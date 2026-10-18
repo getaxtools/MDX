@@ -1,3 +1,4 @@
+
 node_modules
 dist
 target
@@ -7,6 +8,7 @@ CHANGELOG.md
 LICENSE-APACHE
 CODE_OF_CONDUCT.md
 tests/fixtures
+apps/desktop/src-tauri/tauri.conf.json
 apps/desktop/src-tauri/gen
 apps/desktop/src-tauri/target
 apps/desktop/src-tauri/icons
