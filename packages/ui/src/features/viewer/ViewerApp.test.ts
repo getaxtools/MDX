@@ -2,9 +2,10 @@ import { ViewerSession } from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
 import { InMemoryAppState, InMemoryDocumentFiles, InMemoryDocumentRequests } from '@mdx/platform';
 import { createMarkdownRenderer } from '@mdx/renderer';
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { tick } from 'svelte';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import ViewerApp from './ViewerApp.svelte';
 import { ViewerController } from './ViewerController';
 
@@ -35,6 +36,11 @@ async function renderViewer(startupPaths: string[] = []) {
 }
 
 describe('ViewerApp', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
   it('opens documents picked with Ctrl+O and shows the active one', async () => {
     const { requests } = await renderViewer();
     requests.pickedPaths = [GUIDE];
@@ -114,5 +120,21 @@ describe('ViewerApp', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Close' }));
 
     expect(screen.queryByRole('dialog', { name: 'About MDX' })).toBeNull();
+  });
+
+  it('stays at the end of the document after scrolling there', async () => {
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(1100);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(100);
+    await renderViewer([GUIDE]);
+    await screen.findByRole('article', { name: 'Guide.md' });
+    const readingArea = screen.getByRole('main');
+    vi.useFakeTimers();
+
+    readingArea.scrollTop = 1000;
+    await fireEvent.scroll(readingArea);
+    vi.runAllTimers();
+    await tick();
+
+    expect(readingArea.scrollTop).toBe(1000);
   });
 });

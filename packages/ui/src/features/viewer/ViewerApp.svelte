@@ -29,7 +29,9 @@
 
   const { controller, translator, platform, appInfo, codeHighlighter }: Props = $props();
 
-  let snapshot: ViewerSnapshot | undefined = $state();
+  // Raw, not deep state: a deep proxy gives the same document a new identity on every
+  // snapshot, and the document view treats that as a newly opened document.
+  let snapshot: ViewerSnapshot | undefined = $state.raw();
   let currentHeadingId: string | undefined = $state();
   $effect(() => controller.subscribe((latest) => (snapshot = latest)));
 
