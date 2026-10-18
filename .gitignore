@@ -66,3 +66,4 @@ desktop.ini
 *.mobileprovision
 *.provisionprofile
 signing/
+/.vs
