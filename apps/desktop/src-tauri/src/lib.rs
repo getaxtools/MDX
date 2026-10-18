@@ -68,7 +68,7 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::links::resolve_document_link,
         commands::links::open_external_link,
         commands::folders::pick_folder,
-        commands::folders::list_folder_documents,
+        commands::folders::list_folder_contents,
         menu::update_view_menu,
     ])
 }

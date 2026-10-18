@@ -11,7 +11,7 @@ import {
   DocumentOpenError,
   type AppMenuPort,
   type DocumentLinksPort,
-  type DocumentLocation,
+  type FolderListing,
   type FolderPort,
   type DocumentPrinterPort,
   type DocumentResourcesPort,
@@ -29,6 +29,7 @@ import { commandForMenuItem, type ViewerCommand } from './viewerCommands';
 
 export const STATE_SAVE_DELAY_MS = 500;
 const SCROLL_RATIO_PRECISION = 0.001;
+const EMPTY_FOLDER_LISTING: FolderListing = { folders: [], documents: [] };
 
 export interface ViewerControllerDependencies {
   readonly session: ViewerSession;
@@ -256,12 +257,12 @@ export class ViewerController {
     });
   }
 
-  /** The Markdown documents in a favourite folder; empty when the folder cannot be read. */
-  async listFolderDocuments(folderPath: string): Promise<readonly DocumentLocation[]> {
+  /** The subfolders and Markdown documents in a favourite folder; empty when the folder cannot be read. */
+  async listFolderContents(folderPath: string): Promise<FolderListing> {
     try {
-      return (await this.dependencies.folders?.listFolderDocuments(folderPath)) ?? [];
+      return (await this.dependencies.folders?.listFolderContents(folderPath)) ?? EMPTY_FOLDER_LISTING;
     } catch {
-      return [];
+      return EMPTY_FOLDER_LISTING;
     }
   }
 

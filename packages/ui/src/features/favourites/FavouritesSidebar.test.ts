@@ -19,7 +19,7 @@ function renderSidebar(favourites = FavouritesList.empty(), recentFiles = Recent
     onOpenFavourite,
     onOpenRecentFile,
     onCommand: vi.fn(),
-    onListFolder: () => Promise.resolve([]),
+    onListFolder: () => Promise.resolve({ folders: [], documents: [] }),
     onOpenDocument: vi.fn(),
   });
   return { onOpenFavourite, onOpenRecentFile };

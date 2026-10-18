@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -81,7 +81,7 @@ jobs:
 
   dependency-audit:
     name: Dependency audit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -99,7 +99,7 @@ jobs:
   dependency-review:
     name: Dependency review
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -110,7 +110,7 @@ jobs:
 
   secret-scan:
     name: Secret scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -122,7 +122,7 @@ jobs:
 
   private-paths:
     name: No private files
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -139,7 +139,7 @@ jobs:
   pull-request-title:
     name: Conventional PR title
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       pull-requests: read
     steps:
@@ -150,19 +150,22 @@ jobs:
   developer-certificate-of-origin:
     name: DCO sign-off
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Check every commit has a Signed-off-by line
+      - name: Check every human commit has a Signed-off-by line
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           missing=0
           for commit in $(git rev-list --no-merges "$BASE_SHA..$HEAD_SHA"); do
+            if git show -s --format=%ae "$commit" | grep -qE '^[0-9]+\+[a-z0-9-]+\[bot\]@users\.noreply\.github\.com$'; then
+              continue
+            fi
             if ! git show -s --format=%B "$commit" | grep -q '^Signed-off-by: '; then
               echo "::error::Commit $commit has no Signed-off-by line. Use 'git commit -s'."
               missing=1
