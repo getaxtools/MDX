@@ -36,7 +36,7 @@
     "@tauri-apps/api": "2.12.4",
     "@testing-library/svelte": "5.4.2",
     "@testing-library/user-event": "14.6.8",
-    "@types/node": "24.19.2",
+    "@types/node": "26.6.5",
     "@vitest/coverage-v8": "5.0.5",
     "eslint": "10.13.0",
     "eslint-plugin-svelte": "3.23.1",
@@ -47,7 +47,7 @@
     "prettier-plugin-svelte": "4.1.1",
     "svelte": "5.57.2",
     "svelte-check": "4.7.7",
-    "typescript": "6.0.3",
+    "typescript": "7.0.2",
     "typescript-eslint": "8.71.2",
     "vite": "8.3.4",
     "vitest": "5.0.5"
