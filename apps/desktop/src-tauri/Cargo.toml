@@ -1,6 +1,6 @@
 [package]
 name = "mdx-desktop"
-version = "0.0.0"
+version = "0.1.0"
 description = "MDX - Markdown Explorer"
 authors = ["getaxtools"]
 license = "MIT OR Apache-2.0"
