@@ -27,7 +27,7 @@
     "fmt": "prettier --write ."
   },
   "devDependencies": {
-    "@axe-core/webdriverio": "4.13.0",
+    "@axe-core/webdriverio": "4.14.0",
     "@eslint/js": "10.0.1",
     "@mdx/core": "workspace:*",
     "@mdx/i18n": "workspace:*",
@@ -53,6 +53,6 @@
     "typescript-eslint": "8.71.2",
     "vite": "8.3.4",
     "vitest": "5.0.5",
-    "webdriverio": "9.32.0"
+    "webdriverio": "10.0.2"
   }
 }
