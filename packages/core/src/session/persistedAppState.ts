@@ -2,6 +2,7 @@ import type { DocumentLocation } from '@mdx/platform';
 import { FavouritesList, type Favourite } from '../favourites/FavouritesList';
 import { RecentFilesList, type RecentFile } from '../recent-files/RecentFilesList';
 import { TabStrip, type Tab, type TabStripSnapshot } from '../tabs/TabStrip';
+import { DEFAULT_VIEW_SETTINGS, parseViewSettings, type ViewSettings } from '../view/ViewSettings';
 
 export const APP_STATE_SCHEMA_VERSION = 1;
 
@@ -10,25 +11,32 @@ export interface PersistedAppState {
   readonly tabs: TabStripSnapshot;
   readonly recentFiles: readonly RecentFile[];
   readonly favourites: readonly Favourite[];
+  readonly view: ViewSettings;
 }
 
-export interface RestoredAppState {
+export interface ViewerState {
   readonly tabStrip: TabStrip;
   readonly recentFiles: RecentFilesList;
   readonly favourites: FavouritesList;
+  readonly viewSettings: ViewSettings;
+}
+
+export interface RestoredAppState extends ViewerState {
   readonly wasReset: boolean;
 }
 
-export function toPersistedAppState(
-  tabStrip: TabStrip,
-  recentFiles: RecentFilesList,
-  favourites: FavouritesList,
-): PersistedAppState {
+export function toPersistedAppState({
+  tabStrip,
+  recentFiles,
+  favourites,
+  viewSettings,
+}: ViewerState): PersistedAppState {
   return {
     schemaVersion: APP_STATE_SCHEMA_VERSION,
     tabs: tabStrip.toSnapshot(),
     recentFiles: recentFiles.entries(),
     favourites: favourites.favourites(),
+    view: viewSettings,
   };
 }
 
@@ -42,6 +50,7 @@ export function restoreAppState(saved: unknown): RestoredAppState {
     tabStrip: TabStrip.fromSnapshot({ tabs: validEntries(savedTabs.tabs, parseTab), ...activeKey }),
     recentFiles: RecentFilesList.fromRecentFiles(validEntries(saved.recentFiles, parseRecentFile)),
     favourites: FavouritesList.fromFavourites(validEntries(saved.favourites, parseFavourite)),
+    viewSettings: parseViewSettings(saved.view),
     wasReset: false,
   };
 }
@@ -51,6 +60,7 @@ function emptyAppState({ wasReset }: { wasReset: boolean }): RestoredAppState {
     tabStrip: TabStrip.empty(),
     recentFiles: RecentFilesList.empty(),
     favourites: FavouritesList.empty(),
+    viewSettings: DEFAULT_VIEW_SETTINGS,
     wasReset,
   };
 }

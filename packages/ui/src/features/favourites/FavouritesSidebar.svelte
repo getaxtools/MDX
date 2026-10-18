@@ -1,53 +1,48 @@
 <script lang="ts">
-  import { displayNameOf, type Favourite, type RecentFile } from '@mdx/core';
+  import type { Favourite, RecentFile } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
+  import type { DocumentLocation, PathStatus } from '@mdx/platform';
+  import type { RecentFileCommand } from '../recent-files/recentFileCommands';
+  import RecentFilesSection from '../recent-files/RecentFilesSection.svelte';
+  import type { FavouriteCommand } from './favouriteCommands';
+  import FavouritesSection from './FavouritesSection.svelte';
 
   interface Props {
     favourites: readonly Favourite[];
     recentFiles: readonly RecentFile[];
+    pathStatuses: ReadonlyMap<string, PathStatus>;
     translator: Translator;
     onOpenFavourite: (favourite: Favourite) => void;
     onOpenRecentFile: (recentFile: RecentFile) => void;
+    onCommand: (command: FavouriteCommand | RecentFileCommand) => void;
+    onListFolder: (folderPath: string) => Promise<readonly DocumentLocation[]>;
+    onOpenDocument: (documentPath: string) => void;
   }
 
-  const { favourites, recentFiles, translator, onOpenFavourite, onOpenRecentFile }: Props = $props();
+  const {
+    favourites,
+    recentFiles,
+    pathStatuses,
+    translator,
+    onOpenFavourite,
+    onOpenRecentFile,
+    onCommand,
+    onListFolder,
+    onOpenDocument,
+  }: Props = $props();
 </script>
 
 <nav class="sidebar" aria-label={translator.translate('sidebar.label')}>
-  <section aria-labelledby="favourites-heading">
-    <h2 id="favourites-heading">{translator.translate('favourites.sidebar.title')}</h2>
-    {#if favourites.length === 0}
-      <p class="empty-state">{translator.translate('favourites.sidebar.emptyState')}</p>
-    {:else}
-      <ul>
-        {#each favourites as favourite (favourite.location.canonicalKey)}
-          <li>
-            <button title={favourite.location.displayPath} onclick={() => onOpenFavourite(favourite)}>
-              <span aria-hidden="true">★</span>
-              {displayNameOf(favourite)}
-            </button>
-          </li>
-        {/each}
-      </ul>
-    {/if}
-  </section>
-
-  <section aria-labelledby="recent-files-heading">
-    <h2 id="recent-files-heading">{translator.translate('recentFiles.title')}</h2>
-    {#if recentFiles.length === 0}
-      <p class="empty-state">{translator.translate('recentFiles.emptyState')}</p>
-    {:else}
-      <ul>
-        {#each recentFiles as recentFile (recentFile.location.canonicalKey)}
-          <li>
-            <button title={recentFile.location.displayPath} onclick={() => onOpenRecentFile(recentFile)}>
-              {recentFile.location.fileName}
-            </button>
-          </li>
-        {/each}
-      </ul>
-    {/if}
-  </section>
+  <FavouritesSection
+    {favourites}
+    {pathStatuses}
+    {translator}
+    onOpen={onOpenFavourite}
+    {onCommand}
+    {onListFolder}
+    {onOpenDocument}
+  />
+  <RecentFilesSection {recentFiles} {pathStatuses} {translator} onOpen={onOpenRecentFile} {onCommand} />
 </nav>
 
 <style>
@@ -61,7 +56,7 @@
     overflow-y: auto;
   }
 
-  h2 {
+  .sidebar :global(h2) {
     margin: 0 var(--space-2) var(--space-2);
     font-size: var(--text-size-small);
     font-weight: 600;
@@ -70,16 +65,18 @@
     letter-spacing: 0.04em;
   }
 
-  ul {
+  .sidebar :global(ul) {
     margin: 0;
     padding: 0;
     list-style: none;
   }
 
-  button {
+  .sidebar :global(li > button),
+  .sidebar :global(li > input) {
     display: flex;
     gap: var(--space-2);
     width: 100%;
+    box-sizing: border-box;
     padding: var(--space-1) var(--space-2);
     border: 0;
     border-radius: var(--radius-small);
@@ -93,15 +90,25 @@
     white-space: nowrap;
   }
 
-  button:hover {
+  .sidebar :global(li > input) {
+    border: 1px solid var(--color-focus);
+    background: var(--color-background);
+  }
+
+  .sidebar :global(li > button:hover) {
     background: var(--color-surface-hover);
   }
 
-  button:focus-visible {
+  .sidebar :global(li > button.unavailable) {
+    color: var(--color-text-secondary);
+    font-style: italic;
+  }
+
+  .sidebar :global(li > button:focus-visible) {
     outline: 2px solid var(--color-focus);
   }
 
-  .empty-state {
+  .sidebar :global(.empty-state) {
     margin: 0 var(--space-2);
     font-size: var(--text-size-small);
     color: var(--color-text-secondary);

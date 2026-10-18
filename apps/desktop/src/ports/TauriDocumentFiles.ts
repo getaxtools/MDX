@@ -1,11 +1,5 @@
-import {
-  DocumentOpenError,
-  isDocumentOpenFailure,
-  type DocumentFilePort,
-  type DocumentLocation,
-  type OpenedDocument,
-  type PathStatus,
-} from '@mdx/platform';
+import type { DocumentFilePort, DocumentLocation, OpenedDocument, PathStatus } from '@mdx/platform';
+import { documentOpenErrorOf } from './documentOpenErrorOf';
 import { tauriCommands } from './tauriCommands';
 
 export class TauriDocumentFiles implements DocumentFilePort {
@@ -13,7 +7,7 @@ export class TauriDocumentFiles implements DocumentFilePort {
     try {
       return await tauriCommands.openDocument(path);
     } catch (error) {
-      throw new DocumentOpenError(failureCodeOf(error), path);
+      throw documentOpenErrorOf(error, path);
     }
   }
 
@@ -23,10 +17,4 @@ export class TauriDocumentFiles implements DocumentFilePort {
       locations.map((location, index) => [location.canonicalKey, statuses[index] ?? 'unreachable']),
     );
   }
-}
-
-function failureCodeOf(error: unknown) {
-  const code: unknown =
-    typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
-  return isDocumentOpenFailure(code) ? code : 'unreadable';
 }

@@ -23,8 +23,13 @@ export interface MarkdownRendererOptions {
   readonly resolveResourceUrl?: ResourceUrlResolver;
 }
 
+export interface RenderOptions {
+  /** Resolves relative image references for this document; replaces the renderer-wide resolver. */
+  readonly resolveResourceUrl?: ResourceUrlResolver;
+}
+
 export interface MarkdownRenderer {
-  render(source: string): RenderedDocument;
+  render(source: string, options?: RenderOptions): RenderedDocument;
 }
 
 export function createMarkdownRenderer({
@@ -34,13 +39,16 @@ export function createMarkdownRenderer({
   const markdown = new MarkdownIt({ html: true, linkify: true, typographer: false })
     .use(taskListPlugin)
     .use(headingAnchorsPlugin);
-  const sanitizeHtml = createHtmlSanitizer(window, resolveResourceUrl);
+  const sanitizeHtml = createHtmlSanitizer(window);
 
   return {
-    render(source) {
+    render(source, options = {}) {
       const { frontMatter, body } = splitFrontMatter(source);
       const environment: OutlineEnvironment = { outline: [] };
-      const html = sanitizeHtml(markdown.render(body, environment));
+      const html = sanitizeHtml(
+        markdown.render(body, environment),
+        options.resolveResourceUrl ?? resolveResourceUrl,
+      );
       return frontMatter === undefined
         ? { html, outline: environment.outline }
         : { html, outline: environment.outline, frontMatter };

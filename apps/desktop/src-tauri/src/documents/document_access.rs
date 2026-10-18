@@ -31,6 +31,17 @@ impl DocumentAccessList {
             .any(|folder_key| is_inside_folder(&location.canonical_key, folder_key))
     }
 
+    pub fn is_folder_allowed(&self, folder: &DocumentLocation) -> bool {
+        self.granted_folder_keys
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .any(|folder_key| {
+                folder.canonical_key == *folder_key
+                    || is_inside_folder(&folder.canonical_key, folder_key)
+            })
+    }
+
     fn grant_folder_key(&self, folder_key: String) {
         let mut folder_keys = self
             .granted_folder_keys

@@ -111,6 +111,42 @@ describe('ViewerSession', () => {
     expect(session.currentState().recentFiles.entries()).toEqual([]);
   });
 
+  it('updates and saves view settings', async () => {
+    const { session, appState } = createSession();
+
+    session.updateViewSettings((viewSettings) => ({ ...viewSettings, theme: 'dark' }));
+    await session.save();
+    const restarted = createSession(appState).session;
+    await restarted.restore();
+
+    expect(restarted.currentState().viewSettings.theme).toBe('dark');
+  });
+
+  it('reloads an open document that changed on disk without changing tabs or recent files', async () => {
+    const { session, documentFiles } = createSession();
+    await session.openDocument(GUIDE_PATH);
+    await session.openDocument(NOTES_PATH);
+    const recentBefore = session.currentState().recentFiles.entries();
+    documentFiles.write(GUIDE_PATH, '# Guide, updated');
+
+    await session.reloadDocuments([GUIDE_PATH]);
+
+    const guide = session.currentState().tabStrip.tabs()[0]?.location;
+    expect(session.openedDocument(guide?.canonicalKey ?? '')?.text).toBe('# Guide, updated');
+    expect(session.currentState().tabStrip.activeTab()?.location.fileName).toBe('Notes.md');
+    expect(session.currentState().recentFiles.entries()).toEqual(recentBefore);
+  });
+
+  it('forgets a changed document that can no longer be read, so it is opened again later', async () => {
+    const { session, documentFiles } = createSession();
+    const guide = await session.openDocument(GUIDE_PATH);
+    documentFiles.delete(GUIDE_PATH);
+
+    await session.reloadDocuments([GUIDE_PATH]);
+
+    expect(session.openedDocument(guide.location.canonicalKey)).toBeUndefined();
+  });
+
   it('notifies subscribers of every change until they unsubscribe', async () => {
     const { session } = createSession();
     const notifications: ViewerState[] = [];

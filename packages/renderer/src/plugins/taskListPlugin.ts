@@ -38,9 +38,18 @@ function startsListItemParagraph(tokens: readonly Token[], index: number): boole
 
 function convertToCheckbox(state: StateCore, { listItem, inline, firstText, marker }: TaskItem): void {
   const isChecked = marker[1] !== ' ';
-  const checkbox = new state.Token('html_inline', '', 0);
-  checkbox.content = `<input type="checkbox" disabled${isChecked ? ' checked' : ''}> `;
+  const labelledCheckbox = htmlToken(
+    state,
+    `<label><input type="checkbox" disabled${isChecked ? ' checked' : ''}> `,
+  );
   firstText.content = firstText.content.slice(marker[0].length);
-  inline.children?.unshift(checkbox);
+  inline.children?.unshift(labelledCheckbox);
+  inline.children?.push(htmlToken(state, '</label>'));
   listItem.attrJoin('class', 'task-list-item');
+}
+
+function htmlToken(state: StateCore, html: string): Token {
+  const token = new state.Token('html_inline', '', 0);
+  token.content = html;
+  return token;
 }

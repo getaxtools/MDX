@@ -56,9 +56,28 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @mdx/desktop build:frontend
       - run: cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
-      - run: cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
+      - run: cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
       - run: cargo nextest run --manifest-path apps/desktop/src-tauri/Cargo.toml
       - run: cargo deny --manifest-path apps/desktop/src-tauri/Cargo.toml check
+
+  desktop-ui-tests:
+    name: Desktop UI tests (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: apps/desktop/src-tauri
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @mdx/desktop tauri build --debug --no-bundle --features webdriver --config src-tauri/tauri.ui-test.conf.json
+      - run: pnpm test:ui
 
   dependency-audit:
     name: Dependency audit

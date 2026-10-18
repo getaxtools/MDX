@@ -11,8 +11,9 @@ export {
   toPersistedAppState,
   type PersistedAppState,
   type RestoredAppState,
+  type ViewerState,
 } from './session/persistedAppState';
-export { ViewerSession, type ViewerSessionDependencies, type ViewerState } from './session/ViewerSession';
+export { ViewerSession, type ViewerSessionDependencies } from './session/ViewerSession';
 export {
   LAST_TAB_NUMBER_KEY,
   MAX_REOPENABLE_TABS,
@@ -20,3 +21,20 @@ export {
   type Tab,
   type TabStripSnapshot,
 } from './tabs/TabStrip';
+export {
+  DEFAULT_VIEW_SETTINGS,
+  READING_WIDTHS,
+  THEME_PREFERENCES,
+  parseViewSettings,
+  resetZoom,
+  zoomIn,
+  zoomOut,
+  type ReadingWidth,
+  type ThemePreference,
+  type ViewSettings,
+} from './view/ViewSettings';
+export {
+  measureDocument,
+  READING_WORDS_PER_MINUTE,
+  type DocumentStatistics,
+} from './documents/documentStatistics';

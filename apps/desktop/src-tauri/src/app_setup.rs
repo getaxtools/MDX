@@ -1,10 +1,13 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use tauri::{App, Manager};
+use tauri::{App, AppHandle, Emitter, Manager};
 
 use crate::documents::DocumentAccessList;
-use crate::open_requests::{StartupDocuments, grant_documents, markdown_paths_from_arguments};
+use crate::live_reload::{DOCUMENTS_CHANGED_EVENT, DocumentWatcher};
+use crate::open_requests::{
+    MAIN_WINDOW_LABEL, StartupDocuments, grant_documents, markdown_paths_from_arguments,
+};
 use crate::storage::{AppStateStore, saved_document_paths};
 
 const DATA_FOLDER_OVERRIDE_VARIABLE: &str = "MDX_DATA_DIR";
@@ -22,7 +25,16 @@ pub fn initialize(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(store);
     app.manage(access);
     app.manage(startup_documents);
+    app.manage(start_document_watcher(app.handle().clone()));
     Ok(())
+}
+
+fn start_document_watcher(app: AppHandle) -> DocumentWatcher {
+    DocumentWatcher::start(move |display_paths| {
+        if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+            let _ = window.emit(DOCUMENTS_CHANGED_EVENT, display_paths);
+        }
+    })
 }
 
 fn data_folder(app: &App) -> Result<PathBuf, tauri::Error> {

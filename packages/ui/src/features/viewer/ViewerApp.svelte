@@ -1,28 +1,51 @@
 <script lang="ts">
   import type { Favourite, RecentFile } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
+  import type { CodeHighlighter } from '@mdx/renderer';
+  import AboutDialog from '../about/AboutDialog.svelte';
+  import type { AppInfo } from '../about/AppInfo';
+  import ConfirmDialog from '../../components/ConfirmDialog.svelte';
+  import type { DocumentLink } from '../document-view/DocumentLink';
   import DocumentView from '../document-view/DocumentView.svelte';
   import FavouritesSidebar from '../favourites/FavouritesSidebar.svelte';
+  import KeyboardShortcutsDialog from '../help/KeyboardShortcutsDialog.svelte';
+  import OutlinePanel from '../outline/OutlinePanel.svelte';
+  import type { TabCommand } from '../tabs/tabCommands';
   import TabStripView from '../tabs/TabStripView.svelte';
+  import { applyTheme } from '../view/applyTheme';
+  import StatusBar from '../view/StatusBar.svelte';
+  import ViewOptions from '../view/ViewOptions.svelte';
   import NoticeBar from './NoticeBar.svelte';
-  import { commandForShortcut, type DesktopPlatform } from './viewerCommands';
+  import { commandForShortcut, type DesktopPlatform, type ViewerCommand } from './viewerCommands';
   import type { ViewerController, ViewerSnapshot } from './ViewerController';
 
   interface Props {
     controller: ViewerController;
     translator: Translator;
     platform: DesktopPlatform;
+    appInfo: AppInfo;
+    codeHighlighter?: CodeHighlighter;
   }
 
-  const { controller, translator, platform }: Props = $props();
+  const { controller, translator, platform, appInfo, codeHighlighter }: Props = $props();
 
   let snapshot: ViewerSnapshot | undefined = $state();
+  let currentHeadingId: string | undefined = $state();
   $effect(() => controller.subscribe((latest) => (snapshot = latest)));
+
+  $effect(() => {
+    if (snapshot) applyTheme(globalThis.document.documentElement, snapshot.viewer.viewSettings.theme);
+  });
 
   const activeTab = $derived(snapshot?.viewer.tabStrip.activeTab());
   const isActiveFavourite = $derived(
     activeTab ? (snapshot?.viewer.favourites.isFavourite(activeTab.location.canonicalKey) ?? false) : false,
   );
+
+  // The webview's own menu offers browser actions such as Back and Refresh that make no sense in the app.
+  function preventBrowserContextMenu(event: MouseEvent) {
+    event.preventDefault();
+  }
 
   function handleKeydown(event: KeyboardEvent) {
     const command = commandForShortcut(event, platform);
@@ -32,17 +55,24 @@
   }
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} oncontextmenu={preventBrowserContextMenu} />
 
 {#if snapshot}
-  <div class="viewer">
-    <FavouritesSidebar
-      favourites={snapshot.viewer.favourites.favourites()}
-      recentFiles={snapshot.viewer.recentFiles.entries()}
-      {translator}
-      onOpenFavourite={(favourite: Favourite) => void controller.openFavourite(favourite)}
-      onOpenRecentFile={(recentFile: RecentFile) => void controller.openRecentFile(recentFile)}
-    />
+  {@const viewSettings = snapshot.viewer.viewSettings}
+  <div class="viewer" class:without-sidebar={!viewSettings.isSidebarVisible}>
+    {#if viewSettings.isSidebarVisible}
+      <FavouritesSidebar
+        favourites={snapshot.viewer.favourites.favourites()}
+        recentFiles={snapshot.viewer.recentFiles.entries()}
+        pathStatuses={snapshot.pathStatuses}
+        onCommand={(command: ViewerCommand) => void controller.execute(command)}
+        onListFolder={(folderPath: string) => controller.listFolderDocuments(folderPath)}
+        onOpenDocument={(documentPath: string) => void controller.openDocuments([documentPath])}
+        {translator}
+        onOpenFavourite={(favourite: Favourite) => void controller.openFavourite(favourite)}
+        onOpenRecentFile={(recentFile: RecentFile) => void controller.openRecentFile(recentFile)}
+      />
+    {/if}
     <div class="workspace">
       <div class="toolbar" role="toolbar" aria-label={translator.translate('toolbar.label')}>
         <button onclick={() => void controller.execute({ kind: 'openDocuments' })}>
@@ -56,22 +86,57 @@
           <span aria-hidden="true">{isActiveFavourite ? '★' : '☆'}</span>
           {translator.translate('favourites.toggle')}
         </button>
+        <ViewOptions
+          settings={viewSettings}
+          {translator}
+          onCommand={(command: ViewerCommand) => void controller.execute(command)}
+        />
       </div>
       <NoticeBar message={snapshot.notice} {translator} onDismiss={() => controller.dismissNotice()} />
       <TabStripView
         tabs={snapshot.viewer.tabStrip.tabs()}
         activeKey={activeTab?.location.canonicalKey}
+        pathStatuses={snapshot.pathStatuses}
         {translator}
         onActivate={(canonicalKey: string) => controller.activateTab(canonicalKey)}
-        onClose={(canonicalKey: string) => controller.closeTab(canonicalKey)}
+        onCommand={(command: TabCommand) => void controller.execute(command)}
       />
-      <DocumentView
-        document={snapshot.activeDocument}
-        {translator}
-        onUnsupportedLink={() => controller.showNotice('document.linkNotSupportedYet')}
-      />
+      <div class="reading-area">
+        <DocumentView
+          document={snapshot.activeDocument}
+          zoomPercent={viewSettings.zoomPercent}
+          readingWidth={viewSettings.readingWidth}
+          {codeHighlighter}
+          findRequest={snapshot.findRequest}
+          isSourceView={snapshot.isSourceView ?? false}
+          onCloseFind={() => controller.closeFind()}
+          {translator}
+          onOpenLink={(link: DocumentLink) => void controller.openLink(link)}
+          onScroll={(scrollRatio: number) => controller.rememberScrollPosition(scrollRatio)}
+          onCurrentHeadingChange={(headingId: string | undefined) => (currentHeadingId = headingId)}
+        />
+        {#if snapshot.activeDocument && viewSettings.isOutlineVisible}
+          <OutlinePanel outline={snapshot.activeDocument.outline} {currentHeadingId} {translator} />
+        {/if}
+      </div>
+      <StatusBar document={snapshot.activeDocument} {translator} />
     </div>
   </div>
+  {#if snapshot.externalLinkRequest !== undefined}
+    <ConfirmDialog
+      title={translator.translate('document.openExternalLink.title')}
+      message={translator.translate('document.openExternalLink.body', { url: snapshot.externalLinkRequest })}
+      confirmLabel={translator.translate('document.openExternalLink.open')}
+      cancelLabel={translator.translate('document.openExternalLink.cancel')}
+      onConfirm={() => controller.answerExternalLink(true)}
+      onCancel={() => controller.answerExternalLink(false)}
+    />
+  {/if}
+  {#if snapshot.openDialog === 'about'}
+    <AboutDialog {appInfo} {translator} onClose={() => controller.closeDialog()} />
+  {:else if snapshot.openDialog === 'keyboardShortcuts'}
+    <KeyboardShortcutsDialog {translator} onClose={() => controller.closeDialog()} />
+  {/if}
 {/if}
 
 <style>
@@ -84,11 +149,25 @@
     background: var(--color-background);
   }
 
+  .viewer.without-sidebar {
+    grid-template-columns: 1fr;
+  }
+
   .workspace {
     display: grid;
-    grid-template-rows: auto auto auto 1fr;
+    grid-template-rows: auto auto auto 1fr auto;
     min-width: 0;
     min-height: 0;
+  }
+
+  .reading-area {
+    display: flex;
+    min-height: 0;
+  }
+
+  .reading-area > :global(main) {
+    flex: 1;
+    min-width: 0;
   }
 
   .toolbar {

@@ -13,6 +13,27 @@ function renderToElement(source: string): HTMLElement {
 }
 
 describe('createMarkdownRenderer', () => {
+  describe('images', () => {
+    it('resolves relative images with the resolver given for this document', () => {
+      const { html } = renderer.render('![Diagram](images/diagram.png)', {
+        resolveResourceUrl: (relativeUrl) => `image://guide/${relativeUrl}`,
+      });
+
+      expect(html).toContain('src="image://guide/images/diagram.png"');
+    });
+
+    it('falls back to the renderer-wide resolver', () => {
+      expect(renderer.render('![Logo](logo.png)').html).toContain('src="asset://docs/logo.png"');
+    });
+
+    it('never loads remote images', () => {
+      const { html } = renderer.render('![Tracker](https://example.com/pixel.png)');
+
+      expect(html).not.toMatch(/\ssrc=/);
+      expect(html).toContain('data-mdx-blocked-src="https://example.com/pixel.png"');
+    });
+  });
+
   describe('GitHub-flavored Markdown', () => {
     it('renders tables', () => {
       const element = renderToElement('| Name | Value |\n| --- | --- |\n| a | 1 |');
@@ -39,6 +60,14 @@ describe('createMarkdownRenderer', () => {
       expect(checkboxes.every((checkbox) => checkbox.disabled)).toBe(true);
       expect(element.querySelectorAll('li.task-list-item')).toHaveLength(2);
       expect(element.querySelector('li')?.textContent).toBe(' done');
+    });
+
+    it('labels each task checkbox with its task text', () => {
+      const element = renderToElement('- [x] Write the *guide*\n- [ ] Review it');
+      const labels = [...element.querySelectorAll('li.task-list-item > label')];
+
+      expect(labels.map((label) => label.textContent.trim())).toEqual(['Write the guide', 'Review it']);
+      expect(labels.every((label) => label.querySelector('input[type="checkbox"]'))).toBe(true);
     });
   });
 

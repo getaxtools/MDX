@@ -1,9 +1,11 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { InMemoryDocumentFiles } from '@mdx/platform';
 import { afterEach, describe, expect, it } from 'vitest';
+import { TauriAppMenu } from './TauriAppMenu';
 import { TauriAppState } from './TauriAppState';
 import { TauriDocumentFiles } from './TauriDocumentFiles';
 import { TauriDocumentRequests } from './TauriDocumentRequests';
+import { TauriDocumentWatcher } from './TauriDocumentWatcher';
 
 type CommandArguments = Record<string, unknown>;
 
@@ -102,5 +104,26 @@ describe('TauriDocumentRequests', () => {
 
     expect(await requests.pickDocuments()).toEqual(['picked.md']);
     expect(await requests.takeStartupDocuments()).toEqual(['startup.md']);
+  });
+});
+
+describe('TauriAppMenu', () => {
+  it('shows the view settings in the native menu through the update_view_menu command', async () => {
+    const calls = mockCommands({ update_view_menu: () => null });
+    const state = { theme: 'dark', readingWidth: 'wide', isSidebarVisible: false, isOutlineVisible: true };
+
+    await new TauriAppMenu().showViewState(state);
+
+    expect(calls).toEqual([{ command: 'update_view_menu', args: { state } }]);
+  });
+});
+
+describe('TauriDocumentWatcher', () => {
+  it('watches the open documents through the watch_documents command', async () => {
+    const calls = mockCommands({ watch_documents: () => null });
+
+    await new TauriDocumentWatcher().watch(['C:\\Docs\\a.md']);
+
+    expect(calls).toEqual([{ command: 'watch_documents', args: { paths: ['C:\\Docs\\a.md'] } }]);
   });
 });

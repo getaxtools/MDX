@@ -14,9 +14,13 @@ function renderSidebar(favourites = FavouritesList.empty(), recentFiles = Recent
   render(FavouritesSidebar, {
     favourites: favourites.favourites(),
     recentFiles: recentFiles.entries(),
+    pathStatuses: new Map(),
     translator: createTranslator(),
     onOpenFavourite,
     onOpenRecentFile,
+    onCommand: vi.fn(),
+    onListFolder: () => Promise.resolve([]),
+    onOpenDocument: vi.fn(),
   });
   return { onOpenFavourite, onOpenRecentFile };
 }

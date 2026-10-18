@@ -36,6 +36,10 @@ impl AppStateStore {
         }
     }
 
+    pub fn folder(&self) -> &Path {
+        &self.folder
+    }
+
     pub fn load(&self) -> Result<Option<String>, AppStateError> {
         let saved = match fs::read_to_string(self.folder.join(STATE_FILE_NAME)) {
             Ok(saved) => saved,

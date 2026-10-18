@@ -21,11 +21,13 @@
   "scripts": {
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:ui": "vitest run --config tests/e2e/vitest.desktop.config.ts",
     "lint": "eslint . && prettier --check . && node scripts/check-source-hygiene.mjs && node scripts/check-ui-text.mjs",
     "typecheck": "tsc -p tsconfig.json && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "fmt": "prettier --write ."
   },
   "devDependencies": {
+    "@axe-core/webdriverio": "4.13.0",
     "@eslint/js": "10.0.1",
     "@mdx/core": "workspace:*",
     "@mdx/i18n": "workspace:*",
@@ -50,6 +52,7 @@
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.2",
     "vite": "8.3.4",
-    "vitest": "5.0.5"
+    "vitest": "5.0.5",
+    "webdriverio": "9.32.0"
   }
 }

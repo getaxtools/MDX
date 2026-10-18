@@ -34,9 +34,13 @@ test-rust: build-frontend
 build:
     pnpm --filter @mdx/desktop tauri build
 
+# Build the debug desktop app with the embedded UI test driver
+build-ui-test-app:
+    pnpm --filter @mdx/desktop tauri build --debug --no-bundle --features webdriver --config src-tauri/tauri.ui-test.conf.json
+
 # Run UI tests against the desktop app
-test-ui:
-    {{ if path_exists("tests/e2e/wdio.desktop.conf.ts") == "true" { "pnpm wdio run tests/e2e/wdio.desktop.conf.ts" } else { "echo 'No UI test suite yet.'" } }}
+test-ui: build-ui-test-app
+    pnpm test:ui
 
 # Run unit tests whose path contains the feature name, e.g. just test-feature favourites
 test-feature name:
@@ -51,7 +55,7 @@ lint: build-frontend
     pnpm lint
     pnpm typecheck
     cargo fmt --manifest-path {{ tauri_manifest }} --check
-    cargo clippy --manifest-path {{ tauri_manifest }} --all-targets -- -D warnings
+    cargo clippy --manifest-path {{ tauri_manifest }} --all-targets --all-features -- -D warnings
 
 # Format all code in place
 fmt:

@@ -25,8 +25,13 @@ async function renderViewer(startupPaths: string[] = []) {
     translator,
   });
   await controller.start();
-  render(ViewerApp, { controller, translator, platform: 'windows' });
-  return { requests };
+  render(ViewerApp, {
+    controller,
+    translator,
+    platform: 'windows',
+    appInfo: { version: '1.0.0', dataFolder: 'C:\\Data' },
+  });
+  return { requests, controller };
 }
 
 describe('ViewerApp', () => {
@@ -72,5 +77,42 @@ describe('ViewerApp', () => {
     await renderViewer();
 
     expect((await screen.findByRole('button', { name: /Favourite/ })).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('hides and shows the sidebar with Ctrl+B', async () => {
+    await renderViewer();
+    await screen.findByRole('navigation', { name: 'Favourites and recent files' });
+
+    await userEvent.keyboard('{Control>}b{/Control}');
+
+    expect(screen.queryByRole('navigation', { name: 'Favourites and recent files' })).toBeNull();
+  });
+
+  it('zooms the document with Ctrl+= and applies a chosen theme to the page', async () => {
+    await renderViewer([GUIDE]);
+    await screen.findByRole('article', { name: 'Guide.md' });
+
+    await userEvent.keyboard('{Control>}={/Control}');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Theme' }), 'Dark');
+
+    expect(screen.getByRole('button', { name: 'Zoom 110%' })).toBeTruthy();
+    expect(document.documentElement.dataset.theme).toBe('dark');
+  });
+
+  it('shows statistics for the active document in the status bar', async () => {
+    await renderViewer([GUIDE]);
+
+    const statusBar = await screen.findByRole('contentinfo', { name: 'Document information' });
+
+    expect(statusBar.textContent).toContain('2 words');
+  });
+
+  it('shows the About dialog when asked and closes it again', async () => {
+    const { controller } = await renderViewer();
+
+    await controller.execute({ kind: 'showAbout' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Close' }));
+
+    expect(screen.queryByRole('dialog', { name: 'About MDX' })).toBeNull();
   });
 });

@@ -1,0 +1,63 @@
+@media print {
+  /* Printed pages are always light, whatever theme the window uses. */
+  :root {
+    color-scheme: light;
+    --color-background: #ffffff !important;
+    --color-surface: #ffffff !important;
+    --color-text: #000000 !important;
+    --color-text-secondary: #444444 !important;
+    --color-border: #cccccc !important;
+    --color-accent: #1a4fd0 !important;
+    --color-code-background: #f4f4f4 !important;
+  }
+
+  html,
+  body {
+    height: auto;
+  }
+
+  .sidebar,
+  .toolbar,
+  .tab-strip,
+  .notice-region,
+  .status-bar,
+  .outline,
+  .find-bar,
+  .context-menu,
+  .copy-code {
+    display: none !important;
+  }
+
+  .viewer,
+  .workspace,
+  .reading-area {
+    display: block !important;
+    height: auto !important;
+  }
+
+  .document-area {
+    overflow: visible !important;
+  }
+
+  .rendered-document {
+    max-width: none !important;
+    zoom: 1 !important;
+  }
+
+  .rendered-document code.highlighted span {
+    color: var(--code-light, inherit) !important;
+  }
+
+  .rendered-document pre {
+    white-space: pre-wrap;
+    break-inside: avoid;
+  }
+
+  .rendered-document :is(h1, h2, h3, h4, h5, h6) {
+    break-after: avoid;
+  }
+
+  .rendered-document img {
+    max-width: 100%;
+  }
+}

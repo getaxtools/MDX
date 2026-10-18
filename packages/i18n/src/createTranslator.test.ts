@@ -5,6 +5,9 @@ const MESSAGE_KEY_FORMAT = /^[a-z][a-zA-Z]*(\.[a-z][a-zA-Z0-9]*)+$/;
 const SAMPLE_VALUES = {
   count: 2,
   minutes: 3,
+  percent: 125,
+  current: 1,
+  total: 4,
   fileName: 'Guide.md',
   name: 'Specs',
   path: 'C:\\Docs\\Guide.md',

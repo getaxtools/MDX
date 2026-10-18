@@ -40,8 +40,8 @@ describe('createHtmlSanitizer', () => {
   });
 
   it('drops relative images that point at a scheme', () => {
-    const sanitize = createHtmlSanitizer(window, () => 'asset://resolved');
+    const sanitize = createHtmlSanitizer(window);
 
-    expect(sanitize('<img src="cid:image001" alt="a">')).toBe('<img alt="a">');
+    expect(sanitize('<img src="cid:image001" alt="a">', () => 'asset://resolved')).toBe('<img alt="a">');
   });
 });

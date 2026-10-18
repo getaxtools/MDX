@@ -1,6 +1,14 @@
 import { ViewerSession } from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
-import { InMemoryAppState, InMemoryDocumentFiles, InMemoryDocumentRequests } from '@mdx/platform';
+import {
+  InMemoryAppMenu,
+  InMemoryAppState,
+  InMemoryDocumentFiles,
+  InMemoryDocumentLinks,
+  InMemoryDocumentRequests,
+  InMemoryDocumentWatcher,
+  InMemoryFolders,
+} from '@mdx/platform';
 import { createMarkdownRenderer } from '@mdx/renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { STATE_SAVE_DELAY_MS, ViewerController, type ViewerSnapshot } from './ViewerController';
@@ -8,7 +16,14 @@ import { STATE_SAVE_DELAY_MS, ViewerController, type ViewerSnapshot } from './Vi
 const GUIDE = 'C:\\Docs\\Guide.md';
 const NOTES = 'C:\\Docs\\Notes.md';
 
-function createViewer({ startupPaths = [] as string[], appState = new InMemoryAppState() } = {}) {
+function createViewer({
+  startupPaths = [] as string[],
+  appState = new InMemoryAppState(),
+  menu = new InMemoryAppMenu(),
+  watcher = new InMemoryDocumentWatcher(),
+  links = new InMemoryDocumentLinks(),
+  folders = new InMemoryFolders({ 'C:\\Docs': [GUIDE, NOTES] }),
+} = {}) {
   const documentFiles = new InMemoryDocumentFiles({ [GUIDE]: '# Guide', [NOTES]: '# Notes' });
   const requests = new InMemoryDocumentRequests(startupPaths);
   const session = new ViewerSession({ documentFiles, appState, now: () => Date.now() });
@@ -17,6 +32,10 @@ function createViewer({ startupPaths = [] as string[], appState = new InMemoryAp
     requests,
     renderer: createMarkdownRenderer({ window }),
     translator: createTranslator(),
+    menu,
+    watcher,
+    links,
+    folders,
   });
   let latest: ViewerSnapshot | undefined;
   controller.subscribe((snapshot) => (latest = snapshot));
@@ -24,7 +43,7 @@ function createViewer({ startupPaths = [] as string[], appState = new InMemoryAp
     if (!latest) throw new Error('no snapshot published');
     return latest;
   };
-  return { controller, session, requests, documentFiles, appState, snapshot };
+  return { controller, session, requests, documentFiles, appState, menu, watcher, links, folders, snapshot };
 }
 
 const tabNames = (snapshot: ViewerSnapshot) =>
@@ -117,6 +136,42 @@ describe('ViewerController', () => {
 
     expect(tabNames(second.snapshot())).toEqual(['Guide.md']);
     expect(second.snapshot().activeDocument?.html).toContain('Guide');
+  });
+
+  it('shows restored favourites and recent files when no tab was left open', async () => {
+    const first = createViewer({ startupPaths: [GUIDE] });
+    await first.controller.start();
+    await first.controller.execute({ kind: 'toggleFavourite' });
+    await first.controller.execute({ kind: 'closeActiveTab' });
+    await vi.advanceTimersByTimeAsync(STATE_SAVE_DELAY_MS);
+    first.controller.stop();
+
+    const second = createViewer({ appState: first.appState });
+    await second.controller.start();
+
+    const restored = second.snapshot().viewer;
+    expect(restored.favourites.favourites().map((favourite) => favourite.location.fileName)).toEqual([
+      'Guide.md',
+    ]);
+    expect(restored.recentFiles.entries().map((recentFile) => recentFile.location.fileName)).toEqual([
+      'Guide.md',
+    ]);
+    expect(tabNames(second.snapshot())).toEqual([]);
+  });
+
+  it('does not save again just because the saved state was restored', async () => {
+    const first = createViewer({ startupPaths: [GUIDE] });
+    await first.controller.start();
+    await first.controller.execute({ kind: 'closeActiveTab' });
+    await vi.advanceTimersByTimeAsync(STATE_SAVE_DELAY_MS);
+    first.controller.stop();
+    const savesBeforeRestart = first.appState.saveCount;
+
+    const second = createViewer({ appState: first.appState });
+    await second.controller.start();
+    await vi.advanceTimersByTimeAsync(STATE_SAVE_DELAY_MS);
+
+    expect(first.appState.saveCount).toBe(savesBeforeRestart);
   });
 
   it('reports a restored tab whose file has disappeared', async () => {
@@ -245,5 +300,314 @@ describe('ViewerController', () => {
 
     expect(requests.listenerCount()).toBe(0);
     expect(appState.saveCount).toBe(0);
+  });
+
+  it('shows images next to the document through the resources port', async () => {
+    const documentFiles = new InMemoryDocumentFiles({ [GUIDE]: '![Diagram](images/diagram.png)' });
+    const controller = new ViewerController({
+      session: new ViewerSession({ documentFiles, appState: new InMemoryAppState(), now: () => 0 }),
+      requests: new InMemoryDocumentRequests([GUIDE]),
+      renderer: createMarkdownRenderer({ window }),
+      translator: createTranslator(),
+      resources: {
+        imageUrl: (documentPath, source) => `image://${encodeURIComponent(documentPath)}/${source}`,
+      },
+    });
+    let html = '';
+    controller.subscribe((snapshot) => (html = snapshot.activeDocument?.html ?? ''));
+
+    await controller.start();
+
+    expect(html).toContain(`src="image://${encodeURIComponent(GUIDE)}/images/diagram.png"`);
+  });
+
+  it('prints only when a document is open', async () => {
+    const printer = { printActiveDocument: vi.fn() };
+    const empty = new ViewerController({
+      session: new ViewerSession({
+        documentFiles: new InMemoryDocumentFiles(),
+        appState: new InMemoryAppState(),
+        now: () => 0,
+      }),
+      requests: new InMemoryDocumentRequests(),
+      renderer: createMarkdownRenderer({ window }),
+      translator: createTranslator(),
+      printer,
+    });
+    await empty.start();
+    await empty.execute({ kind: 'print' });
+    expect(printer.printActiveDocument).not.toHaveBeenCalled();
+
+    const withDocument = new ViewerController({
+      session: new ViewerSession({
+        documentFiles: new InMemoryDocumentFiles({ [GUIDE]: '# Guide' }),
+        appState: new InMemoryAppState(),
+        now: () => 0,
+      }),
+      requests: new InMemoryDocumentRequests([GUIDE]),
+      renderer: createMarkdownRenderer({ window }),
+      translator: createTranslator(),
+      printer,
+    });
+    await withDocument.start();
+    await withDocument.execute({ kind: 'print' });
+
+    expect(printer.printActiveDocument).toHaveBeenCalledOnce();
+  });
+
+  it('remembers where each tab was scrolled and restores it after a restart', async () => {
+    const first = createViewer({ startupPaths: [GUIDE] });
+    await first.controller.start();
+    first.controller.rememberScrollPosition(0.4);
+    await vi.advanceTimersByTimeAsync(STATE_SAVE_DELAY_MS);
+    first.controller.stop();
+
+    const second = createViewer({ appState: first.appState });
+    await second.controller.start();
+
+    expect(second.snapshot().activeDocument?.scrollRatio).toBe(0.4);
+  });
+
+  it('passes front matter on so it can be shown as properties', async () => {
+    const documentFiles = new InMemoryDocumentFiles({ [GUIDE]: '---\ntitle: Guide\n---\n# Guide' });
+    const controller = new ViewerController({
+      session: new ViewerSession({ documentFiles, appState: new InMemoryAppState(), now: () => 0 }),
+      requests: new InMemoryDocumentRequests([GUIDE]),
+      renderer: createMarkdownRenderer({ window }),
+      translator: createTranslator(),
+    });
+    let frontMatter: string | undefined;
+    controller.subscribe((snapshot) => (frontMatter = snapshot.activeDocument?.frontMatter));
+
+    await controller.start();
+
+    expect(frontMatter).toBe('title: Guide');
+  });
+
+  it('switches between the rendered document and its source', async () => {
+    const { controller, snapshot } = createViewer({ startupPaths: [GUIDE] });
+    await controller.start();
+
+    await controller.execute({ kind: 'toggleSourceView' });
+    expect(snapshot().isSourceView).toBe(true);
+    expect(snapshot().activeDocument?.source).toBe('# Guide');
+    await controller.execute({ kind: 'toggleSourceView' });
+
+    expect(snapshot()).not.toHaveProperty('isSourceView');
+  });
+
+  describe('folder favourites', () => {
+    it('adds a chosen folder to the favourites once', async () => {
+      const { controller, folders, snapshot } = createViewer();
+      folders.pickedFolder = 'C:\\Docs';
+      await controller.start();
+
+      await controller.execute({ kind: 'openFolder' });
+      await controller.execute({ kind: 'openFolder' });
+
+      const favourites = snapshot().viewer.favourites.favourites();
+      expect(favourites.map((favourite) => [favourite.location.fileName, favourite.kind])).toEqual([
+        ['Docs', 'folder'],
+      ]);
+    });
+
+    it('does nothing when the user cancels choosing a folder', async () => {
+      const { controller, snapshot } = createViewer();
+      await controller.start();
+
+      await controller.execute({ kind: 'openFolder' });
+
+      expect(snapshot().viewer.favourites.favourites()).toEqual([]);
+    });
+
+    it('lists the documents in a favourite folder', async () => {
+      const { controller } = createViewer();
+      await controller.start();
+
+      const documents = await controller.listFolderDocuments('C:\\Docs');
+
+      expect(documents.map((document) => document.fileName)).toEqual(['Guide.md', 'Notes.md']);
+    });
+  });
+
+  describe('links', () => {
+    it('opens a linked document in a new tab', async () => {
+      const { controller, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+
+      await controller.openLink({ kind: 'document', href: 'Notes.md' });
+
+      expect(tabNames(snapshot())).toEqual(['Guide.md', 'Notes.md']);
+      expect(snapshot().activeDocument?.fileName).toBe('Notes.md');
+    });
+
+    it('explains when a linked document cannot be opened', async () => {
+      const { controller, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+
+      await controller.openLink({ kind: 'document', href: 'Missing.md' });
+
+      expect(snapshot().notice).toContain('could not be found');
+    });
+
+    it('asks before opening a web link and opens it only when confirmed', async () => {
+      const { controller, links, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+
+      await controller.openLink({ kind: 'external', href: 'https://example.com' });
+      expect(snapshot().externalLinkRequest).toBe('https://example.com');
+      expect(links.openedExternalLinks).toEqual([]);
+      controller.answerExternalLink(true);
+
+      expect(links.openedExternalLinks).toEqual(['https://example.com']);
+      expect(snapshot()).not.toHaveProperty('externalLinkRequest');
+    });
+
+    it('does not open a web link the user declined', async () => {
+      const { controller, links } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+
+      await controller.openLink({ kind: 'external', href: 'https://example.com' });
+      controller.answerExternalLink(false);
+
+      expect(links.openedExternalLinks).toEqual([]);
+    });
+  });
+
+  describe('live reload', () => {
+    it('watches exactly the open documents', async () => {
+      const { controller, watcher } = createViewer({ startupPaths: [GUIDE, NOTES] });
+      await controller.start();
+
+      await controller.execute({ kind: 'closeActiveTab' });
+
+      expect(watcher.watchedPaths).toEqual([GUIDE]);
+    });
+
+    it('shows the new text when the active document changes on disk', async () => {
+      const { controller, documentFiles, watcher, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+      documentFiles.write(GUIDE, '# Guide, second edition');
+
+      watcher.reportChanges([GUIDE]);
+
+      await vi.waitFor(() => expect(snapshot().activeDocument?.html).toContain('second edition'));
+    });
+
+    it('marks a tab as missing when its file is deleted by another program', async () => {
+      const { controller, documentFiles, watcher, snapshot } = createViewer({ startupPaths: [GUIDE, NOTES] });
+      await controller.start();
+      const guideKey = snapshot().viewer.tabStrip.tabs()[0]?.location.canonicalKey ?? '';
+      documentFiles.delete(GUIDE);
+
+      watcher.reportChanges([GUIDE]);
+
+      await vi.waitFor(() => expect(snapshot().pathStatuses.get(guideKey)).toBe('missing'));
+    });
+
+    it('explains when the active document was deleted by another program', async () => {
+      const { controller, documentFiles, watcher, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+      documentFiles.delete(GUIDE);
+
+      watcher.reportChanges([GUIDE]);
+
+      await vi.waitFor(() => expect(snapshot().notice).toContain('could not be found'));
+    });
+  });
+
+  describe('app menu', () => {
+    it('runs the command of a chosen menu item', async () => {
+      const { controller, menu, snapshot } = createViewer({ startupPaths: [GUIDE, NOTES] });
+      await controller.start();
+
+      menu.choose('closeActiveTab');
+
+      await vi.waitFor(() => expect(tabNames(snapshot())).toEqual(['Guide.md']));
+    });
+
+    it('shows the current view settings in the menu and keeps them up to date', async () => {
+      const { controller, menu } = createViewer();
+      await controller.start();
+      expect(menu.shownViewState).toEqual({
+        theme: 'system',
+        readingWidth: 'medium',
+        isSidebarVisible: true,
+        isOutlineVisible: true,
+      });
+
+      menu.choose('theme.dark');
+
+      await vi.waitFor(() => expect(menu.shownViewState?.theme).toBe('dark'));
+    });
+
+    it('opens find from the menu, asks to refocus it when opened again, and closes it', async () => {
+      const { controller, menu, snapshot } = createViewer();
+      await controller.start();
+
+      menu.choose('showFind');
+      await vi.waitFor(() => expect(snapshot().findRequest).toBe(1));
+      menu.choose('showFind');
+      await vi.waitFor(() => expect(snapshot().findRequest).toBe(2));
+      controller.closeFind();
+
+      expect(snapshot()).not.toHaveProperty('findRequest');
+    });
+
+    it('opens and closes the About dialog', async () => {
+      const { controller, menu, snapshot } = createViewer();
+      await controller.start();
+
+      menu.choose('showAbout');
+      await vi.waitFor(() => expect(snapshot().openDialog).toBe('about'));
+      controller.closeDialog();
+
+      expect(snapshot()).not.toHaveProperty('openDialog');
+    });
+
+    it('opens the keyboard shortcuts from the Help menu', async () => {
+      const { controller, menu, snapshot } = createViewer();
+      await controller.start();
+
+      menu.choose('showKeyboardShortcuts');
+
+      await vi.waitFor(() => expect(snapshot().openDialog).toBe('keyboardShortcuts'));
+    });
+  });
+
+  describe('sidebar', () => {
+    it('renames, reorders and removes favourites and manages recent files through commands', async () => {
+      const { controller, session } = createViewer({ startupPaths: [GUIDE, NOTES] });
+      await controller.start();
+      await controller.execute({ kind: 'toggleFavourite' });
+      const notesKey = session.currentState().tabStrip.activeTab()?.location.canonicalKey ?? '';
+
+      await controller.execute({ kind: 'renameFavourite', canonicalKey: notesKey, label: 'My notes' });
+      await controller.execute({ kind: 'pinRecentFile', canonicalKey: notesKey });
+      await controller.execute({ kind: 'clearUnpinnedRecentFiles' });
+
+      expect(session.currentState().favourites.favourites()[0]?.label).toBe('My notes');
+      expect(
+        session
+          .currentState()
+          .recentFiles.entries()
+          .map((entry) => entry.location.fileName),
+      ).toEqual(['Notes.md']);
+    });
+
+    it('reports favourites and recent files whose files have disappeared', async () => {
+      const first = createViewer({ startupPaths: [GUIDE] });
+      await first.controller.start();
+      await first.controller.execute({ kind: 'toggleFavourite' });
+      await first.controller.execute({ kind: 'closeActiveTab' });
+      await vi.advanceTimersByTimeAsync(STATE_SAVE_DELAY_MS);
+      first.controller.stop();
+
+      const second = createViewer({ appState: first.appState });
+      second.documentFiles.delete(GUIDE);
+      await second.controller.start();
+
+      await vi.waitFor(() => expect([...second.snapshot().pathStatuses.values()]).toEqual(['missing']));
+    });
   });
 });

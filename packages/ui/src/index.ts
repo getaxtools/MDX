@@ -1,5 +1,6 @@
 import './tokens/tokens.css';
 import './tokens/document.css';
+import './tokens/print.css';
 
 export { default as ViewerApp } from './features/viewer/ViewerApp.svelte';
 export {
@@ -14,3 +15,4 @@ export {
   type DesktopPlatform,
   type ViewerCommand,
 } from './features/viewer/viewerCommands';
+export type { AppInfo } from './features/about/AppInfo';

@@ -39,14 +39,13 @@ export class UnsafeSanitizerEnvironmentError extends Error {
 
 export type BrowserWindow = Window & typeof globalThis;
 
-export function createHtmlSanitizer(
-  window: BrowserWindow,
-  resolveResourceUrl?: ResourceUrlResolver,
-): (html: string) => string {
+export type HtmlSanitizer = (html: string, resolveResourceUrl?: ResourceUrlResolver) => string;
+
+export function createHtmlSanitizer(window: BrowserWindow): HtmlSanitizer {
   const purifier = createDOMPurify(window);
   // Some DOM implementations report support but let scripts through; fail closed instead of rendering unsafely.
   assertSanitizerWorks(purifier.sanitize(SELF_CHECK_HTML));
-  return (html) => {
+  return (html, resolveResourceUrl) => {
     const fragment = purifier.sanitize(html, {
       FORBID_TAGS: FORBIDDEN_TAGS,
       FORBID_ATTR: FORBIDDEN_ATTRIBUTES,

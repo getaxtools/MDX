@@ -6,3 +6,13 @@ export type { DocumentRequestListener, DocumentRequestsPort } from './DocumentRe
 export { InMemoryAppState } from './fakes/InMemoryAppState';
 export { InMemoryDocumentFiles } from './fakes/InMemoryDocumentFiles';
 export { InMemoryDocumentRequests } from './fakes/InMemoryDocumentRequests';
+export type { AppMenuPort, MenuCommandListener, ViewMenuState } from './AppMenuPort';
+export { InMemoryAppMenu } from './fakes/InMemoryAppMenu';
+export type { DocumentsChangedListener, DocumentWatcherPort } from './DocumentWatcherPort';
+export { InMemoryDocumentWatcher } from './fakes/InMemoryDocumentWatcher';
+export type { DocumentResourcesPort } from './DocumentResourcesPort';
+export type { DocumentPrinterPort } from './DocumentPrinterPort';
+export type { DocumentLinksPort } from './DocumentLinksPort';
+export { InMemoryDocumentLinks } from './fakes/InMemoryDocumentLinks';
+export type { FolderPort } from './FolderPort';
+export { InMemoryFolders } from './fakes/InMemoryFolders';

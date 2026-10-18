@@ -1,14 +1,50 @@
+import type { ReadingWidth } from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 import DocumentView from './DocumentView.svelte';
 
-function renderDocument(html: string | undefined) {
-  const onUnsupportedLink = vi.fn();
+interface ViewOptions {
+  readonly zoomPercent?: number;
+  readonly readingWidth?: ReadingWidth;
+  readonly onScroll?: (scrollRatio: number) => void;
+  readonly isSourceView?: boolean;
+}
+
+function renderDocument(
+  html: string | undefined,
+  {
+    zoomPercent = 100,
+    readingWidth = 'medium',
+    onScroll = () => undefined,
+    isSourceView = false,
+  }: ViewOptions = {},
+) {
+  const onOpenLink = vi.fn();
   const document =
-    html === undefined ? undefined : { canonicalKey: 'a.md', fileName: 'a.md', html, outline: [] };
-  render(DocumentView, { document, translator: createTranslator(), onUnsupportedLink });
-  return { onUnsupportedLink };
+    html === undefined
+      ? undefined
+      : {
+          canonicalKey: 'a.md',
+          fileName: 'a.md',
+          html,
+          outline: [],
+          statistics: { words: 0, characters: 0, readingMinutes: 0 },
+          encoding: 'utf-8',
+          lineEnding: 'lf' as const,
+          scrollRatio: 0.5,
+          source: '# Source',
+        };
+  render(DocumentView, {
+    document,
+    zoomPercent,
+    readingWidth,
+    translator: createTranslator(),
+    onOpenLink,
+    onScroll,
+    isSourceView,
+  });
+  return { onOpenLink };
 }
 
 describe('DocumentView', () => {
@@ -26,18 +62,16 @@ describe('DocumentView', () => {
   });
 
   it('never lets a link navigate the app window away', async () => {
-    const { onUnsupportedLink } = renderDocument(
-      '<a href="https://example.com" data-mdx-link="external">site</a>',
-    );
+    const { onOpenLink } = renderDocument('<a href="https://example.com" data-mdx-link="external">site</a>');
 
     const wasNotPrevented = await fireEvent.click(screen.getByRole('link', { name: 'site' }));
 
     expect(wasNotPrevented).toBe(false);
-    expect(onUnsupportedLink).toHaveBeenCalledOnce();
+    expect(onOpenLink).toHaveBeenCalledWith({ kind: 'external', href: 'https://example.com' });
   });
 
   it('scrolls to a heading for in-document links', async () => {
-    const { onUnsupportedLink } = renderDocument(
+    const { onOpenLink } = renderDocument(
       '<a href="#mdx-usage" data-mdx-link="anchor">usage</a><h2 id="mdx-usage">Usage</h2>',
     );
     const scrollIntoView = vi.fn();
@@ -46,14 +80,82 @@ describe('DocumentView', () => {
     await fireEvent.click(screen.getByRole('link', { name: 'usage' }));
 
     expect(scrollIntoView).toHaveBeenCalledOnce();
-    expect(onUnsupportedLink).not.toHaveBeenCalled();
+    expect(onOpenLink).not.toHaveBeenCalled();
   });
 
   it('ignores clicks outside links', async () => {
-    const { onUnsupportedLink } = renderDocument('<p>plain text</p>');
+    const { onOpenLink } = renderDocument('<p>plain text</p>');
 
     await fireEvent.click(screen.getByText('plain text'));
 
-    expect(onUnsupportedLink).not.toHaveBeenCalled();
+    expect(onOpenLink).not.toHaveBeenCalled();
+  });
+
+  it('reports links to other documents', async () => {
+    const { onOpenLink } = renderDocument('<a href="next%20steps.md" data-mdx-link="document">next</a>');
+
+    await fireEvent.click(screen.getByRole('link', { name: 'next' }));
+
+    expect(onOpenLink).toHaveBeenCalledWith({ kind: 'document', href: 'next%20steps.md' });
+  });
+
+  it('opens a document at the place it was last read', () => {
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(1100);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(100);
+
+    renderDocument('<p>Long text</p>');
+
+    expect(screen.getByRole('main').scrollTop).toBe(500);
+    vi.restoreAllMocks();
+  });
+
+  it('reports how far the document is scrolled once scrolling settles', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(1100);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(100);
+    const onScroll = vi.fn();
+    renderDocument('<p>Long text</p>', { onScroll });
+    const area = screen.getByRole('main');
+
+    area.scrollTop = 250;
+    await fireEvent.scroll(area);
+    vi.runAllTimers();
+
+    expect(onScroll).toHaveBeenCalledWith(0.25);
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('shows the Markdown source instead of the rendered document in source view', () => {
+    renderDocument('<h1>Rendered</h1>', { isSourceView: true });
+
+    const article = screen.getByRole('article', { name: 'a.md' });
+
+    expect(article.textContent).toContain('# Source');
+    expect(screen.queryByRole('heading', { name: 'Rendered' })).toBeNull();
+  });
+
+  it('scales the document to the zoom level', () => {
+    renderDocument('<p>Text</p>', { zoomPercent: 150 });
+
+    expect(screen.getByRole('article', { name: 'a.md' }).style.zoom).toBe('1.5');
+  });
+
+  it('lets the document use the full width when asked', () => {
+    renderDocument('<p>Text</p>', { readingWidth: 'full' });
+
+    expect(screen.getByRole('main').style.getPropertyValue('--reading-measure')).toBe('none');
+  });
+
+  it('offers Select All from the right-click menu and keeps Copy disabled without a selection', async () => {
+    renderDocument('<p>First</p><p>Second</p>');
+    const article = screen.getByRole('article', { name: 'a.md' });
+
+    await fireEvent.contextMenu(article, { clientX: 5, clientY: 5 });
+    expect(screen.getByRole('menuitem', { name: 'Copy' }).hasAttribute('disabled')).toBe(true);
+    await fireEvent.click(screen.getByRole('menuitem', { name: 'Select All' }));
+
+    expect(globalThis.getSelection()?.toString()).toContain('Second');
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 });

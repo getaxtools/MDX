@@ -31,7 +31,8 @@ pub fn canonical_key_of(display_path: &str) -> String {
     }
 }
 
-fn location_of_resolved_path(resolved_path: &Path) -> DocumentLocation {
+/// Builds a location for a path that is already resolved, without touching the disk.
+pub fn location_of_resolved_path(resolved_path: &Path) -> DocumentLocation {
     let display_path = resolved_path.to_string_lossy().into_owned();
     let file_name = resolved_path.file_name().map_or_else(
         || display_path.clone(),
