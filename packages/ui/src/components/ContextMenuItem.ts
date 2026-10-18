@@ -3,6 +3,8 @@ export interface ContextMenuItem<ItemId extends string> {
   readonly label: string;
   readonly isDisabled?: boolean;
   readonly hasSeparatorBefore?: boolean;
+  /** Shown next to the label, for example `Ctrl+W`. */
+  readonly shortcut?: string | undefined;
 }
 
 export interface ContextMenuRequest {

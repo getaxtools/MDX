@@ -14,7 +14,8 @@ export type ViewCommand =
   | { readonly kind: 'setTheme'; readonly theme: ThemePreference }
   | { readonly kind: 'setReadingWidth'; readonly readingWidth: ReadingWidth }
   | { readonly kind: 'toggleSidebar' }
-  | { readonly kind: 'toggleOutline' };
+  | { readonly kind: 'toggleOutline' }
+  | { readonly kind: 'toggleStatusBar' };
 
 type ViewCommandHandlers = {
   readonly [Kind in ViewCommand['kind']]: (
@@ -31,6 +32,7 @@ const VIEW_COMMAND_HANDLERS: ViewCommandHandlers = {
   setReadingWidth: (settings, { readingWidth }) => ({ ...settings, readingWidth }),
   toggleSidebar: (settings) => ({ ...settings, isSidebarVisible: !settings.isSidebarVisible }),
   toggleOutline: (settings) => ({ ...settings, isOutlineVisible: !settings.isOutlineVisible }),
+  toggleStatusBar: (settings) => ({ ...settings, isStatusBarVisible: !settings.isStatusBarVisible }),
 };
 
 export function isViewCommand(command: { readonly kind: string }): command is ViewCommand {

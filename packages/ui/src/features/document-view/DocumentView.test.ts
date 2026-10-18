@@ -21,12 +21,15 @@ function renderDocument(
   }: ViewOptions = {},
 ) {
   const onOpenLink = vi.fn();
+  const onCommand = vi.fn();
   const document =
     html === undefined
       ? undefined
       : {
           canonicalKey: 'a.md',
+          displayPath: 'a.md',
           fileName: 'a.md',
+          isUntitled: false,
           html,
           outline: [],
           statistics: { words: 0, characters: 0, readingMinutes: 0 },
@@ -43,8 +46,9 @@ function renderDocument(
     onOpenLink,
     onScroll,
     isSourceView,
+    onCommand,
   });
-  return { onOpenLink };
+  return { onOpenLink, onCommand };
 }
 
 describe('DocumentView', () => {
@@ -157,5 +161,25 @@ describe('DocumentView', () => {
 
     expect(globalThis.getSelection()?.toString()).toContain('Second');
     expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('runs viewer actions such as Show Source from the right-click menu', async () => {
+    const { onCommand } = renderDocument('<p>Text</p>');
+
+    await fireEvent.contextMenu(screen.getByRole('article', { name: 'a.md' }), { clientX: 5, clientY: 5 });
+    await fireEvent.click(screen.getByRole('menuitem', { name: 'Show Source' }));
+
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'toggleSourceView' });
+  });
+
+  it('zooms with Ctrl and the mouse wheel, and scrolls normally without Ctrl', async () => {
+    const { onCommand } = renderDocument('<p>Text</p>');
+    const area = screen.getByRole('main');
+
+    await fireEvent.wheel(area, { deltaY: -100, ctrlKey: true });
+    await fireEvent.wheel(area, { deltaY: 100, ctrlKey: true });
+    await fireEvent.wheel(area, { deltaY: 100 });
+
+    expect(onCommand.mock.calls).toEqual([[{ kind: 'zoomIn' }], [{ kind: 'zoomOut' }]]);
   });
 });

@@ -4,12 +4,14 @@ import type {
   FolderListing,
   OpenedDocument,
   PathStatus,
+  SaveSource,
   ViewMenuState,
 } from '@mdx/platform';
 import type { AppInfo } from '@mdx/ui';
 
 export const tauriCommands = {
   openDocument: (path: string) => invoke<OpenedDocument>('open_document', { path }),
+  saveDocumentAs: (source: SaveSource) => invoke<string | null>('save_document_as', { source }),
   pickDocuments: () => invoke<string[]>('pick_documents'),
   checkPathStatuses: (paths: readonly string[]) => invoke<PathStatus[]>('check_path_statuses', { paths }),
   takeStartupDocuments: () => invoke<string[]>('take_startup_documents'),
@@ -17,6 +19,7 @@ export const tauriCommands = {
   saveAppState: (stateJson: string) => invoke<null>('save_app_state', { stateJson }),
   getAppInfo: () => invoke<AppInfo>('get_app_info'),
   updateViewMenu: (state: ViewMenuState) => invoke<null>('update_view_menu', { state }),
+  updateRecentMenu: (displayPaths: readonly string[]) => invoke<null>('update_recent_menu', { displayPaths }),
   watchDocuments: (paths: readonly string[]) => invoke<null>('watch_documents', { paths }),
   resolveDocumentLink: (document: string, href: string) =>
     invoke<string>('resolve_document_link', { document, href }),

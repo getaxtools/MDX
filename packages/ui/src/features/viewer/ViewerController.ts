@@ -9,6 +9,7 @@ import {
 import type { MessageKey, Translator } from '@mdx/i18n';
 import {
   DocumentOpenError,
+  isUntitledLocation,
   type AppMenuPort,
   type DocumentLinksPort,
   type FolderListing,
@@ -23,11 +24,18 @@ import {
 } from '@mdx/platform';
 import type { MarkdownRenderer, OutlineEntry } from '@mdx/renderer';
 import type { DocumentLink } from '../document-view/DocumentLink';
+import {
+  DocumentSaving,
+  type UnsavedChangesChoice,
+  type UnsavedChangesRequest,
+} from '../saving/DocumentSaving';
+import { isTabCommand } from '../tabs/tabCommands';
 import { applySessionCommand } from './applySessionCommand';
 import { LiveReload } from './LiveReload';
 import { commandForMenuItem, type ViewerCommand } from './viewerCommands';
 
 export const STATE_SAVE_DELAY_MS = 500;
+export const MAX_RECENT_MENU_ENTRIES = 10;
 const SCROLL_RATIO_PRECISION = 0.001;
 const EMPTY_FOLDER_LISTING: FolderListing = { folders: [], documents: [] };
 
@@ -46,7 +54,9 @@ export interface ViewerControllerDependencies {
 
 export interface RenderedActiveDocument {
   readonly canonicalKey: string;
+  readonly displayPath: string;
   readonly fileName: string;
+  readonly isUntitled: boolean;
   readonly html: string;
   readonly outline: readonly OutlineEntry[];
   readonly statistics: DocumentStatistics;
@@ -65,17 +75,25 @@ export interface ViewerSnapshot {
   readonly findRequest?: number;
   readonly externalLinkRequest?: string;
   readonly isSourceView?: boolean;
+  readonly unsavedChanges?: UnsavedChangesRequest;
   readonly pathStatuses: ReadonlyMap<string, PathStatus>;
 }
 
-export type ViewerDialog = 'about' | 'keyboardShortcuts';
+export type ViewerDialog = 'about' | 'keyboardShortcuts' | 'pasteTable';
 
 const DIALOGS_BY_COMMAND: Partial<Record<ViewerCommand['kind'], ViewerDialog>> = {
   showAbout: 'about',
   showKeyboardShortcuts: 'keyboardShortcuts',
+  showPasteTable: 'pasteTable',
 };
 
 type SnapshotListener = (snapshot: ViewerSnapshot) => void;
+
+type CommandHandlers = {
+  readonly [Kind in ViewerCommand['kind']]?: (
+    command: Extract<ViewerCommand, { kind: Kind }>,
+  ) => Promise<void> | void;
+};
 
 export class ViewerController {
   private snapshot: ViewerSnapshot;
@@ -88,13 +106,19 @@ export class ViewerController {
   private findRequest = 0;
   private externalLinkRequest: string | undefined;
   private isSourceView = false;
-  private shownViewSettings: ViewerState['viewSettings'] | undefined;
+  private shownMenuViewState = '';
+  private shownRecentFiles: ViewerState['recentFiles'] | undefined;
   private pathStatuses: ReadonlyMap<string, PathStatus> = new Map();
   private checkedLocationKeys = '';
   private readonly liveReload: LiveReload | undefined;
+  private readonly saving: DocumentSaving;
 
   constructor(private readonly dependencies: ViewerControllerDependencies) {
     this.snapshot = { viewer: dependencies.session.currentState(), pathStatuses: this.pathStatuses };
+    this.saving = new DocumentSaving(dependencies.session, {
+      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+      onSaveFailed: (fileName) => this.showNotice('errors.document.saveFailed', { path: fileName }),
+    });
     this.liveReload = dependencies.watcher
       ? new LiveReload(dependencies.watcher, dependencies.session, () =>
           this.refreshPathStatuses({ isForced: true }),
@@ -150,7 +174,34 @@ export class ViewerController {
   }
 
   closeTab(canonicalKey: string): void {
-    this.dependencies.session.updateTabs((tabStrip) => tabStrip.close(canonicalKey));
+    this.saving.runTabCommand({ kind: 'closeTab', canonicalKey });
+  }
+
+  /** Opens converted Markdown, such as a pasted table, as a new document that is not saved yet. */
+  openAsNewDocument(markdown: string): void {
+    const { session, translator } = this.dependencies;
+    this.openDialog = undefined;
+    session.openUntitledDocument(markdown, (number) =>
+      translator.translate('document.untitledName', { number }),
+    );
+  }
+
+  /** Sanitized HTML for Markdown that is not a document yet, such as a converted table. */
+  renderPreview(markdown: string): string {
+    return this.dependencies.renderer.render(markdown, { resolveResourceUrl: () => undefined }).html;
+  }
+
+  hasUnsavedDocuments(): boolean {
+    return this.saving.hasUnsavedDocuments();
+  }
+
+  /** Asks about new documents before the window closes; true when it may close. */
+  confirmClosingWindow(): Promise<boolean> {
+    return this.saving.confirmClosingWindow();
+  }
+
+  answerUnsavedChanges(choice: UnsavedChangesChoice): Promise<void> {
+    return this.saving.answer(choice);
   }
 
   async openLink(link: DocumentLink): Promise<void> {
@@ -160,8 +211,9 @@ export class ViewerController {
       return;
     }
     const { links, session } = this.dependencies;
-    const documentPath = session.currentState().tabStrip.activeTab()?.location.displayPath;
-    if (!links || documentPath === undefined) return;
+    const activeLocation = session.currentState().tabStrip.activeTab()?.location;
+    if (!links || !activeLocation || isUntitledLocation(activeLocation)) return;
+    const documentPath = activeLocation.displayPath;
     try {
       await this.openDocuments([await links.resolveDocumentLink(documentPath, link.href)]);
     } catch (error) {
@@ -196,6 +248,10 @@ export class ViewerController {
   }
 
   async execute(command: ViewerCommand): Promise<void> {
+    if (isTabCommand(command)) {
+      this.saving.runTabCommand(command);
+      return;
+    }
     if (applySessionCommand(this.dependencies.session, command)) return;
     const dialog = DIALOGS_BY_COMMAND[command.kind];
     if (dialog) {
@@ -203,12 +259,16 @@ export class ViewerController {
       this.publish(this.composeSnapshot(this.snapshot.notice));
       return;
     }
-    await this.commandHandlers[command.kind]?.();
+    const handler = this.commandHandlers[command.kind] as ((command: ViewerCommand) => unknown) | undefined;
+    await handler?.(command);
   }
 
-  private readonly commandHandlers: Partial<Record<ViewerCommand['kind'], () => Promise<void> | void>> = {
+  private readonly commandHandlers: CommandHandlers = {
     openDocuments: async () => this.openDocuments(await this.dependencies.requests.pickDocuments()),
     openFolder: () => this.addFolderFavourite(),
+    saveDocument: () => this.saving.saveActive(),
+    saveDocumentAs: () => this.saving.saveActiveAs(),
+    saveAllDocuments: () => this.saving.saveAll(),
     toggleFavourite: () => this.toggleActiveFavourite(),
     print: () => {
       if (this.activeDocument) this.dependencies.printer?.printActiveDocument();
@@ -220,6 +280,11 @@ export class ViewerController {
     toggleSourceView: () => {
       this.isSourceView = !this.isSourceView;
       this.publish(this.composeSnapshot(this.snapshot.notice));
+      this.showViewStateInMenu();
+    },
+    openRecentFileAt: (command) => {
+      const recentFile = this.dependencies.session.currentState().recentFiles.entries()[command.index];
+      return recentFile ? this.openRecentFile(recentFile) : undefined;
     },
   };
 
@@ -233,21 +298,44 @@ export class ViewerController {
       }),
     );
     this.showViewStateInMenu();
+    this.showRecentFilesInMenu();
   }
 
   private showViewStateInMenu(): void {
-    const { viewSettings } = this.dependencies.session.currentState();
-    if (!this.dependencies.menu || viewSettings === this.shownViewSettings) return;
-    this.shownViewSettings = viewSettings;
-    const { theme, readingWidth, isSidebarVisible, isOutlineVisible } = viewSettings;
-    void this.dependencies.menu.showViewState({ theme, readingWidth, isSidebarVisible, isOutlineVisible });
+    const { menu, session } = this.dependencies;
+    if (!menu) return;
+    const { theme, readingWidth, isSidebarVisible, isOutlineVisible, isStatusBarVisible } =
+      session.currentState().viewSettings;
+    const state = {
+      theme,
+      readingWidth,
+      isSidebarVisible,
+      isOutlineVisible,
+      isStatusBarVisible,
+      isSourceView: this.isSourceView,
+    };
+    const stateKey = JSON.stringify(state);
+    if (stateKey === this.shownMenuViewState) return;
+    this.shownMenuViewState = stateKey;
+    void menu.showViewState(state);
+  }
+
+  private showRecentFilesInMenu(): void {
+    const { menu, session } = this.dependencies;
+    const { recentFiles } = session.currentState();
+    if (!menu || recentFiles === this.shownRecentFiles) return;
+    this.shownRecentFiles = recentFiles;
+    const displayPaths = recentFiles.entries().map((recentFile) => recentFile.location.displayPath);
+    void menu.showRecentFiles(displayPaths.slice(0, MAX_RECENT_MENU_ENTRIES));
   }
 
   private refreshPathStatuses({ isForced = false } = {}): void {
     const { session } = this.dependencies;
     const { tabStrip, favourites, recentFiles } = session.currentState();
     const entries = [...tabStrip.tabs(), ...favourites.favourites(), ...recentFiles.entries()];
-    const locations = entries.map((entry) => entry.location);
+    const locations = entries
+      .map((entry) => entry.location)
+      .filter((location) => !isUntitledLocation(location));
     const locationKeys = JSON.stringify(locations.map((location) => location.canonicalKey));
     if (!isForced && locationKeys === this.checkedLocationKeys) return;
     this.checkedLocationKeys = locationKeys;
@@ -276,7 +364,7 @@ export class ViewerController {
 
   private toggleActiveFavourite(): void {
     const activeTab = this.dependencies.session.currentState().tabStrip.activeTab();
-    if (!activeTab) return;
+    if (!activeTab || isUntitledLocation(activeTab.location)) return;
     this.dependencies.session.updateFavourites((favourites) => favourites.toggle(activeTab.location, 'file'));
   }
 
@@ -304,6 +392,7 @@ export class ViewerController {
   private handleSessionChange(): void {
     this.publish(this.composeSnapshot(this.snapshot.notice));
     this.showViewStateInMenu();
+    this.showRecentFilesInMenu();
     this.refreshPathStatuses();
     this.liveReload?.watchOpenTabs();
     this.scheduleSave();
@@ -336,12 +425,16 @@ export class ViewerController {
 
   private render(document: OpenedDocument): RenderedActiveDocument {
     const { resources } = this.dependencies;
+    const isUntitled = isUntitledLocation(document.location);
     const { html, outline, frontMatter } = this.dependencies.renderer.render(document.text, {
-      resolveResourceUrl: (source) => resources?.imageUrl(document.location.displayPath, source),
+      resolveResourceUrl: (source) =>
+        isUntitled ? undefined : resources?.imageUrl(document.location.displayPath, source),
     });
     return {
       canonicalKey: document.location.canonicalKey,
+      displayPath: document.location.displayPath,
       fileName: document.location.fileName,
+      isUntitled,
       html,
       outline,
       statistics: measureDocument(document.text, this.dependencies.translator.locale),
@@ -363,7 +456,13 @@ export class ViewerController {
       ...(this.findRequest > 0 ? { findRequest: this.findRequest } : {}),
       ...(this.externalLinkRequest === undefined ? {} : { externalLinkRequest: this.externalLinkRequest }),
       ...(this.isSourceView ? { isSourceView: true } : {}),
+      ...this.unsavedChangesPart(),
     };
+  }
+
+  private unsavedChangesPart(): Pick<ViewerSnapshot, 'unsavedChanges'> {
+    const unsavedChanges = this.saving.unsavedChangesRequest();
+    return unsavedChanges ? { unsavedChanges } : {};
   }
 
   private publish(snapshot: ViewerSnapshot): void {

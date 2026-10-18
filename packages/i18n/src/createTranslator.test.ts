@@ -4,6 +4,7 @@ import { createTranslator, englishCatalog, type MessageKey } from './createTrans
 const MESSAGE_KEY_FORMAT = /^[a-z][a-zA-Z]*(\.[a-z][a-zA-Z0-9]*)+$/;
 const SAMPLE_VALUES = {
   count: 2,
+  number: 1,
   minutes: 3,
   percent: 125,
   current: 1,

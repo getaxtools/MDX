@@ -1,4 +1,10 @@
-import type { DocumentFilePort, DocumentLocation, OpenedDocument, PathStatus } from '@mdx/platform';
+import type {
+  DocumentFilePort,
+  DocumentLocation,
+  OpenedDocument,
+  PathStatus,
+  SaveSource,
+} from '@mdx/platform';
 import { documentOpenErrorOf } from './documentOpenErrorOf';
 import { tauriCommands } from './tauriCommands';
 
@@ -9,6 +15,10 @@ export class TauriDocumentFiles implements DocumentFilePort {
     } catch (error) {
       throw documentOpenErrorOf(error, path);
     }
+  }
+
+  async saveAs(source: SaveSource): Promise<string | undefined> {
+    return (await tauriCommands.saveDocumentAs(source)) ?? undefined;
   }
 
   async checkPathStatuses(locations: readonly DocumentLocation[]): Promise<ReadonlyMap<string, PathStatus>> {

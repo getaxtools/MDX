@@ -7,6 +7,7 @@ export interface ViewSettings {
   readonly readingWidth: ReadingWidth;
   readonly isSidebarVisible: boolean;
   readonly isOutlineVisible: boolean;
+  readonly isStatusBarVisible: boolean;
 }
 
 export const THEME_PREFERENCES: readonly ThemePreference[] = ['system', 'light', 'dark'];
@@ -24,6 +25,7 @@ export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
   readingWidth: 'medium',
   isSidebarVisible: true,
   isOutlineVisible: true,
+  isStatusBarVisible: true,
 };
 
 export function zoomIn(settings: ViewSettings): ViewSettings {
@@ -42,10 +44,8 @@ export function resetZoom(settings: ViewSettings): ViewSettings {
 
 export function parseViewSettings(saved: unknown): ViewSettings {
   if (typeof saved !== 'object' || saved === null) return DEFAULT_VIEW_SETTINGS;
-  const { theme, zoomPercent, readingWidth, isSidebarVisible, isOutlineVisible } = saved as Record<
-    string,
-    unknown
-  >;
+  const { theme, zoomPercent, readingWidth, isSidebarVisible, isOutlineVisible, isStatusBarVisible } =
+    saved as Record<string, unknown>;
   return {
     theme: THEME_PREFERENCES.find((preference) => preference === theme) ?? DEFAULT_VIEW_SETTINGS.theme,
     zoomPercent: ZOOM_LEVELS_PERCENT.find((level) => level === zoomPercent) ?? DEFAULT_ZOOM_PERCENT,
@@ -53,5 +53,6 @@ export function parseViewSettings(saved: unknown): ViewSettings {
       READING_WIDTHS.find((width) => width === readingWidth) ?? DEFAULT_VIEW_SETTINGS.readingWidth,
     isSidebarVisible: typeof isSidebarVisible === 'boolean' ? isSidebarVisible : true,
     isOutlineVisible: typeof isOutlineVisible === 'boolean' ? isOutlineVisible : true,
+    isStatusBarVisible: typeof isStatusBarVisible === 'boolean' ? isStatusBarVisible : true,
   };
 }

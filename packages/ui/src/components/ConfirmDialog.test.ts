@@ -44,4 +44,26 @@ describe('ConfirmDialog', () => {
     expect(onCancel).toHaveBeenCalledOnce();
     expect(onConfirm).not.toHaveBeenCalled();
   });
+
+  it('offers a third choice between confirming and cancelling', async () => {
+    const onChoose = vi.fn();
+    render(ConfirmDialog, {
+      title: 'Save new documents?',
+      message: 'Untitled-1.md has not been saved.',
+      confirmLabel: 'Save',
+      cancelLabel: 'Cancel',
+      onConfirm: vi.fn(),
+      onCancel: vi.fn(),
+      alternative: { label: 'Don’t Save', onChoose },
+    });
+
+    expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Save',
+      'Don’t Save',
+      'Cancel',
+    ]);
+    await userEvent.click(screen.getByRole('button', { name: 'Don’t Save' }));
+
+    expect(onChoose).toHaveBeenCalledOnce();
+  });
 });

@@ -10,9 +10,6 @@ export {
   type ViewerControllerDependencies,
   type ViewerSnapshot,
 } from './features/viewer/ViewerController';
-export {
-  commandForShortcut,
-  type DesktopPlatform,
-  type ViewerCommand,
-} from './features/viewer/viewerCommands';
+export { commandForShortcut } from './features/shortcuts/commandShortcuts';
+export type { DesktopPlatform, ViewerCommand } from './features/viewer/viewerCommands';
 export type { AppInfo } from './features/about/AppInfo';

@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Tab } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
-  import type { PathStatus } from '@mdx/platform';
+  import { isUntitledLocation, type PathStatus } from '@mdx/platform';
   import ContextMenu from '../../components/ContextMenu.svelte';
   import { contextMenuPosition, isContextMenuKey } from '../../components/ContextMenuItem';
   import type { TabCommand } from './tabCommands';
@@ -20,6 +20,13 @@
 
   function isMissing(tab: Tab): boolean {
     return pathStatuses.get(tab.location.canonicalKey) === 'missing';
+  }
+
+  function labelOf(tab: Tab): string {
+    const { fileName } = tab.location;
+    if (isMissing(tab)) return translator.translate('tabs.status.missing', { fileName });
+    if (isUntitledLocation(tab.location)) return translator.translate('tabs.status.notSaved', { fileName });
+    return fileName;
   }
 
   const PRIMARY_MOUSE_BUTTON = 0;
@@ -121,9 +128,7 @@
         onpointerdown={(event) => startDrag(event, tab.location.canonicalKey)}
       >
         {#if tab.isPinned}<span class="pin" aria-hidden="true">📌</span>{/if}
-        {isMissing(tab)
-          ? translator.translate('tabs.status.missing', { fileName: tab.location.fileName })
-          : tab.location.fileName}
+        {labelOf(tab)}
       </button>
       <!-- A tab list may only contain tabs, so keyboard and screen reader users close tabs with Ctrl+W instead. -->
       <button
@@ -141,7 +146,11 @@
 {#if menuRequest && menuTab}
   <ContextMenu
     label={translator.translate('tabs.contextMenu.label', { fileName: menuTab.location.fileName })}
-    items={tabContextMenuItems(menuTab, { index: menuRequest.index, tabCount: tabs.length }, translator)}
+    items={tabContextMenuItems(
+      menuTab,
+      { index: menuRequest.index, tabCount: tabs.length, activeKey },
+      translator,
+    )}
     position={menuRequest}
     onChoose={chooseMenuItem}
     onClose={closeMenu}

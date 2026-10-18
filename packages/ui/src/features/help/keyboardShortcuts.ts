@@ -1,48 +1,18 @@
-import type { MessageKey, Translator } from '@mdx/i18n';
-
-type Modifier = 'ctrl' | 'shift' | 'alt';
+import type { MessageKey } from '@mdx/i18n';
+import { COMMAND_SHORTCUTS } from '../shortcuts/commandShortcuts';
+import type { KeyCombination } from '../shortcuts/describeCombination';
 
 export interface KeyboardShortcut {
-  /** Alternative key combinations, each a list of modifiers followed by one key. */
-  readonly combinations: readonly (readonly string[])[];
+  readonly combinations: readonly KeyCombination[];
   readonly actionKey: MessageKey;
 }
 
-export const KEYBOARD_SHORTCUTS: readonly KeyboardShortcut[] = [
-  { combinations: [['ctrl', 'O']], actionKey: 'menu.file.open' },
-  {
-    combinations: [
-      ['ctrl', 'W'],
-      ['ctrl', 'F4'],
-    ],
-    actionKey: 'menu.file.closeTab',
-  },
-  { combinations: [['ctrl', 'shift', 'T']], actionKey: 'tabs.reopenClosed' },
-  {
-    combinations: [
-      ['ctrl', 'Tab'],
-      ['ctrl', 'shift', 'Tab'],
-    ],
-    actionKey: 'shortcuts.switchTab',
-  },
+const SHORTCUTS_HANDLED_IN_PLACE: readonly KeyboardShortcut[] = [
+  { combinations: [['ctrl', 'C']], actionKey: 'menu.edit.copy' },
+  { combinations: [['ctrl', 'A']], actionKey: 'menu.edit.selectAll' },
   { combinations: [['ctrl', '1–9']], actionKey: 'shortcuts.tabByNumber' },
-  {
-    combinations: [
-      ['ctrl', 'shift', 'PageUp'],
-      ['ctrl', 'shift', 'PageDown'],
-    ],
-    actionKey: 'shortcuts.moveTab',
-  },
-  { combinations: [['ctrl', 'D']], actionKey: 'favourites.toggle' },
-  { combinations: [['ctrl', 'F']], actionKey: 'menu.edit.find' },
   { combinations: [['F3'], ['shift', 'F3']], actionKey: 'shortcuts.findNext' },
-  { combinations: [['ctrl', 'P']], actionKey: 'menu.file.print' },
-  { combinations: [['ctrl', 'U']], actionKey: 'menu.view.toggleSource' },
-  { combinations: [['ctrl', '=']], actionKey: 'menu.view.zoomIn' },
-  { combinations: [['ctrl', '-']], actionKey: 'menu.view.zoomOut' },
-  { combinations: [['ctrl', '0']], actionKey: 'menu.view.resetZoom' },
-  { combinations: [['ctrl', 'B']], actionKey: 'menu.view.toggleSidebar' },
-  { combinations: [['ctrl', 'shift', 'O']], actionKey: 'menu.view.toggleOutline' },
+  { combinations: [['ctrl', 'wheel']], actionKey: 'shortcuts.zoomWithWheel' },
   { combinations: [['F2']], actionKey: 'shortcuts.renameFavourite' },
   {
     combinations: [
@@ -52,19 +22,10 @@ export const KEYBOARD_SHORTCUTS: readonly KeyboardShortcut[] = [
     actionKey: 'shortcuts.moveFavourite',
   },
   { combinations: [['shift', 'F10']], actionKey: 'shortcuts.contextMenu' },
-  { combinations: [['F1']], actionKey: 'menu.help.keyboardShortcuts' },
+  { combinations: [['alt', 'F4']], actionKey: 'menu.file.exit' },
 ];
 
-const MODIFIER_LABELS: Readonly<Record<Modifier, MessageKey>> = {
-  ctrl: 'keys.ctrl',
-  shift: 'keys.shift',
-  alt: 'keys.alt',
-};
-
-export function describeCombination(combination: readonly string[], translator: Translator): string {
-  return combination
-    .map((part) =>
-      Object.hasOwn(MODIFIER_LABELS, part) ? translator.translate(MODIFIER_LABELS[part as Modifier]) : part,
-    )
-    .join('+');
-}
+export const KEYBOARD_SHORTCUTS: readonly KeyboardShortcut[] = [
+  ...COMMAND_SHORTCUTS.map(({ combinations, actionKey }) => ({ combinations, actionKey })),
+  ...SHORTCUTS_HANDLED_IN_PLACE,
+];

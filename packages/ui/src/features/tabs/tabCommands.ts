@@ -1,4 +1,4 @@
-import type { TabStrip } from '@mdx/core';
+import type { Tab, TabStrip } from '@mdx/core';
 
 export type TabCommand =
   | { readonly kind: 'closeActiveTab' }
@@ -12,7 +12,10 @@ export type TabCommand =
   | { readonly kind: 'pinTab'; readonly canonicalKey: string }
   | { readonly kind: 'unpinTab'; readonly canonicalKey: string }
   | { readonly kind: 'moveTab'; readonly canonicalKey: string; readonly toIndex: number }
-  | { readonly kind: 'moveActiveTab'; readonly step: -1 | 1 };
+  | { readonly kind: 'moveActiveTab'; readonly step: -1 | 1 }
+  | { readonly kind: 'togglePinActiveTab' }
+  | { readonly kind: 'closeInactiveTabs' }
+  | { readonly kind: 'closeTabsRightOfActive' };
 
 type TabCommandHandlers = {
   readonly [Kind in TabCommand['kind']]: (
@@ -21,11 +24,13 @@ type TabCommandHandlers = {
   ) => TabStrip;
 };
 
+function withActiveTab(tabStrip: TabStrip, change: (activeTab: Tab) => TabStrip): TabStrip {
+  const activeTab = tabStrip.activeTab();
+  return activeTab ? change(activeTab) : tabStrip;
+}
+
 const TAB_COMMAND_HANDLERS: TabCommandHandlers = {
-  closeActiveTab: (tabStrip) => {
-    const activeTab = tabStrip.activeTab();
-    return activeTab ? tabStrip.close(activeTab.location.canonicalKey) : tabStrip;
-  },
+  closeActiveTab: (tabStrip) => withActiveTab(tabStrip, (tab) => tabStrip.close(tab.location.canonicalKey)),
   nextTab: (tabStrip) => tabStrip.activateNext(),
   previousTab: (tabStrip) => tabStrip.activatePrevious(),
   activateTabNumber: (tabStrip, { numberKey }) => tabStrip.activateByNumberKey(numberKey),
@@ -42,6 +47,14 @@ const TAB_COMMAND_HANDLERS: TabCommandHandlers = {
     const activeIndex = tabStrip.tabs().findIndex((tab) => tab.location.canonicalKey === activeKey);
     return tabStrip.move(activeKey, activeIndex + step);
   },
+  togglePinActiveTab: (tabStrip) =>
+    withActiveTab(tabStrip, ({ location, isPinned }) =>
+      isPinned ? tabStrip.unpin(location.canonicalKey) : tabStrip.pin(location.canonicalKey),
+    ),
+  closeInactiveTabs: (tabStrip) =>
+    withActiveTab(tabStrip, (tab) => tabStrip.closeOthers(tab.location.canonicalKey)),
+  closeTabsRightOfActive: (tabStrip) =>
+    withActiveTab(tabStrip, (tab) => tabStrip.closeToTheRight(tab.location.canonicalKey)),
 };
 
 export function isTabCommand(command: { readonly kind: string }): command is TabCommand {

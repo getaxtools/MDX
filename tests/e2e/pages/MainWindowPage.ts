@@ -131,7 +131,7 @@ export class MainWindowPage {
   private async sidebarSection(titleKey: MessageKey) {
     const title = translator.translate(titleKey);
     const sections = await this.browser
-      .$('nav')
+      .$(`nav[aria-label="${translator.translate('sidebar.label')}"]`)
       .$$('section')
       .filter(async (section) => (await section.$('h2').getProperty('textContent')) === title);
     const [section] = sections;

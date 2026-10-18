@@ -8,15 +8,19 @@
   import type { DocumentLink } from '../document-view/DocumentLink';
   import DocumentView from '../document-view/DocumentView.svelte';
   import FavouritesSidebar from '../favourites/FavouritesSidebar.svelte';
+  import { isUntitledLocation } from '@mdx/platform';
   import KeyboardShortcutsDialog from '../help/KeyboardShortcutsDialog.svelte';
+  import PasteTableDialog from '../table-paste/PasteTableDialog.svelte';
   import OutlinePanel from '../outline/OutlinePanel.svelte';
   import type { TabCommand } from '../tabs/tabCommands';
   import TabStripView from '../tabs/TabStripView.svelte';
   import { applyTheme } from '../view/applyTheme';
+  import ActivityBar from '../view/ActivityBar.svelte';
   import StatusBar from '../view/StatusBar.svelte';
   import ViewOptions from '../view/ViewOptions.svelte';
   import NoticeBar from './NoticeBar.svelte';
-  import { commandForShortcut, type DesktopPlatform, type ViewerCommand } from './viewerCommands';
+  import { commandForShortcut } from '../shortcuts/commandShortcuts';
+  import type { DesktopPlatform, ViewerCommand } from './viewerCommands';
   import type { ViewerController, ViewerSnapshot } from './ViewerController';
 
   interface Props {
@@ -40,6 +44,7 @@
   });
 
   const activeTab = $derived(snapshot?.viewer.tabStrip.activeTab());
+  const isActiveUntitled = $derived(activeTab ? isUntitledLocation(activeTab.location) : false);
   const isActiveFavourite = $derived(
     activeTab ? (snapshot?.viewer.favourites.isFavourite(activeTab.location.canonicalKey) ?? false) : false,
   );
@@ -61,68 +66,88 @@
 
 {#if snapshot}
   {@const viewSettings = snapshot.viewer.viewSettings}
-  <div class="viewer" class:without-sidebar={!viewSettings.isSidebarVisible}>
-    {#if viewSettings.isSidebarVisible}
-      <FavouritesSidebar
-        favourites={snapshot.viewer.favourites.favourites()}
-        recentFiles={snapshot.viewer.recentFiles.entries()}
-        pathStatuses={snapshot.pathStatuses}
-        onCommand={(command: ViewerCommand) => void controller.execute(command)}
-        onListFolder={(folderPath: string) => controller.listFolderContents(folderPath)}
-        onOpenDocument={(documentPath: string) => void controller.openDocuments([documentPath])}
+  <div class="app-shell">
+    <div class="viewer" class:without-sidebar={!viewSettings.isSidebarVisible}>
+      <ActivityBar
+        isSidebarVisible={viewSettings.isSidebarVisible}
+        isOutlineVisible={viewSettings.isOutlineVisible}
         {translator}
-        onOpenFavourite={(favourite: Favourite) => void controller.openFavourite(favourite)}
-        onOpenRecentFile={(recentFile: RecentFile) => void controller.openRecentFile(recentFile)}
+        onCommand={(command: ViewerCommand) => void controller.execute(command)}
+      />
+      {#if viewSettings.isSidebarVisible}
+        <FavouritesSidebar
+          favourites={snapshot.viewer.favourites.favourites()}
+          recentFiles={snapshot.viewer.recentFiles.entries()}
+          pathStatuses={snapshot.pathStatuses}
+          onCommand={(command: ViewerCommand) => void controller.execute(command)}
+          onListFolder={(folderPath: string) => controller.listFolderContents(folderPath)}
+          onOpenDocument={(documentPath: string) => void controller.openDocuments([documentPath])}
+          {translator}
+          onOpenFavourite={(favourite: Favourite) => void controller.openFavourite(favourite)}
+          onOpenRecentFile={(recentFile: RecentFile) => void controller.openRecentFile(recentFile)}
+        />
+      {/if}
+      <div class="workspace">
+        <div class="toolbar" role="toolbar" aria-label={translator.translate('toolbar.label')}>
+          <button onclick={() => void controller.execute({ kind: 'openDocuments' })}>
+            {translator.translate('toolbar.open')}
+          </button>
+          <button
+            aria-pressed={isActiveFavourite}
+            disabled={!activeTab || isActiveUntitled}
+            onclick={() => void controller.execute({ kind: 'toggleFavourite' })}
+          >
+            <span aria-hidden="true">{isActiveFavourite ? '★' : '☆'}</span>
+            {translator.translate('favourites.toggle')}
+          </button>
+          <ViewOptions
+            settings={viewSettings}
+            {translator}
+            onCommand={(command: ViewerCommand) => void controller.execute(command)}
+          />
+        </div>
+        <NoticeBar message={snapshot.notice} {translator} onDismiss={() => controller.dismissNotice()} />
+        <TabStripView
+          tabs={snapshot.viewer.tabStrip.tabs()}
+          activeKey={activeTab?.location.canonicalKey}
+          pathStatuses={snapshot.pathStatuses}
+          {translator}
+          onActivate={(canonicalKey: string) => controller.activateTab(canonicalKey)}
+          onCommand={(command: TabCommand) => void controller.execute(command)}
+        />
+        <div class="reading-area">
+          <DocumentView
+            document={snapshot.activeDocument}
+            zoomPercent={viewSettings.zoomPercent}
+            readingWidth={viewSettings.readingWidth}
+            {codeHighlighter}
+            findRequest={snapshot.findRequest}
+            isSourceView={snapshot.isSourceView ?? false}
+            onCloseFind={() => controller.closeFind()}
+            {translator}
+            onOpenLink={(link: DocumentLink) => void controller.openLink(link)}
+            onScroll={(scrollRatio: number) => controller.rememberScrollPosition(scrollRatio)}
+            onCurrentHeadingChange={(headingId: string | undefined) => (currentHeadingId = headingId)}
+            onCommand={(command: ViewerCommand) => void controller.execute(command)}
+            isOutlineVisible={viewSettings.isOutlineVisible}
+            isFavourite={isActiveFavourite}
+            canBeFavourite={!isActiveUntitled}
+          />
+          {#if snapshot.activeDocument && viewSettings.isOutlineVisible}
+            <OutlinePanel outline={snapshot.activeDocument.outline} {currentHeadingId} {translator} />
+          {/if}
+        </div>
+      </div>
+    </div>
+    {#if viewSettings.isStatusBarVisible}
+      <StatusBar
+        document={snapshot.activeDocument}
+        zoomPercent={viewSettings.zoomPercent}
+        isSourceView={snapshot.isSourceView ?? false}
+        {translator}
+        onResetZoom={() => void controller.execute({ kind: 'resetZoom' })}
       />
     {/if}
-    <div class="workspace">
-      <div class="toolbar" role="toolbar" aria-label={translator.translate('toolbar.label')}>
-        <button onclick={() => void controller.execute({ kind: 'openDocuments' })}>
-          {translator.translate('toolbar.open')}
-        </button>
-        <button
-          aria-pressed={isActiveFavourite}
-          disabled={!activeTab}
-          onclick={() => void controller.execute({ kind: 'toggleFavourite' })}
-        >
-          <span aria-hidden="true">{isActiveFavourite ? '★' : '☆'}</span>
-          {translator.translate('favourites.toggle')}
-        </button>
-        <ViewOptions
-          settings={viewSettings}
-          {translator}
-          onCommand={(command: ViewerCommand) => void controller.execute(command)}
-        />
-      </div>
-      <NoticeBar message={snapshot.notice} {translator} onDismiss={() => controller.dismissNotice()} />
-      <TabStripView
-        tabs={snapshot.viewer.tabStrip.tabs()}
-        activeKey={activeTab?.location.canonicalKey}
-        pathStatuses={snapshot.pathStatuses}
-        {translator}
-        onActivate={(canonicalKey: string) => controller.activateTab(canonicalKey)}
-        onCommand={(command: TabCommand) => void controller.execute(command)}
-      />
-      <div class="reading-area">
-        <DocumentView
-          document={snapshot.activeDocument}
-          zoomPercent={viewSettings.zoomPercent}
-          readingWidth={viewSettings.readingWidth}
-          {codeHighlighter}
-          findRequest={snapshot.findRequest}
-          isSourceView={snapshot.isSourceView ?? false}
-          onCloseFind={() => controller.closeFind()}
-          {translator}
-          onOpenLink={(link: DocumentLink) => void controller.openLink(link)}
-          onScroll={(scrollRatio: number) => controller.rememberScrollPosition(scrollRatio)}
-          onCurrentHeadingChange={(headingId: string | undefined) => (currentHeadingId = headingId)}
-        />
-        {#if snapshot.activeDocument && viewSettings.isOutlineVisible}
-          <OutlinePanel outline={snapshot.activeDocument.outline} {currentHeadingId} {translator} />
-        {/if}
-      </div>
-      <StatusBar document={snapshot.activeDocument} {translator} />
-    </div>
   </div>
   {#if snapshot.externalLinkRequest !== undefined}
     <ConfirmDialog
@@ -138,26 +163,57 @@
     <AboutDialog {appInfo} {translator} onClose={() => controller.closeDialog()} />
   {:else if snapshot.openDialog === 'keyboardShortcuts'}
     <KeyboardShortcutsDialog {translator} onClose={() => controller.closeDialog()} />
+  {:else if snapshot.openDialog === 'pasteTable'}
+    <PasteTableDialog
+      {translator}
+      renderPreview={(markdown: string) => controller.renderPreview(markdown)}
+      onOpenAsNewDocument={(markdown: string) => controller.openAsNewDocument(markdown)}
+      onClose={() => controller.closeDialog()}
+    />
+  {/if}
+  {#if snapshot.unsavedChanges}
+    {@const fileNames = snapshot.unsavedChanges.fileNames}
+    <ConfirmDialog
+      title={translator.translate('saving.unsavedDialog.title')}
+      message={translator.translate('saving.unsavedDialog.message', {
+        count: fileNames.length,
+        fileName: fileNames[0] ?? '',
+      })}
+      confirmLabel={translator.translate('saving.unsavedDialog.save')}
+      cancelLabel={translator.translate('saving.unsavedDialog.cancel')}
+      alternative={{
+        label: translator.translate('saving.unsavedDialog.discard'),
+        onChoose: () => void controller.answerUnsavedChanges('discard'),
+      }}
+      onConfirm={() => void controller.answerUnsavedChanges('save')}
+      onCancel={() => void controller.answerUnsavedChanges('cancel')}
+    />
   {/if}
 {/if}
 
 <style>
-  .viewer {
+  .app-shell {
     display: grid;
-    grid-template-columns: minmax(180px, 260px) 1fr;
+    grid-template-rows: 1fr auto;
     height: 100vh;
     font-family: var(--font-ui);
     color: var(--color-text);
     background: var(--color-background);
   }
 
+  .viewer {
+    display: grid;
+    grid-template-columns: auto minmax(180px, 260px) 1fr;
+    min-height: 0;
+  }
+
   .viewer.without-sidebar {
-    grid-template-columns: 1fr;
+    grid-template-columns: auto 1fr;
   }
 
   .workspace {
     display: grid;
-    grid-template-rows: auto auto auto 1fr auto;
+    grid-template-rows: auto auto auto 1fr;
     min-width: 0;
     min-height: 0;
   }

@@ -4,13 +4,14 @@ import { DEFAULT_VIEW_SETTINGS, parseViewSettings, resetZoom, zoomIn, zoomOut } 
 const atZoom = (zoomPercent: number) => ({ ...DEFAULT_VIEW_SETTINGS, zoomPercent });
 
 describe('view settings', () => {
-  it('starts with the system theme, 100% zoom, medium width and the sidebar shown', () => {
+  it('starts with the system theme, 100% zoom, medium width and every panel shown', () => {
     expect(DEFAULT_VIEW_SETTINGS).toEqual({
       theme: 'system',
       zoomPercent: 100,
       readingWidth: 'medium',
       isSidebarVisible: true,
       isOutlineVisible: true,
+      isStatusBarVisible: true,
     });
   });
 
@@ -36,6 +37,7 @@ describe('view settings', () => {
       readingWidth: 'full',
       isSidebarVisible: false,
       isOutlineVisible: false,
+      isStatusBarVisible: false,
     };
 
     expect(parseViewSettings(saved)).toEqual(saved);

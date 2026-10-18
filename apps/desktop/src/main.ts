@@ -42,4 +42,14 @@ mount(ViewerApp, {
   props: { controller, translator, platform: 'windows', appInfo, codeHighlighter: createCodeHighlighter() },
 });
 void controller.start();
-void getCurrentWindow().onCloseRequested(() => controller.saveNow());
+const appWindow = getCurrentWindow();
+void appWindow.onCloseRequested(async (event) => {
+  if (!controller.hasUnsavedDocuments()) {
+    await controller.saveNow();
+    return;
+  }
+  event.preventDefault();
+  if (!(await controller.confirmClosingWindow())) return;
+  await controller.saveNow();
+  await appWindow.destroy();
+});

@@ -4,6 +4,8 @@ pub const THEME_ITEM_PREFIX: &str = "theme.";
 pub const READING_WIDTH_ITEM_PREFIX: &str = "readingWidth.";
 pub const TOGGLE_SIDEBAR_ITEM_ID: &str = "toggleSidebar";
 pub const TOGGLE_OUTLINE_ITEM_ID: &str = "toggleOutline";
+pub const TOGGLE_STATUS_BAR_ITEM_ID: &str = "toggleStatusBar";
+pub const TOGGLE_SOURCE_VIEW_ITEM_ID: &str = "toggleSourceView";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -12,6 +14,8 @@ pub struct ViewMenuState {
     pub reading_width: String,
     pub is_sidebar_visible: bool,
     pub is_outline_visible: bool,
+    pub is_status_bar_visible: bool,
+    pub is_source_view: bool,
 }
 
 impl ViewMenuState {
@@ -25,6 +29,8 @@ impl ViewMenuState {
         match item_id {
             TOGGLE_SIDEBAR_ITEM_ID => self.is_sidebar_visible,
             TOGGLE_OUTLINE_ITEM_ID => self.is_outline_visible,
+            TOGGLE_STATUS_BAR_ITEM_ID => self.is_status_bar_visible,
+            TOGGLE_SOURCE_VIEW_ITEM_ID => self.is_source_view,
             _ => false,
         }
     }
@@ -40,6 +46,8 @@ mod tests {
             reading_width: "wide".to_owned(),
             is_sidebar_visible: true,
             is_outline_visible: false,
+            is_status_bar_visible: true,
+            is_source_view: false,
         }
     }
 
@@ -71,6 +79,19 @@ mod tests {
         state.is_outline_visible = true;
 
         assert!(state.is_checked("toggleOutline"));
+    }
+
+    #[test]
+    fn checks_the_status_bar_and_source_view_items_to_match_the_view() {
+        let mut state = state();
+        assert!(state.is_checked("toggleStatusBar"));
+        assert!(!state.is_checked("toggleSourceView"));
+
+        state.is_status_bar_visible = false;
+        state.is_source_view = true;
+
+        assert!(!state.is_checked("toggleStatusBar"));
+        assert!(state.is_checked("toggleSourceView"));
     }
 
     #[test]

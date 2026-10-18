@@ -51,9 +51,36 @@ describe('ViewerApp', () => {
     expect(await screen.findByRole('heading', { name: 'Guide' })).toBeTruthy();
   });
 
+  it('hides and shows the sidebar from the activity bar', async () => {
+    await renderViewer();
+    const sidebarButton = await screen.findByRole('button', { name: 'Favourites and recent files' });
+
+    await userEvent.click(sidebarButton);
+    expect(screen.queryByRole('region', { name: 'Favourites' })).toBeNull();
+    await userEvent.click(sidebarButton);
+
+    expect(screen.getByRole('region', { name: 'Favourites' })).toBeTruthy();
+  });
+
+  it('turns cells pasted with Ctrl+Alt+V into a new document that cannot be starred until saved', async () => {
+    await renderViewer();
+
+    await userEvent.keyboard('{Control>}{Alt>}v{/Alt}{/Control}');
+    await fireEvent.input(await screen.findByRole('textbox', { name: 'Cells' }), {
+      target: { value: 'Fruit\tQty\r\nApple\t3\r\n' },
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Open as New Document' }));
+
+    expect(
+      await screen.findByRole('tab', { name: 'Untitled-1.md (not saved)', selected: true }),
+    ).toBeTruthy();
+    expect(await screen.findByRole('cell', { name: 'Apple' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Favourite' }).hasAttribute('disabled')).toBe(true);
+  });
+
   it('stars the active document from the toolbar and lists it under favourites', async () => {
     await renderViewer([GUIDE]);
-    const starButton = await screen.findByRole('button', { name: /Favourite/ });
+    const starButton = await screen.findByRole('button', { name: 'Favourite' });
 
     await userEvent.click(starButton);
 
@@ -82,7 +109,7 @@ describe('ViewerApp', () => {
   it('disables the star button when no document is open', async () => {
     await renderViewer();
 
-    expect((await screen.findByRole('button', { name: /Favourite/ })).hasAttribute('disabled')).toBe(true);
+    expect((await screen.findByRole('button', { name: 'Favourite' })).hasAttribute('disabled')).toBe(true);
   });
 
   it('hides and shows the sidebar with Ctrl+B', async () => {

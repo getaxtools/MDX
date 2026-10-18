@@ -1,4 +1,5 @@
 mod menu_labels;
+pub mod recent_files_menu;
 mod view_menu_state;
 
 use tauri::menu::{
@@ -11,8 +12,10 @@ pub use menu_labels::MenuLabels;
 pub use view_menu_state::ViewMenuState;
 
 use crate::open_requests::MAIN_WINDOW_LABEL;
+use recent_files_menu::{RecentFilesMenu, fill_recent_menu};
 use view_menu_state::{
     READING_WIDTH_ITEM_PREFIX, THEME_ITEM_PREFIX, TOGGLE_OUTLINE_ITEM_ID, TOGGLE_SIDEBAR_ITEM_ID,
+    TOGGLE_SOURCE_VIEW_ITEM_ID, TOGGLE_STATUS_BAR_ITEM_ID,
 };
 
 pub const MENU_COMMAND_EVENT: &str = "menu-command";
@@ -36,6 +39,84 @@ const READING_WIDTH_CHOICES: CheckChoices = CheckChoices {
     choices: &["narrow", "medium", "wide", "full"],
 };
 
+/// Menu item id, label key and the shortcut shown next to it.
+type CommandItem = (&'static str, &'static str, Option<&'static str>);
+
+const FILE_OPEN_ITEMS: [CommandItem; 2] = [
+    ("openDocuments", "menu.file.open", Some("Ctrl+O")),
+    ("openFolder", "menu.file.openFolder", None),
+];
+
+const FILE_SAVE_ITEMS: [CommandItem; 3] = [
+    ("saveDocument", "menu.file.save", Some("Ctrl+S")),
+    ("saveDocumentAs", "menu.file.saveAs", Some("Ctrl+Shift+S")),
+    ("saveAllDocuments", "menu.file.saveAll", Some("Ctrl+Alt+S")),
+];
+
+const FILE_OTHER_ITEMS: [CommandItem; 4] = [
+    ("reopenClosedTab", "tabs.reopenClosed", Some("Ctrl+Shift+T")),
+    (
+        "toggleFavourite",
+        "menu.file.toggleFavourite",
+        Some("Ctrl+D"),
+    ),
+    ("closeActiveTab", "menu.file.closeTab", Some("Ctrl+W")),
+    ("print", "menu.file.print", Some("Ctrl+P")),
+];
+
+const EDIT_ITEMS: [CommandItem; 2] = [
+    ("showFind", "menu.edit.find", Some("Ctrl+F")),
+    ("showPasteTable", "menu.edit.pasteTable", Some("Ctrl+Alt+V")),
+];
+
+const ZOOM_ITEMS: [CommandItem; 3] = [
+    ("zoomIn", "menu.view.zoomIn", Some("Ctrl++")),
+    ("zoomOut", "menu.view.zoomOut", Some("Ctrl+-")),
+    ("resetZoom", "menu.view.resetZoom", Some("Ctrl+0")),
+];
+
+const TAB_SWITCH_ITEMS: [CommandItem; 2] = [
+    ("nextTab", "menu.window.nextTab", Some("Ctrl+Tab")),
+    (
+        "previousTab",
+        "menu.window.previousTab",
+        Some("Ctrl+Shift+Tab"),
+    ),
+];
+
+const TAB_ARRANGE_ITEMS: [CommandItem; 3] = [
+    (
+        "moveTabLeft",
+        "menu.window.moveTabLeft",
+        Some("Ctrl+Shift+PgUp"),
+    ),
+    (
+        "moveTabRight",
+        "menu.window.moveTabRight",
+        Some("Ctrl+Shift+PgDn"),
+    ),
+    ("togglePinActiveTab", "menu.window.togglePin", None),
+];
+
+const TAB_CLOSE_ITEMS: [CommandItem; 3] = [
+    ("closeActiveTab", "menu.file.closeTab", Some("Ctrl+W")),
+    ("closeInactiveTabs", "menu.window.closeOthers", None),
+    (
+        "closeTabsRightOfActive",
+        "menu.window.closeToTheRight",
+        None,
+    ),
+];
+
+const HELP_ITEMS: [CommandItem; 2] = [
+    (
+        "showKeyboardShortcuts",
+        "menu.help.keyboardShortcuts",
+        Some("F1"),
+    ),
+    ("showAbout", "menu.help.about", None),
+];
+
 pub struct ViewMenuItems(Vec<CheckMenuItem<Wry>>);
 
 pub fn install_main_menu(app: &App) -> tauri::Result<()> {
@@ -44,17 +125,22 @@ pub fn install_main_menu(app: &App) -> tauri::Result<()> {
         labels: MenuLabels::english(),
         view_items: Vec::new(),
     };
+    let recent_files =
+        SubmenuBuilder::new(app, builder.labels.label("menu.file.openRecent")).build()?;
+    fill_recent_menu(app.handle(), &recent_files, &[])?;
     let menu = Menu::with_items(
         app,
         &[
-            &builder.file_menu()?,
+            &builder.file_menu(&recent_files)?,
             &builder.edit_menu()?,
             &builder.view_menu()?,
+            &builder.window_menu()?,
             &builder.help_menu()?,
         ],
     )?;
     app.set_menu(menu)?;
     app.manage(ViewMenuItems(builder.view_items));
+    app.manage(RecentFilesMenu(recent_files));
     Ok(())
 }
 
@@ -83,15 +169,24 @@ struct MainMenuBuilder<'a> {
 }
 
 impl MainMenuBuilder<'_> {
-    fn file_menu(&self) -> tauri::Result<Submenu<Wry>> {
-        SubmenuBuilder::new(self.app, self.labels.label("menu.file"))
-            .item(&self.command_item("openDocuments", "menu.file.open", Some("Ctrl+O"))?)
-            .item(&self.command_item("openFolder", "menu.file.openFolder", None)?)
-            .item(&self.command_item("closeActiveTab", "menu.file.closeTab", Some("Ctrl+W"))?)
+    fn file_menu(&self, recent_files: &Submenu<Wry>) -> tauri::Result<Submenu<Wry>> {
+        let [reopen_closed, favourite, close_tab, print] =
+            FILE_OTHER_ITEMS.map(|item| self.command_item(item));
+        let builder = SubmenuBuilder::new(self.app, self.labels.label("menu.file"));
+        let builder = self
+            .with_items(builder, &FILE_OPEN_ITEMS)?
+            .item(recent_files)
+            .item(&reopen_closed?)
+            .separator();
+        self.with_items(builder, &FILE_SAVE_ITEMS)?
             .separator()
-            .item(&self.command_item("print", "menu.file.print", Some("Ctrl+P"))?)
+            .item(&favourite?)
             .separator()
-            .item(&self.command_item(EXIT_ITEM_ID, "menu.file.exit", None)?)
+            .item(&close_tab?)
+            .separator()
+            .item(&print?)
+            .separator()
+            .item(&self.command_item((EXIT_ITEM_ID, "menu.file.exit", Some("Alt+F4")))?)
             .build()
     }
 
@@ -101,62 +196,89 @@ impl MainMenuBuilder<'_> {
             self.app,
             Some(&self.labels.label("menu.edit.selectAll")),
         )?;
+        let [find, paste_table] = EDIT_ITEMS.map(|item| self.command_item(item));
         SubmenuBuilder::new(self.app, self.labels.label("menu.edit"))
             .item(&copy)
             .item(&select_all)
             .separator()
-            .item(&self.command_item("showFind", "menu.edit.find", Some("Ctrl+F"))?)
+            .item(&find?)
+            .separator()
+            .item(&paste_table?)
             .build()
     }
 
     fn view_menu(&mut self) -> tauri::Result<Submenu<Wry>> {
         let themes = self.check_submenu(&THEME_CHOICES)?;
         let reading_widths = self.check_submenu(&READING_WIDTH_CHOICES)?;
-        let sidebar =
-            self.toggle_item(TOGGLE_SIDEBAR_ITEM_ID, "menu.view.toggleSidebar", "Ctrl+B")?;
+        let source_view = self.toggle_item(
+            TOGGLE_SOURCE_VIEW_ITEM_ID,
+            "menu.view.toggleSource",
+            Some("Ctrl+U"),
+        )?;
+        let sidebar = self.toggle_item(
+            TOGGLE_SIDEBAR_ITEM_ID,
+            "menu.view.toggleSidebar",
+            Some("Ctrl+B"),
+        )?;
         let outline = self.toggle_item(
             TOGGLE_OUTLINE_ITEM_ID,
             "menu.view.toggleOutline",
-            "Ctrl+Shift+O",
+            Some("Ctrl+Shift+O"),
         )?;
-        SubmenuBuilder::new(self.app, self.labels.label("menu.view"))
+        let status_bar =
+            self.toggle_item(TOGGLE_STATUS_BAR_ITEM_ID, "menu.view.toggleStatusBar", None)?;
+        let builder = SubmenuBuilder::new(self.app, self.labels.label("menu.view"))
             .item(&themes)
             .item(&reading_widths)
+            .separator();
+        self.with_items(builder, &ZOOM_ITEMS)?
             .separator()
-            .item(&self.command_item("zoomIn", "menu.view.zoomIn", Some("Ctrl+="))?)
-            .item(&self.command_item("zoomOut", "menu.view.zoomOut", Some("Ctrl+-"))?)
-            .item(&self.command_item("resetZoom", "menu.view.resetZoom", Some("Ctrl+0"))?)
+            .item(&source_view)
             .separator()
-            .item(&self.command_item(
-                "toggleSourceView",
-                "menu.view.toggleSource",
-                Some("Ctrl+U"),
-            )?)
             .item(&sidebar)
             .item(&outline)
+            .item(&status_bar)
             .build()
     }
 
+    fn window_menu(&self) -> tauri::Result<Submenu<Wry>> {
+        let builder = SubmenuBuilder::new(self.app, self.labels.label("menu.window"));
+        let builder = self.with_items(builder, &TAB_SWITCH_ITEMS)?.separator();
+        let builder = self.with_items(builder, &TAB_ARRANGE_ITEMS)?.separator();
+        self.with_items(builder, &TAB_CLOSE_ITEMS)?.build()
+    }
+
     fn help_menu(&self) -> tauri::Result<Submenu<Wry>> {
+        let [shortcuts, about] = HELP_ITEMS.map(|item| self.command_item(item));
         SubmenuBuilder::new(self.app, self.labels.label("menu.help"))
-            .item(&self.command_item(
-                "showKeyboardShortcuts",
-                "menu.help.keyboardShortcuts",
-                Some("F1"),
-            )?)
+            .item(&shortcuts?)
             .separator()
-            .item(&self.command_item("showAbout", "menu.help.about", None)?)
+            .item(&about?)
             .build()
+    }
+
+    fn with_items<'m>(
+        &self,
+        builder: SubmenuBuilder<'m, Wry, App>,
+        items: &[CommandItem],
+    ) -> tauri::Result<SubmenuBuilder<'m, Wry, App>> {
+        let menu_items = self.command_items(items)?;
+        Ok(menu_items
+            .iter()
+            .fold(builder, |builder, item| builder.item(item)))
+    }
+
+    fn command_items(&self, items: &[CommandItem]) -> tauri::Result<Vec<MenuItem<Wry>>> {
+        items.iter().map(|item| self.command_item(*item)).collect()
     }
 
     fn toggle_item(
         &mut self,
         id: &str,
         label_key: &str,
-        shortcut: &str,
+        shortcut: Option<&str>,
     ) -> tauri::Result<CheckMenuItem<Wry>> {
-        let label = self.labels.label_with_shortcut(label_key, shortcut);
-        let item = CheckMenuItemBuilder::with_id(id, label)
+        let item = CheckMenuItemBuilder::with_id(id, self.label_for(label_key, shortcut))
             .checked(true)
             .build(self.app)?;
         self.view_items.push(item.clone());
@@ -178,23 +300,40 @@ impl MainMenuBuilder<'_> {
         submenu.build()
     }
 
-    fn command_item(
-        &self,
-        id: &str,
-        label_key: &str,
-        shortcut: Option<&str>,
-    ) -> tauri::Result<MenuItem<Wry>> {
-        let label = match shortcut {
+    fn command_item(&self, (id, label_key, shortcut): CommandItem) -> tauri::Result<MenuItem<Wry>> {
+        MenuItemBuilder::with_id(id, self.label_for(label_key, shortcut)).build(self.app)
+    }
+
+    fn label_for(&self, label_key: &str, shortcut: Option<&str>) -> String {
+        match shortcut {
             Some(shortcut) => self.labels.label_with_shortcut(label_key, shortcut),
             None => self.labels.label(label_key),
-        };
-        MenuItemBuilder::with_id(id, label).build(self.app)
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_command_item_has_a_label_in_the_catalog() {
+        let labels = MenuLabels::english();
+        let items = FILE_OPEN_ITEMS
+            .iter()
+            .chain(&FILE_SAVE_ITEMS)
+            .chain(&FILE_OTHER_ITEMS)
+            .chain(&EDIT_ITEMS)
+            .chain(&ZOOM_ITEMS)
+            .chain(&TAB_SWITCH_ITEMS)
+            .chain(&TAB_ARRANGE_ITEMS)
+            .chain(&TAB_CLOSE_ITEMS)
+            .chain(&HELP_ITEMS);
+
+        for (_, label_key, _) in items {
+            assert!(labels.has(label_key), "{label_key}");
+        }
+    }
 
     #[test]
     fn every_menu_choice_has_a_label_in_the_catalog() {

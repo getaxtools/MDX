@@ -147,6 +147,59 @@ describe('ViewerSession', () => {
     expect(session.openedDocument(guide.location.canonicalKey)).toBeUndefined();
   });
 
+  describe('documents that are not saved yet', () => {
+    const nameFor = (number: number) => `Untitled-${String(number)}.md`;
+
+    it('opens text as a new numbered document without adding it to recent files', async () => {
+      const { session } = createSession();
+
+      session.openUntitledDocument('| a |', nameFor);
+      session.openUntitledDocument('| b |', nameFor);
+
+      expect(tabNamesOf(session)).toEqual(['Untitled-1.md', 'Untitled-2.md']);
+      expect(session.currentState().recentFiles.entries()).toEqual([]);
+      expect((await session.loadActiveDocument())?.text).toBe('| b |');
+    });
+
+    it('saves a new document where the user chooses and shows the saved file in its tab', async () => {
+      const { session, documentFiles } = createSession();
+      session.openUntitledDocument('| a |', nameFor);
+      documentFiles.saveAsChoices.push('C:\\Docs\\Table.md');
+
+      const saved = await session.saveDocumentAs('untitled:1');
+
+      expect(saved?.fileName).toBe('Table.md');
+      expect(documentFiles.savedSources).toEqual([
+        { kind: 'text', text: '| a |', fileName: 'Untitled-1.md' },
+      ]);
+      expect(tabNamesOf(session)).toEqual(['Table.md']);
+      expect(session.currentState().recentFiles.has(saved?.canonicalKey ?? '')).toBe(true);
+      expect((await session.loadActiveDocument())?.text).toBe('| a |');
+    });
+
+    it('keeps the new document when the user cancels Save As', async () => {
+      const { session } = createSession();
+      session.openUntitledDocument('| a |', nameFor);
+
+      const saved = await session.saveDocumentAs('untitled:1');
+
+      expect(saved).toBeUndefined();
+      expect(tabNamesOf(session)).toEqual(['Untitled-1.md']);
+    });
+
+    it('saves a copy of an opened document and shows the copy in its tab', async () => {
+      const { session, documentFiles } = createSession();
+      await session.openDocument(GUIDE_PATH);
+      documentFiles.saveAsChoices.push('C:\\Docs\\Guide copy.md');
+
+      await session.saveDocumentAs(GUIDE_PATH.toLowerCase());
+
+      expect(documentFiles.savedSources).toEqual([{ kind: 'copy', path: GUIDE_PATH }]);
+      expect(tabNamesOf(session)).toEqual(['Guide copy.md']);
+      expect((await session.loadActiveDocument())?.text).toBe('# Guide');
+    });
+  });
+
   it('notifies subscribers of every change until they unsubscribe', async () => {
     const { session } = createSession();
     const notifications: ViewerState[] = [];

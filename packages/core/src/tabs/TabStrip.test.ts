@@ -240,6 +240,41 @@ describe('TabStrip', () => {
     });
   });
 
+  describe('replacing', () => {
+    it('shows the saved document in the same tab, keeping its place and pin', () => {
+      const tabStrip = TabStrip.empty()
+        .openOrFocus(location('a.md'))
+        .openOrFocus(location('Untitled-1.md'))
+        .openOrFocus(location('c.md'))
+        .pin(keyOf('Untitled-1.md'))
+        .activate(keyOf('Untitled-1.md'));
+
+      const replaced = tabStrip.replace(keyOf('Untitled-1.md'), location('table.md'));
+
+      expect(replaced.tabs().map((tab) => [tab.location.fileName, tab.isPinned])).toEqual([
+        ['table.md', true],
+        ['a.md', false],
+        ['c.md', false],
+      ]);
+      expect(replaced.activeTab()?.location.fileName).toBe('table.md');
+    });
+
+    it('focuses the existing tab when the saved document is already open', () => {
+      const tabStrip = TabStrip.empty().openOrFocus(location('a.md')).openOrFocus(location('Untitled-1.md'));
+
+      const replaced = tabStrip.replace(keyOf('Untitled-1.md'), location('a.md'));
+
+      expect(replaced.tabs().map((tab) => tab.location.fileName)).toEqual(['a.md']);
+      expect(replaced.activeTab()?.location.fileName).toBe('a.md');
+    });
+
+    it('ignores a tab that is not open', () => {
+      const tabStrip = TabStrip.empty().openOrFocus(location('a.md'));
+
+      expect(tabStrip.replace(keyOf('gone.md'), location('b.md'))).toBe(tabStrip);
+    });
+  });
+
   describe('restoring', () => {
     it('remembers scroll position, clamped between top and bottom', () => {
       const tabStrip = tabStripWith('a.md', 'b.md')
