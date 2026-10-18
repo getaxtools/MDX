@@ -1,4 +1,4 @@
-import type { DocumentLocation, FolderPort } from '@mdx/platform';
+import type { DocumentLocation, FolderListing, FolderPort } from '@mdx/platform';
 import { tauriCommands } from './tauriCommands';
 
 export class TauriFolders implements FolderPort {
@@ -6,7 +6,7 @@ export class TauriFolders implements FolderPort {
     return (await tauriCommands.pickFolder()) ?? undefined;
   }
 
-  listFolderDocuments(folderPath: string): Promise<readonly DocumentLocation[]> {
-    return tauriCommands.listFolderDocuments(folderPath);
+  listFolderContents(folderPath: string): Promise<FolderListing> {
+    return tauriCommands.listFolderContents(folderPath);
   }
 }

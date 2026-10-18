@@ -1,7 +1,7 @@
 <script lang="ts">
   import { displayNameOf, type Favourite } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
-  import type { DocumentLocation, PathStatus } from '@mdx/platform';
+  import type { FolderListing, PathStatus } from '@mdx/platform';
   import { tick } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import ContextMenu from '../../components/ContextMenu.svelte';
@@ -16,7 +16,7 @@
     translator: Translator;
     onOpen: (favourite: Favourite) => void;
     onCommand: (command: FavouriteCommand) => void;
-    onListFolder: (folderPath: string) => Promise<readonly DocumentLocation[]>;
+    onListFolder: (folderPath: string) => Promise<FolderListing>;
     onOpenDocument: (documentPath: string) => void;
   }
 

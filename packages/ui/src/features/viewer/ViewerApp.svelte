@@ -68,7 +68,7 @@
         recentFiles={snapshot.viewer.recentFiles.entries()}
         pathStatuses={snapshot.pathStatuses}
         onCommand={(command: ViewerCommand) => void controller.execute(command)}
-        onListFolder={(folderPath: string) => controller.listFolderDocuments(folderPath)}
+        onListFolder={(folderPath: string) => controller.listFolderContents(folderPath)}
         onOpenDocument={(documentPath: string) => void controller.openDocuments([documentPath])}
         {translator}
         onOpenFavourite={(favourite: Favourite) => void controller.openFavourite(favourite)}

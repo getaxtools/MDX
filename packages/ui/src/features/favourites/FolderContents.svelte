@@ -1,30 +1,53 @@
 <script lang="ts">
   import type { Translator } from '@mdx/i18n';
-  import type { DocumentLocation } from '@mdx/platform';
+  import type { FolderListing } from '@mdx/platform';
+  import { SvelteSet } from 'svelte/reactivity';
+  import FolderContents from './FolderContents.svelte';
 
   interface Props {
     folderPath: string;
     translator: Translator;
-    onListFolder: (folderPath: string) => Promise<readonly DocumentLocation[]>;
+    onListFolder: (folderPath: string) => Promise<FolderListing>;
     onOpenDocument: (documentPath: string) => void;
   }
 
   const { folderPath, translator, onListFolder, onOpenDocument }: Props = $props();
 
-  const documents = $derived(onListFolder(folderPath));
+  const listing = $derived(onListFolder(folderPath));
+  const expandedSubfolderKeys = new SvelteSet<string>();
+
+  function toggleSubfolder(key: string) {
+    if (expandedSubfolderKeys.has(key)) expandedSubfolderKeys.delete(key);
+    else expandedSubfolderKeys.add(key);
+  }
 </script>
 
-{#await documents}
+{#await listing}
   <p class="folder-status">{translator.translate('favourites.folder.loading')}</p>
-{:then locations}
-  {#if locations.length === 0}
+{:then { folders, documents }}
+  {#if folders.length === 0 && documents.length === 0}
     <p class="folder-status">{translator.translate('favourites.folder.empty')}</p>
   {:else}
     <ul class="folder-contents">
-      {#each locations as location (location.canonicalKey)}
+      {#each folders as folder (folder.canonicalKey)}
         <li>
-          <button title={location.displayPath} onclick={() => onOpenDocument(location.displayPath)}>
-            {location.fileName}
+          <button
+            title={folder.displayPath}
+            aria-expanded={expandedSubfolderKeys.has(folder.canonicalKey)}
+            onclick={() => toggleSubfolder(folder.canonicalKey)}
+          >
+            <span aria-hidden="true">📁</span>
+            {folder.fileName}
+          </button>
+          {#if expandedSubfolderKeys.has(folder.canonicalKey)}
+            <FolderContents folderPath={folder.displayPath} {translator} {onListFolder} {onOpenDocument} />
+          {/if}
+        </li>
+      {/each}
+      {#each documents as document (document.canonicalKey)}
+        <li>
+          <button title={document.displayPath} onclick={() => onOpenDocument(document.displayPath)}>
+            {document.fileName}
           </button>
         </li>
       {/each}

@@ -22,7 +22,7 @@ function createViewer({
   menu = new InMemoryAppMenu(),
   watcher = new InMemoryDocumentWatcher(),
   links = new InMemoryDocumentLinks(),
-  folders = new InMemoryFolders({ 'C:\\Docs': [GUIDE, NOTES] }),
+  folders = new InMemoryFolders({ 'C:\\Docs': { folders: ['C:\\Docs\\Specs'], documents: [GUIDE, NOTES] } }),
 } = {}) {
   const documentFiles = new InMemoryDocumentFiles({ [GUIDE]: '# Guide', [NOTES]: '# Notes' });
   const requests = new InMemoryDocumentRequests(startupPaths);
@@ -420,13 +420,25 @@ describe('ViewerController', () => {
       expect(snapshot().viewer.favourites.favourites()).toEqual([]);
     });
 
-    it('lists the documents in a favourite folder', async () => {
+    it('lists the subfolders and documents in a favourite folder', async () => {
       const { controller } = createViewer();
       await controller.start();
 
-      const documents = await controller.listFolderDocuments('C:\\Docs');
+      const listing = await controller.listFolderContents('C:\\Docs');
 
-      expect(documents.map((document) => document.fileName)).toEqual(['Guide.md', 'Notes.md']);
+      expect(listing.folders.map((folder) => folder.fileName)).toEqual(['Specs']);
+      expect(listing.documents.map((document) => document.fileName)).toEqual(['Guide.md', 'Notes.md']);
+    });
+
+    it('lists nothing when a folder cannot be read', async () => {
+      const folders = new InMemoryFolders();
+      folders.listFolderContents = () => Promise.reject(new Error('unreachable'));
+      const { controller } = createViewer({ folders });
+      await controller.start();
+
+      const listing = await controller.listFolderContents('C:\\Offline');
+
+      expect(listing).toEqual({ folders: [], documents: [] });
     });
   });
 

@@ -1,5 +1,11 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { DocumentLocation, OpenedDocument, PathStatus, ViewMenuState } from '@mdx/platform';
+import type {
+  DocumentLocation,
+  FolderListing,
+  OpenedDocument,
+  PathStatus,
+  ViewMenuState,
+} from '@mdx/platform';
 import type { AppInfo } from '@mdx/ui';
 
 export const tauriCommands = {
@@ -16,7 +22,7 @@ export const tauriCommands = {
     invoke<string>('resolve_document_link', { document, href }),
   openExternalLink: (url: string) => invoke<null>('open_external_link', { url }),
   pickFolder: () => invoke<DocumentLocation | null>('pick_folder'),
-  listFolderDocuments: (folder: string) => invoke<DocumentLocation[]>('list_folder_documents', { folder }),
+  listFolderContents: (folder: string) => invoke<FolderListing>('list_folder_contents', { folder }),
 };
 
 export const OPEN_DOCUMENTS_EVENT = 'open-documents';

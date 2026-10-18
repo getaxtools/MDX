@@ -1,10 +1,10 @@
-
 node_modules
 dist
 target
 coverage
 pnpm-lock.yaml
 CHANGELOG.md
+.release-please-manifest.json
 LICENSE-APACHE
 CODE_OF_CONDUCT.md
 tests/fixtures

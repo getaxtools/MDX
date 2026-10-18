@@ -1,6 +1,6 @@
 import { FavouritesList } from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
-import { InMemoryDocumentFiles, type PathStatus } from '@mdx/platform';
+import { InMemoryDocumentFiles, type FolderListing, type PathStatus } from '@mdx/platform';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -8,6 +8,7 @@ import FavouritesSection from './FavouritesSection.svelte';
 
 const location = (path: string) => InMemoryDocumentFiles.locationOf(path);
 const keyOf = (path: string) => location(path).canonicalKey;
+const EMPTY_LISTING: FolderListing = { folders: [], documents: [] };
 
 function renderFavourites(pathStatuses: ReadonlyMap<string, PathStatus> = new Map()) {
   const favourites = FavouritesList.empty()
@@ -21,7 +22,7 @@ function renderFavourites(pathStatuses: ReadonlyMap<string, PathStatus> = new Ma
     translator: createTranslator(),
     onOpen,
     onCommand,
-    onListFolder: () => Promise.resolve([]),
+    onListFolder: () => Promise.resolve(EMPTY_LISTING),
     onOpenDocument: vi.fn(),
   });
   return { onOpen, onCommand };
@@ -104,7 +105,7 @@ describe('FavouritesSection folders', () => {
       translator: createTranslator(),
       onOpen: vi.fn(),
       onCommand: vi.fn(),
-      onListFolder: () => Promise.resolve([location('C:\\Specs\\Plan.md')]),
+      onListFolder: () => Promise.resolve({ folders: [], documents: [location('C:\\Specs\\Plan.md')] }),
       onOpenDocument,
     });
     const folder = screen.getByRole('button', { name: 'Specs' });
@@ -116,14 +117,40 @@ describe('FavouritesSection folders', () => {
     expect(onOpenDocument).toHaveBeenCalledWith('C:\\Specs\\Plan.md');
   });
 
-  it('says when a folder has no Markdown documents', async () => {
+  it('expands a subfolder to list its own documents', async () => {
+    const listingsByFolder: Record<string, FolderListing> = {
+      'C:\\Specs': { folders: [location('C:\\Specs\\docs')], documents: [location('C:\\Specs\\README.md')] },
+      'C:\\Specs\\docs': { folders: [], documents: [location('C:\\Specs\\docs\\Plan.md')] },
+    };
+    const onOpenDocument = vi.fn();
+    render(FavouritesSection, {
+      favourites: FavouritesList.empty().add(location('C:\\Specs'), 'folder').favourites(),
+      pathStatuses: new Map(),
+      translator: createTranslator(),
+      onOpen: vi.fn(),
+      onCommand: vi.fn(),
+      onListFolder: (folderPath: string) => Promise.resolve(listingsByFolder[folderPath] ?? EMPTY_LISTING),
+      onOpenDocument,
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Specs' }));
+    const subfolder = await screen.findByRole('button', { name: 'docs' });
+    await userEvent.click(subfolder);
+    await userEvent.click(await screen.findByRole('button', { name: 'Plan.md' }));
+
+    expect(subfolder.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('button', { name: 'README.md' })).toBeTruthy();
+    expect(onOpenDocument).toHaveBeenCalledWith('C:\\Specs\\docs\\Plan.md');
+  });
+
+  it('says when a folder has no subfolders or Markdown documents', async () => {
     render(FavouritesSection, {
       favourites: FavouritesList.empty().add(location('C:\\Empty'), 'folder').favourites(),
       pathStatuses: new Map(),
       translator: createTranslator(),
       onOpen: vi.fn(),
       onCommand: vi.fn(),
-      onListFolder: () => Promise.resolve([]),
+      onListFolder: () => Promise.resolve(EMPTY_LISTING),
       onOpenDocument: vi.fn(),
     });
 

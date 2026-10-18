@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Favourite, RecentFile } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
-  import type { DocumentLocation, PathStatus } from '@mdx/platform';
+  import type { FolderListing, PathStatus } from '@mdx/platform';
   import type { RecentFileCommand } from '../recent-files/recentFileCommands';
   import RecentFilesSection from '../recent-files/RecentFilesSection.svelte';
   import type { FavouriteCommand } from './favouriteCommands';
@@ -15,7 +15,7 @@
     onOpenFavourite: (favourite: Favourite) => void;
     onOpenRecentFile: (recentFile: RecentFile) => void;
     onCommand: (command: FavouriteCommand | RecentFileCommand) => void;
-    onListFolder: (folderPath: string) => Promise<readonly DocumentLocation[]>;
+    onListFolder: (folderPath: string) => Promise<FolderListing>;
     onOpenDocument: (documentPath: string) => void;
   }
 

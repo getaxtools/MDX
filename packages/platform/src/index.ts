@@ -14,5 +14,5 @@ export type { DocumentResourcesPort } from './DocumentResourcesPort';
 export type { DocumentPrinterPort } from './DocumentPrinterPort';
 export type { DocumentLinksPort } from './DocumentLinksPort';
 export { InMemoryDocumentLinks } from './fakes/InMemoryDocumentLinks';
-export type { FolderPort } from './FolderPort';
-export { InMemoryFolders } from './fakes/InMemoryFolders';
+export type { FolderListing, FolderPort } from './FolderPort';
+export { InMemoryFolders, type InMemoryFolderContents } from './fakes/InMemoryFolders';
