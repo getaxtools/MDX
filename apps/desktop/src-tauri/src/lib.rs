@@ -61,6 +61,7 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::documents::pick_documents,
         commands::documents::check_path_statuses,
         commands::documents::take_startup_documents,
+        commands::documents::save_document_as,
         commands::app_state::load_app_state,
         commands::app_state::save_app_state,
         commands::app_info::get_app_info,
@@ -70,6 +71,7 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::folders::pick_folder,
         commands::folders::list_folder_contents,
         menu::update_view_menu,
+        menu::recent_files_menu::update_recent_menu,
     ])
 }
 

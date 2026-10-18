@@ -65,7 +65,10 @@
       <div class="separator" role="separator"></div>
     {/if}
     <button role="menuitem" tabindex="-1" disabled={item.isDisabled} onclick={() => choose(item.id)}>
-      {item.label}
+      <span>{item.label}</span>
+      {#if item.shortcut}
+        <span class="shortcut" aria-hidden="true">{item.shortcut}</span>
+      {/if}
     </button>
   {/each}
 </div>
@@ -85,6 +88,9 @@
   }
 
   button {
+    display: flex;
+    gap: var(--space-6);
+    justify-content: space-between;
     padding: var(--space-1) var(--space-3);
     border: 0;
     border-radius: var(--radius-small);
@@ -102,6 +108,12 @@
 
   button:disabled {
     color: var(--color-text-secondary);
+  }
+
+  .shortcut {
+    color: var(--color-text-secondary);
+    font-size: var(--text-size-small);
+    white-space: nowrap;
   }
 
   .separator {

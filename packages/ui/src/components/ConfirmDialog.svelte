@@ -6,9 +6,11 @@
     cancelLabel: string;
     onConfirm: () => void;
     onCancel: () => void;
+    /** A third choice between confirming and cancelling, such as Don't Save. */
+    alternative?: { readonly label: string; readonly onChoose: () => void } | undefined;
   }
 
-  const { title, message, confirmLabel, cancelLabel, onConfirm, onCancel }: Props = $props();
+  const { title, message, confirmLabel, cancelLabel, onConfirm, onCancel, alternative }: Props = $props();
 
   let cancelButton: HTMLButtonElement | undefined = $state();
 
@@ -35,6 +37,9 @@
     <p id="confirm-message">{message}</p>
     <div class="actions">
       <button class="primary" onclick={onConfirm}>{confirmLabel}</button>
+      {#if alternative}
+        <button onclick={alternative.onChoose}>{alternative.label}</button>
+      {/if}
       <button bind:this={cancelButton} onclick={onCancel}>{cancelLabel}</button>
     </div>
   </div>

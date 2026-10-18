@@ -528,6 +528,155 @@ describe('ViewerController', () => {
     });
   });
 
+  describe('new documents and saving', () => {
+    const TABLE = 'C:\\Docs\\Table.md';
+
+    async function viewerWithNewDocument(startupPaths: string[] = []) {
+      const viewer = createViewer({ startupPaths });
+      await viewer.controller.start();
+      await viewer.controller.execute({ kind: 'showPasteTable' });
+      viewer.controller.openAsNewDocument('| a |\n| - |');
+      await vi.waitFor(() => expect(viewer.snapshot().activeDocument?.isUntitled).toBe(true));
+      return viewer;
+    }
+
+    it('opens a converted table as a new document and closes the converter', async () => {
+      const { snapshot } = await viewerWithNewDocument();
+
+      expect(tabNames(snapshot())).toEqual(['Untitled-1.md']);
+      expect(snapshot().activeDocument?.html).toContain('<table>');
+      expect(snapshot()).not.toHaveProperty('openDialog');
+    });
+
+    it('saves a new document with Save and shows the saved file in its tab', async () => {
+      const { controller, documentFiles, snapshot } = await viewerWithNewDocument();
+      documentFiles.saveAsChoices.push(TABLE);
+
+      await controller.execute({ kind: 'saveDocument' });
+
+      await vi.waitFor(() => expect(tabNames(snapshot())).toEqual(['Table.md']));
+      expect(snapshot().activeDocument?.isUntitled).toBe(false);
+    });
+
+    it('does nothing on Save for a document that already has a file', async () => {
+      const { controller, documentFiles } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+
+      await controller.execute({ kind: 'saveDocument' });
+
+      expect(documentFiles.savedSources).toEqual([]);
+    });
+
+    it('saves a copy of an opened document with Save As', async () => {
+      const { controller, documentFiles, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+      documentFiles.saveAsChoices.push('C:\\Docs\\Copy.md');
+
+      await controller.execute({ kind: 'saveDocumentAs' });
+
+      expect(documentFiles.savedSources).toEqual([{ kind: 'copy', path: GUIDE }]);
+      await vi.waitFor(() => expect(tabNames(snapshot())).toEqual(['Copy.md']));
+    });
+
+    it('saves every new document with Save All and stops when the user cancels', async () => {
+      const { controller, documentFiles, snapshot } = await viewerWithNewDocument([GUIDE]);
+      controller.openAsNewDocument('| b |');
+      controller.openAsNewDocument('| c |');
+      documentFiles.saveAsChoices.push(TABLE, undefined);
+
+      await controller.execute({ kind: 'saveAllDocuments' });
+
+      expect(documentFiles.savedSources).toHaveLength(2);
+      await vi.waitFor(() =>
+        expect(tabNames(snapshot())).toEqual(['Guide.md', 'Table.md', 'Untitled-2.md', 'Untitled-3.md']),
+      );
+    });
+
+    it('asks before closing a new document, and closes it without saving on Don’t Save', async () => {
+      const { controller, documentFiles, snapshot } = await viewerWithNewDocument([GUIDE]);
+
+      await controller.execute({ kind: 'closeActiveTab' });
+      expect(snapshot().unsavedChanges).toEqual({ fileNames: ['Untitled-1.md'] });
+      expect(tabNames(snapshot())).toEqual(['Guide.md', 'Untitled-1.md']);
+      await controller.answerUnsavedChanges('discard');
+
+      expect(snapshot()).not.toHaveProperty('unsavedChanges');
+      expect(tabNames(snapshot())).toEqual(['Guide.md']);
+      expect(documentFiles.savedSources).toEqual([]);
+    });
+
+    it('saves a new document before closing it on Save', async () => {
+      const { controller, documentFiles, snapshot } = await viewerWithNewDocument([GUIDE]);
+      documentFiles.saveAsChoices.push(TABLE);
+
+      await controller.execute({ kind: 'closeActiveTab' });
+      await controller.answerUnsavedChanges('save');
+
+      expect(tabNames(snapshot())).toEqual(['Guide.md']);
+      expect(await documentFiles.open(TABLE)).toMatchObject({ text: '| a |\n| - |' });
+    });
+
+    it('keeps a new document open when the user cancels, or cancels the Save dialog', async () => {
+      const { controller, snapshot } = await viewerWithNewDocument();
+
+      await controller.execute({ kind: 'closeActiveTab' });
+      await controller.answerUnsavedChanges('cancel');
+      await controller.execute({ kind: 'closeActiveTab' });
+      await controller.answerUnsavedChanges('save');
+
+      expect(tabNames(snapshot())).toEqual(['Untitled-1.md']);
+    });
+
+    it('closes other saved tabs without asking', async () => {
+      const { controller, snapshot } = createViewer({ startupPaths: [GUIDE, NOTES] });
+      await controller.start();
+
+      await controller.execute({ kind: 'closeInactiveTabs' });
+
+      expect(snapshot()).not.toHaveProperty('unsavedChanges');
+      expect(tabNames(snapshot())).toEqual(['Notes.md']);
+    });
+
+    it('asks before the window closes and lets it close after Don’t Save', async () => {
+      const { controller } = await viewerWithNewDocument();
+
+      expect(controller.hasUnsavedDocuments()).toBe(true);
+      const mayClose = controller.confirmClosingWindow();
+      await controller.answerUnsavedChanges('discard');
+
+      expect(await mayClose).toBe(true);
+    });
+
+    it('keeps the window open when the user cancels closing it', async () => {
+      const { controller } = await viewerWithNewDocument();
+
+      const mayClose = controller.confirmClosingWindow();
+      await controller.answerUnsavedChanges('cancel');
+
+      expect(await mayClose).toBe(false);
+    });
+
+    it('reports a save that fails', async () => {
+      const { controller, documentFiles, snapshot } = await viewerWithNewDocument();
+      documentFiles.saveAs = () => Promise.reject(new Error('disk full'));
+
+      await controller.execute({ kind: 'saveDocument' });
+
+      expect(snapshot().notice).toContain('Untitled-1.md could not be saved');
+    });
+
+    it('never stars, watches or checks the file status of a new document', async () => {
+      const { controller, watcher, snapshot } = await viewerWithNewDocument([GUIDE]);
+
+      await controller.execute({ kind: 'toggleFavourite' });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(snapshot().viewer.favourites.favourites()).toEqual([]);
+      expect(watcher.watchedPaths).toEqual([GUIDE]);
+      expect([...snapshot().pathStatuses.keys()]).not.toContain('untitled:1');
+    });
+  });
+
   describe('app menu', () => {
     it('runs the command of a chosen menu item', async () => {
       const { controller, menu, snapshot } = createViewer({ startupPaths: [GUIDE, NOTES] });
@@ -546,11 +695,42 @@ describe('ViewerController', () => {
         readingWidth: 'medium',
         isSidebarVisible: true,
         isOutlineVisible: true,
+        isStatusBarVisible: true,
+        isSourceView: false,
       });
 
       menu.choose('theme.dark');
 
       await vi.waitFor(() => expect(menu.shownViewState?.theme).toBe('dark'));
+    });
+
+    it('checks Source View in the menu while the source is shown', async () => {
+      const { controller, menu } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+
+      await controller.execute({ kind: 'toggleSourceView' });
+
+      expect(menu.shownViewState?.isSourceView).toBe(true);
+    });
+
+    it('lists recent documents under Open Recent and opens the chosen one', async () => {
+      const { controller, menu, snapshot } = createViewer({ startupPaths: [GUIDE, NOTES] });
+      await controller.start();
+      await controller.execute({ kind: 'closeActiveTab' });
+      await vi.waitFor(() => expect(menu.shownRecentFiles).toEqual([NOTES, GUIDE]));
+
+      menu.choose('openRecent.0');
+
+      await vi.waitFor(() => expect(tabNames(snapshot())).toEqual(['Guide.md', 'Notes.md']));
+    });
+
+    it('ignores an Open Recent item that is no longer in the list', async () => {
+      const { controller, snapshot } = createViewer();
+      await controller.start();
+
+      await controller.execute({ kind: 'openRecentFileAt', index: 5 });
+
+      expect(tabNames(snapshot())).toEqual([]);
     });
 
     it('opens find from the menu, asks to refocus it when opened again, and closes it', async () => {

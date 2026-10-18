@@ -1,4 +1,4 @@
-import type { DocumentFilePort, OpenedDocument, PathStatus } from '../DocumentFilePort';
+import type { DocumentFilePort, OpenedDocument, PathStatus, SaveSource } from '../DocumentFilePort';
 import type { DocumentLocation } from '../DocumentLocation';
 import { DocumentOpenError } from '../DocumentOpenError';
 
@@ -6,6 +6,9 @@ export class InMemoryDocumentFiles implements DocumentFilePort {
   private readonly textByKey = new Map<string, string>();
   private readonly unreachableKeys = new Set<string>();
   readonly openedPaths: string[] = [];
+  readonly savedSources: SaveSource[] = [];
+  /** The paths the user picks in the next Save As dialogs, in order; undefined means they cancel. */
+  readonly saveAsChoices: (string | undefined)[] = [];
 
   constructor(textByPath: Readonly<Record<string, string>> = {}) {
     for (const [path, text] of Object.entries(textByPath)) this.write(path, text);
@@ -44,6 +47,15 @@ export class InMemoryDocumentFiles implements DocumentFilePort {
       lineEnding: 'lf',
       modifiedAtMs: 0,
     });
+  }
+
+  saveAs(source: SaveSource): Promise<string | undefined> {
+    this.savedSources.push(source);
+    const chosenPath = this.saveAsChoices.shift();
+    if (chosenPath === undefined) return Promise.resolve(undefined);
+    const text = source.kind === 'text' ? source.text : this.textByKey.get(source.path.toLowerCase());
+    this.write(chosenPath, text ?? '');
+    return Promise.resolve(chosenPath);
   }
 
   checkPathStatuses(locations: readonly DocumentLocation[]): Promise<ReadonlyMap<string, PathStatus>> {

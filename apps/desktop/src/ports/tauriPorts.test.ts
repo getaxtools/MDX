@@ -33,6 +33,16 @@ describe('TauriDocumentFiles', () => {
     expect(calls).toEqual([{ command: 'open_document', args: { path: 'C:\\a.md' } }]);
   });
 
+  it('saves a document through the save_document_as command and reports a cancelled dialog', async () => {
+    const savedPaths = ['C:\\Docs\\Table.md', null];
+    const calls = mockCommands({ save_document_as: () => savedPaths.shift() });
+    const source = { kind: 'text', text: '| a |', fileName: 'Untitled-1.md' } as const;
+
+    expect(await new TauriDocumentFiles().saveAs(source)).toBe('C:\\Docs\\Table.md');
+    expect(await new TauriDocumentFiles().saveAs(source)).toBeUndefined();
+    expect(calls[0]).toEqual({ command: 'save_document_as', args: { source } });
+  });
+
   it('turns a backend error code into a DocumentOpenError', async () => {
     mockCommands({
       open_document: () => {
@@ -110,11 +120,26 @@ describe('TauriDocumentRequests', () => {
 describe('TauriAppMenu', () => {
   it('shows the view settings in the native menu through the update_view_menu command', async () => {
     const calls = mockCommands({ update_view_menu: () => null });
-    const state = { theme: 'dark', readingWidth: 'wide', isSidebarVisible: false, isOutlineVisible: true };
+    const state = {
+      theme: 'dark',
+      readingWidth: 'wide',
+      isSidebarVisible: false,
+      isOutlineVisible: true,
+      isStatusBarVisible: true,
+      isSourceView: false,
+    };
 
     await new TauriAppMenu().showViewState(state);
 
     expect(calls).toEqual([{ command: 'update_view_menu', args: { state } }]);
+  });
+
+  it('lists recent documents in the native menu through the update_recent_menu command', async () => {
+    const calls = mockCommands({ update_recent_menu: () => null });
+
+    await new TauriAppMenu().showRecentFiles(['C:\\Docs\\a.md']);
+
+    expect(calls).toEqual([{ command: 'update_recent_menu', args: { displayPaths: ['C:\\Docs\\a.md'] } }]);
   });
 });
 

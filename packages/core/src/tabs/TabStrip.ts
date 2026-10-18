@@ -129,6 +129,23 @@ export class TabStrip {
     return new TabStrip(insertTabAt(otherTabs, movingTab, clampedIndex), this.activeKey, this.recentlyClosed);
   }
 
+  /** Shows another document in a tab, as after Save As; focuses that document's tab if it is already open. */
+  replace(canonicalKey: string, location: DocumentLocation): TabStrip {
+    const replacedTab = this.orderedTabs.find((tab) => keyOf(tab) === canonicalKey);
+    if (!replacedTab || canonicalKey === location.canonicalKey) return this;
+    const wasActive = this.activeKey === canonicalKey;
+    if (this.isOpen(location.canonicalKey)) {
+      const remainingTabs = this.orderedTabs.filter((tab) => tab !== replacedTab);
+      return new TabStrip(
+        remainingTabs,
+        wasActive ? location.canonicalKey : this.activeKey,
+        this.recentlyClosed,
+      );
+    }
+    const updatedTabs = this.orderedTabs.map((tab) => (tab === replacedTab ? { ...tab, location } : tab));
+    return new TabStrip(updatedTabs, wasActive ? location.canonicalKey : this.activeKey, this.recentlyClosed);
+  }
+
   pin(canonicalKey: string): TabStrip {
     return this.withPinnedState(canonicalKey, true);
   }

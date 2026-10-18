@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { Translator } from '@mdx/i18n';
   import Dialog from '../../components/Dialog.svelte';
-  import { describeCombination, KEYBOARD_SHORTCUTS } from './keyboardShortcuts';
+  import { describeCombination } from '../shortcuts/describeCombination';
+  import { KEYBOARD_SHORTCUTS } from './keyboardShortcuts';
 
   interface Props {
     translator: Translator;

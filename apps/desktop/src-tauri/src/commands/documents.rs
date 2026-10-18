@@ -1,12 +1,14 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use serde::Deserialize;
 use tauri::{AppHandle, State};
-use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_dialog::{DialogExt, FileDialogBuilder};
 
 use crate::documents::{
-    DocumentAccessList, DocumentError, OpenedDocument, PathStatus, open_allowed_document,
-    status_of_path,
+    DocumentAccessList, DocumentError, MAX_DOCUMENT_BYTES, OpenedDocument, PathStatus,
+    copy_document, is_markdown_path, locate_document, open_allowed_document, status_of_path,
+    validated_file_name, with_markdown_extension, write_document_text,
 };
 use crate::open_requests::{StartupDocuments, grant_documents};
 
@@ -63,6 +65,96 @@ pub fn take_startup_documents(startup: State<'_, StartupDocuments>) -> Vec<Strin
     startup.take()
 }
 
+/// What Save As writes: a copy of an open document, or the text of a document not saved yet.
+#[derive(Debug, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum SaveSource {
+    Copy { path: String },
+    Text { text: String, file_name: String },
+}
+
+/// Asks where to save, writes the document there and returns the saved path, or `None` on cancel.
+#[tauri::command]
+pub async fn save_document_as(
+    source: SaveSource,
+    app: AppHandle,
+    access: State<'_, Arc<DocumentAccessList>>,
+) -> Result<Option<String>, DocumentError> {
+    let access = Arc::clone(&access);
+    run_blocking(move || {
+        let request = SaveRequest::validated(source, &access)?;
+        let Some(chosen) = request
+            .dialog(app.dialog().file())
+            .blocking_save_file()
+            .and_then(|file| file.into_path().ok())
+        else {
+            return Ok(None);
+        };
+        let destination = with_markdown_extension(chosen);
+        request.write_to(&destination)?;
+        access.grant_folder_of(&destination)?;
+        Ok(Some(locate_document(&destination)?.display_path))
+    })
+    .await?
+}
+
+enum SaveRequest {
+    Copy { source: PathBuf, file_name: String },
+    Text { text: String, file_name: String },
+}
+
+impl SaveRequest {
+    fn validated(source: SaveSource, access: &DocumentAccessList) -> Result<Self, DocumentError> {
+        match source {
+            SaveSource::Copy { path } => {
+                let location = locate_document(&validated_path(&path)?)?;
+                if !access.is_allowed(&location) {
+                    return Err(DocumentError::AccessDenied);
+                }
+                if !is_markdown_path(&location.path()) {
+                    return Err(DocumentError::NotMarkdown);
+                }
+                Ok(Self::Copy {
+                    source: location.path(),
+                    file_name: location.file_name,
+                })
+            }
+            SaveSource::Text { text, file_name } => {
+                if u64::try_from(text.len()).unwrap_or(u64::MAX) > MAX_DOCUMENT_BYTES {
+                    return Err(DocumentError::TooLarge);
+                }
+                let file_name = validated_file_name(&file_name)?.to_owned();
+                Ok(Self::Text { text, file_name })
+            }
+        }
+    }
+
+    fn dialog(&self, dialog: FileDialogBuilder<tauri::Wry>) -> FileDialogBuilder<tauri::Wry> {
+        let dialog = dialog.add_filter("Markdown", &MARKDOWN_FILTER_EXTENSIONS);
+        match self {
+            Self::Copy { source, file_name } => {
+                let dialog = dialog.set_file_name(file_name);
+                match source.parent() {
+                    Some(folder) => dialog.set_directory(folder),
+                    None => dialog,
+                }
+            }
+            Self::Text { file_name, .. } => dialog.set_file_name(file_name),
+        }
+    }
+
+    fn write_to(&self, destination: &Path) -> Result<(), DocumentError> {
+        match self {
+            Self::Copy { source, .. } => copy_document(source, destination),
+            Self::Text { text, .. } => write_document_text(destination, text),
+        }
+    }
+}
+
 fn validated_path(path: &str) -> Result<PathBuf, DocumentError> {
     let is_valid = !path.trim().is_empty()
         && path.chars().count() <= MAX_PATH_CHARACTERS
@@ -102,6 +194,86 @@ mod tests {
             Err(DocumentError::InvalidRequest)
         );
         assert_eq!(validated_path("a\0.md"), Err(DocumentError::InvalidRequest));
+    }
+
+    fn folder_with_document() -> (tempfile::TempDir, PathBuf, DocumentAccessList) {
+        let folder = tempfile::tempdir().unwrap();
+        let document = folder.path().join("guide.md");
+        std::fs::write(&document, "# Guide").unwrap();
+        (folder, document, DocumentAccessList::default())
+    }
+
+    #[test]
+    fn saves_a_copy_only_of_a_document_the_user_has_opened() {
+        let (_folder, document, access) = folder_with_document();
+        let copy = || SaveSource::Copy {
+            path: document.to_string_lossy().into_owned(),
+        };
+
+        assert!(matches!(
+            SaveRequest::validated(copy(), &access),
+            Err(DocumentError::AccessDenied)
+        ));
+        access.grant_folder_of(&document).unwrap();
+        assert!(matches!(
+            SaveRequest::validated(copy(), &access),
+            Ok(SaveRequest::Copy { file_name, .. }) if file_name == "guide.md"
+        ));
+    }
+
+    #[test]
+    fn refuses_to_save_a_copy_of_a_file_that_is_not_markdown() {
+        let (folder, document, access) = folder_with_document();
+        let image = folder.path().join("image.png");
+        std::fs::write(&image, "x").unwrap();
+        access.grant_folder_of(&document).unwrap();
+
+        let request = SaveSource::Copy {
+            path: image.to_string_lossy().into_owned(),
+        };
+
+        assert!(matches!(
+            SaveRequest::validated(request, &access),
+            Err(DocumentError::NotMarkdown)
+        ));
+    }
+
+    #[test]
+    fn refuses_new_documents_with_an_unsafe_name() {
+        let request = SaveSource::Text {
+            text: "# New".to_owned(),
+            file_name: r"..\escape.md".to_owned(),
+        };
+
+        assert!(matches!(
+            SaveRequest::validated(request, &DocumentAccessList::default()),
+            Err(DocumentError::InvalidRequest)
+        ));
+    }
+
+    #[test]
+    fn accepts_a_new_document_with_a_plain_name() {
+        let request = SaveSource::Text {
+            text: "# New".to_owned(),
+            file_name: "Untitled-1.md".to_owned(),
+        };
+
+        assert!(matches!(
+            SaveRequest::validated(request, &DocumentAccessList::default()),
+            Ok(SaveRequest::Text { file_name, .. }) if file_name == "Untitled-1.md"
+        ));
+    }
+
+    #[test]
+    fn reads_save_requests_sent_by_the_frontend() {
+        let copy: SaveSource =
+            serde_json::from_str(r#"{"kind":"copy","path":"C:/docs/a.md"}"#).unwrap();
+        let text: SaveSource =
+            serde_json::from_str(r##"{"kind":"text","text":"# A","fileName":"Untitled-1.md"}"##)
+                .unwrap();
+
+        assert!(matches!(copy, SaveSource::Copy { path } if path == "C:/docs/a.md"));
+        assert!(matches!(text, SaveSource::Text { file_name, .. } if file_name == "Untitled-1.md"));
     }
 
     #[test]

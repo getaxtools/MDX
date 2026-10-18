@@ -29,6 +29,19 @@ describe('tab context menu', () => {
     ]);
   });
 
+  it('shows the Close shortcut only on the active tab, and the Reopen shortcut always', () => {
+    const shortcutsOf = (activeKey: string) =>
+      tabContextMenuItems(tab, { index: 0, tabCount: 2, activeKey }, translator)
+        .filter((item) => item.shortcut !== undefined)
+        .map((item) => [item.id, item.shortcut]);
+
+    expect(shortcutsOf(tab.location.canonicalKey)).toEqual([
+      ['close', 'Ctrl+W'],
+      ['reopenClosed', 'Ctrl+Shift+T'],
+    ]);
+    expect(shortcutsOf('other.md')).toEqual([['reopenClosed', 'Ctrl+Shift+T']]);
+  });
+
   it('offers to unpin a pinned tab', () => {
     const items = tabContextMenuItems({ ...tab, isPinned: true }, { index: 0, tabCount: 2 }, translator);
 

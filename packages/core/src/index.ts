@@ -38,3 +38,5 @@ export {
   READING_WORDS_PER_MINUTE,
   type DocumentStatistics,
 } from './documents/documentStatistics';
+export { parseSpreadsheetCells } from './tables/parseSpreadsheetCells';
+export { toMarkdownTable, type MarkdownTableOptions } from './tables/toMarkdownTable';

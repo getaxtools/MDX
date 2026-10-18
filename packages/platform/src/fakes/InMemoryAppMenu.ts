@@ -3,6 +3,7 @@ import type { AppMenuPort, MenuCommandListener, ViewMenuState } from '../AppMenu
 export class InMemoryAppMenu implements AppMenuPort {
   private readonly listeners = new Set<MenuCommandListener>();
   shownViewState: ViewMenuState | undefined;
+  shownRecentFiles: readonly string[] | undefined;
 
   onMenuCommand(listener: MenuCommandListener): () => void {
     this.listeners.add(listener);
@@ -11,6 +12,11 @@ export class InMemoryAppMenu implements AppMenuPort {
 
   showViewState(state: ViewMenuState): Promise<void> {
     this.shownViewState = state;
+    return Promise.resolve();
+  }
+
+  showRecentFiles(displayPaths: readonly string[]): Promise<void> {
+    this.shownRecentFiles = displayPaths;
     return Promise.resolve();
   }
 

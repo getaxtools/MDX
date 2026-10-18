@@ -1,9 +1,11 @@
-import type {
-  AppStatePort,
-  DocumentFilePort,
-  DocumentLocation,
-  OpenedDocument,
-  PathStatus,
+import {
+  untitledLocation,
+  type AppStatePort,
+  type DocumentFilePort,
+  type DocumentLocation,
+  type OpenedDocument,
+  type PathStatus,
+  type SaveSource,
 } from '@mdx/platform';
 import { FavouritesList } from '../favourites/FavouritesList';
 import { RecentFilesList } from '../recent-files/RecentFilesList';
@@ -29,6 +31,8 @@ export class ViewerSession {
     viewSettings: DEFAULT_VIEW_SETTINGS,
   };
   private readonly openedDocuments = new Map<string, OpenedDocument>();
+  private readonly untitledDocuments = new Map<string, OpenedDocument>();
+  private untitledCount = 0;
   private readonly listeners = new Set<ViewerStateListener>();
 
   constructor(private readonly dependencies: ViewerSessionDependencies) {}
@@ -64,12 +68,53 @@ export class ViewerSession {
     return document;
   }
 
+  /** Opens text that has no file yet, such as a converted table, in a new tab named by `nameFor`. */
+  openUntitledDocument(text: string, nameFor: (number: number) => string): OpenedDocument {
+    this.untitledCount += 1;
+    const document: OpenedDocument = {
+      location: untitledLocation(this.untitledCount, nameFor(this.untitledCount)),
+      text,
+      encoding: 'utf-8',
+      hasByteOrderMark: false,
+      lineEnding: text.includes('\r\n') ? 'crlf' : 'lf',
+      modifiedAtMs: this.dependencies.now(),
+    };
+    this.untitledDocuments.set(document.location.canonicalKey, document);
+    this.replaceState({ ...this.state, tabStrip: this.state.tabStrip.openOrFocus(document.location) });
+    return document;
+  }
+
+  /** Saves an open document where the user chooses and shows the saved file in its tab. */
+  async saveDocumentAs(canonicalKey: string): Promise<DocumentLocation | undefined> {
+    const tab = this.state.tabStrip
+      .tabs()
+      .find((candidate) => candidate.location.canonicalKey === canonicalKey);
+    if (!tab) return undefined;
+    const untitled = this.untitledDocuments.get(canonicalKey);
+    const source: SaveSource = untitled
+      ? { kind: 'text', text: untitled.text, fileName: untitled.location.fileName }
+      : { kind: 'copy', path: tab.location.displayPath };
+    const savedPath = await this.dependencies.documentFiles.saveAs(source);
+    if (savedPath === undefined) return undefined;
+    const saved = await this.dependencies.documentFiles.open(savedPath);
+    this.untitledDocuments.delete(canonicalKey);
+    this.openedDocuments.set(saved.location.canonicalKey, saved);
+    this.replaceState({
+      ...this.state,
+      tabStrip: this.state.tabStrip.replace(canonicalKey, saved.location),
+      recentFiles: this.state.recentFiles.add(saved.location, this.dependencies.now()),
+    });
+    return saved.location;
+  }
+
   async loadActiveDocument(): Promise<OpenedDocument | undefined> {
     const activeTab = this.state.tabStrip.activeTab();
     if (!activeTab) return undefined;
+    const { canonicalKey, displayPath } = activeTab.location;
     return (
-      this.openedDocuments.get(activeTab.location.canonicalKey) ??
-      this.openDocument(activeTab.location.displayPath)
+      this.untitledDocuments.get(canonicalKey) ??
+      this.openedDocuments.get(canonicalKey) ??
+      this.openDocument(displayPath)
     );
   }
 

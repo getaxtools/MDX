@@ -1,4 +1,4 @@
-import { InMemoryDocumentFiles } from '@mdx/platform';
+import { InMemoryDocumentFiles, untitledLocation } from '@mdx/platform';
 import { describe, expect, it } from 'vitest';
 import { FavouritesList } from '../favourites/FavouritesList';
 import { RecentFilesList } from '../recent-files/RecentFilesList';
@@ -28,6 +28,22 @@ describe('persisted app state', () => {
     expect(restored.recentFiles.entries()).toEqual(recentFiles.entries());
     expect(restored.favourites.favourites()).toEqual(favourites.favourites());
     expect(restored.viewSettings).toEqual(viewSettings);
+  });
+
+  it('never saves tabs of documents that were not saved yet', () => {
+    const tabStrip = TabStrip.empty()
+      .openOrFocus(location('a.md'))
+      .openOrFocus(untitledLocation(1, 'Untitled-1.md'));
+    const state = {
+      tabStrip,
+      recentFiles: RecentFilesList.empty(),
+      favourites: FavouritesList.empty(),
+      viewSettings: DEFAULT_VIEW_SETTINGS,
+    };
+
+    const saved = toPersistedAppState(state);
+
+    expect(saved.tabs).toEqual({ tabs: [{ location: location('a.md'), isPinned: false, scrollRatio: 0 }] });
   });
 
   it('starts empty on first launch without reporting a reset', () => {

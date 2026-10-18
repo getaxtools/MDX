@@ -28,6 +28,26 @@ describe('tab commands', () => {
     ).toEqual(['a.md']);
   });
 
+  it('closes the tabs other than, or to the right of, the active tab', () => {
+    const tabStrip = stripWith('a.md', 'b.md', 'c.md').activate(keyOf('b.md'));
+
+    expect(namesOf(applyTabCommand(tabStrip, { kind: 'closeInactiveTabs' }))).toEqual(['b.md']);
+    expect(namesOf(applyTabCommand(tabStrip, { kind: 'closeTabsRightOfActive' }))).toEqual(['a.md', 'b.md']);
+  });
+
+  it('pins and unpins the active tab', () => {
+    const tabStrip = stripWith('a.md', 'b.md');
+
+    const pinned = applyTabCommand(tabStrip, { kind: 'togglePinActiveTab' });
+    const unpinned = applyTabCommand(pinned, { kind: 'togglePinActiveTab' });
+
+    expect(pinned.tabs().map((tab) => [tab.location.fileName, tab.isPinned])).toEqual([
+      ['b.md', true],
+      ['a.md', false],
+    ]);
+    expect(unpinned.tabs().every((tab) => !tab.isPinned)).toBe(true);
+  });
+
   it('pins a tab to the front and unpins it again', () => {
     const tabStrip = stripWith('a.md', 'b.md');
 

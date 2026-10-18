@@ -3,7 +3,8 @@
   import type { Translator } from '@mdx/i18n';
   import type { CodeHighlighter } from '@mdx/renderer';
   import ContextMenu from '../../components/ContextMenu.svelte';
-  import { contextMenuPosition, type ContextMenuItem } from '../../components/ContextMenuItem';
+  import { contextMenuPosition } from '../../components/ContextMenuItem';
+  import type { ViewerCommand } from '../viewer/viewerCommands';
   import type { RenderedActiveDocument } from '../viewer/ViewerController';
   import FindBar from '../find/FindBar.svelte';
   import { currentHeadingId } from '../outline/currentHeadingId';
@@ -11,6 +12,11 @@
   import PropertiesPanel from './PropertiesPanel.svelte';
   import { enhanceCodeBlocks } from './enhanceCodeBlocks';
   import { scrollToHeading } from './scrollToHeading';
+  import {
+    commandForDocumentMenuItem,
+    documentContextMenuItems,
+    type DocumentMenuItemId,
+  } from './documentContextMenu';
 
   interface Props {
     document: RenderedActiveDocument | undefined;
@@ -24,6 +30,10 @@
     onOpenLink: (link: DocumentLink) => void;
     onScroll?: (scrollRatio: number) => void;
     onCurrentHeadingChange?: (headingId: string | undefined) => void;
+    onCommand?: (command: ViewerCommand) => void;
+    isOutlineVisible?: boolean;
+    isFavourite?: boolean;
+    canBeFavourite?: boolean;
   }
 
   const {
@@ -38,6 +48,10 @@
     onOpenLink,
     onScroll = () => undefined,
     onCurrentHeadingChange = () => undefined,
+    onCommand = () => undefined,
+    isOutlineVisible = true,
+    isFavourite = false,
+    canBeFavourite = true,
   }: Props = $props();
 
   const SCROLL_REPORT_DELAY_MS = 250;
@@ -50,6 +64,19 @@
     if (!document || !area || document === restoredDocument) return;
     restoredDocument = document;
     area.scrollTop = document.scrollRatio * Math.max(area.scrollHeight - area.clientHeight, 0);
+  });
+
+  $effect(() => {
+    const area = documentArea;
+    if (!area) return;
+    // Registered by hand because a passive wheel listener cannot stop the page from scrolling.
+    const zoomWithWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey || event.deltaY === 0) return;
+      event.preventDefault();
+      onCommand({ kind: event.deltaY < 0 ? 'zoomIn' : 'zoomOut' });
+    };
+    area.addEventListener('wheel', zoomWithWheel, { passive: false });
+    return () => area.removeEventListener('wheel', zoomWithWheel);
   });
 
   function reportScroll() {
@@ -84,16 +111,22 @@
     full: 'none',
   };
 
-  type DocumentMenuItemId = 'copy' | 'selectAll';
-
   let articleElement: HTMLElement | undefined = $state();
   let menuRequest: { readonly x: number; readonly y: number; readonly selectedText: string } | undefined =
     $state();
 
-  const menuItems = $derived<ContextMenuItem<DocumentMenuItemId>[]>([
-    { id: 'copy', label: translator.translate('menu.edit.copy'), isDisabled: !menuRequest?.selectedText },
-    { id: 'selectAll', label: translator.translate('menu.edit.selectAll') },
-  ]);
+  const menuItems = $derived(
+    documentContextMenuItems(
+      {
+        hasSelection: Boolean(menuRequest?.selectedText),
+        isSourceView,
+        isOutlineVisible,
+        isFavourite,
+        canBeFavourite,
+      },
+      translator,
+    ),
+  );
 
   function openMenu(event: MouseEvent) {
     event.preventDefault();
@@ -104,6 +137,8 @@
   }
 
   function chooseMenuItem(itemId: DocumentMenuItemId) {
+    const command = commandForDocumentMenuItem(itemId);
+    if (command) onCommand(command);
     if (itemId === 'copy' && menuRequest?.selectedText)
       void globalThis.navigator.clipboard.writeText(menuRequest.selectedText);
     if (itemId === 'selectAll' && articleElement)

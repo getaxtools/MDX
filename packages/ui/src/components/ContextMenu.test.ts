@@ -11,7 +11,7 @@ function renderMenu() {
     items: [
       { id: 'pin', label: 'Pin Tab' },
       { id: 'closeOthers', label: 'Close Others', isDisabled: true },
-      { id: 'close', label: 'Close', hasSeparatorBefore: true },
+      { id: 'close', label: 'Close', hasSeparatorBefore: true, shortcut: 'Ctrl+W' },
     ],
     position: { x: 10, y: 20 },
     onChoose,
@@ -26,13 +26,21 @@ describe('ContextMenu', () => {
 
     const menu = screen.getByRole('menu', { name: 'Tab actions' });
 
-    expect(screen.getAllByRole('menuitem').map((item) => item.textContent.trim())).toEqual([
+    expect(screen.getAllByRole('menuitem').map((item) => item.firstElementChild?.textContent)).toEqual([
       'Pin Tab',
       'Close Others',
       'Close',
     ]);
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Pin Tab' }));
     expect(menu.style.left).toBe('10px');
+  });
+
+  it('shows an item shortcut next to its label without adding it to the item name', () => {
+    renderMenu();
+
+    const close = screen.getByRole('menuitem', { name: 'Close' });
+
+    expect(close.textContent).toContain('Ctrl+W');
   });
 
   it('moves between enabled items with the arrow keys and chooses with Enter', async () => {

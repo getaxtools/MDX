@@ -1,6 +1,17 @@
 export type { AppStatePort } from './AppStatePort';
-export type { DocumentFilePort, LineEnding, OpenedDocument, PathStatus } from './DocumentFilePort';
-export { isSameDocument, type DocumentLocation } from './DocumentLocation';
+export type {
+  DocumentFilePort,
+  LineEnding,
+  OpenedDocument,
+  PathStatus,
+  SaveSource,
+} from './DocumentFilePort';
+export {
+  isSameDocument,
+  isUntitledLocation,
+  untitledLocation,
+  type DocumentLocation,
+} from './DocumentLocation';
 export { DocumentOpenError, isDocumentOpenFailure, type DocumentOpenFailure } from './DocumentOpenError';
 export type { DocumentRequestListener, DocumentRequestsPort } from './DocumentRequestsPort';
 export { InMemoryAppState } from './fakes/InMemoryAppState';

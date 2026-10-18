@@ -1,5 +1,5 @@
 import type { ViewerSession } from '@mdx/core';
-import type { DocumentWatcherPort } from '@mdx/platform';
+import { isUntitledLocation, type DocumentWatcherPort } from '@mdx/platform';
 
 /** Keeps the watched files equal to the open tabs and reloads documents that change on disk. */
 export class LiveReload {
@@ -23,6 +23,7 @@ export class LiveReload {
     const displayPaths = this.session
       .currentState()
       .tabStrip.tabs()
+      .filter((tab) => !isUntitledLocation(tab.location))
       .map((tab) => tab.location.displayPath);
     const pathsKey = JSON.stringify(displayPaths);
     if (pathsKey === this.watchedPathsKey) return;

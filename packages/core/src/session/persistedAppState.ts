@@ -1,4 +1,4 @@
-import type { DocumentLocation } from '@mdx/platform';
+import { isUntitledLocation, type DocumentLocation } from '@mdx/platform';
 import { FavouritesList, type Favourite } from '../favourites/FavouritesList';
 import { RecentFilesList, type RecentFile } from '../recent-files/RecentFilesList';
 import { TabStrip, type Tab, type TabStripSnapshot } from '../tabs/TabStrip';
@@ -33,11 +33,18 @@ export function toPersistedAppState({
 }: ViewerState): PersistedAppState {
   return {
     schemaVersion: APP_STATE_SCHEMA_VERSION,
-    tabs: tabStrip.toSnapshot(),
+    tabs: withoutUntitledTabs(tabStrip.toSnapshot()),
     recentFiles: recentFiles.entries(),
     favourites: favourites.favourites(),
     view: viewSettings,
   };
+}
+
+/** Documents that were never saved exist only in memory, so they cannot be reopened later. */
+function withoutUntitledTabs({ tabs, activeKey }: TabStripSnapshot): TabStripSnapshot {
+  const savedTabs = tabs.filter((tab) => !isUntitledLocation(tab.location));
+  const isActiveTabSaved = savedTabs.some((tab) => tab.location.canonicalKey === activeKey);
+  return activeKey !== undefined && isActiveTabSaved ? { tabs: savedTabs, activeKey } : { tabs: savedTabs };
 }
 
 export function restoreAppState(saved: unknown): RestoredAppState {
