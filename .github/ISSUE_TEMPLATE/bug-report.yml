@@ -1,0 +1,40 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for reporting. Please don't include private documents or personal data.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a file from a network share
+        2. Star it as a favourite
+        3. ...
+    validations: { required: true }
+  - type: input
+    id: mdx-version
+    attributes:
+      label: MDX version
+      description: Help > About MDX
+    validations: { required: true }
+  - type: input
+    id: windows-version
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 24H2, x64
+    validations: { required: true }
+  - type: textarea
+    id: sample
+    attributes:
+      label: Sample Markdown (optional)
+      description: A small, made-up document that shows the problem.
+      render: markdown

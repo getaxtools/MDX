@@ -1,0 +1,21 @@
+{
+  "name": "@mdx/ui",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "svelte": "./src/index.ts",
+  "exports": {
+    ".": {
+      "svelte": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@mdx/core": "workspace:*",
+    "@mdx/i18n": "workspace:*",
+    "@mdx/platform": "workspace:*",
+    "@mdx/renderer": "workspace:*",
+    "svelte": "5.57.2"
+  }
+}

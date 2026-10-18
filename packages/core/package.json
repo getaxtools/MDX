@@ -1,0 +1,13 @@
+{
+  "name": "@mdx/core",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@mdx/platform": "workspace:*"
+  }
+}

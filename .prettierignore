@@ -1,0 +1,13 @@
+node_modules
+dist
+target
+coverage
+pnpm-lock.yaml
+CHANGELOG.md
+LICENSE-APACHE
+CODE_OF_CONDUCT.md
+tests/fixtures
+apps/desktop/src-tauri/gen
+apps/desktop/src-tauri/target
+apps/desktop/src-tauri/icons
+apps/desktop/dist

@@ -1,0 +1,26 @@
+{
+  "name": "@mdx/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev:frontend": "vite",
+    "build:frontend": "vite build",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@mdx/core": "workspace:*",
+    "@mdx/i18n": "workspace:*",
+    "@mdx/platform": "workspace:*",
+    "@mdx/renderer": "workspace:*",
+    "@mdx/ui": "workspace:*",
+    "@tauri-apps/api": "2.12.4",
+    "svelte": "5.57.2"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "@tauri-apps/cli": "2.12.3",
+    "vite": "8.3.4"
+  }
+}

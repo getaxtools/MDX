@@ -1,0 +1,68 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+target/
+*.tsbuildinfo
+.vite/
+apps/desktop/src-tauri/gen/
+**/*.rs.bk
+*.pdb
+
+# Test, coverage and audit output
+coverage/
+lcov.info
+playwright-report/
+test-results/
+blob-report/
+tests/e2e/**/logs/
+allure-results/
+*.cdx.json
+sbom/
+SHA256SUMS.txt
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Personal AI-assistant and planning files (never committed)
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.claude/
+.cursor/
+.cursorrules
+.windsurf/
+.continue/
+.aider*
+.gemini/
+docs/
+*.plan.md
+
+# Editors and OS
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.history/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Secrets and signing material
+.env
+.env.*
+*.pfx
+*.p12
+*.p8
+*.key
+*.pem
+*.snk
+*.mobileprovision
+*.provisionprofile
+signing/

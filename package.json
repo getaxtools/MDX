@@ -1,0 +1,55 @@
+{
+  "name": "mdx",
+  "version": "0.0.0",
+  "private": true,
+  "description": "MDX - Markdown Explorer: a fast, private Markdown viewer.",
+  "license": "MIT OR Apache-2.0",
+  "author": "getaxtools (https://github.com/getaxtools)",
+  "homepage": "https://github.com/getaxtools/mdx",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/getaxtools/mdx.git"
+  },
+  "bugs": {
+    "url": "https://github.com/getaxtools/mdx/issues"
+  },
+  "type": "module",
+  "packageManager": "pnpm@10.34.7",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint . && prettier --check . && node scripts/check-source-hygiene.mjs && node scripts/check-ui-text.mjs",
+    "typecheck": "tsc -p tsconfig.json && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
+    "fmt": "prettier --write ."
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@mdx/core": "workspace:*",
+    "@mdx/i18n": "workspace:*",
+    "@mdx/platform": "workspace:*",
+    "@mdx/renderer": "workspace:*",
+    "@mdx/ui": "workspace:*",
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "@tauri-apps/api": "2.12.4",
+    "@testing-library/svelte": "5.4.2",
+    "@testing-library/user-event": "14.6.8",
+    "@types/node": "24.19.2",
+    "@vitest/coverage-v8": "5.0.5",
+    "eslint": "10.13.0",
+    "eslint-plugin-svelte": "3.23.1",
+    "fast-check": "4.10.2",
+    "happy-dom": "21.0.3",
+    "jsdom": "30.1.3",
+    "prettier": "3.9.10",
+    "prettier-plugin-svelte": "4.1.1",
+    "svelte": "5.57.2",
+    "svelte-check": "4.7.7",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.2",
+    "vite": "8.3.4",
+    "vitest": "5.0.5"
+  }
+}

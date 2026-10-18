@@ -1,0 +1,32 @@
+# Advisories for crates that only build on Linux. None of them are compiled into the Windows app.
+# Each entry expires so it is re-checked; remove it as soon as the named upstream release lands.
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0429"
+ignoreUntil = 2027-01-31
+reason = "glib 0.18 (Linux-only, via Tauri's GTK 0.18 backend). Fixed in glib 0.20; resolved when Tauri moves to a newer gtk-rs."
+
+[[IgnoredVulns]]
+id = "GHSA-wrw7-89jp-8q8g"
+ignoreUntil = 2027-01-31
+reason = "Alias of RUSTSEC-2024-0429 (glib 0.18, Linux-only)."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0370"
+ignoreUntil = 2027-01-31
+reason = "proc-macro-error is unmaintained (build-time macro of glib 0.18, Linux-only). Resolved with the same Tauri gtk-rs upgrade."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0370"
+ignoreUntil = 2027-01-31
+reason = "zvariant is unmaintained, merged into zbus 6 (Linux-only D-Bus, via tauri-plugin-single-instance on zbus 5). Resolved when the plugin moves to zbus 6."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0371"
+ignoreUntil = 2027-01-31
+reason = "zbus_names is unmaintained, merged into zbus 6 (Linux-only, via tauri-plugin-single-instance). Resolved when the plugin moves to zbus 6."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0372"
+ignoreUntil = 2027-01-31
+reason = "zvariant_derive is unmaintained, merged into zbus 6 (Linux-only, via tauri-plugin-single-instance). Resolved when the plugin moves to zbus 6."

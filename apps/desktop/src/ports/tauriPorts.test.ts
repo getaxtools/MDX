@@ -1,0 +1,106 @@
+import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
+import { InMemoryDocumentFiles } from '@mdx/platform';
+import { afterEach, describe, expect, it } from 'vitest';
+import { TauriAppState } from './TauriAppState';
+import { TauriDocumentFiles } from './TauriDocumentFiles';
+import { TauriDocumentRequests } from './TauriDocumentRequests';
+
+type CommandArguments = Record<string, unknown>;
+
+function mockCommands(handlers: Record<string, (args: CommandArguments) => unknown>) {
+  const calls: { command: string; args: CommandArguments }[] = [];
+  mockIPC((command, args) => {
+    calls.push({ command, args: args as CommandArguments });
+    const handler = handlers[command];
+    if (!handler) throw new Error(`unexpected command ${command}`);
+    return handler(args as CommandArguments);
+  });
+  return calls;
+}
+
+afterEach(() => clearMocks());
+
+describe('TauriDocumentFiles', () => {
+  it('opens a document through the open_document command', async () => {
+    const document = { location: InMemoryDocumentFiles.locationOf('a.md'), text: '# A' };
+    const calls = mockCommands({ open_document: () => document });
+
+    const opened = await new TauriDocumentFiles().open('C:\\a.md');
+
+    expect(opened).toEqual(document);
+    expect(calls).toEqual([{ command: 'open_document', args: { path: 'C:\\a.md' } }]);
+  });
+
+  it('turns a backend error code into a DocumentOpenError', async () => {
+    mockCommands({
+      open_document: () => {
+        throw Object.assign(new Error('backend error'), { code: 'unreachable' });
+      },
+    });
+
+    await expect(new TauriDocumentFiles().open('\\\\server\\a.md')).rejects.toMatchObject({
+      failure: 'unreachable',
+      path: '\\\\server\\a.md',
+    });
+  });
+
+  it('treats an unknown backend error as unreadable', async () => {
+    mockCommands({
+      open_document: () => {
+        throw new Error('boom');
+      },
+    });
+
+    await expect(new TauriDocumentFiles().open('a.md')).rejects.toMatchObject({ failure: 'unreadable' });
+  });
+
+  it('maps path statuses back to canonical keys', async () => {
+    mockCommands({ check_path_statuses: () => ['available', 'missing'] });
+    const locations = ['A.md', 'B.md'].map((path) => InMemoryDocumentFiles.locationOf(path));
+
+    const statuses = await new TauriDocumentFiles().checkPathStatuses(locations);
+
+    expect([...statuses]).toEqual([
+      ['a.md', 'available'],
+      ['b.md', 'missing'],
+    ]);
+  });
+});
+
+describe('TauriAppState', () => {
+  it('returns nothing on first launch', async () => {
+    mockCommands({ load_app_state: () => null });
+
+    expect(await new TauriAppState().load()).toBeUndefined();
+  });
+
+  it('parses the saved JSON', async () => {
+    mockCommands({ load_app_state: () => '{"schemaVersion":1}' });
+
+    expect(await new TauriAppState().load()).toEqual({ schemaVersion: 1 });
+  });
+
+  it('passes corrupt text through so the core can reset and tell the user', async () => {
+    mockCommands({ load_app_state: () => '{ broken' });
+
+    expect(await new TauriAppState().load()).toBe('{ broken');
+  });
+
+  it('saves the state as JSON text', async () => {
+    const calls = mockCommands({ save_app_state: () => null });
+
+    await new TauriAppState().save({ schemaVersion: 1 });
+
+    expect(calls).toEqual([{ command: 'save_app_state', args: { stateJson: '{"schemaVersion":1}' } }]);
+  });
+});
+
+describe('TauriDocumentRequests', () => {
+  it('asks the backend for picked and startup documents', async () => {
+    mockCommands({ pick_documents: () => ['picked.md'], take_startup_documents: () => ['startup.md'] });
+    const requests = new TauriDocumentRequests();
+
+    expect(await requests.pickDocuments()).toEqual(['picked.md']);
+    expect(await requests.takeStartupDocuments()).toEqual(['startup.md']);
+  });
+});
