@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/getaxtools/MDX/compare/v0.1.0...v0.2.0) (2026-10-19)
+
+
+### Features
+
+* standard shortcuts, saving and paste table from Excel ([e4f5fe2](https://github.com/getaxtools/MDX/commit/e4f5fe22fb7bb76a69284c507c37238a83d2f2ff))
+
+
+### Bug Fixes
+
+* **favourites:** list subfolders in folder favourites ([e703e3f](https://github.com/getaxtools/MDX/commit/e703e3f8e43099c781a8e3442dcc3ea94460304b))
+
 ## 0.1.0 (2026-10-18)
 
 
