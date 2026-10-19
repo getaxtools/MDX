@@ -62,6 +62,8 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::documents::check_path_statuses,
         commands::documents::take_startup_documents,
         commands::documents::save_document_as,
+        commands::favourites_file::export_favourites,
+        commands::favourites_file::import_favourites,
         commands::app_state::load_app_state,
         commands::app_state::save_app_state,
         commands::app_info::get_app_info,

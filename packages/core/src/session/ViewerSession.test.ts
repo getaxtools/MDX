@@ -147,6 +147,24 @@ describe('ViewerSession', () => {
     expect(session.openedDocument(guide.location.canonicalKey)).toBeUndefined();
   });
 
+  it('reopens a document with a chosen encoding and keeps it when the file reloads', async () => {
+    const { session, documentFiles } = createSession();
+    await session.openDocument(GUIDE_PATH);
+
+    await session.reopenWithEncoding(GUIDE_PATH.toLowerCase(), 'windows-1252');
+    await session.reloadDocuments([GUIDE_PATH]);
+    await session.reopenWithEncoding(GUIDE_PATH.toLowerCase(), undefined);
+    await session.reloadDocuments([GUIDE_PATH]);
+
+    expect(documentFiles.openedEncodings).toEqual([
+      undefined,
+      'windows-1252',
+      'windows-1252',
+      undefined,
+      undefined,
+    ]);
+  });
+
   describe('documents that are not saved yet', () => {
     const nameFor = (number: number) => `Untitled-${String(number)}.md`;
 

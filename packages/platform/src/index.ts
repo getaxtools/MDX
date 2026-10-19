@@ -26,4 +26,6 @@ export type { DocumentPrinterPort } from './DocumentPrinterPort';
 export type { DocumentLinksPort } from './DocumentLinksPort';
 export { InMemoryDocumentLinks } from './fakes/InMemoryDocumentLinks';
 export type { FolderListing, FolderPort } from './FolderPort';
+export type { FavouritesFilePort } from './FavouritesFilePort';
+export { InMemoryFavouritesFile } from './fakes/InMemoryFavouritesFile';
 export { InMemoryFolders, type InMemoryFolderContents } from './fakes/InMemoryFolders';

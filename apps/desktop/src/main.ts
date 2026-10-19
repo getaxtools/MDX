@@ -1,6 +1,6 @@
 import { ViewerSession } from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
-import { createCodeHighlighter, createMarkdownRenderer } from '@mdx/renderer';
+import { createCodeHighlighter, createMarkdownRenderer, createRichBlockRenderer } from '@mdx/renderer';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ViewerApp, ViewerController } from '@mdx/ui';
 import { mount } from 'svelte';
@@ -11,6 +11,7 @@ import { TauriDocumentLinks } from './ports/TauriDocumentLinks';
 import { TauriDocumentRequests } from './ports/TauriDocumentRequests';
 import { TauriDocumentResources } from './ports/TauriDocumentResources';
 import { TauriDocumentWatcher } from './ports/TauriDocumentWatcher';
+import { TauriFavouritesFile } from './ports/TauriFavouritesFile';
 import { TauriFolders } from './ports/TauriFolders';
 import { WebViewPrinter } from './ports/WebViewPrinter';
 import { tauriCommands } from './ports/tauriCommands';
@@ -34,12 +35,20 @@ const controller = new ViewerController({
   printer: new WebViewPrinter(),
   links: new TauriDocumentLinks(),
   folders: new TauriFolders(),
+  favouritesFile: new TauriFavouritesFile(),
 });
 
 const appInfo = await tauriCommands.getAppInfo();
 mount(ViewerApp, {
   target: appElement,
-  props: { controller, translator, platform: 'windows', appInfo, codeHighlighter: createCodeHighlighter() },
+  props: {
+    controller,
+    translator,
+    platform: 'windows',
+    appInfo,
+    codeHighlighter: createCodeHighlighter(),
+    richBlocks: createRichBlockRenderer({ window }),
+  },
 });
 void controller.start();
 const appWindow = getCurrentWindow();

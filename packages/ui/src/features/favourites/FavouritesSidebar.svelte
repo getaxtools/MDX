@@ -1,26 +1,30 @@
 <script lang="ts">
-  import type { Favourite, RecentFile } from '@mdx/core';
+  import type { Favourite, FavouriteGroup, RecentFile } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
   import type { FolderListing, PathStatus } from '@mdx/platform';
-  import type { RecentFileCommand } from '../recent-files/recentFileCommands';
+  import type { LocateRecentFileCommand, RecentFileCommand } from '../recent-files/recentFileCommands';
   import RecentFilesSection from '../recent-files/RecentFilesSection.svelte';
-  import type { FavouriteCommand } from './favouriteCommands';
+  import type { FavouriteCommand, FavouritesFileCommand } from './favouriteCommands';
   import FavouritesSection from './FavouritesSection.svelte';
 
   interface Props {
     favourites: readonly Favourite[];
+    favouriteGroups?: readonly FavouriteGroup[];
     recentFiles: readonly RecentFile[];
     pathStatuses: ReadonlyMap<string, PathStatus>;
     translator: Translator;
     onOpenFavourite: (favourite: Favourite) => void;
     onOpenRecentFile: (recentFile: RecentFile) => void;
-    onCommand: (command: FavouriteCommand | RecentFileCommand) => void;
+    onCommand: (
+      command: FavouriteCommand | FavouritesFileCommand | RecentFileCommand | LocateRecentFileCommand,
+    ) => void;
     onListFolder: (folderPath: string) => Promise<FolderListing>;
     onOpenDocument: (documentPath: string) => void;
   }
 
   const {
     favourites,
+    favouriteGroups = [],
     recentFiles,
     pathStatuses,
     translator,
@@ -35,6 +39,7 @@
 <nav class="sidebar" aria-label={translator.translate('sidebar.label')}>
   <FavouritesSection
     {favourites}
+    groups={favouriteGroups}
     {pathStatuses}
     {translator}
     onOpen={onOpenFavourite}

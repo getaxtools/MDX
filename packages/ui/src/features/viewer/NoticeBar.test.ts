@@ -15,6 +15,22 @@ describe('NoticeBar', () => {
     expect(onDismiss).toHaveBeenCalledOnce();
   });
 
+  it('offers the notice actions as buttons', async () => {
+    const onAction = vi.fn();
+    const locate = { label: 'Locate…', command: { kind: 'locateRecentFile', canonicalKey: 'a.md' } } as const;
+    render(NoticeBar, {
+      message: 'File not found',
+      actions: [locate],
+      translator: createTranslator(),
+      onAction,
+      onDismiss: vi.fn(),
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Locate…' }));
+
+    expect(onAction).toHaveBeenCalledWith(locate);
+  });
+
   it('keeps an empty live region when there is no message', () => {
     render(NoticeBar, { message: undefined, translator: createTranslator(), onDismiss: vi.fn() });
 

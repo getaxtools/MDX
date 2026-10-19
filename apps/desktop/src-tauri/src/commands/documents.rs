@@ -7,8 +7,9 @@ use tauri_plugin_dialog::{DialogExt, FileDialogBuilder};
 
 use crate::documents::{
     DocumentAccessList, DocumentError, MAX_DOCUMENT_BYTES, OpenedDocument, PathStatus,
-    copy_document, is_markdown_path, locate_document, open_allowed_document, status_of_path,
-    validated_file_name, with_markdown_extension, write_document_text,
+    copy_document, encoding_for_label, is_markdown_path, locate_document, open_allowed_document,
+    open_allowed_document_as, status_of_path, validated_file_name, with_markdown_extension,
+    write_text_atomically,
 };
 use crate::open_requests::{StartupDocuments, grant_documents};
 
@@ -16,14 +17,23 @@ const MAX_PATH_CHARACTERS: usize = 32_767;
 const MAX_STATUS_CHECKS: usize = 500;
 const MARKDOWN_FILTER_EXTENSIONS: [&str; 5] = ["md", "markdown", "mdown", "mkd", "mdx"];
 
+/// Opens a document, decoded with `encoding` when the user chose one, or else detected.
 #[tauri::command]
 pub async fn open_document(
     path: String,
+    encoding: Option<String>,
     access: State<'_, Arc<DocumentAccessList>>,
 ) -> Result<OpenedDocument, DocumentError> {
     let path = validated_path(&path)?;
+    let chosen_encoding = encoding
+        .map(|label| encoding_for_label(&label).ok_or(DocumentError::InvalidRequest))
+        .transpose()?;
     let access = Arc::clone(&access);
-    run_blocking(move || open_allowed_document(&path, &access)).await?
+    run_blocking(move || match chosen_encoding {
+        Some(encoding) => open_allowed_document_as(&path, &access, encoding),
+        None => open_allowed_document(&path, &access),
+    })
+    .await?
 }
 
 #[tauri::command]
@@ -150,7 +160,7 @@ impl SaveRequest {
     fn write_to(&self, destination: &Path) -> Result<(), DocumentError> {
         match self {
             Self::Copy { source, .. } => copy_document(source, destination),
-            Self::Text { text, .. } => write_document_text(destination, text),
+            Self::Text { text, .. } => write_text_atomically(destination, text),
         }
     }
 }

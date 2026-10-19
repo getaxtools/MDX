@@ -11,6 +11,8 @@ describe('commandForMenuItem', () => {
     ['clearUnpinnedRecentFiles', { kind: 'clearUnpinnedRecentFiles' }],
     ['closeActiveTab', { kind: 'closeActiveTab' }],
     ['showPasteTable', { kind: 'showPasteTable' }],
+    ['exportFavourites', { kind: 'exportFavourites' }],
+    ['importFavourites', { kind: 'importFavourites' }],
     ['theme.dark', { kind: 'setTheme', theme: 'dark' }],
     ['readingWidth.narrow', { kind: 'setReadingWidth', readingWidth: 'narrow' }],
     ['toggleSidebar', { kind: 'toggleSidebar' }],
@@ -26,6 +28,15 @@ describe('commandForMenuItem', () => {
   it('opens a recent file by its position in the Open Recent menu', () => {
     expect(commandForMenuItem('openRecent.0')).toEqual({ kind: 'openRecentFileAt', index: 0 });
     expect(commandForMenuItem('openRecent.9')).toEqual({ kind: 'openRecentFileAt', index: 9 });
+  });
+
+  it('reopens with an encoding chosen in the File menu, or detects it again', () => {
+    expect(commandForMenuItem('reopenWithEncoding.shift_jis')).toEqual({
+      kind: 'reopenWithEncoding',
+      encoding: 'shift_jis',
+    });
+    expect(commandForMenuItem('reopenWithEncoding.detect')).toEqual({ kind: 'reopenWithEncoding' });
+    expect(commandForMenuItem('reopenWithEncoding.klingon')).toBeUndefined();
   });
 
   it('ignores unknown menu items', () => {

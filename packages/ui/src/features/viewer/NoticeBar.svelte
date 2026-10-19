@@ -1,20 +1,28 @@
 <script lang="ts">
   import type { Translator } from '@mdx/i18n';
+  import type { NoticeAction } from './ViewerController';
 
   interface Props {
     message: string | undefined;
+    actions?: readonly NoticeAction[] | undefined;
     translator: Translator;
+    onAction?: (action: NoticeAction) => void;
     onDismiss: () => void;
   }
 
-  const { message, translator, onDismiss }: Props = $props();
+  const { message, actions = [], translator, onAction = () => undefined, onDismiss }: Props = $props();
 </script>
 
 <div class="notice-region" role="status" aria-live="polite">
   {#if message}
     <div class="notice">
       <span>{message}</span>
-      <button onclick={onDismiss}>{translator.translate('notice.dismiss')}</button>
+      <div class="actions">
+        {#each actions as action (action.label)}
+          <button onclick={() => onAction(action)}>{action.label}</button>
+        {/each}
+        <button onclick={onDismiss}>{translator.translate('notice.dismiss')}</button>
+      </div>
     </div>
   {/if}
 </div>
@@ -29,6 +37,12 @@
     background: var(--color-notice-background);
     border-bottom: 1px solid var(--color-notice-border);
     font-size: var(--text-size-body);
+  }
+
+  .actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: var(--space-2);
   }
 
   button {

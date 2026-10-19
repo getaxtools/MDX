@@ -19,7 +19,8 @@ export type SaveSource =
   | { readonly kind: 'text'; readonly text: string; readonly fileName: string };
 
 export interface DocumentFilePort {
-  open(path: string): Promise<OpenedDocument>;
+  /** Reads a document, decoded with `encoding` (a WHATWG label) when given, or else detected. */
+  open(path: string, encoding?: string): Promise<OpenedDocument>;
   /** Asks the user where to save; resolves to the saved path, or undefined when they cancel. */
   saveAs(source: SaveSource): Promise<string | undefined>;
   checkPathStatuses(locations: readonly DocumentLocation[]): Promise<ReadonlyMap<string, PathStatus>>;

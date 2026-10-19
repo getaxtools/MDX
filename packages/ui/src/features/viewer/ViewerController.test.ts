@@ -1,4 +1,4 @@
-import { ViewerSession } from '@mdx/core';
+import { FavouritesList, parseFavouritesFile, toFavouritesFile, ViewerSession } from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
 import {
   InMemoryAppMenu,
@@ -7,6 +7,7 @@ import {
   InMemoryDocumentLinks,
   InMemoryDocumentRequests,
   InMemoryDocumentWatcher,
+  InMemoryFavouritesFile,
   InMemoryFolders,
 } from '@mdx/platform';
 import { createMarkdownRenderer } from '@mdx/renderer';
@@ -23,6 +24,7 @@ function createViewer({
   watcher = new InMemoryDocumentWatcher(),
   links = new InMemoryDocumentLinks(),
   folders = new InMemoryFolders({ 'C:\\Docs': { folders: ['C:\\Docs\\Specs'], documents: [GUIDE, NOTES] } }),
+  favouritesFile = new InMemoryFavouritesFile(),
 } = {}) {
   const documentFiles = new InMemoryDocumentFiles({ [GUIDE]: '# Guide', [NOTES]: '# Notes' });
   const requests = new InMemoryDocumentRequests(startupPaths);
@@ -36,6 +38,7 @@ function createViewer({
     watcher,
     links,
     folders,
+    favouritesFile,
   });
   let latest: ViewerSnapshot | undefined;
   controller.subscribe((snapshot) => (latest = snapshot));
@@ -43,7 +46,19 @@ function createViewer({
     if (!latest) throw new Error('no snapshot published');
     return latest;
   };
-  return { controller, session, requests, documentFiles, appState, menu, watcher, links, folders, snapshot };
+  return {
+    controller,
+    session,
+    requests,
+    documentFiles,
+    appState,
+    menu,
+    watcher,
+    links,
+    folders,
+    favouritesFile,
+    snapshot,
+  };
 }
 
 const tabNames = (snapshot: ViewerSnapshot) =>
@@ -764,6 +779,139 @@ describe('ViewerController', () => {
       menu.choose('showKeyboardShortcuts');
 
       await vi.waitFor(() => expect(snapshot().openDialog).toBe('keyboardShortcuts'));
+    });
+  });
+
+  describe('reopen with encoding', () => {
+    it('reopens the active document with the chosen encoding and shows it in the status bar', async () => {
+      const { controller, documentFiles, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+
+      await controller.execute({ kind: 'reopenWithEncoding', encoding: 'windows-1252' });
+
+      await vi.waitFor(() => expect(snapshot().activeDocument?.encoding).toBe('windows-1252'));
+      expect(documentFiles.openedEncodings.at(-1)).toBe('windows-1252');
+    });
+
+    it('reports a document that cannot be reopened', async () => {
+      const { controller, documentFiles, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+      documentFiles.delete(GUIDE);
+
+      await controller.execute({ kind: 'reopenWithEncoding', encoding: 'big5' });
+
+      expect(snapshot().notice).toContain('could not be reopened with that encoding');
+    });
+  });
+
+  describe('recent files that have moved', () => {
+    const MOVED = 'C:\\Archive\\Guide.md';
+
+    async function viewerWithMovedGuide() {
+      const viewer = createViewer({ startupPaths: [GUIDE] });
+      await viewer.controller.start();
+      await viewer.controller.execute({ kind: 'toggleFavourite' });
+      await viewer.controller.execute({ kind: 'closeActiveTab' });
+      viewer.documentFiles.delete(GUIDE);
+      viewer.documentFiles.write(MOVED, '# Guide');
+      const [guide] = viewer.session.currentState().recentFiles.entries();
+      if (!guide) throw new Error('Guide.md is missing from recent files');
+      await viewer.controller.openRecentFile(guide);
+      return viewer;
+    }
+
+    it('offers Locate and Remove when a recent file cannot be found', async () => {
+      const { snapshot } = await viewerWithMovedGuide();
+
+      expect(snapshot().notice).toContain('could not be found');
+      expect(snapshot().noticeActions?.map((action) => action.label)).toEqual([
+        'Locate…',
+        'Remove from List',
+      ]);
+    });
+
+    it('points the recent file and the favourite at the located file and opens it', async () => {
+      const { controller, requests, session, snapshot } = await viewerWithMovedGuide();
+      requests.pickedPaths = [MOVED];
+      const [locate] = snapshot().noticeActions ?? [];
+      if (!locate) throw new Error('no Locate action');
+
+      await controller.runNoticeAction(locate);
+
+      const { recentFiles, favourites } = session.currentState();
+      expect(recentFiles.entries().map((file) => file.location.displayPath)).toEqual([MOVED]);
+      expect(favourites.favourites().map((favourite) => favourite.location.displayPath)).toEqual([MOVED]);
+      expect(tabNames(snapshot())).toEqual(['Guide.md']);
+      expect(snapshot()).not.toHaveProperty('notice');
+    });
+
+    it('removes the recent file when the user chooses Remove', async () => {
+      const { controller, session, snapshot } = await viewerWithMovedGuide();
+      const remove = snapshot().noticeActions?.[1];
+      if (!remove) throw new Error('no Remove action');
+
+      await controller.runNoticeAction(remove);
+
+      expect(session.currentState().recentFiles.entries()).toEqual([]);
+    });
+  });
+
+  describe('favourites file', () => {
+    it('exports the favourites and says where they were saved', async () => {
+      const { controller, favouritesFile, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+      await controller.execute({ kind: 'toggleFavourite' });
+      favouritesFile.exportPath = 'C:\\Backup\\favourites.json';
+
+      await controller.execute({ kind: 'exportFavourites' });
+
+      const [exported] = favouritesFile.exportedFiles;
+      expect(exported?.suggestedFileName).toBe('MDX favourites.json');
+      expect(
+        parseFavouritesFile(exported?.contents ?? '')
+          ?.favourites()
+          .map((f) => f.location.fileName),
+      ).toEqual(['Guide.md']);
+      expect(snapshot().notice).toBe('Favourites exported to C:\\Backup\\favourites.json.');
+    });
+
+    it('says nothing when the user cancels the export', async () => {
+      const { controller, snapshot } = createViewer();
+      await controller.start();
+
+      await controller.execute({ kind: 'exportFavourites' });
+
+      expect(snapshot()).not.toHaveProperty('notice');
+    });
+
+    it('imports favourites, adding only the ones that are new', async () => {
+      const { controller, favouritesFile, session, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+      await controller.execute({ kind: 'toggleFavourite' });
+      const exported = FavouritesList.empty()
+        .add(InMemoryDocumentFiles.locationOf(GUIDE), 'file')
+        .add(InMemoryDocumentFiles.locationOf(NOTES), 'file');
+      favouritesFile.importedText = toFavouritesFile(exported);
+
+      await controller.execute({ kind: 'importFavourites' });
+
+      expect(
+        session
+          .currentState()
+          .favourites.favourites()
+          .map((favourite) => favourite.location.fileName),
+      ).toEqual(['Guide.md', 'Notes.md']);
+      expect(snapshot().notice).toBe('Imported 1 favourite.');
+    });
+
+    it('rejects a file that is not an exported favourites file', async () => {
+      const { controller, favouritesFile, snapshot } = createViewer();
+      await controller.start();
+      favouritesFile.importedText = '{"hello":"world"}';
+
+      await controller.execute({ kind: 'importFavourites' });
+
+      expect(snapshot().notice).toBe('That file is not a favourites file exported from MDX.');
     });
   });
 

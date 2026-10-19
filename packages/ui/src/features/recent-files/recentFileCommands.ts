@@ -6,6 +6,12 @@ export type RecentFileCommand =
   | { readonly kind: 'removeRecentFile'; readonly canonicalKey: string }
   | { readonly kind: 'clearUnpinnedRecentFiles' };
 
+/** Opens a file dialog, so the viewer runs it rather than the recent files list itself. */
+export interface LocateRecentFileCommand {
+  readonly kind: 'locateRecentFile';
+  readonly canonicalKey: string;
+}
+
 type RecentFileCommandHandlers = {
   readonly [Kind in RecentFileCommand['kind']]: (
     recentFiles: RecentFilesList,

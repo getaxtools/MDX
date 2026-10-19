@@ -32,6 +32,8 @@ export class ViewerSession {
   };
   private readonly openedDocuments = new Map<string, OpenedDocument>();
   private readonly untitledDocuments = new Map<string, OpenedDocument>();
+  /** Encodings the user chose with Reopen with Encoding, kept for live reload. */
+  private readonly chosenEncodings = new Map<string, string>();
   private untitledCount = 0;
   private readonly listeners = new Set<ViewerStateListener>();
 
@@ -128,12 +130,28 @@ export class ViewerSession {
       try {
         this.openedDocuments.set(
           location.canonicalKey,
-          await this.dependencies.documentFiles.open(location.displayPath),
+          await this.dependencies.documentFiles.open(
+            location.displayPath,
+            this.chosenEncodings.get(location.canonicalKey),
+          ),
         );
       } catch {
         this.openedDocuments.delete(location.canonicalKey);
       }
     }
+    this.replaceState({ ...this.state });
+  }
+
+  /** Reads an open document again with the given encoding, or with detection for `undefined`. */
+  async reopenWithEncoding(canonicalKey: string, encoding: string | undefined): Promise<void> {
+    const tab = this.state.tabStrip
+      .tabs()
+      .find((candidate) => candidate.location.canonicalKey === canonicalKey);
+    if (!tab) return;
+    const document = await this.dependencies.documentFiles.open(tab.location.displayPath, encoding);
+    if (encoding === undefined) this.chosenEncodings.delete(canonicalKey);
+    else this.chosenEncodings.set(canonicalKey, encoding);
+    this.openedDocuments.set(canonicalKey, document);
     this.replaceState({ ...this.state });
   }
 

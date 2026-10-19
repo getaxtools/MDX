@@ -1,45 +1,85 @@
 <script lang="ts">
-  import { displayNameOf, type Favourite } from '@mdx/core';
+  import { displayNameOf, nextFavouriteGroupId, type Favourite, type FavouriteGroup } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
   import type { FolderListing, PathStatus } from '@mdx/platform';
   import { tick } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import ContextMenu from '../../components/ContextMenu.svelte';
   import { contextMenuPosition, isContextMenuKey } from '../../components/ContextMenuItem';
-  import { favouriteContextMenuItems, type FavouriteMenuItemId } from './favouriteContextMenu';
-  import type { FavouriteCommand } from './favouriteCommands';
+  import {
+    favouriteContextMenuItems,
+    favouriteGroupContextMenuItems,
+    favouritesHeaderMenuItems,
+    groupIdOfMenuItem,
+    type FavouriteGroupMenuItemId,
+    type FavouriteMenuItemId,
+    type FavouritesHeaderMenuItemId,
+  } from './favouriteContextMenu';
+  import type { FavouriteCommand, FavouritesFileCommand } from './favouriteCommands';
   import FolderContents from './FolderContents.svelte';
 
   interface Props {
     favourites: readonly Favourite[];
+    groups?: readonly FavouriteGroup[];
     pathStatuses: ReadonlyMap<string, PathStatus>;
     translator: Translator;
     onOpen: (favourite: Favourite) => void;
-    onCommand: (command: FavouriteCommand) => void;
+    onCommand: (command: FavouriteCommand | FavouritesFileCommand) => void;
     onListFolder: (folderPath: string) => Promise<FolderListing>;
     onOpenDocument: (documentPath: string) => void;
   }
 
-  const { favourites, pathStatuses, translator, onOpen, onCommand, onListFolder, onOpenDocument }: Props =
-    $props();
+  const {
+    favourites,
+    groups = [],
+    pathStatuses,
+    translator,
+    onOpen,
+    onCommand,
+    onListFolder,
+    onOpenDocument,
+  }: Props = $props();
+
+  type MenuRequest =
+    | { readonly kind: 'favourite'; readonly index: number; readonly x: number; readonly y: number }
+    | { readonly kind: 'group'; readonly group: FavouriteGroup; readonly x: number; readonly y: number }
+    | { readonly kind: 'header'; readonly x: number; readonly y: number };
 
   const expandedFolderKeys = new SvelteSet<string>();
+  const collapsedGroupIds = new SvelteSet<string>();
+  let itemButtons: HTMLButtonElement[] = $state([]);
+  let menuRequest: MenuRequest | undefined = $state();
+  let renamingIndex: number | undefined = $state();
+  let renamingGroupId: string | undefined = $state();
+
+  const ungroupedFavourites = $derived(favourites.filter((favourite) => favourite.groupId === undefined));
+  const groupedFavourites = $derived(
+    groups.map((group) => ({
+      group,
+      items: favourites.filter((favourite) => favourite.groupId === group.id),
+    })),
+  );
+  /** Favourites in the order they appear, which is what item indexes refer to. */
+  const shownFavourites = $derived([
+    ...ungroupedFavourites,
+    ...groupedFavourites.flatMap(({ items }) => items),
+  ]);
+  const menuFavourite = $derived(
+    menuRequest?.kind === 'favourite' ? shownFavourites[menuRequest.index] : undefined,
+  );
 
   function activate(favourite: Favourite) {
     if (favourite.kind === 'file') {
       onOpen(favourite);
       return;
     }
-    const key = favourite.location.canonicalKey;
-    if (expandedFolderKeys.has(key)) expandedFolderKeys.delete(key);
-    else expandedFolderKeys.add(key);
+    toggle(expandedFolderKeys, favourite.location.canonicalKey);
   }
 
-  let itemButtons: HTMLButtonElement[] = $state([]);
-  let menuRequest: { readonly index: number; readonly x: number; readonly y: number } | undefined = $state();
-  let renamingIndex: number | undefined = $state();
-
-  const menuFavourite = $derived(menuRequest ? favourites[menuRequest.index] : undefined);
+  function toggle(set: SvelteSet<string>, key: string) {
+    if (set.has(key)) set.delete(key);
+    else set.add(key);
+  }
 
   function labelOf(favourite: Favourite): string {
     const name = displayNameOf(favourite);
@@ -47,11 +87,22 @@
     return status === 'available' ? name : translator.translate(`favourites.status.${status}`, { name });
   }
 
-  function move(index: number, toIndex: number) {
-    const favourite = favourites[index];
-    if (!favourite || toIndex < 0 || toIndex >= favourites.length) return;
-    onCommand({ kind: 'moveFavourite', canonicalKey: favourite.location.canonicalKey, toIndex });
-    void tick().then(() => itemButtons[toIndex]?.focus());
+  /** A neighbour in the same group, which is the only place a favourite can move to with Up or Down. */
+  function neighbourOf(index: number, step: -1 | 1): Favourite | undefined {
+    const neighbour = shownFavourites[index + step];
+    return neighbour && neighbour.groupId === shownFavourites[index]?.groupId ? neighbour : undefined;
+  }
+
+  function move(index: number, step: -1 | 1) {
+    const favourite = shownFavourites[index];
+    const neighbour = neighbourOf(index, step);
+    if (!favourite || !neighbour) return;
+    onCommand({
+      kind: 'moveFavourite',
+      canonicalKey: favourite.location.canonicalKey,
+      toIndex: favourites.indexOf(neighbour),
+    });
+    void tick().then(() => itemButtons[index + step]?.focus());
   }
 
   const KEY_ACTIONS: Readonly<Record<string, (index: number) => void>> = {
@@ -61,12 +112,12 @@
 
   function handleKeydown(event: KeyboardEvent, index: number) {
     if (isContextMenuKey(event)) {
-      openMenu(event, index);
+      openMenu(event, { kind: 'favourite', index });
       return;
     }
     if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
       event.preventDefault();
-      move(index, event.key === 'ArrowUp' ? index - 1 : index + 1);
+      move(index, event.key === 'ArrowUp' ? -1 : 1);
       return;
     }
     const action = KEY_ACTIONS[event.key];
@@ -75,33 +126,76 @@
     action(index);
   }
 
+  function handleGroupKeydown(event: KeyboardEvent, group: FavouriteGroup) {
+    if (isContextMenuKey(event)) {
+      openMenu(event, { kind: 'group', group });
+      return;
+    }
+    if (event.key === 'F2') renamingGroupId = group.id;
+    else if (event.key === 'Delete') onCommand({ kind: 'removeFavouriteGroup', groupId: group.id });
+    else return;
+    event.preventDefault();
+  }
+
   function remove(index: number) {
-    const favourite = favourites[index];
+    const favourite = shownFavourites[index];
     if (favourite) onCommand({ kind: 'removeFavourite', canonicalKey: favourite.location.canonicalKey });
   }
 
-  function openMenu(event: MouseEvent | KeyboardEvent, index: number) {
+  function openMenu(
+    event: MouseEvent | KeyboardEvent,
+    target:
+      { kind: 'favourite'; index: number } | { kind: 'group'; group: FavouriteGroup } | { kind: 'header' },
+  ) {
     event.preventDefault();
-    menuRequest = { index, ...contextMenuPosition(event) };
+    menuRequest = { ...target, ...contextMenuPosition(event) };
   }
 
-  function chooseMenuItem(itemId: FavouriteMenuItemId) {
-    const index = menuRequest?.index;
-    if (index === undefined || !menuFavourite) return;
-    const actions: Record<FavouriteMenuItemId, () => void> = {
-      open: () => activate(menuFavourite),
+  function createGroup(canonicalKey?: string) {
+    const groupId = nextFavouriteGroupId(groups);
+    const name = translator.translate('favourites.group.defaultName', { number: groups.length + 1 });
+    onCommand({ kind: 'createFavouriteGroup', groupId, name, ...(canonicalKey ? { canonicalKey } : {}) });
+    renamingGroupId = groupId;
+  }
+
+  function chooseFavouriteItem(itemId: FavouriteMenuItemId) {
+    if (menuRequest?.kind !== 'favourite' || !menuFavourite) return;
+    const { index } = menuRequest;
+    const canonicalKey = menuFavourite.location.canonicalKey;
+    const targetGroupId = groupIdOfMenuItem(itemId);
+    if (targetGroupId !== undefined) {
+      onCommand({ kind: 'moveFavouriteToGroup', canonicalKey, groupId: targetGroupId });
+      return;
+    }
+    const favourite = menuFavourite;
+    const actions: Partial<Record<FavouriteMenuItemId, () => void>> = {
+      open: () => activate(favourite),
       rename: () => (renamingIndex = index),
-      moveUp: () => move(index, index - 1),
-      moveDown: () => move(index, index + 1),
+      moveUp: () => move(index, -1),
+      moveDown: () => move(index, 1),
+      moveToNewGroup: () => createGroup(canonicalKey),
+      removeFromGroup: () => onCommand({ kind: 'moveFavouriteToGroup', canonicalKey }),
       remove: () => remove(index),
     };
-    actions[itemId]();
+    actions[itemId]?.();
+  }
+
+  function chooseGroupItem(itemId: FavouriteGroupMenuItemId) {
+    if (menuRequest?.kind !== 'group') return;
+    const { group } = menuRequest;
+    if (itemId === 'renameGroup') renamingGroupId = group.id;
+    else onCommand({ kind: 'removeFavouriteGroup', groupId: group.id });
+  }
+
+  function chooseHeaderItem(itemId: FavouritesHeaderMenuItemId) {
+    if (itemId === 'newGroup') createGroup();
+    else onCommand({ kind: itemId });
   }
 
   function closeMenu() {
-    const index = menuRequest?.index;
+    const request = menuRequest;
     menuRequest = undefined;
-    if (index !== undefined && renamingIndex === undefined) itemButtons[index]?.focus();
+    if (request?.kind === 'favourite' && renamingIndex === undefined) itemButtons[request.index]?.focus();
   }
 
   function finishRename(input: HTMLInputElement, favourite: Favourite, shouldSave: boolean) {
@@ -118,12 +212,21 @@
     void tick().then(() => itemButtons[index]?.focus());
   }
 
-  function handleRenameKeydown(event: KeyboardEvent, favourite: Favourite) {
+  function finishGroupRename(input: HTMLInputElement, group: FavouriteGroup, shouldSave: boolean) {
+    if (renamingGroupId === undefined) return;
+    renamingGroupId = undefined;
+    if (shouldSave) onCommand({ kind: 'renameFavouriteGroup', groupId: group.id, name: input.value });
+  }
+
+  function handleRenameKeydown(
+    event: KeyboardEvent,
+    finish: (input: HTMLInputElement, save: boolean) => void,
+  ) {
     if (!(event.currentTarget instanceof HTMLInputElement)) return;
-    if (event.key === 'Enter') finishRename(event.currentTarget, favourite, true);
+    if (event.key === 'Enter') finish(event.currentTarget, true);
     if (event.key === 'Escape') {
       event.stopPropagation();
-      finishRename(event.currentTarget, favourite, false);
+      finish(event.currentTarget, false);
     }
   }
 
@@ -133,47 +236,100 @@
   }
 </script>
 
+{#snippet favouriteItem(favourite: Favourite)}
+  {@const index = shownFavourites.indexOf(favourite)}
+  <li>
+    {#if renamingIndex === index}
+      <input
+        aria-label={translator.translate('favourites.renameInput.label', { name: displayNameOf(favourite) })}
+        value={displayNameOf(favourite)}
+        use:focusAndSelect
+        onkeydown={(event) =>
+          handleRenameKeydown(event, (input, save) => finishRename(input, favourite, save))}
+        onblur={(event) => finishRename(event.currentTarget, favourite, true)}
+      />
+    {:else}
+      <button
+        bind:this={itemButtons[index]}
+        class:unavailable={(pathStatuses.get(favourite.location.canonicalKey) ?? 'available') !== 'available'}
+        title={favourite.location.displayPath}
+        aria-expanded={favourite.kind === 'folder'
+          ? expandedFolderKeys.has(favourite.location.canonicalKey)
+          : undefined}
+        onclick={() => activate(favourite)}
+        onkeydown={(event) => handleKeydown(event, index)}
+        oncontextmenu={(event) => openMenu(event, { kind: 'favourite', index })}
+      >
+        <span aria-hidden="true">{favourite.kind === 'folder' ? '📁' : '★'}</span>
+        {labelOf(favourite)}
+      </button>
+      {#if expandedFolderKeys.has(favourite.location.canonicalKey)}
+        <FolderContents
+          folderPath={favourite.location.displayPath}
+          {translator}
+          {onListFolder}
+          {onOpenDocument}
+        />
+      {/if}
+    {/if}
+  </li>
+{/snippet}
+
 <section aria-labelledby="favourites-heading">
-  <h2 id="favourites-heading">{translator.translate('favourites.sidebar.title')}</h2>
-  {#if favourites.length === 0}
+  <div class="heading">
+    <h2 id="favourites-heading">{translator.translate('favourites.sidebar.title')}</h2>
+    <button
+      class="header-menu"
+      aria-label={translator.translate('favourites.headerMenu.label')}
+      title={translator.translate('favourites.headerMenu.label')}
+      aria-haspopup="menu"
+      onclick={(event) => openMenu(event, { kind: 'header' })}
+    >
+      <span aria-hidden="true">⋯</span>
+    </button>
+  </div>
+  {#if favourites.length === 0 && groups.length === 0}
     <p class="empty-state">{translator.translate('favourites.sidebar.emptyState')}</p>
   {:else}
     <ul>
-      {#each favourites as favourite, index (favourite.location.canonicalKey)}
-        <li>
-          {#if renamingIndex === index}
+      {#each ungroupedFavourites as favourite (favourite.location.canonicalKey)}
+        <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a snippet is not a value -->
+        {@render favouriteItem(favourite)}
+      {/each}
+      {#each groupedFavourites as { group, items } (group.id)}
+        {@const isExpanded = !collapsedGroupIds.has(group.id)}
+        <li class="group">
+          {#if renamingGroupId === group.id}
             <input
-              aria-label={translator.translate('favourites.renameInput.label', {
-                name: displayNameOf(favourite),
-              })}
-              value={displayNameOf(favourite)}
+              aria-label={translator.translate('favourites.group.renameInput.label', { name: group.name })}
+              value={group.name}
               use:focusAndSelect
-              onkeydown={(event) => handleRenameKeydown(event, favourite)}
-              onblur={(event) => finishRename(event.currentTarget, favourite, true)}
+              onkeydown={(event) =>
+                handleRenameKeydown(event, (input, save) => finishGroupRename(input, group, save))}
+              onblur={(event) => finishGroupRename(event.currentTarget, group, true)}
             />
           {:else}
             <button
-              bind:this={itemButtons[index]}
-              class:unavailable={(pathStatuses.get(favourite.location.canonicalKey) ?? 'available') !==
-                'available'}
-              title={favourite.location.displayPath}
-              aria-expanded={favourite.kind === 'folder'
-                ? expandedFolderKeys.has(favourite.location.canonicalKey)
-                : undefined}
-              onclick={() => activate(favourite)}
-              onkeydown={(event) => handleKeydown(event, index)}
-              oncontextmenu={(event) => openMenu(event, index)}
+              class="group-header"
+              aria-expanded={isExpanded}
+              onclick={() => toggle(collapsedGroupIds, group.id)}
+              onkeydown={(event) => handleGroupKeydown(event, group)}
+              oncontextmenu={(event) => openMenu(event, { kind: 'group', group })}
             >
-              <span aria-hidden="true">{favourite.kind === 'folder' ? '📁' : '★'}</span>
-              {labelOf(favourite)}
+              <span aria-hidden="true">{isExpanded ? '▾' : '▸'}</span>
+              {group.name}
             </button>
-            {#if expandedFolderKeys.has(favourite.location.canonicalKey)}
-              <FolderContents
-                folderPath={favourite.location.displayPath}
-                {translator}
-                {onListFolder}
-                {onOpenDocument}
-              />
+          {/if}
+          {#if isExpanded}
+            {#if items.length === 0}
+              <p class="empty-state group-empty">{translator.translate('favourites.group.emptyState')}</p>
+            {:else}
+              <ul class="group-items">
+                {#each items as favourite (favourite.location.canonicalKey)}
+                  <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a snippet is not a value -->
+                  {@render favouriteItem(favourite)}
+                {/each}
+              </ul>
             {/if}
           {/if}
         </li>
@@ -181,12 +337,76 @@
     </ul>
   {/if}
 </section>
-{#if menuRequest && menuFavourite}
+{#if menuRequest?.kind === 'favourite' && menuFavourite}
+  {@const index = menuRequest.index}
   <ContextMenu
     label={translator.translate('favourites.contextMenu.label', { name: displayNameOf(menuFavourite) })}
-    items={favouriteContextMenuItems({ index: menuRequest.index, count: favourites.length }, translator)}
+    items={favouriteContextMenuItems(
+      {
+        canMoveUp: neighbourOf(index, -1) !== undefined,
+        canMoveDown: neighbourOf(index, 1) !== undefined,
+        groups,
+        groupId: menuFavourite.groupId,
+      },
+      translator,
+    )}
     position={menuRequest}
-    onChoose={chooseMenuItem}
+    onChoose={chooseFavouriteItem}
+    onClose={closeMenu}
+  />
+{:else if menuRequest?.kind === 'group'}
+  <ContextMenu
+    label={translator.translate('favourites.group.contextMenu.label', { name: menuRequest.group.name })}
+    items={favouriteGroupContextMenuItems(translator)}
+    position={menuRequest}
+    onChoose={chooseGroupItem}
+    onClose={closeMenu}
+  />
+{:else if menuRequest?.kind === 'header'}
+  <ContextMenu
+    label={translator.translate('favourites.headerMenu.label')}
+    items={favouritesHeaderMenuItems(translator)}
+    position={menuRequest}
+    onChoose={chooseHeaderItem}
     onClose={closeMenu}
   />
 {/if}
+
+<style>
+  .heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+
+  .header-menu {
+    margin-inline-end: var(--space-1);
+    padding: 0 var(--space-2);
+    border: 0;
+    border-radius: var(--radius-small);
+    background: none;
+    color: var(--color-text-secondary);
+    font: inherit;
+  }
+
+  .header-menu:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+  }
+
+  .header-menu:focus-visible {
+    outline: 2px solid var(--color-focus);
+  }
+
+  .group-header {
+    font-weight: 600;
+  }
+
+  .group-items {
+    padding-inline-start: var(--space-3) !important;
+  }
+
+  .group-empty {
+    padding-inline-start: var(--space-6);
+  }
+</style>

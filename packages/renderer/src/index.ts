@@ -23,3 +23,9 @@ export {
   type HighlightedToken,
 } from './highlight/createCodeHighlighter';
 export { readFrontMatterProperties, type DocumentProperty } from './front-matter/readFrontMatterProperties';
+export {
+  createRichBlockRenderer,
+  type MathTypesetter,
+  type RichBlockRenderer,
+  type RichBlockRenderOptions,
+} from './rich-blocks/createRichBlockRenderer';

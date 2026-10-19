@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Favourite, RecentFile } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
-  import type { CodeHighlighter } from '@mdx/renderer';
+  import type { CodeHighlighter, RichBlockRenderer } from '@mdx/renderer';
   import AboutDialog from '../about/AboutDialog.svelte';
   import type { AppInfo } from '../about/AppInfo';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
@@ -21,7 +21,7 @@
   import NoticeBar from './NoticeBar.svelte';
   import { commandForShortcut } from '../shortcuts/commandShortcuts';
   import type { DesktopPlatform, ViewerCommand } from './viewerCommands';
-  import type { ViewerController, ViewerSnapshot } from './ViewerController';
+  import type { NoticeAction, ViewerController, ViewerSnapshot } from './ViewerController';
 
   interface Props {
     controller: ViewerController;
@@ -29,9 +29,10 @@
     platform: DesktopPlatform;
     appInfo: AppInfo;
     codeHighlighter?: CodeHighlighter;
+    richBlocks?: RichBlockRenderer;
   }
 
-  const { controller, translator, platform, appInfo, codeHighlighter }: Props = $props();
+  const { controller, translator, platform, appInfo, codeHighlighter, richBlocks }: Props = $props();
 
   // Raw, not deep state: a deep proxy gives the same document a new identity on every
   // snapshot, and the document view treats that as a newly opened document.
@@ -77,6 +78,7 @@
       {#if viewSettings.isSidebarVisible}
         <FavouritesSidebar
           favourites={snapshot.viewer.favourites.favourites()}
+          favouriteGroups={snapshot.viewer.favourites.groups()}
           recentFiles={snapshot.viewer.recentFiles.entries()}
           pathStatuses={snapshot.pathStatuses}
           onCommand={(command: ViewerCommand) => void controller.execute(command)}
@@ -106,7 +108,13 @@
             onCommand={(command: ViewerCommand) => void controller.execute(command)}
           />
         </div>
-        <NoticeBar message={snapshot.notice} {translator} onDismiss={() => controller.dismissNotice()} />
+        <NoticeBar
+          message={snapshot.notice}
+          actions={snapshot.noticeActions}
+          {translator}
+          onAction={(action: NoticeAction) => void controller.runNoticeAction(action)}
+          onDismiss={() => controller.dismissNotice()}
+        />
         <TabStripView
           tabs={snapshot.viewer.tabStrip.tabs()}
           activeKey={activeTab?.location.canonicalKey}
@@ -121,6 +129,7 @@
             zoomPercent={viewSettings.zoomPercent}
             readingWidth={viewSettings.readingWidth}
             {codeHighlighter}
+            {richBlocks}
             findRequest={snapshot.findRequest}
             isSourceView={snapshot.isSourceView ?? false}
             onCloseFind={() => controller.closeFind()}
@@ -146,6 +155,12 @@
         isSourceView={snapshot.isSourceView ?? false}
         {translator}
         onResetZoom={() => void controller.execute({ kind: 'resetZoom' })}
+        onReopenWithEncoding={(encoding: string | undefined) =>
+          void controller.execute(
+            encoding === undefined
+              ? { kind: 'reopenWithEncoding' }
+              : { kind: 'reopenWithEncoding', encoding },
+          )}
       />
     {/if}
   </div>

@@ -1,4 +1,5 @@
 import type { ReadingWidth } from '@mdx/core';
+import type { RichBlockRenderer } from '@mdx/renderer';
 import { createTranslator } from '@mdx/i18n';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
@@ -9,6 +10,7 @@ interface ViewOptions {
   readonly readingWidth?: ReadingWidth;
   readonly onScroll?: (scrollRatio: number) => void;
   readonly isSourceView?: boolean;
+  readonly richBlocks?: RichBlockRenderer;
 }
 
 function renderDocument(
@@ -18,6 +20,7 @@ function renderDocument(
     readingWidth = 'medium',
     onScroll = () => undefined,
     isSourceView = false,
+    richBlocks,
   }: ViewOptions = {},
 ) {
   const onOpenLink = vi.fn();
@@ -47,6 +50,7 @@ function renderDocument(
     onScroll,
     isSourceView,
     onCommand,
+    richBlocks,
   });
   return { onOpenLink, onCommand };
 }
@@ -181,5 +185,22 @@ describe('DocumentView', () => {
     await fireEvent.wheel(area, { deltaY: 100 });
 
     expect(onCommand.mock.calls).toEqual([[{ kind: 'zoomIn' }], [{ kind: 'zoomOut' }]]);
+  });
+
+  it('typesets the math in the rendered document', async () => {
+    const renderInto = vi.fn<RichBlockRenderer['renderInto']>(() => Promise.resolve());
+
+    renderDocument('<p><span class="mdx-math-inline">x</span></p>', { richBlocks: { renderInto } });
+
+    await vi.waitFor(() => expect(renderInto).toHaveBeenCalled());
+    expect(renderInto.mock.calls[0]?.[0].getAttribute('aria-label')).toBe('a.md');
+  });
+
+  it('leaves math as source in source view', () => {
+    const renderInto = vi.fn(() => Promise.resolve());
+
+    renderDocument('<p>x</p>', { richBlocks: { renderInto }, isSourceView: true });
+
+    expect(renderInto).not.toHaveBeenCalled();
   });
 });

@@ -159,3 +159,107 @@ describe('FavouritesSection folders', () => {
     expect(await screen.findByText('No Markdown documents in this folder.')).toBeTruthy();
   });
 });
+
+describe('FavouritesSection groups', () => {
+  function renderGrouped() {
+    const list = FavouritesList.empty()
+      .add(location('Guide.md'), 'file')
+      .add(location('Plan.md'), 'file')
+      .add(location('Spec.md'), 'file')
+      .createGroup('group-1', 'Work', keyOf('Plan.md'))
+      .moveToGroup(keyOf('Spec.md'), 'group-1');
+    const onCommand = vi.fn();
+    render(FavouritesSection, {
+      favourites: list.favourites(),
+      groups: list.groups(),
+      pathStatuses: new Map(),
+      translator: createTranslator(),
+      onOpen: vi.fn(),
+      onCommand,
+      onListFolder: () => Promise.resolve(EMPTY_LISTING),
+      onOpenDocument: vi.fn(),
+    });
+    return { onCommand };
+  }
+
+  it('shows ungrouped favourites first and each group as a header that collapses', async () => {
+    renderGrouped();
+    const groupHeader = screen.getByRole('button', { name: 'Work' });
+
+    expect(groupHeader.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Plan.md' })).toBeTruthy();
+    await userEvent.click(groupHeader);
+
+    expect(groupHeader.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('button', { name: 'Plan.md' })).toBeNull();
+  });
+
+  it('moves a favourite into a group from its right-click menu', async () => {
+    const { onCommand } = renderGrouped();
+
+    await fireEvent.contextMenu(screen.getByRole('button', { name: 'Guide.md' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Move to Work' }));
+
+    expect(onCommand).toHaveBeenCalledWith({
+      kind: 'moveFavouriteToGroup',
+      canonicalKey: keyOf('Guide.md'),
+      groupId: 'group-1',
+    });
+  });
+
+  it('creates a new group around a favourite and lets the user name it', async () => {
+    const { onCommand } = renderGrouped();
+
+    await fireEvent.contextMenu(screen.getByRole('button', { name: 'Guide.md' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Move to New Group' }));
+
+    expect(onCommand).toHaveBeenCalledWith({
+      kind: 'createFavouriteGroup',
+      groupId: 'group-2',
+      name: 'Group 2',
+      canonicalKey: keyOf('Guide.md'),
+    });
+  });
+
+  it('renames a group with F2 and removes it with Delete', async () => {
+    const { onCommand } = renderGrouped();
+    screen.getByRole('button', { name: 'Work' }).focus();
+
+    await userEvent.keyboard('{F2}');
+    const input = screen.getByRole('textbox', { name: 'New name for the Work group' });
+    await userEvent.clear(input);
+    await userEvent.type(input, 'Projects{Enter}');
+    screen.getByRole('button', { name: 'Work' }).focus();
+    await userEvent.keyboard('{Delete}');
+
+    expect(onCommand).toHaveBeenCalledWith({
+      kind: 'renameFavouriteGroup',
+      groupId: 'group-1',
+      name: 'Projects',
+    });
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'removeFavouriteGroup', groupId: 'group-1' });
+  });
+
+  it('moves a favourite only within its group', async () => {
+    const { onCommand } = renderGrouped();
+    screen.getByRole('button', { name: 'Plan.md' }).focus();
+
+    await userEvent.keyboard('{Alt>}{ArrowUp}{/Alt}');
+    await userEvent.keyboard('{Alt>}{ArrowDown}{/Alt}');
+
+    expect(onCommand.mock.calls).toEqual([
+      [{ kind: 'moveFavourite', canonicalKey: keyOf('Plan.md'), toIndex: 2 }],
+    ]);
+  });
+
+  it('offers a new group, export and import from the Favourites heading', async () => {
+    const { onCommand } = renderGrouped();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Favourites actions' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Export Favourites…' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Favourites actions' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Import Favourites…' }));
+
+    expect(onCommand.mock.calls).toEqual([[{ kind: 'exportFavourites' }], [{ kind: 'importFavourites' }]]);
+  });
+});

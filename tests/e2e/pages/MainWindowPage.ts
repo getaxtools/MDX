@@ -65,6 +65,11 @@ export class MainWindowPage {
     return this.browser.$('main article').$$(elementSelector).getElements();
   }
 
+  /** Waits for content that appears after the first render, such as typeset math or a drawn diagram. */
+  async waitForRenderedElement(elementSelector: string): Promise<void> {
+    await this.browser.$('main article').$(elementSelector).waitForExist({ timeout: 15_000 });
+  }
+
   async renderedTexts(elementSelector: string): Promise<string[]> {
     const elements = await this.renderedElements(elementSelector);
     return Promise.all(Array.from(elements, async (element) => (await element.getText()).trim()));
@@ -141,7 +146,7 @@ export class MainWindowPage {
 
   private async sidebarEntryNames(titleKey: MessageKey): Promise<string[]> {
     const section = await this.sidebarSection(titleKey);
-    const names = await section.$$('button').map((button) => button.getText());
+    const names = await section.$$('li > button').map((button) => button.getText());
     return names.map((name) => name.replace('★', '').trim());
   }
 }

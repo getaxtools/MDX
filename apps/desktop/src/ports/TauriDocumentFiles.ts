@@ -9,9 +9,9 @@ import { documentOpenErrorOf } from './documentOpenErrorOf';
 import { tauriCommands } from './tauriCommands';
 
 export class TauriDocumentFiles implements DocumentFilePort {
-  async open(path: string): Promise<OpenedDocument> {
+  async open(path: string, encoding?: string): Promise<OpenedDocument> {
     try {
-      return await tauriCommands.openDocument(path);
+      return await tauriCommands.openDocument(path, encoding);
     } catch (error) {
       throw documentOpenErrorOf(error, path);
     }

@@ -9,14 +9,14 @@
     recentFileContextMenuItems,
     type RecentFileMenuItemId,
   } from './recentFileContextMenu';
-  import type { RecentFileCommand } from './recentFileCommands';
+  import type { LocateRecentFileCommand, RecentFileCommand } from './recentFileCommands';
 
   interface Props {
     recentFiles: readonly RecentFile[];
     pathStatuses: ReadonlyMap<string, PathStatus>;
     translator: Translator;
     onOpen: (recentFile: RecentFile) => void;
-    onCommand: (command: RecentFileCommand) => void;
+    onCommand: (command: RecentFileCommand | LocateRecentFileCommand) => void;
   }
 
   const { recentFiles, pathStatuses, translator, onOpen, onCommand }: Props = $props();
@@ -89,7 +89,9 @@
     label={translator.translate('recentFiles.contextMenu.label', {
       fileName: menuRecentFile.location.fileName,
     })}
-    items={recentFileContextMenuItems(menuRecentFile, translator)}
+    items={recentFileContextMenuItems(menuRecentFile, translator, {
+      isAvailable: statusOf(menuRecentFile) === 'available',
+    })}
     position={menuRequest}
     onChoose={chooseMenuItem}
     onClose={closeMenu}

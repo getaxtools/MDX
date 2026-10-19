@@ -6,6 +6,7 @@ export class InMemoryDocumentFiles implements DocumentFilePort {
   private readonly textByKey = new Map<string, string>();
   private readonly unreachableKeys = new Set<string>();
   readonly openedPaths: string[] = [];
+  readonly openedEncodings: (string | undefined)[] = [];
   readonly savedSources: SaveSource[] = [];
   /** The paths the user picks in the next Save As dialogs, in order; undefined means they cancel. */
   readonly saveAsChoices: (string | undefined)[] = [];
@@ -31,8 +32,9 @@ export class InMemoryDocumentFiles implements DocumentFilePort {
     this.unreachableKeys.add(InMemoryDocumentFiles.locationOf(path).canonicalKey);
   }
 
-  open(path: string): Promise<OpenedDocument> {
+  open(path: string, encoding?: string): Promise<OpenedDocument> {
     this.openedPaths.push(path);
+    this.openedEncodings.push(encoding);
     const location = InMemoryDocumentFiles.locationOf(path);
     if (this.unreachableKeys.has(location.canonicalKey)) {
       return Promise.reject(new DocumentOpenError('unreachable', path));
@@ -42,7 +44,7 @@ export class InMemoryDocumentFiles implements DocumentFilePort {
     return Promise.resolve({
       location,
       text,
-      encoding: 'utf-8',
+      encoding: encoding ?? 'utf-8',
       hasByteOrderMark: false,
       lineEnding: 'lf',
       modifiedAtMs: 0,
