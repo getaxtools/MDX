@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { ReadingWidth } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
-  import type { CodeHighlighter } from '@mdx/renderer';
+  import type { CodeHighlighter, RichBlockRenderer } from '@mdx/renderer';
   import ContextMenu from '../../components/ContextMenu.svelte';
   import { contextMenuPosition } from '../../components/ContextMenuItem';
   import type { ViewerCommand } from '../viewer/viewerCommands';
@@ -24,6 +24,7 @@
     readingWidth: ReadingWidth;
     translator: Translator;
     codeHighlighter?: CodeHighlighter | undefined;
+    richBlocks?: RichBlockRenderer | undefined;
     findRequest?: number | undefined;
     isSourceView?: boolean;
     onCloseFind?: () => void;
@@ -42,6 +43,7 @@
     readingWidth,
     translator,
     codeHighlighter,
+    richBlocks,
     findRequest,
     isSourceView = false,
     onCloseFind = () => undefined,
@@ -100,6 +102,14 @@
       isStillShown: () => isStillShown,
       writeClipboard: (text) => globalThis.navigator.clipboard.writeText(text),
     });
+    return () => (isStillShown = false);
+  });
+
+  $effect(() => {
+    const article = articleElement;
+    if (!document?.html || !article || isSourceView || !richBlocks) return;
+    let isStillShown = true;
+    void richBlocks.renderInto(article, { isStillShown: () => isStillShown });
     return () => (isStillShown = false);
   });
 

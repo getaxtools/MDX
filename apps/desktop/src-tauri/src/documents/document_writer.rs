@@ -34,7 +34,7 @@ pub fn validated_file_name(file_name: &str) -> Result<&str, DocumentError> {
 }
 
 /// Writes the whole text or nothing: a failed save never leaves a half-written document.
-pub fn write_document_text(destination: &Path, text: &str) -> Result<(), DocumentError> {
+pub fn write_text_atomically(destination: &Path, text: &str) -> Result<(), DocumentError> {
     let pending = pending_path_of(destination);
     let result = (|| {
         let mut file = File::create(&pending)?;
@@ -114,7 +114,7 @@ mod tests {
         let folder = tempfile::tempdir().unwrap();
         let destination = folder.path().join("table.md");
 
-        write_document_text(&destination, "| a |\n|---|\n").unwrap();
+        write_text_atomically(&destination, "| a |\n|---|\n").unwrap();
 
         assert_eq!(fs::read_to_string(&destination).unwrap(), "| a |\n|---|\n");
         assert_eq!(fs::read_dir(folder.path()).unwrap().count(), 1);
@@ -126,7 +126,7 @@ mod tests {
         let destination = folder.path().join("table.md");
         fs::write(&destination, "old").unwrap();
 
-        write_document_text(&destination, "new").unwrap();
+        write_text_atomically(&destination, "new").unwrap();
 
         assert_eq!(fs::read_to_string(&destination).unwrap(), "new");
     }
@@ -137,7 +137,7 @@ mod tests {
         let destination = folder.path().join("missing").join("table.md");
 
         assert_eq!(
-            write_document_text(&destination, "text"),
+            write_text_atomically(&destination, "text"),
             Err(DocumentError::NotFound)
         );
         assert_eq!(fs::read_dir(folder.path()).unwrap().count(), 0);

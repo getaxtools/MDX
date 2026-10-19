@@ -1,9 +1,12 @@
 export {
   displayNameOf,
   FavouritesList,
+  nextFavouriteGroupId,
   type Favourite,
+  type FavouriteGroup,
   type FavouriteKind,
 } from './favourites/FavouritesList';
+export { parseFavouritesFile, toFavouritesFile } from './favourites/favouritesFile';
 export { MAX_RECENT_FILES, RecentFilesList, type RecentFile } from './recent-files/RecentFilesList';
 export {
   APP_STATE_SCHEMA_VERSION,

@@ -1,6 +1,7 @@
 import { READING_WIDTHS, THEME_PREFERENCES } from '@mdx/core';
-import type { FavouriteCommand } from '../favourites/favouriteCommands';
-import type { RecentFileCommand } from '../recent-files/recentFileCommands';
+import { DETECT_ENCODING_ITEM, isReopenEncoding } from '../encodings/reopenEncodings';
+import type { FavouriteCommand, FavouritesFileCommand } from '../favourites/favouriteCommands';
+import type { LocateRecentFileCommand, RecentFileCommand } from '../recent-files/recentFileCommands';
 import type { TabCommand } from '../tabs/tabCommands';
 import type { ViewCommand } from '../view/viewCommands';
 
@@ -8,7 +9,9 @@ export type ViewerCommand =
   | TabCommand
   | ViewCommand
   | FavouriteCommand
+  | FavouritesFileCommand
   | RecentFileCommand
+  | LocateRecentFileCommand
   | { readonly kind: 'openDocuments' }
   | { readonly kind: 'openRecentFileAt'; readonly index: number }
   | { readonly kind: 'saveDocument' }
@@ -21,7 +24,8 @@ export type ViewerCommand =
   | { readonly kind: 'print' }
   | { readonly kind: 'showKeyboardShortcuts' }
   | { readonly kind: 'openFolder' }
-  | { readonly kind: 'toggleSourceView' };
+  | { readonly kind: 'toggleSourceView' }
+  | { readonly kind: 'reopenWithEncoding'; readonly encoding?: string };
 
 export type DesktopPlatform = 'windows' | 'macos' | 'linux';
 
@@ -34,6 +38,8 @@ const COMMANDS_BY_MENU_ITEM: Readonly<Record<string, ViewerCommand>> = {
   saveDocumentAs: { kind: 'saveDocumentAs' },
   saveAllDocuments: { kind: 'saveAllDocuments' },
   toggleFavourite: { kind: 'toggleFavourite' },
+  exportFavourites: { kind: 'exportFavourites' },
+  importFavourites: { kind: 'importFavourites' },
   closeActiveTab: { kind: 'closeActiveTab' },
   print: { kind: 'print' },
   showFind: { kind: 'showFind' },
@@ -57,13 +63,22 @@ const COMMANDS_BY_MENU_ITEM: Readonly<Record<string, ViewerCommand>> = {
 };
 
 const RECENT_FILE_MENU_ITEM = /^openRecent\.(\d{1,2})$/;
+const REOPEN_WITH_ENCODING_PREFIX = 'reopenWithEncoding.';
 
 export function commandForMenuItem(menuItemId: string): ViewerCommand | undefined {
   const theme = THEME_PREFERENCES.find((preference) => menuItemId === `theme.${preference}`);
   if (theme) return { kind: 'setTheme', theme };
   const readingWidth = READING_WIDTHS.find((width) => menuItemId === `readingWidth.${width}`);
   if (readingWidth) return { kind: 'setReadingWidth', readingWidth };
+  if (menuItemId.startsWith(REOPEN_WITH_ENCODING_PREFIX)) {
+    return reopenCommandFor(menuItemId.slice(REOPEN_WITH_ENCODING_PREFIX.length));
+  }
   const recentFileIndex = RECENT_FILE_MENU_ITEM.exec(menuItemId)?.[1];
   if (recentFileIndex !== undefined) return { kind: 'openRecentFileAt', index: Number(recentFileIndex) };
   return Object.hasOwn(COMMANDS_BY_MENU_ITEM, menuItemId) ? COMMANDS_BY_MENU_ITEM[menuItemId] : undefined;
+}
+
+function reopenCommandFor(encoding: string): ViewerCommand | undefined {
+  if (encoding === DETECT_ENCODING_ITEM) return { kind: 'reopenWithEncoding' };
+  return isReopenEncoding(encoding) ? { kind: 'reopenWithEncoding', encoding } : undefined;
 }

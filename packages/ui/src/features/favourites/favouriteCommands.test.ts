@@ -29,6 +29,36 @@ describe('favourite commands', () => {
     ).toEqual(['b.md', 'a.md']);
   });
 
+  it('creates, renames and removes groups and moves favourites between them', () => {
+    const grouped = applyFavouriteCommand(favourites, {
+      kind: 'createFavouriteGroup',
+      groupId: 'group-1',
+      name: 'Specs',
+      canonicalKey: keyOf('a.md'),
+    });
+    const renamed = applyFavouriteCommand(grouped, {
+      kind: 'renameFavouriteGroup',
+      groupId: 'group-1',
+      name: 'Docs',
+    });
+    const moved = applyFavouriteCommand(renamed, {
+      kind: 'moveFavouriteToGroup',
+      canonicalKey: keyOf('b.md'),
+      groupId: 'group-1',
+    });
+    const ungrouped = applyFavouriteCommand(moved, {
+      kind: 'moveFavouriteToGroup',
+      canonicalKey: keyOf('a.md'),
+    });
+    const removed = applyFavouriteCommand(ungrouped, { kind: 'removeFavouriteGroup', groupId: 'group-1' });
+
+    expect(renamed.groups()).toEqual([{ id: 'group-1', name: 'Docs' }]);
+    expect(moved.favouritesInGroup('group-1').map(displayNameOf)).toEqual(['a.md', 'b.md']);
+    expect(ungrouped.favouritesInGroup('group-1').map(displayNameOf)).toEqual(['b.md']);
+    expect(removed.groups()).toEqual([]);
+    expect(removed.favouritesInGroup(undefined)).toHaveLength(2);
+  });
+
   it('tells favourite commands apart from other commands', () => {
     expect(isFavouriteCommand({ kind: 'renameFavourite' })).toBe(true);
     expect(isFavouriteCommand({ kind: 'pinTab' })).toBe(false);

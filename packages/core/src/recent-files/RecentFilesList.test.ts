@@ -113,4 +113,37 @@ describe('RecentFilesList', () => {
 
     expect(pathsOf(recentFiles)).toEqual(['b.md', 'A.md']);
   });
+
+  it('points a moved file at its new place and keeps it pinned', () => {
+    const recentFiles = RecentFilesList.empty()
+      .add(location('old/a.md'), 1)
+      .add(location('b.md'), 2)
+      .pin(location('old/a.md').canonicalKey);
+
+    const relocated = recentFiles.relocate(location('old/a.md').canonicalKey, location('new/a.md'));
+
+    expect(relocated.entries().map((file) => [file.location.displayPath, file.isPinned])).toEqual([
+      ['new/a.md', true],
+      ['b.md', false],
+    ]);
+  });
+
+  it('merges a located file with an entry it already has', () => {
+    const recentFiles = RecentFilesList.empty()
+      .add(location('old/a.md'), 1)
+      .add(location('new/a.md'), 2)
+      .pin(location('old/a.md').canonicalKey);
+
+    const relocated = recentFiles.relocate(location('old/a.md').canonicalKey, location('new/a.md'));
+
+    expect(relocated.entries().map((file) => [file.location.displayPath, file.isPinned])).toEqual([
+      ['new/a.md', true],
+    ]);
+  });
+
+  it('ignores relocating a file it does not list', () => {
+    const recentFiles = RecentFilesList.empty().add(location('a.md'), 1);
+
+    expect(recentFiles.relocate(location('gone.md').canonicalKey, location('b.md'))).toBe(recentFiles);
+  });
 });

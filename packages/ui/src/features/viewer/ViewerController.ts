@@ -5,6 +5,8 @@ import {
   type RecentFile,
   type ViewerSession,
   type ViewerState,
+  parseFavouritesFile,
+  toFavouritesFile,
 } from '@mdx/core';
 import type { MessageKey, Translator } from '@mdx/i18n';
 import {
@@ -12,6 +14,7 @@ import {
   isUntitledLocation,
   type AppMenuPort,
   type DocumentLinksPort,
+  type FavouritesFilePort,
   type FolderListing,
   type FolderPort,
   type DocumentPrinterPort,
@@ -50,6 +53,7 @@ export interface ViewerControllerDependencies {
   readonly printer?: DocumentPrinterPort;
   readonly links?: DocumentLinksPort;
   readonly folders?: FolderPort;
+  readonly favouritesFile?: FavouritesFilePort;
 }
 
 export interface RenderedActiveDocument {
@@ -71,12 +75,19 @@ export interface ViewerSnapshot {
   readonly viewer: ViewerState;
   readonly activeDocument?: RenderedActiveDocument;
   readonly notice?: string;
+  readonly noticeActions?: readonly NoticeAction[];
   readonly openDialog?: ViewerDialog;
   readonly findRequest?: number;
   readonly externalLinkRequest?: string;
   readonly isSourceView?: boolean;
   readonly unsavedChanges?: UnsavedChangesRequest;
   readonly pathStatuses: ReadonlyMap<string, PathStatus>;
+}
+
+/** A button in the notice bar that runs a command, such as Locate for a file that has moved. */
+export interface NoticeAction {
+  readonly label: string;
+  readonly command: ViewerCommand;
 }
 
 export type ViewerDialog = 'about' | 'keyboardShortcuts' | 'pasteTable';
@@ -103,6 +114,7 @@ export class ViewerController {
   private renderedDocument: OpenedDocument | undefined;
   private activeDocument: RenderedActiveDocument | undefined;
   private openDialog: ViewerDialog | undefined;
+  private noticeActions: readonly NoticeAction[] = [];
   private findRequest = 0;
   private externalLinkRequest: string | undefined;
   private isSourceView = false;
@@ -166,7 +178,62 @@ export class ViewerController {
   }
 
   async openRecentFile(recentFile: RecentFile): Promise<void> {
-    await this.openDocument(recentFile.location.displayPath);
+    const { canonicalKey, displayPath } = recentFile.location;
+    try {
+      await this.dependencies.session.openDocument(displayPath);
+    } catch (error) {
+      this.showOpenFailure(error, displayPath, this.recoveryActionsFor(error, canonicalKey));
+    }
+  }
+
+  /** Runs a notice button's command and hides the notice. */
+  runNoticeAction(action: NoticeAction): Promise<void> {
+    this.dismissNotice();
+    return this.execute(action.command);
+  }
+
+  private recoveryActionsFor(error: unknown, canonicalKey: string): NoticeAction[] {
+    const hasMoved =
+      error instanceof DocumentOpenError && (error.failure === 'notFound' || error.failure === 'unreachable');
+    if (!hasMoved) return [];
+    const { translator } = this.dependencies;
+    return [
+      {
+        label: translator.translate('recentFiles.locate'),
+        command: { kind: 'locateRecentFile', canonicalKey },
+      },
+      {
+        label: translator.translate('recentFiles.remove'),
+        command: { kind: 'removeRecentFile', canonicalKey },
+      },
+    ];
+  }
+
+  private async reopenActiveDocumentWithEncoding(encoding: string | undefined): Promise<void> {
+    const { session } = this.dependencies;
+    const location = session.currentState().tabStrip.activeTab()?.location;
+    if (!location || isUntitledLocation(location)) return;
+    try {
+      await session.reopenWithEncoding(location.canonicalKey, encoding);
+    } catch {
+      this.showNotice('errors.document.reopenFailed', { path: location.displayPath });
+    }
+  }
+
+  private async locateRecentFile(canonicalKey: string): Promise<void> {
+    const { requests, session } = this.dependencies;
+    const [path] = await requests.pickDocuments();
+    if (path === undefined) return;
+    let located: OpenedDocument;
+    try {
+      located = await session.openDocument(path);
+    } catch (error) {
+      this.showOpenFailure(error, path);
+      return;
+    }
+    session.updateTabs((tabStrip) => tabStrip.replace(canonicalKey, located.location));
+    session.updateRecentFiles((recentFiles) => recentFiles.relocate(canonicalKey, located.location));
+    session.updateFavourites((favourites) => favourites.relocate(canonicalKey, located.location));
   }
 
   activateTab(canonicalKey: string): void {
@@ -266,10 +333,14 @@ export class ViewerController {
   private readonly commandHandlers: CommandHandlers = {
     openDocuments: async () => this.openDocuments(await this.dependencies.requests.pickDocuments()),
     openFolder: () => this.addFolderFavourite(),
+    locateRecentFile: ({ canonicalKey }) => this.locateRecentFile(canonicalKey),
+    reopenWithEncoding: ({ encoding }) => this.reopenActiveDocumentWithEncoding(encoding),
     saveDocument: () => this.saving.saveActive(),
     saveDocumentAs: () => this.saving.saveActiveAs(),
     saveAllDocuments: () => this.saving.saveAll(),
     toggleFavourite: () => this.toggleActiveFavourite(),
+    exportFavourites: () => this.exportFavourites(),
+    importFavourites: () => this.importFavourites(),
     print: () => {
       if (this.activeDocument) this.dependencies.printer?.printActiveDocument();
     },
@@ -362,17 +433,59 @@ export class ViewerController {
     );
   }
 
+  private async exportFavourites(): Promise<void> {
+    const { favouritesFile, session, translator } = this.dependencies;
+    if (!favouritesFile) return;
+    try {
+      const savedPath = await favouritesFile.exportFavourites(
+        toFavouritesFile(session.currentState().favourites),
+        translator.translate('favourites.file.defaultName'),
+      );
+      if (savedPath !== undefined) this.showNotice('favourites.file.exported', { path: savedPath });
+    } catch {
+      this.showNotice('errors.favourites.exportFailed');
+    }
+  }
+
+  private async importFavourites(): Promise<void> {
+    const { favouritesFile, session } = this.dependencies;
+    if (!favouritesFile) return;
+    let text: string | undefined;
+    try {
+      text = await favouritesFile.importFavourites();
+    } catch {
+      this.showNotice('errors.favourites.importFailed');
+      return;
+    }
+    if (text === undefined) return;
+    const imported = parseFavouritesFile(text);
+    if (!imported) {
+      this.showNotice('errors.favourites.notAFavouritesFile');
+      return;
+    }
+    const before = session.currentState().favourites.favourites().length;
+    session.updateFavourites((favourites) => favourites.merge(imported));
+    const added = session.currentState().favourites.favourites().length - before;
+    this.showNotice('favourites.file.imported', { count: added });
+  }
+
   private toggleActiveFavourite(): void {
     const activeTab = this.dependencies.session.currentState().tabStrip.activeTab();
     if (!activeTab || isUntitledLocation(activeTab.location)) return;
     this.dependencies.session.updateFavourites((favourites) => favourites.toggle(activeTab.location, 'file'));
   }
 
-  showNotice(key: MessageKey, values?: Readonly<Record<string, string>>): void {
+  showNotice(
+    key: MessageKey,
+    values?: Readonly<Record<string, string | number>>,
+    actions: readonly NoticeAction[] = [],
+  ): void {
+    this.noticeActions = actions;
     this.publish(this.composeSnapshot(this.dependencies.translator.translate(key, values)));
   }
 
   dismissNotice(): void {
+    this.noticeActions = [];
     this.publish(this.composeSnapshot(undefined));
   }
 
@@ -384,9 +497,9 @@ export class ViewerController {
     }
   }
 
-  private showOpenFailure(error: unknown, path: string): void {
+  private showOpenFailure(error: unknown, path: string, actions: readonly NoticeAction[] = []): void {
     const key = error instanceof DocumentOpenError ? error.messageKey : 'errors.document.unreadable';
-    this.showNotice(key, { path });
+    this.showNotice(key, { path }, actions);
   }
 
   private handleSessionChange(): void {
@@ -452,6 +565,7 @@ export class ViewerController {
       pathStatuses: this.pathStatuses,
       ...(this.activeDocument ? { activeDocument: this.activeDocument } : {}),
       ...(notice === undefined ? {} : { notice }),
+      ...(notice !== undefined && this.noticeActions.length > 0 ? { noticeActions: this.noticeActions } : {}),
       ...(this.openDialog === undefined ? {} : { openDialog: this.openDialog }),
       ...(this.findRequest > 0 ? { findRequest: this.findRequest } : {}),
       ...(this.externalLinkRequest === undefined ? {} : { externalLinkRequest: this.externalLinkRequest }),

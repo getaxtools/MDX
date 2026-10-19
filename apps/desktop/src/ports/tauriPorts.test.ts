@@ -6,6 +6,7 @@ import { TauriAppState } from './TauriAppState';
 import { TauriDocumentFiles } from './TauriDocumentFiles';
 import { TauriDocumentRequests } from './TauriDocumentRequests';
 import { TauriDocumentWatcher } from './TauriDocumentWatcher';
+import { TauriFavouritesFile } from './TauriFavouritesFile';
 
 type CommandArguments = Record<string, unknown>;
 
@@ -30,7 +31,17 @@ describe('TauriDocumentFiles', () => {
     const opened = await new TauriDocumentFiles().open('C:\\a.md');
 
     expect(opened).toEqual(document);
-    expect(calls).toEqual([{ command: 'open_document', args: { path: 'C:\\a.md' } }]);
+    expect(calls).toEqual([{ command: 'open_document', args: { path: 'C:\\a.md', encoding: null } }]);
+  });
+
+  it('reopens a document with a chosen encoding', async () => {
+    const calls = mockCommands({ open_document: () => ({}) });
+
+    await new TauriDocumentFiles().open('C:\\a.md', 'windows-1252');
+
+    expect(calls).toEqual([
+      { command: 'open_document', args: { path: 'C:\\a.md', encoding: 'windows-1252' } },
+    ]);
   });
 
   it('saves a document through the save_document_as command and reports a cancelled dialog', async () => {
@@ -114,6 +125,23 @@ describe('TauriDocumentRequests', () => {
 
     expect(await requests.pickDocuments()).toEqual(['picked.md']);
     expect(await requests.takeStartupDocuments()).toEqual(['startup.md']);
+  });
+});
+
+describe('TauriFavouritesFile', () => {
+  it('exports and imports favourites through the backend, reporting cancelled dialogs as undefined', async () => {
+    const calls = mockCommands({
+      export_favourites: () => null,
+      import_favourites: () => '{"format":"mdx-favourites"}',
+    });
+    const favouritesFile = new TauriFavouritesFile();
+
+    expect(await favouritesFile.exportFavourites('{}', 'MDX favourites.json')).toBeUndefined();
+    expect(await favouritesFile.importFavourites()).toBe('{"format":"mdx-favourites"}');
+    expect(calls[0]).toEqual({
+      command: 'export_favourites',
+      args: { contents: '{}', suggestedFileName: 'MDX favourites.json' },
+    });
   });
 });
 

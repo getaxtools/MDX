@@ -21,14 +21,20 @@ const savedDocument: RenderedActiveDocument = {
 
 function renderStatusBar(document: RenderedActiveDocument | undefined, isSourceView = false) {
   const onResetZoom = vi.fn();
+  const onReopenWithEncoding = vi.fn();
   render(StatusBar, {
     document,
     zoomPercent: 125,
     isSourceView,
     translator: createTranslator(),
     onResetZoom,
+    onReopenWithEncoding,
   });
-  return { onResetZoom, statusBar: screen.getByRole('contentinfo', { name: 'Document information' }) };
+  return {
+    onResetZoom,
+    onReopenWithEncoding,
+    statusBar: screen.getByRole('contentinfo', { name: 'Document information' }),
+  };
 }
 
 describe('StatusBar', () => {
@@ -68,5 +74,22 @@ describe('StatusBar', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Zoom 125% - reset to 100%' }));
 
     expect(onResetZoom).toHaveBeenCalledOnce();
+  });
+
+  it('reopens the document with an encoding chosen from the encoding menu', async () => {
+    const { onReopenWithEncoding } = renderStatusBar(savedDocument);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Encoding: UTF-8' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Western European (Windows-1252)' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Encoding: UTF-8' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Detect Automatically' }));
+
+    expect(onReopenWithEncoding.mock.calls).toEqual([['windows-1252'], [undefined]]);
+  });
+
+  it('offers no other encoding for a document that is not saved yet', () => {
+    renderStatusBar({ ...savedDocument, isUntitled: true });
+
+    expect(screen.getByRole('button', { name: 'Encoding: UTF-8' }).hasAttribute('disabled')).toBe(true);
   });
 });

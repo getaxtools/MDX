@@ -64,6 +64,37 @@ const FILE_OTHER_ITEMS: [CommandItem; 4] = [
     ("print", "menu.file.print", Some("Ctrl+P")),
 ];
 
+const FAVOURITES_FILE_ITEMS: [CommandItem; 2] = [
+    ("exportFavourites", "menu.file.exportFavourites", None),
+    ("importFavourites", "menu.file.importFavourites", None),
+];
+
+const REOPEN_WITH_ENCODING_PREFIX: &str = "reopenWithEncoding.";
+const DETECT_ENCODING_CHOICE: &str = "detect";
+
+/// The encodings offered under File > Reopen with Encoding, as WHATWG labels.
+const REOPEN_ENCODINGS: [&str; 19] = [
+    "utf-8",
+    "utf-16le",
+    "utf-16be",
+    "windows-1252",
+    "iso-8859-15",
+    "windows-1250",
+    "iso-8859-2",
+    "windows-1251",
+    "koi8-r",
+    "windows-1253",
+    "windows-1254",
+    "windows-1255",
+    "windows-1256",
+    "windows-874",
+    "shift_jis",
+    "euc-jp",
+    "gb18030",
+    "big5",
+    "euc-kr",
+];
+
 const EDIT_ITEMS: [CommandItem; 2] = [
     ("showFind", "menu.edit.find", Some("Ctrl+F")),
     ("showPasteTable", "menu.edit.pasteTable", Some("Ctrl+Alt+V")),
@@ -177,16 +208,44 @@ impl MainMenuBuilder<'_> {
             .with_items(builder, &FILE_OPEN_ITEMS)?
             .item(recent_files)
             .item(&reopen_closed?)
+            .item(&self.reopen_with_encoding_menu()?)
             .separator();
-        self.with_items(builder, &FILE_SAVE_ITEMS)?
+        let builder = self
+            .with_items(builder, &FILE_SAVE_ITEMS)?
             .separator()
-            .item(&favourite?)
+            .item(&favourite?);
+        self.with_items(builder, &FAVOURITES_FILE_ITEMS)?
             .separator()
             .item(&close_tab?)
             .separator()
             .item(&print?)
             .separator()
             .item(&self.command_item((EXIT_ITEM_ID, "menu.file.exit", Some("Alt+F4")))?)
+            .build()
+    }
+
+    fn reopen_with_encoding_menu(&self) -> tauri::Result<Submenu<Wry>> {
+        let detect = MenuItemBuilder::with_id(
+            format!("{REOPEN_WITH_ENCODING_PREFIX}{DETECT_ENCODING_CHOICE}"),
+            self.labels.label("encoding.detect"),
+        )
+        .build(self.app)?;
+        let builder = SubmenuBuilder::new(self.app, self.labels.label("encoding.reopen"))
+            .item(&detect)
+            .separator();
+        let encodings = REOPEN_ENCODINGS
+            .iter()
+            .map(|encoding| {
+                MenuItemBuilder::with_id(
+                    format!("{REOPEN_WITH_ENCODING_PREFIX}{encoding}"),
+                    self.labels.label(&encoding_name_key(encoding)),
+                )
+                .build(self.app)
+            })
+            .collect::<tauri::Result<Vec<_>>>()?;
+        encodings
+            .iter()
+            .fold(builder, |builder, item| builder.item(item))
             .build()
     }
 
@@ -312,9 +371,30 @@ impl MainMenuBuilder<'_> {
     }
 }
 
+fn encoding_name_key(encoding: &str) -> String {
+    let compact: String = encoding
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .collect();
+    format!("encoding.name.{compact}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_reopen_encoding_is_known_and_named_in_the_catalog() {
+        let labels = MenuLabels::english();
+
+        for encoding in REOPEN_ENCODINGS {
+            assert!(
+                crate::documents::encoding_for_label(encoding).is_some(),
+                "{encoding}"
+            );
+            assert!(labels.has(&encoding_name_key(encoding)), "{encoding}");
+        }
+    }
 
     #[test]
     fn every_command_item_has_a_label_in_the_catalog() {
@@ -323,6 +403,7 @@ mod tests {
             .iter()
             .chain(&FILE_SAVE_ITEMS)
             .chain(&FILE_OTHER_ITEMS)
+            .chain(&FAVOURITES_FILE_ITEMS)
             .chain(&EDIT_ITEMS)
             .chain(&ZOOM_ITEMS)
             .chain(&TAB_SWITCH_ITEMS)

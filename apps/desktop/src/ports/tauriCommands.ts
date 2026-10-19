@@ -10,7 +10,8 @@ import type {
 import type { AppInfo } from '@mdx/ui';
 
 export const tauriCommands = {
-  openDocument: (path: string) => invoke<OpenedDocument>('open_document', { path }),
+  openDocument: (path: string, encoding?: string) =>
+    invoke<OpenedDocument>('open_document', { path, encoding: encoding ?? null }),
   saveDocumentAs: (source: SaveSource) => invoke<string | null>('save_document_as', { source }),
   pickDocuments: () => invoke<string[]>('pick_documents'),
   checkPathStatuses: (paths: readonly string[]) => invoke<PathStatus[]>('check_path_statuses', { paths }),
@@ -26,6 +27,9 @@ export const tauriCommands = {
   openExternalLink: (url: string) => invoke<null>('open_external_link', { url }),
   pickFolder: () => invoke<DocumentLocation | null>('pick_folder'),
   listFolderContents: (folder: string) => invoke<FolderListing>('list_folder_contents', { folder }),
+  exportFavourites: (contents: string, suggestedFileName: string) =>
+    invoke<string | null>('export_favourites', { contents, suggestedFileName }),
+  importFavourites: () => invoke<string | null>('import_favourites'),
 };
 
 export const OPEN_DOCUMENTS_EVENT = 'open-documents';

@@ -5,6 +5,7 @@ import {
   type OutlineEntry,
   type OutlineEnvironment,
 } from './plugins/headingAnchorsPlugin';
+import { mathPlugin } from './plugins/mathPlugin';
 import { taskListPlugin } from './plugins/taskListPlugin';
 import {
   createHtmlSanitizer,
@@ -38,6 +39,7 @@ export function createMarkdownRenderer({
 }: MarkdownRendererOptions): MarkdownRenderer {
   const markdown = new MarkdownIt({ html: true, linkify: true, typographer: false })
     .use(taskListPlugin)
+    .use(mathPlugin)
     .use(headingAnchorsPlugin);
   const sanitizeHtml = createHtmlSanitizer(window);
 

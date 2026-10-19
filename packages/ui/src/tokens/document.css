@@ -138,3 +138,11 @@
   border: 0;
   border-top: 1px solid var(--color-border);
 }
+
+.rendered-document .mdx-math-display {
+  display: block;
+  margin: var(--space-4) 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  text-align: center;
+}

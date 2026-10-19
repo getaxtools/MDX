@@ -1,5 +1,12 @@
 <script lang="ts">
   import type { Translator } from '@mdx/i18n';
+  import ContextMenu from '../../components/ContextMenu.svelte';
+  import { contextMenuPosition, type ContextMenuRequest } from '../../components/ContextMenuItem';
+  import {
+    DETECT_ENCODING_ITEM,
+    encodingMenuItems,
+    type EncodingMenuItemId,
+  } from '../encodings/reopenEncodings';
   import type { RenderedActiveDocument } from '../viewer/ViewerController';
 
   interface Props {
@@ -8,9 +15,23 @@
     isSourceView: boolean;
     translator: Translator;
     onResetZoom: () => void;
+    onReopenWithEncoding?: (encoding: string | undefined) => void;
   }
 
-  const { document, zoomPercent, isSourceView, translator, onResetZoom }: Props = $props();
+  const {
+    document,
+    zoomPercent,
+    isSourceView,
+    translator,
+    onResetZoom,
+    onReopenWithEncoding = () => undefined,
+  }: Props = $props();
+
+  let encodingMenuRequest: ContextMenuRequest | undefined = $state();
+
+  function chooseEncoding(itemId: EncodingMenuItemId) {
+    onReopenWithEncoding(itemId === DETECT_ENCODING_ITEM ? undefined : itemId);
+  }
 
   const details = $derived(
     document
@@ -19,13 +40,10 @@
           translator.translate('statusBar.words', { count: document.statistics.words }),
           translator.translate('statusBar.characters', { count: document.statistics.characters }),
           translator.translate('statusBar.readingTime', { minutes: document.statistics.readingMinutes }),
-          translator.translate('statusBar.encoding', { encoding: document.encoding.toUpperCase() }),
-          translator.translate('statusBar.lineEnding', {
-            lineEnding: translator.translate(`statusBar.lineEnding.${document.lineEnding}`),
-          }),
         ]
       : [],
   );
+  const encodingName = $derived(document?.encoding.toUpperCase() ?? '');
   const location = $derived(
     document?.isUntitled
       ? translator.translate('statusBar.notSaved', { fileName: document.fileName })
@@ -39,6 +57,21 @@
     {#each details as detail (detail)}
       <span>{detail}</span>
     {/each}
+    {#if document}
+      <button
+        title={translator.translate('statusBar.chooseEncoding', { encoding: encodingName })}
+        aria-haspopup="menu"
+        disabled={document.isUntitled}
+        onclick={(event) => (encodingMenuRequest = contextMenuPosition(event))}
+      >
+        {translator.translate('statusBar.encoding', { encoding: encodingName })}
+      </button>
+      <span>
+        {translator.translate('statusBar.lineEnding', {
+          lineEnding: translator.translate(`statusBar.lineEnding.${document.lineEnding}`),
+        })}
+      </span>
+    {/if}
     <button
       title={translator.translate('statusBar.resetZoom', { percent: zoomPercent })}
       aria-label={translator.translate('statusBar.resetZoom', { percent: zoomPercent })}
@@ -48,6 +81,15 @@
     </button>
   </div>
 </footer>
+{#if encodingMenuRequest}
+  <ContextMenu
+    label={translator.translate('encoding.menu.label')}
+    items={encodingMenuItems(translator)}
+    position={encodingMenuRequest}
+    onChoose={chooseEncoding}
+    onClose={() => (encodingMenuRequest = undefined)}
+  />
+{/if}
 
 <style>
   .status-bar {
@@ -87,7 +129,11 @@
     font: inherit;
   }
 
-  button:hover {
+  button:disabled {
+    color: inherit;
+  }
+
+  button:hover:not(:disabled) {
     background: var(--color-surface-hover);
     color: var(--color-text);
   }

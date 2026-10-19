@@ -13,8 +13,10 @@ pub use document_location::{
 };
 pub use document_reader::{
     MAX_DOCUMENT_BYTES, OpenedDocument, is_markdown_path, open_allowed_document,
+    open_allowed_document_as,
 };
 pub use document_writer::{
-    copy_document, validated_file_name, with_markdown_extension, write_document_text,
+    copy_document, validated_file_name, with_markdown_extension, write_text_atomically,
 };
 pub use path_status::{PathStatus, status_of_path};
+pub use text_decoding::encoding_for_label;

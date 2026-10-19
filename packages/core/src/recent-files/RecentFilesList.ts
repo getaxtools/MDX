@@ -55,6 +55,22 @@ export class RecentFilesList {
     );
   }
 
+  /** Points an entry at the file's new place, as after the user locates a moved file; keeps its pin. */
+  relocate(canonicalKey: string, location: DocumentLocation): RecentFilesList {
+    const moved = this.find(canonicalKey);
+    if (!moved || canonicalKey === location.canonicalKey) return this;
+    const existing = this.find(location.canonicalKey);
+    const relocated: RecentFile = {
+      location,
+      isPinned: moved.isPinned || (existing?.isPinned ?? false),
+      lastOpenedAtMs: Math.max(moved.lastOpenedAtMs, existing?.lastOpenedAtMs ?? 0),
+    };
+    const others = this.newestFirst.filter(
+      (file) => file !== moved && file.location.canonicalKey !== location.canonicalKey,
+    );
+    return RecentFilesList.fromRecentFiles([relocated, ...others]);
+  }
+
   pin(canonicalKey: string): RecentFilesList {
     return this.withPinnedState(canonicalKey, true);
   }

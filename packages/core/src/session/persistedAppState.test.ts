@@ -14,7 +14,8 @@ describe('persisted app state', () => {
     const recentFiles = RecentFilesList.empty().add(location('a.md'), 1).pin(location('a.md').canonicalKey);
     const favourites = FavouritesList.empty()
       .add(location('Specs'), 'folder')
-      .rename(location('Specs').canonicalKey, 'Specs folder');
+      .rename(location('Specs').canonicalKey, 'Specs folder')
+      .createGroup('group-1', 'Work', location('Specs').canonicalKey);
 
     const viewSettings = { ...DEFAULT_VIEW_SETTINGS, theme: 'dark' as const, zoomPercent: 125 };
 
@@ -27,6 +28,7 @@ describe('persisted app state', () => {
     expect(restored.tabStrip.toSnapshot()).toEqual(tabStrip.toSnapshot());
     expect(restored.recentFiles.entries()).toEqual(recentFiles.entries());
     expect(restored.favourites.favourites()).toEqual(favourites.favourites());
+    expect(restored.favourites.groups()).toEqual(favourites.groups());
     expect(restored.viewSettings).toEqual(viewSettings);
   });
 

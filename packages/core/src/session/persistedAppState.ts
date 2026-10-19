@@ -1,8 +1,10 @@
-import { isUntitledLocation, type DocumentLocation } from '@mdx/platform';
-import { FavouritesList, type Favourite } from '../favourites/FavouritesList';
+import { isUntitledLocation } from '@mdx/platform';
+import { FavouritesList, type Favourite, type FavouriteGroup } from '../favourites/FavouritesList';
+import { parseFavourites } from '../favourites/parseFavourites';
 import { RecentFilesList, type RecentFile } from '../recent-files/RecentFilesList';
 import { TabStrip, type Tab, type TabStripSnapshot } from '../tabs/TabStrip';
 import { DEFAULT_VIEW_SETTINGS, parseViewSettings, type ViewSettings } from '../view/ViewSettings';
+import { isRecord, parseLocation, validEntries } from './savedValues';
 
 export const APP_STATE_SCHEMA_VERSION = 1;
 
@@ -11,6 +13,7 @@ export interface PersistedAppState {
   readonly tabs: TabStripSnapshot;
   readonly recentFiles: readonly RecentFile[];
   readonly favourites: readonly Favourite[];
+  readonly favouriteGroups: readonly FavouriteGroup[];
   readonly view: ViewSettings;
 }
 
@@ -36,6 +39,7 @@ export function toPersistedAppState({
     tabs: withoutUntitledTabs(tabStrip.toSnapshot()),
     recentFiles: recentFiles.entries(),
     favourites: favourites.favourites(),
+    favouriteGroups: favourites.groups(),
     view: viewSettings,
   };
 }
@@ -56,7 +60,7 @@ export function restoreAppState(saved: unknown): RestoredAppState {
   return {
     tabStrip: TabStrip.fromSnapshot({ tabs: validEntries(savedTabs.tabs, parseTab), ...activeKey }),
     recentFiles: RecentFilesList.fromRecentFiles(validEntries(saved.recentFiles, parseRecentFile)),
-    favourites: FavouritesList.fromFavourites(validEntries(saved.favourites, parseFavourite)),
+    favourites: parseFavourites(saved.favourites, saved.favouriteGroups),
     viewSettings: parseViewSettings(saved.view),
     wasReset: false,
   };
@@ -72,17 +76,6 @@ function emptyAppState({ wasReset }: { wasReset: boolean }): RestoredAppState {
   };
 }
 
-function validEntries<Entry>(
-  saved: unknown,
-  parse: (value: Record<string, unknown>) => Entry | undefined,
-): Entry[] {
-  if (!Array.isArray(saved)) return [];
-  return saved.flatMap((value: unknown) => {
-    const entry = isRecord(value) ? parse(value) : undefined;
-    return entry === undefined ? [] : [entry];
-  });
-}
-
 function parseTab(value: Record<string, unknown>): Tab | undefined {
   const location = parseLocation(value.location);
   if (!location || typeof value.isPinned !== 'boolean' || typeof value.scrollRatio !== 'number')
@@ -95,25 +88,4 @@ function parseRecentFile(value: Record<string, unknown>): RecentFile | undefined
   if (!location || typeof value.isPinned !== 'boolean' || typeof value.lastOpenedAtMs !== 'number')
     return undefined;
   return { location, isPinned: value.isPinned, lastOpenedAtMs: value.lastOpenedAtMs };
-}
-
-function parseFavourite(value: Record<string, unknown>): Favourite | undefined {
-  const location = parseLocation(value.location);
-  if (!location || (value.kind !== 'file' && value.kind !== 'folder')) return undefined;
-  return typeof value.label === 'string'
-    ? { location, kind: value.kind, label: value.label }
-    : { location, kind: value.kind };
-}
-
-function parseLocation(value: unknown): DocumentLocation | undefined {
-  if (!isRecord(value)) return undefined;
-  const { canonicalKey, displayPath, fileName } = value;
-  if (typeof canonicalKey !== 'string' || typeof displayPath !== 'string' || typeof fileName !== 'string') {
-    return undefined;
-  }
-  return { canonicalKey, displayPath, fileName };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

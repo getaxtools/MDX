@@ -32,6 +32,23 @@ pub fn decode_document_bytes(bytes: &[u8]) -> DecodedText {
     }
 }
 
+/// Decodes with an encoding the user chose; a byte order mark is dropped only if it belongs to it.
+pub fn decode_document_bytes_as(bytes: &[u8], encoding: &'static Encoding) -> DecodedText {
+    let has_byte_order_mark =
+        Encoding::for_bom(bytes).is_some_and(|(bom_encoding, _)| bom_encoding == encoding);
+    let (text, _had_replacements) = encoding.decode_with_bom_removal(bytes);
+    DecodedText {
+        text: text.into_owned(),
+        encoding: encoding.name(),
+        has_byte_order_mark,
+    }
+}
+
+/// The encoding for a WHATWG label such as `windows-1252` or `shift_jis`.
+pub fn encoding_for_label(label: &str) -> Option<&'static Encoding> {
+    Encoding::for_label(label.trim().as_bytes())
+}
+
 pub fn detect_line_ending(text: &str) -> LineEnding {
     let windows_line_endings = text.matches("\r\n").count();
     let unix_line_endings = text.matches('\n').count() - windows_line_endings;
@@ -116,6 +133,38 @@ mod tests {
         let decoded = decode_document_bytes(decomposed.as_bytes());
 
         assert_eq!(decoded.text, decomposed);
+    }
+
+    #[test]
+    fn decodes_with_the_encoding_the_user_chose() {
+        let decoded = decode_document_bytes_as(b"Caf\xE9", encoding_rs::WINDOWS_1252);
+
+        assert_eq!(decoded.text, "Café");
+        assert_eq!(decoded.encoding, "windows-1252");
+    }
+
+    #[test]
+    fn drops_a_byte_order_mark_only_when_it_belongs_to_the_chosen_encoding() {
+        let utf8 = decode_document_bytes_as(b"\xEF\xBB\xBF# A", encoding_rs::UTF_8);
+        let legacy = decode_document_bytes_as(b"\xEF\xBB\xBF# A", encoding_rs::WINDOWS_1252);
+
+        assert_eq!(utf8.text, "# A");
+        assert!(utf8.has_byte_order_mark);
+        assert_eq!(legacy.text, "ï»¿# A");
+        assert!(!legacy.has_byte_order_mark);
+    }
+
+    #[test]
+    fn finds_encodings_by_their_standard_labels() {
+        assert_eq!(
+            encoding_for_label("shift_jis"),
+            Some(encoding_rs::SHIFT_JIS)
+        );
+        assert_eq!(
+            encoding_for_label(" UTF-16LE "),
+            Some(encoding_rs::UTF_16LE)
+        );
+        assert_eq!(encoding_for_label("klingon"), None);
     }
 
     #[test]

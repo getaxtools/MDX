@@ -18,6 +18,19 @@
 
   $effect(() => enabledButtons()[0]?.focus());
 
+  let shownPosition = $state({ x: 0, y: 0 });
+
+  // A menu opened near the bottom or right edge, such as from the status bar, opens upwards or leftwards.
+  $effect(() => {
+    const bounds = menuElement?.getBoundingClientRect();
+    const width = bounds?.width ?? 0;
+    const height = bounds?.height ?? 0;
+    shownPosition = {
+      x: Math.max(0, Math.min(position.x, globalThis.innerWidth - width)),
+      y: Math.max(0, Math.min(position.y, globalThis.innerHeight - height)),
+    };
+  });
+
   const MOVES: Readonly<Record<string, (index: number, count: number) => number>> = {
     ArrowDown: (index, count) => (index + 1) % count,
     ArrowUp: (index, count) => (index - 1 + count) % count,
@@ -55,8 +68,8 @@
   role="menu"
   aria-label={label}
   tabindex="-1"
-  style:left="{position.x}px"
-  style:top="{position.y}px"
+  style:left="{shownPosition.x}px"
+  style:top="{shownPosition.y}px"
   onkeydown={handleKeydown}
   onfocusout={closeWhenFocusLeaves}
 >
@@ -80,6 +93,8 @@
     display: flex;
     flex-direction: column;
     min-width: 12rem;
+    max-height: calc(100vh - 2 * var(--space-2));
+    overflow-y: auto;
     padding: var(--space-1);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-medium);

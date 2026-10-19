@@ -4,7 +4,11 @@ use std::time::UNIX_EPOCH;
 
 use serde::Serialize;
 
-use super::text_decoding::{LineEnding, decode_document_bytes, detect_line_ending};
+use encoding_rs::Encoding;
+
+use super::text_decoding::{
+    LineEnding, decode_document_bytes, decode_document_bytes_as, detect_line_ending,
+};
 use super::{DocumentAccessList, DocumentError, DocumentLocation, locate_document};
 
 pub const MAX_DOCUMENT_BYTES: u64 = 50 * 1024 * 1024;
@@ -35,10 +39,26 @@ pub fn open_allowed_document(
     if !access.is_allowed(&location) {
         return Err(DocumentError::AccessDenied);
     }
-    read_located_document(location)
+    read_located_document(location, None)
 }
 
-fn read_located_document(location: DocumentLocation) -> Result<OpenedDocument, DocumentError> {
+/// Opens a document decoded with the given encoding instead of the detected one.
+pub fn open_allowed_document_as(
+    path: &Path,
+    access: &DocumentAccessList,
+    encoding: &'static Encoding,
+) -> Result<OpenedDocument, DocumentError> {
+    let location = locate_document(path)?;
+    if !access.is_allowed(&location) {
+        return Err(DocumentError::AccessDenied);
+    }
+    read_located_document(location, Some(encoding))
+}
+
+fn read_located_document(
+    location: DocumentLocation,
+    chosen_encoding: Option<&'static Encoding>,
+) -> Result<OpenedDocument, DocumentError> {
     let path = location.path();
     if !is_markdown_path(&path) {
         return Err(DocumentError::NotMarkdown);
@@ -50,7 +70,11 @@ fn read_located_document(location: DocumentLocation) -> Result<OpenedDocument, D
     if metadata.len() > MAX_DOCUMENT_BYTES {
         return Err(DocumentError::TooLarge);
     }
-    let decoded = decode_document_bytes(&fs::read(&path)?);
+    let bytes = fs::read(&path)?;
+    let decoded = match chosen_encoding {
+        Some(encoding) => decode_document_bytes_as(&bytes, encoding),
+        None => decode_document_bytes(&bytes),
+    };
     Ok(OpenedDocument {
         line_ending: detect_line_ending(&decoded.text),
         text: decoded.text,
@@ -84,6 +108,35 @@ mod tests {
         let access = DocumentAccessList::default();
         access.grant_folder(folder.path()).unwrap();
         (folder, access)
+    }
+
+    #[test]
+    fn reopens_a_document_with_a_chosen_encoding() {
+        let (folder, access) = folder_with(&[("Legacy.md", b"# Caf\xE9")]);
+
+        let document = open_allowed_document_as(
+            &folder.path().join("Legacy.md"),
+            &access,
+            encoding_rs::WINDOWS_1252,
+        )
+        .unwrap();
+
+        assert_eq!(document.text, "# Café");
+        assert_eq!(document.encoding, "windows-1252");
+    }
+
+    #[test]
+    fn refuses_to_reopen_a_document_outside_granted_folders() {
+        let folder = tempfile::tempdir().unwrap();
+        fs::write(folder.path().join("a.md"), "# A").unwrap();
+
+        let result = open_allowed_document_as(
+            &folder.path().join("a.md"),
+            &DocumentAccessList::default(),
+            encoding_rs::UTF_8,
+        );
+
+        assert!(matches!(result, Err(DocumentError::AccessDenied)));
     }
 
     #[test]
