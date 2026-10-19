@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/getaxtools/MDX/compare/v0.2.0...v0.3.0) (2026-10-19)
+
+
+### Features
+
+* favourite groups and export, locate moved files, reopen with encoding, math ([6065d1f](https://github.com/getaxtools/MDX/commit/6065d1f3a6b5341cb54aa6b26db5d3530b28a584))
+
 ## [0.2.0](https://github.com/getaxtools/MDX/compare/v0.1.0...v0.2.0) (2026-10-19)
 
 
