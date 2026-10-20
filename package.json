@@ -1,6 +1,6 @@
 {
   "name": "mdx",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "MDX - Markdown Explorer: a fast, private Markdown viewer.",
   "license": "MIT OR Apache-2.0",
