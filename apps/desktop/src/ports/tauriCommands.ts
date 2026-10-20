@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
   DocumentLocation,
+  EditedDocumentSave,
   FolderListing,
   OpenedDocument,
   PathStatus,
@@ -13,6 +14,7 @@ export const tauriCommands = {
   openDocument: (path: string, encoding?: string) =>
     invoke<OpenedDocument>('open_document', { path, encoding: encoding ?? null }),
   saveDocumentAs: (source: SaveSource) => invoke<string | null>('save_document_as', { source }),
+  saveDocument: (document: EditedDocumentSave) => invoke<number>('save_document', { document }),
   pickDocuments: () => invoke<string[]>('pick_documents'),
   checkPathStatuses: (paths: readonly string[]) => invoke<PathStatus[]>('check_path_statuses', { paths }),
   takeStartupDocuments: () => invoke<string[]>('take_startup_documents'),
@@ -28,6 +30,8 @@ export const tauriCommands = {
   openExternalLink: (url: string) => invoke<null>('open_external_link', { url }),
   pickFolder: () => invoke<DocumentLocation | null>('pick_folder'),
   listFolderContents: (folder: string) => invoke<FolderListing>('list_folder_contents', { folder }),
+  findFolderDocuments: (folders: readonly string[]) =>
+    invoke<DocumentLocation[]>('find_folder_documents', { folders }),
   exportFavourites: (contents: string, suggestedFileName: string) =>
     invoke<string | null>('export_favourites', { contents, suggestedFileName }),
   importFavourites: () => invoke<string | null>('import_favourites'),

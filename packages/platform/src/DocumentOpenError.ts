@@ -1,5 +1,14 @@
 export type DocumentOpenFailure =
-  'notFound' | 'unreachable' | 'tooLarge' | 'notMarkdown' | 'accessDenied' | 'unreadable' | 'invalidRequest';
+  | 'notFound'
+  | 'unreachable'
+  | 'tooLarge'
+  | 'notMarkdown'
+  | 'accessDenied'
+  | 'unreadable'
+  | 'invalidRequest'
+  | 'changedOnDisk'
+  | 'cannotEncode'
+  | 'lossyDecoding';
 
 const DOCUMENT_OPEN_FAILURES: readonly string[] = [
   'notFound',
@@ -9,6 +18,9 @@ const DOCUMENT_OPEN_FAILURES: readonly string[] = [
   'accessDenied',
   'unreadable',
   'invalidRequest',
+  'changedOnDisk',
+  'cannotEncode',
+  'lossyDecoding',
 ];
 
 export function isDocumentOpenFailure(value: unknown): value is DocumentOpenFailure {

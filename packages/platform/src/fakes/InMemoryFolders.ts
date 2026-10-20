@@ -25,4 +25,17 @@ export class InMemoryFolders implements FolderPort {
       documents: (contents.documents ?? []).map((path) => InMemoryDocumentFiles.locationOf(path)),
     });
   }
+
+  findDocuments(folderPaths: readonly string[]): Promise<DocumentLocation[]> {
+    const documentPaths = folderPaths.flatMap((folderPath) => this.documentPathsBelow(folderPath));
+    return Promise.resolve([...new Set(documentPaths)].map((path) => InMemoryDocumentFiles.locationOf(path)));
+  }
+
+  private documentPathsBelow(folderPath: string): string[] {
+    const contents = this.contentsByFolder[folderPath] ?? {};
+    return [
+      ...(contents.documents ?? []),
+      ...(contents.folders ?? []).flatMap((subfolder) => this.documentPathsBelow(subfolder)),
+    ];
+  }
 }

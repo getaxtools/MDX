@@ -1,5 +1,6 @@
 import { InMemoryDocumentFiles, untitledLocation } from '@mdx/platform';
 import { describe, expect, it } from 'vitest';
+import { ExplorerFolders } from '../explorer/ExplorerFolders';
 import { FavouritesList } from '../favourites/FavouritesList';
 import { RecentFilesList } from '../recent-files/RecentFilesList';
 import { TabStrip } from '../tabs/TabStrip';
@@ -9,7 +10,7 @@ import { APP_STATE_SCHEMA_VERSION, restoreAppState, toPersistedAppState } from '
 const location = (path: string) => InMemoryDocumentFiles.locationOf(path);
 
 describe('persisted app state', () => {
-  it('round-trips tabs, recent files, favourites and view settings', () => {
+  it('round-trips tabs, recent files, favourites, Explorer folders and view settings', () => {
     const tabStrip = TabStrip.empty().openOrFocus(location('a.md')).openOrFocus(location('b.md'));
     const recentFiles = RecentFilesList.empty().add(location('a.md'), 1).pin(location('a.md').canonicalKey);
     const favourites = FavouritesList.empty()
@@ -17,10 +18,18 @@ describe('persisted app state', () => {
       .rename(location('Specs').canonicalKey, 'Specs folder')
       .createGroup('group-1', 'Work', location('Specs').canonicalKey);
 
-    const viewSettings = { ...DEFAULT_VIEW_SETTINGS, theme: 'dark' as const, zoomPercent: 125 };
+    const explorerFolders = ExplorerFolders.empty().add(location('C:\\Notes'));
+    const viewSettings = {
+      ...DEFAULT_VIEW_SETTINGS,
+      theme: 'dark' as const,
+      zoomPercent: 125,
+      collapsedExplorerSections: ['recentFiles' as const],
+    };
 
     const saved: unknown = JSON.parse(
-      JSON.stringify(toPersistedAppState({ tabStrip, recentFiles, favourites, viewSettings })),
+      JSON.stringify(
+        toPersistedAppState({ tabStrip, recentFiles, favourites, explorerFolders, viewSettings }),
+      ),
     );
     const restored = restoreAppState(saved);
 
@@ -29,6 +38,7 @@ describe('persisted app state', () => {
     expect(restored.recentFiles.entries()).toEqual(recentFiles.entries());
     expect(restored.favourites.favourites()).toEqual(favourites.favourites());
     expect(restored.favourites.groups()).toEqual(favourites.groups());
+    expect(restored.explorerFolders.folders()).toEqual(explorerFolders.folders());
     expect(restored.viewSettings).toEqual(viewSettings);
   });
 
@@ -40,6 +50,7 @@ describe('persisted app state', () => {
       tabStrip,
       recentFiles: RecentFilesList.empty(),
       favourites: FavouritesList.empty(),
+      explorerFolders: ExplorerFolders.empty(),
       viewSettings: DEFAULT_VIEW_SETTINGS,
     };
 

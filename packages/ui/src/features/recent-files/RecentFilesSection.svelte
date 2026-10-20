@@ -9,6 +9,9 @@
     recentFileContextMenuItems,
     type RecentFileMenuItemId,
   } from './recentFileContextMenu';
+  import ExplorerSectionHeader from '../explorer/ExplorerSectionHeader.svelte';
+  import TreeItemIcon from '../folder-tree/TreeItemIcon.svelte';
+  import { activateWithKeyboard, treeKeyboard } from '../folder-tree/treeKeyboard';
   import type { LocateRecentFileCommand, RecentFileCommand } from './recentFileCommands';
 
   interface Props {
@@ -17,11 +20,21 @@
     translator: Translator;
     onOpen: (recentFile: RecentFile) => void;
     onCommand: (command: RecentFileCommand | LocateRecentFileCommand) => void;
+    isExpanded?: boolean;
+    onToggleExpanded?: () => void;
   }
 
-  const { recentFiles, pathStatuses, translator, onOpen, onCommand }: Props = $props();
+  const {
+    recentFiles,
+    pathStatuses,
+    translator,
+    onOpen,
+    onCommand,
+    isExpanded = true,
+    onToggleExpanded = () => undefined,
+  }: Props = $props();
 
-  let itemButtons: HTMLButtonElement[] = $state([]);
+  let itemRows: HTMLElement[] = $state([]);
   let menuRequest: { readonly index: number; readonly x: number; readonly y: number } | undefined = $state();
 
   const menuRecentFile = $derived(menuRequest ? recentFiles[menuRequest.index] : undefined);
@@ -44,6 +57,7 @@
   }
 
   function handleKeydown(event: KeyboardEvent, index: number) {
+    activateWithKeyboard(event);
     if (isContextMenuKey(event)) openMenu(event, index);
   }
 
@@ -56,32 +70,44 @@
   function closeMenu() {
     const index = menuRequest?.index;
     menuRequest = undefined;
-    if (index !== undefined) itemButtons[index]?.focus();
+    if (index !== undefined) itemRows[index]?.focus();
   }
 </script>
 
 <section aria-labelledby="recent-files-heading">
-  <h2 id="recent-files-heading">{translator.translate('recentFiles.title')}</h2>
-  {#if recentFiles.length === 0}
-    <p class="empty-state">{translator.translate('recentFiles.emptyState')}</p>
-  {:else}
-    <ul>
-      {#each recentFiles as recentFile, index (recentFile.location.canonicalKey)}
-        <li>
-          <button
-            bind:this={itemButtons[index]}
-            class:unavailable={statusOf(recentFile) !== 'available'}
-            title={recentFile.location.displayPath}
-            onclick={() => onOpen(recentFile)}
-            onkeydown={(event) => handleKeydown(event, index)}
-            oncontextmenu={(event) => openMenu(event, index)}
-          >
-            {#if recentFile.isPinned}<span aria-hidden="true">📌</span>{/if}
-            {labelOf(recentFile)}
-          </button>
-        </li>
-      {/each}
-    </ul>
+  <ExplorerSectionHeader
+    headingId="recent-files-heading"
+    title={translator.translate('recentFiles.title')}
+    {isExpanded}
+    onToggle={onToggleExpanded}
+  />
+  {#if isExpanded}
+    {#if recentFiles.length === 0}
+      <p class="empty-state">{translator.translate('recentFiles.emptyState')}</p>
+    {:else}
+      <ul role="tree" aria-labelledby="recent-files-heading" use:treeKeyboard>
+        {#each recentFiles as recentFile, index (recentFile.location.canonicalKey)}
+          <li role="none">
+            <div
+              bind:this={itemRows[index]}
+              role="treeitem"
+              aria-selected="false"
+              tabindex="-1"
+              aria-level="1"
+              class:unavailable={statusOf(recentFile) !== 'available'}
+              title={recentFile.location.displayPath}
+              onclick={() => onOpen(recentFile)}
+              onkeydown={(event) => handleKeydown(event, index)}
+              oncontextmenu={(event) => openMenu(event, index)}
+            >
+              <TreeItemIcon kind="document" />
+              <span class="name">{labelOf(recentFile)}</span>
+              {#if recentFile.isPinned}<span class="pin" aria-hidden="true">📌</span>{/if}
+            </div>
+          </li>
+        {/each}
+      </ul>
+    {/if}
   {/if}
 </section>
 {#if menuRequest && menuRecentFile}
@@ -97,3 +123,15 @@
     onClose={closeMenu}
   />
 {/if}
+
+<style>
+  .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .pin {
+    margin-inline-start: auto;
+    font-size: var(--text-size-small);
+  }
+</style>

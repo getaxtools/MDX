@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::{MAIN_SEPARATOR, Path};
 use std::sync::{Mutex, PoisonError};
 
@@ -6,6 +7,7 @@ use super::{DocumentError, DocumentLocation, canonical_key_of, locate_document};
 #[derive(Debug, Default)]
 pub struct DocumentAccessList {
     granted_folder_keys: Mutex<Vec<String>>,
+    opened_document_keys: Mutex<HashSet<String>>,
 }
 
 impl DocumentAccessList {
@@ -40,6 +42,21 @@ impl DocumentAccessList {
                 folder.canonical_key == *folder_key
                     || is_inside_folder(&folder.canonical_key, folder_key)
             })
+    }
+
+    /// Records a document the app has read, which is what makes it eligible to be saved over.
+    pub fn remember_opened(&self, location: &DocumentLocation) {
+        self.opened_document_keys
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(location.canonical_key.clone());
+    }
+
+    pub fn was_opened(&self, location: &DocumentLocation) -> bool {
+        self.opened_document_keys
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .contains(&location.canonical_key)
     }
 
     fn grant_folder_key(&self, folder_key: String) {

@@ -30,6 +30,7 @@
     "@axe-core/webdriverio": "4.14.0",
     "@eslint/js": "10.0.1",
     "@mdx/core": "workspace:*",
+    "@mdx/editor": "workspace:*",
     "@mdx/i18n": "workspace:*",
     "@mdx/platform": "workspace:*",
     "@mdx/renderer": "workspace:*",

@@ -25,6 +25,7 @@ export class DesktopApp {
   private constructor(
     readonly browser: WebdriverIO.Browser,
     private readonly appProcess: ChildProcess,
+    private readonly driverPort: number,
   ) {}
 
   static async launch({ workspace, documentFileNames = [] }: LaunchOptions): Promise<DesktopApp> {
@@ -45,7 +46,7 @@ export class DesktopApp {
       logLevel: 'warn',
       capabilities: { 'wdio:enforceWebDriverClassic': true },
     });
-    return new DesktopApp(browser, appProcess);
+    return new DesktopApp(browser, appProcess, driverPort);
   }
 
   /** Starts a second copy of the app, the way Explorer does, and waits for it to hand over and exit. */
@@ -61,10 +62,19 @@ export class DesktopApp {
   async quit(): Promise<void> {
     if (hasExited(this.appProcess)) return;
     const exited = once(this.appProcess, 'exit');
-    await this.browser.closeWindow().catch(() => undefined);
+    await this.closeMainWindow();
     if (await exitsWithin(exited, APP_EXIT_TIMEOUT_MS)) return;
     this.appProcess.kill();
     await exited;
+  }
+
+  /**
+   * Closes the window with a bare WebDriver request. WebdriverIO's `closeWindow` follows up by
+   * switching to another window, a request the exiting app can no longer answer.
+   */
+  private async closeMainWindow(): Promise<void> {
+    const windowUrl = `http://${LOCALHOST}:${String(this.driverPort)}/session/${this.browser.sessionId}/window`;
+    await fetch(windowUrl, { method: 'DELETE' }).catch(() => undefined);
   }
 }
 

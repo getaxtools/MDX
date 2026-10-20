@@ -83,7 +83,7 @@ fn sort_by_name_and_cap(locations: &mut Vec<DocumentLocation>) {
     locations.truncate(MAX_LISTED_ENTRIES_PER_KIND);
 }
 
-fn is_hidden(entry: &DirEntry) -> bool {
+pub(crate) fn is_hidden(entry: &DirEntry) -> bool {
     entry.file_name().to_string_lossy().starts_with('.') || has_hidden_attribute(entry)
 }
 

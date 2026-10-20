@@ -35,10 +35,15 @@ pub fn validated_file_name(file_name: &str) -> Result<&str, DocumentError> {
 
 /// Writes the whole text or nothing: a failed save never leaves a half-written document.
 pub fn write_text_atomically(destination: &Path, text: &str) -> Result<(), DocumentError> {
+    write_bytes_atomically(destination, text.as_bytes())
+}
+
+/// Writes all the bytes or nothing, through a temporary file renamed over the destination.
+pub fn write_bytes_atomically(destination: &Path, bytes: &[u8]) -> Result<(), DocumentError> {
     let pending = pending_path_of(destination);
     let result = (|| {
         let mut file = File::create(&pending)?;
-        file.write_all(text.as_bytes())?;
+        file.write_all(bytes)?;
         file.sync_all()?;
         fs::rename(&pending, destination)
     })();

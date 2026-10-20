@@ -11,12 +11,21 @@
     tabs: readonly Tab[];
     activeKey: string | undefined;
     pathStatuses?: ReadonlyMap<string, PathStatus>;
+    unsavedKeys?: ReadonlySet<string>;
     translator: Translator;
     onActivate: (canonicalKey: string) => void;
     onCommand: (command: TabCommand) => void;
   }
 
-  const { tabs, activeKey, pathStatuses = new Map(), translator, onActivate, onCommand }: Props = $props();
+  const {
+    tabs,
+    activeKey,
+    pathStatuses = new Map(),
+    unsavedKeys = new Set(),
+    translator,
+    onActivate,
+    onCommand,
+  }: Props = $props();
 
   function isMissing(tab: Tab): boolean {
     return pathStatuses.get(tab.location.canonicalKey) === 'missing';
@@ -129,6 +138,10 @@
       >
         {#if tab.isPinned}<span class="pin" aria-hidden="true">📌</span>{/if}
         {labelOf(tab)}
+        {#if unsavedKeys.has(tab.location.canonicalKey)}
+          <span class="unsaved-dot" aria-hidden="true">●</span>
+          <span class="visually-hidden">{translator.translate('tabs.status.unsavedHint')}</span>
+        {/if}
       </button>
       <!-- A tab list may only contain tabs, so keyboard and screen reader users close tabs with Ctrl+W instead. -->
       <button
@@ -223,5 +236,19 @@
   button:focus-visible {
     outline: 2px solid var(--color-focus);
     outline-offset: -2px;
+  }
+
+  .unsaved-dot {
+    margin-inline-start: var(--space-1);
+    color: var(--color-accent);
+  }
+
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 </style>

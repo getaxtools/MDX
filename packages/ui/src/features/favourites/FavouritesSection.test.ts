@@ -32,13 +32,13 @@ describe('FavouritesSection', () => {
   it('marks a favourite whose file is missing or unreachable', () => {
     renderFavourites(new Map([[keyOf('Notes.md'), 'unreachable']]));
 
-    expect(screen.getByRole('button', { name: 'Notes.md (location unreachable)' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Guide.md' })).toBeTruthy();
+    expect(screen.getByRole('treeitem', { name: 'Notes.md (location unreachable)' })).toBeTruthy();
+    expect(screen.getByRole('treeitem', { name: 'Guide.md' })).toBeTruthy();
   });
 
   it('renames a favourite with F2, saving on Enter', async () => {
     const { onCommand } = renderFavourites();
-    screen.getByRole('button', { name: 'Guide.md' }).focus();
+    screen.getByRole('treeitem', { name: 'Guide.md' }).focus();
 
     await userEvent.keyboard('{F2}');
     const input = screen.getByRole('textbox', { name: 'New name for Guide.md' });
@@ -54,7 +54,7 @@ describe('FavouritesSection', () => {
 
   it('cancels a rename with Escape', async () => {
     const { onCommand } = renderFavourites();
-    screen.getByRole('button', { name: 'Guide.md' }).focus();
+    screen.getByRole('treeitem', { name: 'Guide.md' }).focus();
 
     await userEvent.keyboard('{F2}{Escape}');
 
@@ -64,7 +64,7 @@ describe('FavouritesSection', () => {
 
   it('moves a favourite down with Alt+ArrowDown', async () => {
     const { onCommand } = renderFavourites();
-    screen.getByRole('button', { name: 'Guide.md' }).focus();
+    screen.getByRole('treeitem', { name: 'Guide.md' }).focus();
 
     await userEvent.keyboard('{Alt>}{ArrowDown}{/Alt}');
 
@@ -78,7 +78,10 @@ describe('FavouritesSection', () => {
   it('removes a favourite from its context menu', async () => {
     const { onCommand } = renderFavourites();
 
-    await fireEvent.contextMenu(screen.getByRole('button', { name: 'Notes.md' }), { clientX: 4, clientY: 4 });
+    await fireEvent.contextMenu(screen.getByRole('treeitem', { name: 'Notes.md' }), {
+      clientX: 4,
+      clientY: 4,
+    });
     expect(screen.getByRole('menuitem', { name: 'Move Down' }).hasAttribute('disabled')).toBe(true);
     await userEvent.click(screen.getByRole('menuitem', { name: 'Remove from Favourites' }));
 
@@ -88,7 +91,10 @@ describe('FavouritesSection', () => {
   it('opens a favourite from its context menu', async () => {
     const { onOpen } = renderFavourites();
 
-    await fireEvent.contextMenu(screen.getByRole('button', { name: 'Guide.md' }), { clientX: 4, clientY: 4 });
+    await fireEvent.contextMenu(screen.getByRole('treeitem', { name: 'Guide.md' }), {
+      clientX: 4,
+      clientY: 4,
+    });
     await userEvent.click(screen.getByRole('menuitem', { name: 'Open' }));
 
     expect(onOpen).toHaveBeenCalledOnce();
@@ -108,10 +114,10 @@ describe('FavouritesSection folders', () => {
       onListFolder: () => Promise.resolve({ folders: [], documents: [location('C:\\Specs\\Plan.md')] }),
       onOpenDocument,
     });
-    const folder = screen.getByRole('button', { name: 'Specs' });
+    const folder = screen.getByRole('treeitem', { name: 'Specs' });
 
     await userEvent.click(folder);
-    await userEvent.click(await screen.findByRole('button', { name: 'Plan.md' }));
+    await userEvent.click(await screen.findByRole('treeitem', { name: 'Plan.md' }));
 
     expect(folder.getAttribute('aria-expanded')).toBe('true');
     expect(onOpenDocument).toHaveBeenCalledWith('C:\\Specs\\Plan.md');
@@ -133,13 +139,13 @@ describe('FavouritesSection folders', () => {
       onOpenDocument,
     });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Specs' }));
-    const subfolder = await screen.findByRole('button', { name: 'docs' });
+    await userEvent.click(screen.getByRole('treeitem', { name: 'Specs' }));
+    const subfolder = await screen.findByRole('treeitem', { name: 'docs' });
     await userEvent.click(subfolder);
-    await userEvent.click(await screen.findByRole('button', { name: 'Plan.md' }));
+    await userEvent.click(await screen.findByRole('treeitem', { name: 'Plan.md' }));
 
     expect(subfolder.getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByRole('button', { name: 'README.md' })).toBeTruthy();
+    expect(screen.getByRole('treeitem', { name: 'README.md' })).toBeTruthy();
     expect(onOpenDocument).toHaveBeenCalledWith('C:\\Specs\\docs\\Plan.md');
   });
 
@@ -154,7 +160,7 @@ describe('FavouritesSection folders', () => {
       onOpenDocument: vi.fn(),
     });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Empty' }));
+    await userEvent.click(screen.getByRole('treeitem', { name: 'Empty' }));
 
     expect(await screen.findByText('No Markdown documents in this folder.')).toBeTruthy();
   });
@@ -171,7 +177,7 @@ describe('FavouritesSection folders', () => {
       onOpenDocument: vi.fn(),
     });
 
-    await fireEvent.contextMenu(screen.getByRole('button', { name: 'Specs' }));
+    await fireEvent.contextMenu(screen.getByRole('treeitem', { name: 'Specs' }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Refresh' }));
     await userEvent.click(screen.getByRole('button', { name: 'Favourites actions' }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Refresh Folders' }));
@@ -204,20 +210,20 @@ describe('FavouritesSection groups', () => {
 
   it('shows ungrouped favourites first and each group as a header that collapses', async () => {
     renderGrouped();
-    const groupHeader = screen.getByRole('button', { name: 'Work' });
+    const groupHeader = screen.getByRole('treeitem', { name: 'Work' });
 
     expect(groupHeader.getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Plan.md' })).toBeTruthy();
+    expect(screen.getByRole('treeitem', { name: 'Plan.md' })).toBeTruthy();
     await userEvent.click(groupHeader);
 
     expect(groupHeader.getAttribute('aria-expanded')).toBe('false');
-    expect(screen.queryByRole('button', { name: 'Plan.md' })).toBeNull();
+    expect(screen.queryByRole('treeitem', { name: 'Plan.md' })).toBeNull();
   });
 
   it('moves a favourite into a group from its right-click menu', async () => {
     const { onCommand } = renderGrouped();
 
-    await fireEvent.contextMenu(screen.getByRole('button', { name: 'Guide.md' }));
+    await fireEvent.contextMenu(screen.getByRole('treeitem', { name: 'Guide.md' }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Move to Work' }));
 
     expect(onCommand).toHaveBeenCalledWith({
@@ -230,7 +236,7 @@ describe('FavouritesSection groups', () => {
   it('creates a new group around a favourite and lets the user name it', async () => {
     const { onCommand } = renderGrouped();
 
-    await fireEvent.contextMenu(screen.getByRole('button', { name: 'Guide.md' }));
+    await fireEvent.contextMenu(screen.getByRole('treeitem', { name: 'Guide.md' }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Move to New Group' }));
 
     expect(onCommand).toHaveBeenCalledWith({
@@ -243,13 +249,13 @@ describe('FavouritesSection groups', () => {
 
   it('renames a group with F2 and removes it with Delete', async () => {
     const { onCommand } = renderGrouped();
-    screen.getByRole('button', { name: 'Work' }).focus();
+    screen.getByRole('treeitem', { name: 'Work' }).focus();
 
     await userEvent.keyboard('{F2}');
     const input = screen.getByRole('textbox', { name: 'New name for the Work group' });
     await userEvent.clear(input);
     await userEvent.type(input, 'Projects{Enter}');
-    screen.getByRole('button', { name: 'Work' }).focus();
+    screen.getByRole('treeitem', { name: 'Work' }).focus();
     await userEvent.keyboard('{Delete}');
 
     expect(onCommand).toHaveBeenCalledWith({
@@ -262,7 +268,7 @@ describe('FavouritesSection groups', () => {
 
   it('moves a favourite only within its group', async () => {
     const { onCommand } = renderGrouped();
-    screen.getByRole('button', { name: 'Plan.md' }).focus();
+    screen.getByRole('treeitem', { name: 'Plan.md' }).focus();
 
     await userEvent.keyboard('{Alt>}{ArrowUp}{/Alt}');
     await userEvent.keyboard('{Alt>}{ArrowDown}{/Alt}');

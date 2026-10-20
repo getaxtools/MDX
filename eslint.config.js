@@ -66,7 +66,12 @@ export default defineConfig(
     languageOptions: { parserOptions: { parser: tseslint.parser } },
   },
   {
-    files: ['packages/core/src/**/*.ts', 'packages/platform/src/**/*.ts', 'packages/ui/src/**/*.{ts,svelte}'],
+    files: [
+      'packages/core/src/**/*.ts',
+      'packages/platform/src/**/*.ts',
+      'packages/editor/src/**/*.ts',
+      'packages/ui/src/**/*.{ts,svelte}',
+    ],
     rules: {
       'no-restricted-imports': ['error', { patterns: ['@tauri-apps/*', '@mdx/desktop'] }],
     },

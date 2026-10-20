@@ -68,7 +68,7 @@ export const COMMAND_SHORTCUTS: readonly CommandShortcut[] = [
   },
   {
     command: { kind: 'toggleSidebar' },
-    combinations: [['ctrl', 'B']],
+    combinations: [['ctrl', 'shift', 'E']],
     actionKey: 'menu.view.toggleSidebar',
   },
   {
@@ -91,6 +91,16 @@ export const COMMAND_SHORTCUTS: readonly CommandShortcut[] = [
     command: { kind: 'moveActiveTab', step: 1 },
     combinations: [['ctrl', 'shift', 'PageDown']],
     actionKey: 'menu.window.moveTabRight',
+  },
+  {
+    command: { kind: 'toggleEditing' },
+    combinations: [['ctrl', '/']],
+    actionKey: 'menu.view.toggleEditing',
+  },
+  {
+    command: { kind: 'showCommandPalette' },
+    combinations: [['ctrl', 'shift', 'P']],
+    actionKey: 'menu.view.commandPalette',
   },
   {
     command: { kind: 'showKeyboardShortcuts' },

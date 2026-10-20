@@ -14,24 +14,20 @@ describe('ActivityBar', () => {
   it('shows whether the sidebar and the outline are open', () => {
     renderActivityBar({ isSidebarVisible: true, isOutlineVisible: false });
 
-    expect(
-      screen.getByRole('button', { name: 'Favourites and recent files' }).getAttribute('aria-pressed'),
-    ).toBe('true');
+    expect(screen.getByRole('button', { name: 'Explorer' }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByRole('button', { name: 'Outline' }).getAttribute('aria-pressed')).toBe('false');
   });
 
   it('mentions the shortcut in the tooltip', () => {
     renderActivityBar();
 
-    expect(screen.getByRole('button', { name: 'Favourites and recent files' }).title).toBe(
-      'Favourites and recent files (Ctrl+B)',
-    );
+    expect(screen.getByRole('button', { name: 'Explorer' }).title).toBe('Explorer (Ctrl+Shift+E)');
   });
 
   it('shows and hides the sidebar and the outline, and opens the keyboard shortcuts', async () => {
     const { onCommand } = renderActivityBar();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Favourites and recent files' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Explorer' }));
     await userEvent.click(screen.getByRole('button', { name: 'Outline' }));
     await userEvent.click(screen.getByRole('button', { name: 'Keyboard Shortcuts' }));
 

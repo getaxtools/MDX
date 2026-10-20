@@ -47,11 +47,26 @@ const FILE_OPEN_ITEMS: [CommandItem; 2] = [
     ("openFolder", "menu.file.openFolder", None),
 ];
 
-const FILE_SAVE_ITEMS: [CommandItem; 3] = [
+const FILE_SAVE_ITEMS: [CommandItem; 4] = [
     ("saveDocument", "menu.file.save", Some("Ctrl+S")),
     ("saveDocumentAs", "menu.file.saveAs", Some("Ctrl+Shift+S")),
     ("saveAllDocuments", "menu.file.saveAll", Some("Ctrl+Alt+S")),
+    ("revertDocument", "menu.file.revert", None),
 ];
+
+const EDIT_HISTORY_ITEMS: [CommandItem; 2] = [
+    ("undo", "menu.edit.undo", Some("Ctrl+Z")),
+    ("redo", "menu.edit.redo", Some("Ctrl+Y")),
+];
+
+const EDIT_SEARCH_ITEMS: [CommandItem; 3] = [
+    ("showFind", "menu.edit.find", Some("Ctrl+F")),
+    ("showReplace", "menu.edit.replace", Some("Ctrl+H")),
+    ("goToLine", "menu.edit.goToLine", Some("Ctrl+G")),
+];
+
+const TOGGLE_EDITING_ITEM: CommandItem =
+    ("toggleEditing", "menu.view.toggleEditing", Some("Ctrl+/"));
 
 const FILE_OTHER_ITEMS: [CommandItem; 4] = [
     ("reopenClosedTab", "tabs.reopenClosed", Some("Ctrl+Shift+T")),
@@ -95,10 +110,14 @@ const REOPEN_ENCODINGS: [&str; 19] = [
     "euc-kr",
 ];
 
-const EDIT_ITEMS: [CommandItem; 2] = [
-    ("showFind", "menu.edit.find", Some("Ctrl+F")),
-    ("showPasteTable", "menu.edit.pasteTable", Some("Ctrl+Alt+V")),
-];
+const PASTE_TABLE_ITEM: CommandItem =
+    ("showPasteTable", "menu.edit.pasteTable", Some("Ctrl+Alt+V"));
+
+const COMMAND_PALETTE_ITEM: CommandItem = (
+    "showCommandPalette",
+    "menu.view.commandPalette",
+    Some("Ctrl+Shift+P"),
+);
 
 const ZOOM_ITEMS: [CommandItem; 3] = [
     ("zoomIn", "menu.view.zoomIn", Some("Ctrl++")),
@@ -250,19 +269,26 @@ impl MainMenuBuilder<'_> {
     }
 
     fn edit_menu(&self) -> tauri::Result<Submenu<Wry>> {
+        let cut = PredefinedMenuItem::cut(self.app, Some(&self.labels.label("menu.edit.cut")))?;
         let copy = PredefinedMenuItem::copy(self.app, Some(&self.labels.label("menu.edit.copy")))?;
+        let paste =
+            PredefinedMenuItem::paste(self.app, Some(&self.labels.label("menu.edit.paste")))?;
         let select_all = PredefinedMenuItem::select_all(
             self.app,
             Some(&self.labels.label("menu.edit.selectAll")),
         )?;
-        let [find, paste_table] = EDIT_ITEMS.map(|item| self.command_item(item));
-        SubmenuBuilder::new(self.app, self.labels.label("menu.edit"))
+        let builder = SubmenuBuilder::new(self.app, self.labels.label("menu.edit"));
+        let builder = self
+            .with_items(builder, &EDIT_HISTORY_ITEMS)?
+            .separator()
+            .item(&cut)
             .item(&copy)
+            .item(&paste)
             .item(&select_all)
+            .separator();
+        self.with_items(builder, &EDIT_SEARCH_ITEMS)?
             .separator()
-            .item(&find?)
-            .separator()
-            .item(&paste_table?)
+            .item(&self.command_item(PASTE_TABLE_ITEM)?)
             .build()
     }
 
@@ -277,7 +303,7 @@ impl MainMenuBuilder<'_> {
         let sidebar = self.toggle_item(
             TOGGLE_SIDEBAR_ITEM_ID,
             "menu.view.toggleSidebar",
-            Some("Ctrl+B"),
+            Some("Ctrl+Shift+E"),
         )?;
         let outline = self.toggle_item(
             TOGGLE_OUTLINE_ITEM_ID,
@@ -286,7 +312,12 @@ impl MainMenuBuilder<'_> {
         )?;
         let status_bar =
             self.toggle_item(TOGGLE_STATUS_BAR_ITEM_ID, "menu.view.toggleStatusBar", None)?;
+        let command_palette = self.command_item(COMMAND_PALETTE_ITEM)?;
+        let toggle_editing = self.command_item(TOGGLE_EDITING_ITEM)?;
         let builder = SubmenuBuilder::new(self.app, self.labels.label("menu.view"))
+            .item(&command_palette)
+            .item(&toggle_editing)
+            .separator()
             .item(&themes)
             .item(&reading_widths)
             .separator();
@@ -404,7 +435,9 @@ mod tests {
             .chain(&FILE_SAVE_ITEMS)
             .chain(&FILE_OTHER_ITEMS)
             .chain(&FAVOURITES_FILE_ITEMS)
-            .chain(&EDIT_ITEMS)
+            .chain(&EDIT_HISTORY_ITEMS)
+            .chain(&EDIT_SEARCH_ITEMS)
+            .chain(&[PASTE_TABLE_ITEM, TOGGLE_EDITING_ITEM, COMMAND_PALETTE_ITEM])
             .chain(&ZOOM_ITEMS)
             .chain(&TAB_SWITCH_ITEMS)
             .chain(&TAB_ARRANGE_ITEMS)

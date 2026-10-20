@@ -1,5 +1,7 @@
 import { READING_WIDTHS, THEME_PREFERENCES } from '@mdx/core';
 import { DETECT_ENCODING_ITEM, isReopenEncoding } from '../encodings/reopenEncodings';
+import type { EditingCommand } from '../editing/editingCommands';
+import type { ExplorerActionCommand, RemoveExplorerFolderCommand } from '../explorer/explorerCommands';
 import type { FavouriteCommand, FavouritesFileCommand } from '../favourites/favouriteCommands';
 import type { FolderTreeCommand } from '../folder-tree/folderTreeCommands';
 import type { LocateRecentFileCommand, RecentFileCommand } from '../recent-files/recentFileCommands';
@@ -12,6 +14,9 @@ export type ViewerCommand =
   | FavouriteCommand
   | FavouritesFileCommand
   | FolderTreeCommand
+  | EditingCommand
+  | ExplorerActionCommand
+  | RemoveExplorerFolderCommand
   | RecentFileCommand
   | LocateRecentFileCommand
   | { readonly kind: 'openDocuments' }
@@ -25,6 +30,7 @@ export type ViewerCommand =
   | { readonly kind: 'showPasteTable' }
   | { readonly kind: 'print' }
   | { readonly kind: 'showKeyboardShortcuts' }
+  | { readonly kind: 'showCommandPalette' }
   | { readonly kind: 'openFolder' }
   | { readonly kind: 'toggleSourceView' }
   | { readonly kind: 'reopenWithEncoding'; readonly encoding?: string };
@@ -61,6 +67,13 @@ const COMMANDS_BY_MENU_ITEM: Readonly<Record<string, ViewerCommand>> = {
   closeInactiveTabs: { kind: 'closeInactiveTabs' },
   closeTabsRightOfActive: { kind: 'closeTabsRightOfActive' },
   showKeyboardShortcuts: { kind: 'showKeyboardShortcuts' },
+  showCommandPalette: { kind: 'showCommandPalette' },
+  toggleEditing: { kind: 'toggleEditing' },
+  revertDocument: { kind: 'revertDocument' },
+  undo: { kind: 'runEditorCommand', command: 'undo' },
+  redo: { kind: 'runEditorCommand', command: 'redo' },
+  showReplace: { kind: 'runEditorCommand', command: 'replace' },
+  goToLine: { kind: 'runEditorCommand', command: 'goToLine' },
   showAbout: { kind: 'showAbout' },
 };
 

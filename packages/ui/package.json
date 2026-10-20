@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@mdx/core": "workspace:*",
+    "@mdx/editor": "workspace:*",
     "@mdx/i18n": "workspace:*",
     "@mdx/platform": "workspace:*",
     "@mdx/renderer": "workspace:*",

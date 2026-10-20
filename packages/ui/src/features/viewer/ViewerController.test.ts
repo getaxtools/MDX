@@ -421,8 +421,8 @@ describe('ViewerController', () => {
       folders.pickedFolder = 'C:\\Docs';
       await controller.start();
 
-      await controller.execute({ kind: 'openFolder' });
-      await controller.execute({ kind: 'openFolder' });
+      await controller.execute({ kind: 'addFolderFavourite' });
+      await controller.execute({ kind: 'addFolderFavourite' });
 
       const favourites = snapshot().viewer.favourites.favourites();
       expect(favourites.map((favourite) => [favourite.location.fileName, favourite.kind])).toEqual([
@@ -435,8 +435,41 @@ describe('ViewerController', () => {
       await controller.start();
 
       await controller.execute({ kind: 'openFolder' });
+      await controller.execute({ kind: 'addFolderFavourite' });
 
       expect(snapshot().viewer.favourites.favourites()).toEqual([]);
+      expect(snapshot().viewer.explorerFolders.folders()).toEqual([]);
+    });
+
+    it('opens a chosen folder in the Explorer once and shows the Folders section', async () => {
+      const { controller, folders, snapshot } = createViewer();
+      folders.pickedFolder = 'C:\\Docs';
+      await controller.start();
+      await controller.execute({ kind: 'toggleSidebar' });
+      await controller.execute({ kind: 'toggleExplorerSection', section: 'folders' });
+
+      await controller.execute({ kind: 'openFolder' });
+      await controller.execute({ kind: 'openFolder' });
+
+      const { explorerFolders, viewSettings } = snapshot().viewer;
+      expect(explorerFolders.folders().map((folder) => folder.fileName)).toEqual(['Docs']);
+      expect(viewSettings.isSidebarVisible).toBe(true);
+      expect(viewSettings.collapsedExplorerSections).toEqual([]);
+    });
+
+    it('adds an opened folder to the favourites and removes it from the Explorer', async () => {
+      const { controller, folders, snapshot } = createViewer();
+      folders.pickedFolder = 'C:\\Docs';
+      await controller.start();
+      await controller.execute({ kind: 'openFolder' });
+      const [folder] = snapshot().viewer.explorerFolders.folders();
+      const canonicalKey = folder?.canonicalKey ?? '';
+
+      await controller.execute({ kind: 'addExplorerFolderToFavourites', canonicalKey });
+      await controller.execute({ kind: 'removeExplorerFolder', canonicalKey });
+
+      expect(snapshot().viewer.favourites.isFavourite(canonicalKey)).toBe(true);
+      expect(snapshot().viewer.explorerFolders.folders()).toEqual([]);
     });
 
     it('lists the subfolders and documents in a favourite folder', async () => {
@@ -478,6 +511,53 @@ describe('ViewerController', () => {
       await controller.execute({ kind: 'refreshFolders' });
 
       expect(snapshot().folderRevisions.get('C:\\Docs')).toBe(1);
+    });
+
+    it('offers open, recent and favourite documents first, then documents in folders, each once', async () => {
+      const { controller, folders, session } = createViewer({ startupPaths: [GUIDE] });
+      folders.pickedFolder = 'C:\\Docs';
+      await controller.start();
+      await controller.execute({ kind: 'openFolder' });
+      session.updateFavourites((favourites) =>
+        favourites.add(InMemoryDocumentFiles.locationOf(NOTES), 'file'),
+      );
+
+      const documents = await controller.quickOpenDocuments();
+
+      expect(documents.map((document) => document.displayPath)).toEqual([GUIDE, NOTES]);
+    });
+
+    it('searches a folder that is both opened and a favourite only once', async () => {
+      const { controller, folders, session } = createViewer();
+      folders.pickedFolder = 'C:\\Docs';
+      const searchedFolders: (readonly string[])[] = [];
+      const findDocuments = folders.findDocuments.bind(folders);
+      folders.findDocuments = (folderPaths) => {
+        searchedFolders.push(folderPaths);
+        return findDocuments(folderPaths);
+      };
+      await controller.start();
+      await controller.execute({ kind: 'openFolder' });
+      session.updateFavourites((favourites) =>
+        favourites.add(InMemoryDocumentFiles.locationOf('C:\\Docs'), 'folder'),
+      );
+
+      await controller.quickOpenDocuments();
+
+      expect(searchedFolders).toEqual([['C:\\Docs']]);
+    });
+
+    it('offers only known documents when folders cannot be searched', async () => {
+      const folders = new InMemoryFolders();
+      folders.findDocuments = () => Promise.reject(new Error('unreachable'));
+      folders.pickedFolder = 'C:\\Offline';
+      const { controller } = createViewer({ startupPaths: [GUIDE], folders });
+      await controller.start();
+      await controller.execute({ kind: 'openFolder' });
+
+      const documents = await controller.quickOpenDocuments();
+
+      expect(documents.map((document) => document.fileName)).toEqual(['Guide.md']);
     });
 
     it('lists nothing when a folder cannot be read', async () => {
@@ -533,6 +613,200 @@ describe('ViewerController', () => {
       controller.answerExternalLink(false);
 
       expect(links.openedExternalLinks).toEqual([]);
+    });
+  });
+
+  describe('editing', () => {
+    const guideKey = InMemoryDocumentFiles.locationOf(GUIDE).canonicalKey;
+
+    async function editGuide(text: string) {
+      const viewer = createViewer({ startupPaths: [GUIDE] });
+      await viewer.controller.start();
+      await viewer.controller.execute({ kind: 'toggleEditing' });
+      viewer.controller.updateEditedText(guideKey, text);
+      return viewer;
+    }
+
+    it('switches the active document to editing and back, previewing the edited text', async () => {
+      const { controller, snapshot } = await editGuide('# Guide\n\nAn edited line.');
+
+      expect(snapshot().isActiveDocumentEditing).toBe(true);
+      expect(snapshot().unsavedDocumentKeys.has(guideKey)).toBe(true);
+      await controller.execute({ kind: 'toggleEditing' });
+
+      await vi.waitFor(() => expect(snapshot().activeDocument?.html).toContain('An edited line.'));
+      expect(snapshot().isActiveDocumentEditing).toBeUndefined();
+    });
+
+    it('saves edited text over the file and clears the unsaved mark', async () => {
+      const { controller, documentFiles, snapshot } = await editGuide('# Saved guide');
+
+      await controller.execute({ kind: 'saveDocument' });
+
+      expect(documentFiles.textOf(GUIDE)).toBe('# Saved guide');
+      expect(snapshot().unsavedDocumentKeys.size).toBe(0);
+    });
+
+    it('asks before closing a document with unsaved changes and forgets them when discarded', async () => {
+      const { controller, snapshot } = await editGuide('# Unsaved');
+
+      await controller.execute({ kind: 'closeActiveTab' });
+      expect(snapshot().unsavedChanges?.fileNames).toEqual(['Guide.md']);
+      await controller.answerUnsavedChanges('discard');
+
+      expect(tabNames(snapshot())).toEqual([]);
+      expect(snapshot().unsavedDocumentKeys.size).toBe(0);
+    });
+
+    it('asks before the window closes while a document has unsaved changes', async () => {
+      const { controller } = await editGuide('# Unsaved');
+
+      const closing = controller.confirmClosingWindow();
+      await controller.answerUnsavedChanges('save');
+
+      await expect(closing).resolves.toBe(true);
+    });
+
+    it('warns when another program changed the file and overwrites it when asked', async () => {
+      const { controller, documentFiles, snapshot } = await editGuide('# Mine');
+      documentFiles.write(GUIDE, '# Theirs');
+
+      await controller.execute({ kind: 'saveDocument' });
+      expect(snapshot().notice).toBe('Guide.md was changed by another program since you opened it.');
+      const overwrite = snapshot().noticeActions?.find((action) => action.label === 'Overwrite');
+      if (overwrite) await controller.runNoticeAction(overwrite);
+
+      expect(documentFiles.textOf(GUIDE)).toBe('# Mine');
+      expect(snapshot().unsavedDocumentKeys.size).toBe(0);
+    });
+
+    it('keeps edits when the file changes on disk, and reloads it on request', async () => {
+      const { controller, documentFiles, watcher, snapshot } = await editGuide('# Mine');
+      documentFiles.write(GUIDE, '# Theirs');
+
+      watcher.reportChanges([GUIDE]);
+      await vi.waitFor(() =>
+        expect(snapshot().notice).toBe('Guide.md was changed by another program while you were editing it.'),
+      );
+      expect(snapshot().unsavedDocumentKeys.has(guideKey)).toBe(true);
+      const reload = snapshot().noticeActions?.find((action) => action.label === 'Reload from Disk');
+      if (reload) await controller.runNoticeAction(reload);
+
+      expect(snapshot().unsavedDocumentKeys.size).toBe(0);
+      expect(snapshot().editorRequest).toMatchObject({ kind: 'replaceText', text: '# Theirs' });
+    });
+
+    it('shows the new text in the editor when a document without edits changes on disk', async () => {
+      const { controller, documentFiles, watcher, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+      await controller.execute({ kind: 'toggleEditing' });
+      documentFiles.write(GUIDE, '# Updated elsewhere');
+
+      watcher.reportChanges([GUIDE]);
+
+      await vi.waitFor(() =>
+        expect(snapshot().editorRequest).toMatchObject({ kind: 'replaceText', text: '# Updated elsewhere' }),
+      );
+      expect(snapshot().notice).toBeUndefined();
+    });
+
+    it('sends menu commands to the editor only while editing, with Find going to the editor', async () => {
+      const { controller, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+
+      await controller.execute({ kind: 'runEditorCommand', command: 'undo' });
+      expect(snapshot().editorRequest).toBeUndefined();
+      await controller.execute({ kind: 'toggleEditing' });
+      await controller.execute({ kind: 'showFind' });
+
+      expect(snapshot().editorRequest).toMatchObject({ kind: 'command', command: 'find' });
+      expect(snapshot().findRequest).toBeUndefined();
+    });
+
+    it('keeps text typed while a save is still writing the file', async () => {
+      const { controller, documentFiles, snapshot } = await editGuide('# One');
+      const writeFile = documentFiles.save.bind(documentFiles);
+      let finishWriting: () => void = () => undefined;
+      const writing = new Promise<void>((resolve) => (finishWriting = resolve));
+      documentFiles.save = async (document) => {
+        await writing;
+        return writeFile(document);
+      };
+
+      const saving = controller.execute({ kind: 'saveDocument' });
+      controller.updateEditedText(guideKey, '# One, two');
+      finishWriting();
+      await saving;
+
+      expect(documentFiles.textOf(GUIDE)).toBe('# One');
+      expect(snapshot().unsavedDocumentKeys.has(guideKey)).toBe(true);
+    });
+
+    it('warns when a background document with edits can no longer be read from disk', async () => {
+      const { controller, documentFiles, watcher, snapshot } = createViewer({ startupPaths: [GUIDE, NOTES] });
+      await controller.start();
+      controller.activateTab(guideKey);
+      await controller.execute({ kind: 'toggleEditing' });
+      controller.updateEditedText(guideKey, '# Mine');
+      controller.activateTab(InMemoryDocumentFiles.locationOf(NOTES).canonicalKey);
+      documentFiles.delete(GUIDE);
+
+      watcher.reportChanges([GUIDE]);
+
+      await vi.waitFor(() =>
+        expect(snapshot().notice).toBe('Guide.md was changed by another program while you were editing it.'),
+      );
+      expect(snapshot().unsavedDocumentKeys.has(guideKey)).toBe(true);
+    });
+
+    it('gives each editor the text reloaded for it when several documents change at once', async () => {
+      const { controller, documentFiles, watcher, snapshot } = createViewer({ startupPaths: [GUIDE, NOTES] });
+      await controller.start();
+      await controller.execute({ kind: 'toggleEditing' });
+      controller.activateTab(guideKey);
+      await controller.execute({ kind: 'toggleEditing' });
+      documentFiles.write(GUIDE, '# Guide changed');
+      documentFiles.write(NOTES, '# Notes changed');
+
+      watcher.reportChanges([GUIDE, NOTES]);
+      await vi.waitFor(() =>
+        expect(snapshot().editorRequest).toMatchObject({ kind: 'replaceText', text: '# Guide changed' }),
+      );
+      controller.activateTab(InMemoryDocumentFiles.locationOf(NOTES).canonicalKey);
+
+      await vi.waitFor(() =>
+        expect(snapshot().editorRequest).toMatchObject({ kind: 'replaceText', text: '# Notes changed' }),
+      );
+    });
+
+    it('stays in the editor after saving a new document under a name', async () => {
+      const { controller, documentFiles, snapshot } = createViewer();
+      await controller.start();
+      controller.openAsNewDocument('# Table');
+      await controller.execute({ kind: 'toggleEditing' });
+      documentFiles.saveAsChoices.push('C:\\Docs\\Table.md');
+
+      await controller.execute({ kind: 'saveDocument' });
+
+      expect(snapshot().viewer.tabStrip.activeTab()?.location.fileName).toBe('Table.md');
+      expect(snapshot().isActiveDocumentEditing).toBe(true);
+    });
+
+    it('reverts to the saved text', async () => {
+      const { controller, snapshot } = await editGuide('# Unwanted');
+
+      await controller.execute({ kind: 'revertDocument' });
+
+      expect(snapshot().unsavedDocumentKeys.size).toBe(0);
+      expect(snapshot().editorRequest).toMatchObject({ kind: 'replaceText', text: '# Guide' });
+    });
+
+    it('treats edits that restore the saved text as no change', async () => {
+      const { controller, snapshot } = await editGuide('# Changed');
+
+      controller.updateEditedText(guideKey, '# Guide');
+
+      expect(snapshot().unsavedDocumentKeys.size).toBe(0);
     });
   });
 

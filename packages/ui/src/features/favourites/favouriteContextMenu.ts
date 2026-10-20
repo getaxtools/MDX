@@ -19,7 +19,7 @@ export type FavouriteMenuItemId =
 export type FavouriteGroupMenuItemId = 'renameGroup' | 'removeGroup';
 
 export type FavouritesHeaderMenuItemId =
-  'newGroup' | 'refreshFolders' | 'exportFavourites' | 'importFavourites';
+  'addFolderFavourite' | 'newGroup' | 'refreshFolders' | 'exportFavourites' | 'importFavourites';
 
 export interface FavouriteMenuState {
   readonly canMoveUp: boolean;
@@ -114,6 +114,7 @@ export function favouritesHeaderMenuItems(
   translator: Translator,
 ): ContextMenuItem<FavouritesHeaderMenuItemId>[] {
   return [
+    { id: 'addFolderFavourite', label: translator.translate('favourites.addFolder') },
     { id: 'newGroup', label: translator.translate('favourites.group.new') },
     { id: 'refreshFolders', label: translator.translate('favourites.folder.refreshAll') },
     {

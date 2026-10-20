@@ -1,3 +1,4 @@
+import type { ChainablePromiseElement } from 'webdriverio';
 import { createTranslator, type MessageKey } from '@mdx/i18n';
 
 const translator = createTranslator();
@@ -51,10 +52,20 @@ export class MainWindowPage {
     }, keyboardEventFor(shortcut));
   }
 
+  /** The rendered heading, looked up again on every try because opening documents re-renders it. */
   async documentHeading(): Promise<string> {
-    const heading = this.browser.$('main article h1');
-    await heading.waitForDisplayed();
-    return heading.getText();
+    let headingText = '';
+    await this.browser.waitUntil(
+      async () => {
+        headingText = await this.browser
+          .$('main article h1')
+          .getText()
+          .catch(() => '');
+        return headingText !== '';
+      },
+      { timeoutMsg: 'The document never showed a heading' },
+    );
+    return headingText;
   }
 
   async waitForDocumentHeading(expectedHeading: string): Promise<void> {
@@ -112,7 +123,7 @@ export class MainWindowPage {
 
   async openFavourite(name: string): Promise<void> {
     const section = await this.sidebarSection('favourites.sidebar.title');
-    await section.$(`button*=${name}`).click();
+    await section.$(treeItemContaining(name)).click();
   }
 
   async expandFavouriteFolder(name: string): Promise<void> {
@@ -128,13 +139,173 @@ export class MainWindowPage {
     );
   }
 
+  async waitForExplorerFolderEntries(folderName: string, expectedNames: readonly string[]): Promise<void> {
+    await this.waitForNames(
+      `entries of ${folderName}`,
+      async () => this.entryNamesBelow(await this.explorerFolderButton(folderName)),
+      expectedNames,
+    );
+  }
+
+  async startEditing(): Promise<void> {
+    await this.pressShortcut('Ctrl+/');
+    await this.browser.$('[role="textbox"][aria-label^="Source of"]').waitForDisplayed();
+  }
+
+  /**
+   * Types into the source editor at the end of the document. The embedded driver's key events never
+   * reach the editor's text, so the text goes in the way an input method inserts it.
+   */
+  async typeAtEndOfDocument(text: string): Promise<void> {
+    await this.browser.$('[role="textbox"][aria-label^="Source of"]').click();
+    await this.pressShortcut('Ctrl+End');
+    await this.browser.execute((typedText) => {
+      // eslint-disable-next-line @typescript-eslint/no-deprecated -- still the only way to insert text as an input method does
+      document.execCommand('insertText', false, typedText);
+    }, text);
+  }
+
+  async waitForUnsavedTab(fileName: string): Promise<void> {
+    await this.activeUnsavedTab(fileName).waitForExist();
+  }
+
+  async waitForSavedTab(fileName: string): Promise<void> {
+    await this.activeUnsavedTab(fileName).waitForExist({ reverse: true });
+  }
+
+  async answerUnsavedChanges(labelKey: MessageKey): Promise<void> {
+    await this.browser
+      .$('[role="alertdialog"]')
+      .$(`button=${translator.translate(labelKey)}`)
+      .click();
+  }
+
+  private activeUnsavedTab(fileName: string) {
+    const hint = translator.translate('tabs.status.unsavedHint');
+    return this.browser.$(
+      `//*[@role="tab"][@aria-selected="true"][contains(., "${fileName}")][contains(., "${hint}")]`,
+    );
+  }
+
+  /** Right-clicks an element the way the mouse would, so its own context menu opens. */
+  async openContextMenuOn(element: ChainablePromiseElement): Promise<void> {
+    await element.waitForExist();
+    const resolvedElement = await element.getElement();
+    await this.browser.execute((target) => {
+      const bounds = target.getBoundingClientRect();
+      target.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+          clientX: bounds.left + 4,
+          clientY: bounds.top + 4,
+        }),
+      );
+    }, resolvedElement);
+  }
+
+  async chooseMenuItem(labelKey: MessageKey, values?: Record<string, string>): Promise<void> {
+    const label = translator.translate(labelKey, values);
+    await this.browser
+      .$(`.//*[@role="menu"]//button[@role="menuitem"][contains(normalize-space(.), "${label}")]`)
+      .click();
+  }
+
+  tab(fileName: string): ChainablePromiseElement {
+    return this.browser.$(`//*[@role="tab"][contains(normalize-space(.), "${fileName}")]`);
+  }
+
+  async treeItem(sectionTitleKey: MessageKey, name: string): Promise<ChainablePromiseElement> {
+    const section = await this.sidebarSection(sectionTitleKey);
+    return section.$(treeItemContaining(name));
+  }
+
+  async waitForNotice(messageKey: MessageKey, values: Record<string, string>): Promise<void> {
+    const message = translator.translate(messageKey, values);
+    await this.browser.$(`.//*[@aria-live="polite"]//span[normalize-space(.)="${message}"]`).waitForExist();
+  }
+
+  async clickNoticeAction(labelKey: MessageKey): Promise<void> {
+    await this.browser
+      .$('[aria-live="polite"]')
+      .$(`button=${translator.translate(labelKey)}`)
+      .click();
+  }
+
+  async statusBarText(): Promise<string> {
+    return this.browser.$(`footer[aria-label="${translator.translate('statusBar.label')}"]`).getText();
+  }
+
+  async waitForStatusBarText(expectedPart: string): Promise<void> {
+    await this.browser.waitUntil(async () => (await this.statusBarText()).includes(expectedPart), {
+      timeoutMsg: `The status bar never showed "${expectedPart}"`,
+    });
+  }
+
+  /** Scrolls the document view to a place from 0 (top) to 1 (end). */
+  async scrollDocumentTo(scrollRatio: number): Promise<void> {
+    await this.browser.execute((ratio) => {
+      const area = document.querySelector('main');
+      if (!area) return;
+      area.scrollTop = ratio * (area.scrollHeight - area.clientHeight);
+      area.dispatchEvent(new Event('scroll'));
+    }, scrollRatio);
+  }
+
+  async documentScrollTop(): Promise<number> {
+    return this.browser.execute(() => document.querySelector('main')?.scrollTop ?? 0);
+  }
+
+  async searchInCommandPalette(text: string): Promise<void> {
+    await this.pressShortcut('Ctrl+Shift+P');
+    const searchBox = this.browser.$('[role="dialog"] [role="combobox"]');
+    await searchBox.waitForDisplayed();
+    await searchBox.setValue(text);
+  }
+
+  async waitForCommandPaletteOption(name: string): Promise<void> {
+    await this.browser.$(`.//li[@role="option"][contains(normalize-space(.), "${name}")]`).waitForExist();
+  }
+
+  async isExplorerVisible(): Promise<boolean> {
+    return this.browser.$(`nav[aria-label="${translator.translate('sidebar.label')}"]`).isExisting();
+  }
+
+  async focusExplorerFolder(name: string): Promise<void> {
+    const folder = await this.explorerFolderButton(name);
+    await this.browser.execute((row) => {
+      row.focus();
+    }, folder);
+  }
+
+  async focusedTreeItemName(): Promise<string> {
+    return this.browser.execute(() => document.activeElement?.textContent.trim() ?? '');
+  }
+
+  async waitForSelectedExplorerEntry(expectedName: string): Promise<void> {
+    const section = await this.sidebarSection('explorer.folders.title');
+    await section
+      .$(`.//div[@role="treeitem"][@aria-selected="true"][contains(normalize-space(.), "${expectedName}")]`)
+      .waitForExist();
+  }
+
+  async toggleExplorerSection(titleKey: MessageKey): Promise<void> {
+    const section = await this.sidebarSection(titleKey);
+    await section.$('h2 button').click();
+  }
+
+  async isExplorerSectionExpanded(titleKey: MessageKey): Promise<boolean> {
+    const section = await this.sidebarSection(titleKey);
+    return (await section.$('h2 button').getAttribute('aria-expanded')) === 'true';
+  }
+
   async recentFileNames(): Promise<string[]> {
     return this.sidebarEntryNames('recentFiles.title');
   }
 
   async openRecentFile(fileName: string): Promise<void> {
     const section = await this.sidebarSection('recentFiles.title');
-    await section.$(`button=${fileName}`).click();
+    await section.$(treeItemContaining(fileName)).click();
   }
 
   private async waitForNames(
@@ -154,15 +325,23 @@ export class MainWindowPage {
   }
 
   private async folderEntryNames(folderName: string): Promise<string[]> {
-    const folder = await this.favouriteButton(folderName);
+    return this.entryNamesBelow(await this.favouriteButton(folderName));
+  }
+
+  private async explorerFolderButton(name: string) {
+    const section = await this.sidebarSection('explorer.folders.title');
+    return section.$(treeItemContaining(name));
+  }
+
+  private async entryNamesBelow(folder: ChainablePromiseElement): Promise<string[]> {
     return folder
-      .$$('./following-sibling::ul/li/button')
+      .$$('./following-sibling::ul/li/div[@role="treeitem"]')
       .map(async (entry) => (await entry.getText()).trim());
   }
 
   private async favouriteButton(name: string) {
     const section = await this.sidebarSection('favourites.sidebar.title');
-    return section.$(`button*=${name}`);
+    return section.$(treeItemContaining(name));
   }
 
   private toolbarButton(labelKey: MessageKey) {
@@ -174,7 +353,7 @@ export class MainWindowPage {
     const sections = await this.browser
       .$(`nav[aria-label="${translator.translate('sidebar.label')}"]`)
       .$$('section')
-      .filter(async (section) => (await section.$('h2').getProperty('textContent')) === title);
+      .filter(async (section) => String(await section.$('h2').getProperty('textContent')).trim() === title);
     const [section] = sections;
     if (!section) throw new Error(`The sidebar has no ${title} section`);
     return section;
@@ -182,7 +361,7 @@ export class MainWindowPage {
 
   private async sidebarEntryNames(titleKey: MessageKey): Promise<string[]> {
     const section = await this.sidebarSection(titleKey);
-    return section.$$('li > button').map(async (button) => (await button.getText()).trim());
+    return section.$$('li > [role="treeitem"]').map(async (row) => (await row.getText()).trim());
   }
 }
 
@@ -200,4 +379,8 @@ function keyboardEventFor(shortcut: string): KeyboardEventInit {
     shiftKey: hasShift,
     altKey: parts.includes('Alt'),
   };
+}
+
+function treeItemContaining(name: string): string {
+  return `.//div[@role="treeitem"][contains(normalize-space(.), "${name}")]`;
 }

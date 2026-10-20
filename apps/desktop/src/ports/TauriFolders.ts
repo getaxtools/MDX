@@ -9,4 +9,8 @@ export class TauriFolders implements FolderPort {
   listFolderContents(folderPath: string): Promise<FolderListing> {
     return tauriCommands.listFolderContents(folderPath);
   }
+
+  findDocuments(folderPaths: readonly string[]): Promise<DocumentLocation[]> {
+    return tauriCommands.findFolderDocuments(folderPaths);
+  }
 }

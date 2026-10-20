@@ -16,6 +16,8 @@ describe('view commands', () => {
       isSidebarVisible: false,
       isOutlineVisible: true,
       isStatusBarVisible: true,
+      collapsedExplorerSections: [],
+      explorerSectionHeights: {},
     });
     expect(applyViewCommand(withoutSidebar, { kind: 'resetZoom' }).zoomPercent).toBe(100);
     expect(applyViewCommand(withoutSidebar, { kind: 'zoomOut' }).zoomPercent).toBe(100);
@@ -26,6 +28,15 @@ describe('view commands', () => {
 
     expect(withoutStatusBar.isStatusBarVisible).toBe(false);
     expect(applyViewCommand(withoutStatusBar, { kind: 'toggleStatusBar' }).isStatusBarVisible).toBe(true);
+  });
+
+  it('collapses and expands an Explorer section', () => {
+    const collapsed = applyViewCommand(DEFAULT_VIEW_SETTINGS, {
+      kind: 'toggleExplorerSection',
+      section: 'folders',
+    });
+
+    expect(collapsed.collapsedExplorerSections).toEqual(['folders']);
   });
 
   it('tells view commands apart from document commands', () => {

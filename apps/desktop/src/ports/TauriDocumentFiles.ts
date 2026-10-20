@@ -1,6 +1,7 @@
 import type {
   DocumentFilePort,
   DocumentLocation,
+  EditedDocumentSave,
   OpenedDocument,
   PathStatus,
   SaveSource,
@@ -19,6 +20,14 @@ export class TauriDocumentFiles implements DocumentFilePort {
 
   async saveAs(source: SaveSource): Promise<string | undefined> {
     return (await tauriCommands.saveDocumentAs(source)) ?? undefined;
+  }
+
+  async save(document: EditedDocumentSave): Promise<number> {
+    try {
+      return await tauriCommands.saveDocument(document);
+    } catch (error) {
+      throw documentOpenErrorOf(error, document.path);
+    }
   }
 
   async checkPathStatuses(locations: readonly DocumentLocation[]): Promise<ReadonlyMap<string, PathStatus>> {

@@ -67,3 +67,6 @@ desktop.ini
 *.provisionprofile
 signing/
 /.vs
+
+# Generated at build time by scripts/generate-third-party-licenses.mjs
+apps/desktop/src/generated/

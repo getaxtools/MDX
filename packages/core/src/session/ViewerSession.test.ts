@@ -29,6 +29,17 @@ describe('ViewerSession', () => {
     expect(session.currentState().recentFiles.has(document.location.canonicalKey)).toBe(true);
   });
 
+  it('focuses an open document without reading its file again', async () => {
+    const { session, documentFiles } = createSession();
+    await session.openDocument(GUIDE_PATH);
+    documentFiles.write(GUIDE_PATH, '# Changed on disk');
+
+    const document = await session.openDocument(GUIDE_PATH);
+
+    expect(document.text).toBe('# Guide');
+    expect(documentFiles.openedPaths).toEqual([GUIDE_PATH]);
+  });
+
   it('focuses the existing tab when the same document is opened again', async () => {
     const { session } = createSession();
 
@@ -163,6 +174,80 @@ describe('ViewerSession', () => {
       undefined,
       undefined,
     ]);
+  });
+
+  describe('saving edited text', () => {
+    it('writes the text back with the document line breaks and keeps the new file time', async () => {
+      const { session, documentFiles } = createSession();
+      documentFiles.write(GUIDE_PATH, '# Guide\r\nOld\r\n');
+      const opened = await session.openDocument(GUIDE_PATH);
+
+      await session.saveEditedDocument(opened.location.canonicalKey, '# Guide\nNew\n');
+
+      expect(documentFiles.textOf(GUIDE_PATH)).toBe('# Guide\r\nNew\r\n');
+      expect(documentFiles.savedDocuments[0]).toMatchObject({
+        encoding: 'utf-8',
+        hasByteOrderMark: false,
+        expectedModifiedAtMs: opened.modifiedAtMs,
+      });
+      expect(session.openedDocument(opened.location.canonicalKey)?.text).toBe('# Guide\r\nNew\r\n');
+    });
+
+    it('refuses to overwrite a file another program changed, unless asked to', async () => {
+      const { session, documentFiles } = createSession();
+      const opened = await session.openDocument(GUIDE_PATH);
+      documentFiles.write(GUIDE_PATH, '# Changed elsewhere');
+
+      const refused = session.saveEditedDocument(opened.location.canonicalKey, '# Mine');
+      await expect(refused).rejects.toMatchObject({ failure: 'changedOnDisk' });
+      await session.saveEditedDocument(opened.location.canonicalKey, '# Mine', {
+        shouldOverwriteChangesOnDisk: true,
+      });
+
+      expect(documentFiles.textOf(GUIDE_PATH)).toBe('# Mine');
+    });
+
+    it('refuses to save a document it does not hold, so the edits are not dropped', async () => {
+      const { session } = createSession();
+
+      await expect(session.saveEditedDocument('c:\\docs\\gone.md', '# Mine')).rejects.toMatchObject({
+        failure: 'unreadable',
+      });
+    });
+
+    it('refuses to save over a file whose bytes did not fit its encoding', async () => {
+      const { session, documentFiles } = createSession();
+      const opened = await session.openDocument(GUIDE_PATH);
+      const lossy = { ...opened, hasDecodingErrors: true };
+      documentFiles.open = () => Promise.resolve(lossy);
+      await session.reloadDocuments([GUIDE_PATH]);
+
+      await expect(session.saveEditedDocument(opened.location.canonicalKey, '# Mine')).rejects.toMatchObject({
+        failure: 'lossyDecoding',
+      });
+      expect(documentFiles.savedDocuments).toEqual([]);
+    });
+
+    it('keeps reading a saved document in the encoding it was saved in', async () => {
+      const { session, documentFiles } = createSession();
+      const opened = await session.openDocument(GUIDE_PATH);
+
+      await session.saveEditedDocument(opened.location.canonicalKey, '# Saved');
+      await session.reloadDocuments([GUIDE_PATH]);
+
+      expect(documentFiles.openedEncodings.at(-1)).toBe('utf-8');
+    });
+
+    it('saves edited text of a document with a file as text when using Save As', async () => {
+      const { session, documentFiles } = createSession();
+      const opened = await session.openDocument(GUIDE_PATH);
+      documentFiles.saveAsChoices.push('C:\\Docs\\Copy.md');
+
+      await session.saveDocumentAs(opened.location.canonicalKey, '# Edited');
+
+      expect(documentFiles.savedSources).toEqual([{ kind: 'text', text: '# Edited', fileName: 'Guide.md' }]);
+      expect(documentFiles.textOf('C:\\Docs\\Copy.md')).toBe('# Edited');
+    });
   });
 
   describe('documents that are not saved yet', () => {

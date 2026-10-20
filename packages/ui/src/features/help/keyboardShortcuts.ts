@@ -1,3 +1,4 @@
+import { EDITOR_SHORTCUTS } from '@mdx/editor/shortcuts';
 import type { MessageKey } from '@mdx/i18n';
 import { COMMAND_SHORTCUTS } from '../shortcuts/commandShortcuts';
 import type { KeyCombination } from '../shortcuts/describeCombination';
@@ -23,9 +24,18 @@ const SHORTCUTS_HANDLED_IN_PLACE: readonly KeyboardShortcut[] = [
   },
   { combinations: [['shift', 'F10']], actionKey: 'shortcuts.contextMenu' },
   { combinations: [['alt', 'F4']], actionKey: 'menu.file.exit' },
+  { combinations: [['ctrl', 'Z']], actionKey: 'menu.edit.undo' },
+  { combinations: [['ctrl', 'Y']], actionKey: 'menu.edit.redo' },
+  { combinations: [['ctrl', 'H']], actionKey: 'menu.edit.replace' },
+  { combinations: [['ctrl', 'G']], actionKey: 'menu.edit.goToLine' },
 ];
+
+const EDITOR_FORMATTING_SHORTCUTS: readonly KeyboardShortcut[] = EDITOR_SHORTCUTS.map(
+  ({ action, combination }) => ({ combinations: [combination], actionKey: `editor.action.${action}` }),
+);
 
 export const KEYBOARD_SHORTCUTS: readonly KeyboardShortcut[] = [
   ...COMMAND_SHORTCUTS.map(({ combinations, actionKey }) => ({ combinations, actionKey })),
   ...SHORTCUTS_HANDLED_IN_PLACE,
+  ...EDITOR_FORMATTING_SHORTCUTS,
 ];

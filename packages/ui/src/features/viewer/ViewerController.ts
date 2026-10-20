@@ -21,6 +21,7 @@ import {
   type DocumentPrinterPort,
   type DocumentResourcesPort,
   type DocumentWatcherPort,
+  type DocumentLocation,
   type DocumentRequestsPort,
   type LineEnding,
   type OpenedDocument,
@@ -28,6 +29,10 @@ import {
 } from '@mdx/platform';
 import type { MarkdownRenderer, OutlineEntry } from '@mdx/renderer';
 import type { DocumentLink } from '../document-view/DocumentLink';
+import { DocumentEditing } from '../editing/DocumentEditing';
+import { EditingActions } from '../editing/EditingActions';
+import type { EditorRequest } from '../editing/editingCommands';
+import { ExplorerFolderActions } from '../explorer/ExplorerFolderActions';
 import { FolderRefresh } from '../folder-tree/FolderRefresh';
 import {
   DocumentSaving,
@@ -42,7 +47,6 @@ import { commandForMenuItem, type ViewerCommand } from './viewerCommands';
 export const STATE_SAVE_DELAY_MS = 500;
 export const MAX_RECENT_MENU_ENTRIES = 10;
 const SCROLL_RATIO_PRECISION = 0.001;
-const EMPTY_FOLDER_LISTING: FolderListing = { folders: [], documents: [] };
 
 export interface ViewerControllerDependencies {
   readonly session: ViewerSession;
@@ -71,6 +75,7 @@ export interface RenderedActiveDocument {
   readonly lineEnding: LineEnding;
   readonly scrollRatio: number;
   readonly frontMatter?: string;
+  /** The text shown, which is the edited text while the document has unsaved changes. */
   readonly source: string;
 }
 
@@ -87,6 +92,10 @@ export interface ViewerSnapshot {
   readonly pathStatuses: ReadonlyMap<string, PathStatus>;
   /** How often each shown folder changed on disk, so its listing reloads when the count goes up. */
   readonly folderRevisions: ReadonlyMap<string, number>;
+  readonly isActiveDocumentEditing?: boolean;
+  /** Open documents whose edited text is not saved yet. */
+  readonly unsavedDocumentKeys: ReadonlySet<string>;
+  readonly editorRequest?: EditorRequest;
 }
 
 /** A button in the notice bar that runs a command, such as Locate for a file that has moved. */
@@ -95,12 +104,13 @@ export interface NoticeAction {
   readonly command: ViewerCommand;
 }
 
-export type ViewerDialog = 'about' | 'keyboardShortcuts' | 'pasteTable';
+export type ViewerDialog = 'about' | 'keyboardShortcuts' | 'pasteTable' | 'commandPalette';
 
 const DIALOGS_BY_COMMAND: Partial<Record<ViewerCommand['kind'], ViewerDialog>> = {
   showAbout: 'about',
   showKeyboardShortcuts: 'keyboardShortcuts',
   showPasteTable: 'pasteTable',
+  showCommandPalette: 'commandPalette',
 };
 
 type SnapshotListener = (snapshot: ViewerSnapshot) => void;
@@ -117,6 +127,7 @@ export class ViewerController {
   private readonly stopActions: (() => void)[] = [];
   private pendingSave: ReturnType<typeof setTimeout> | undefined;
   private renderedDocument: OpenedDocument | undefined;
+  private renderedText: string | undefined;
   private activeDocument: RenderedActiveDocument | undefined;
   private openDialog: ViewerDialog | undefined;
   private noticeActions: readonly NoticeAction[] = [];
@@ -129,23 +140,44 @@ export class ViewerController {
   private checkedLocationKeys = '';
   private readonly liveReload: LiveReload | undefined;
   private readonly folderRefresh: FolderRefresh;
+  private readonly explorerFolderActions: ExplorerFolderActions;
   private readonly saving: DocumentSaving;
+  private readonly editing = new DocumentEditing();
+  private readonly editingActions: EditingActions;
 
   constructor(private readonly dependencies: ViewerControllerDependencies) {
     this.snapshot = {
       viewer: dependencies.session.currentState(),
       pathStatuses: this.pathStatuses,
       folderRevisions: new Map(),
+      unsavedDocumentKeys: new Set(),
     };
-    this.saving = new DocumentSaving(dependencies.session, {
+    this.saving = new DocumentSaving(dependencies.session, this.editing, {
       onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
       onSaveFailed: (fileName) => this.showNotice('errors.document.saveFailed', { path: fileName }),
+      onChangedOnDisk: (location) => this.showChangedOnDiskNotice(location, 'errors.document.changedOnDisk'),
+      onCannotSaveInPlace: (location, failure) =>
+        this.showNotice(`errors.document.${failure}`, { path: location.fileName }, [
+          {
+            label: dependencies.translator.translate('menu.file.saveAs'),
+            command: { kind: 'saveDocumentAs' },
+          },
+        ]),
+    });
+    this.editingActions = new EditingActions(dependencies.session, this.editing, {
+      onChange: () => {
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+        void this.refreshActiveDocument();
+      },
+      onConflict: (location) => this.showChangedOnDiskNotice(location, 'editing.conflict.message'),
     });
     this.liveReload = dependencies.watcher
-      ? new LiveReload(dependencies.watcher, dependencies.session, () =>
-          this.refreshPathStatuses({ isForced: true }),
-        )
+      ? new LiveReload(dependencies.watcher, dependencies.session, (changedKeys) => {
+          this.refreshPathStatuses({ isForced: true });
+          this.editingActions.handleReloadedDocuments(changedKeys);
+        })
       : undefined;
+    this.explorerFolderActions = new ExplorerFolderActions(dependencies.session, dependencies.folders);
     this.folderRefresh = new FolderRefresh(dependencies.folderWatcher, () =>
       this.publish(this.composeSnapshot(this.snapshot.notice)),
     );
@@ -346,7 +378,10 @@ export class ViewerController {
 
   private readonly commandHandlers: CommandHandlers = {
     openDocuments: async () => this.openDocuments(await this.dependencies.requests.pickDocuments()),
-    openFolder: () => this.addFolderFavourite(),
+    openFolder: () => this.explorerFolderActions.openFolder(),
+    addFolderFavourite: () => this.explorerFolderActions.addFolderFavourite(),
+    addExplorerFolderToFavourites: ({ canonicalKey }) =>
+      this.explorerFolderActions.addExplorerFolderToFavourites(canonicalKey),
     locateRecentFile: ({ canonicalKey }) => this.locateRecentFile(canonicalKey),
     reopenWithEncoding: ({ encoding }) => this.reopenActiveDocumentWithEncoding(encoding),
     saveDocument: () => this.saving.saveActive(),
@@ -356,10 +391,18 @@ export class ViewerController {
     exportFavourites: () => this.exportFavourites(),
     importFavourites: () => this.importFavourites(),
     refreshFolders: () => this.folderRefresh.refreshShownFolders(),
+    toggleEditing: () => this.editingActions.toggleActiveDocument(),
+    runEditorCommand: ({ command }) => {
+      this.editingActions.runEditorCommand(command);
+    },
+    revertDocument: () => this.editingActions.revertActiveDocument(),
+    reloadFromDisk: ({ canonicalKey }) => this.editingActions.reloadFromDisk(canonicalKey),
+    overwriteChangesOnDisk: ({ canonicalKey }) => this.saving.overwriteChangesOnDisk(canonicalKey),
     print: () => {
       if (this.activeDocument) this.dependencies.printer?.printActiveDocument();
     },
     showFind: () => {
+      if (this.editingActions.runEditorCommand('find')) return;
       this.findRequest += 1;
       this.publish(this.composeSnapshot(this.snapshot.notice));
     },
@@ -417,11 +460,11 @@ export class ViewerController {
 
   private refreshPathStatuses({ isForced = false } = {}): void {
     const { session } = this.dependencies;
-    const { tabStrip, favourites, recentFiles } = session.currentState();
+    const { tabStrip, favourites, recentFiles, explorerFolders } = session.currentState();
     const entries = [...tabStrip.tabs(), ...favourites.favourites(), ...recentFiles.entries()];
-    const locations = entries
-      .map((entry) => entry.location)
-      .filter((location) => !isUntitledLocation(location));
+    const locations = [...entries.map((entry) => entry.location), ...explorerFolders.folders()].filter(
+      (location) => !isUntitledLocation(location),
+    );
     const locationKeys = JSON.stringify(locations.map((location) => location.canonicalKey));
     if (!isForced && locationKeys === this.checkedLocationKeys) return;
     this.checkedLocationKeys = locationKeys;
@@ -431,26 +474,24 @@ export class ViewerController {
     });
   }
 
-  /** The subfolders and Markdown documents in a favourite folder; empty when the folder cannot be read. */
-  async listFolderContents(folderPath: string): Promise<FolderListing> {
-    try {
-      return (await this.dependencies.folders?.listFolderContents(folderPath)) ?? EMPTY_FOLDER_LISTING;
-    } catch {
-      return EMPTY_FOLDER_LISTING;
-    }
+  /** The subfolders and Markdown documents in a folder; empty when the folder cannot be read. */
+  listFolderContents(folderPath: string): Promise<FolderListing> {
+    return this.explorerFolderActions.listFolderContents(folderPath);
+  }
+
+  /** Documents to offer in quick open: open, recent and favourite ones first, then those in folders. */
+  quickOpenDocuments(): Promise<DocumentLocation[]> {
+    return this.explorerFolderActions.quickOpenDocuments();
+  }
+
+  /** Records the source editor's text for a document; the window shows when it has unsaved changes. */
+  updateEditedText(canonicalKey: string, text: string): void {
+    this.editingActions.updateText(canonicalKey, text);
   }
 
   /** Keeps a folder's listing current while it is shown; call the returned function when it is hidden. */
   showFolder(folderPath: string): () => void {
     return this.folderRefresh.showFolder(folderPath);
-  }
-
-  private async addFolderFavourite(): Promise<void> {
-    const folder = await this.dependencies.folders?.pickFolder();
-    if (!folder) return;
-    this.dependencies.session.updateFavourites((favourites) =>
-      favourites.isFavourite(folder.canonicalKey) ? favourites : favourites.add(folder, 'folder'),
-    );
   }
 
   private async exportFavourites(): Promise<void> {
@@ -528,6 +569,14 @@ export class ViewerController {
     this.showRecentFilesInMenu();
     this.refreshPathStatuses();
     this.liveReload?.watchOpenTabs();
+    this.editing.keepOnly(
+      new Set(
+        this.dependencies.session
+          .currentState()
+          .tabStrip.tabs()
+          .map((tab) => tab.location.canonicalKey),
+      ),
+    );
     this.scheduleSave();
     void this.refreshActiveDocument();
   }
@@ -537,12 +586,49 @@ export class ViewerController {
     this.pendingSave = setTimeout(() => void this.dependencies.session.save(), STATE_SAVE_DELAY_MS);
   }
 
+  /** Renders the active document again when it or its edited text changed. */
   private async refreshActiveDocument(): Promise<void> {
     const document = await this.loadActiveDocument();
-    if (document === this.renderedDocument) return;
+    const text = document ? this.textShownFor(document) : undefined;
+    if (document === this.renderedDocument && text === this.renderedText) return;
     this.renderedDocument = document;
-    this.activeDocument = document ? this.render(document) : undefined;
+    this.renderedText = text;
+    this.activeDocument = document && text !== undefined ? this.render(document, text) : undefined;
     this.publish(this.composeSnapshot(this.snapshot.notice));
+  }
+
+  /** While the document is being edited the preview is hidden, so its last edited text is enough. */
+  private textShownFor(document: OpenedDocument): string {
+    const { canonicalKey } = document.location;
+    if (
+      this.editing.isEditing(canonicalKey) &&
+      this.renderedDocument === document &&
+      this.renderedText !== undefined
+    ) {
+      return this.renderedText;
+    }
+    return this.editing.editedTextOf(canonicalKey) ?? document.text;
+  }
+
+  private showChangedOnDiskNotice(
+    location: DocumentLocation,
+    messageKey: 'errors.document.changedOnDisk' | 'editing.conflict.message',
+  ): void {
+    const { translator } = this.dependencies;
+    const { canonicalKey } = location;
+    const keepLabel =
+      messageKey === 'editing.conflict.message' ? 'editing.conflict.keepMine' : 'editing.conflict.overwrite';
+    const keepCommand: ViewerCommand =
+      messageKey === 'editing.conflict.message'
+        ? { kind: 'keepEditedText' }
+        : { kind: 'overwriteChangesOnDisk', canonicalKey };
+    this.showNotice(messageKey, { path: location.fileName }, [
+      { label: translator.translate(keepLabel), command: keepCommand },
+      {
+        label: translator.translate('editing.conflict.reload'),
+        command: { kind: 'reloadFromDisk', canonicalKey },
+      },
+    ]);
   }
 
   private async loadActiveDocument(): Promise<OpenedDocument | undefined> {
@@ -556,10 +642,10 @@ export class ViewerController {
     }
   }
 
-  private render(document: OpenedDocument): RenderedActiveDocument {
+  private render(document: OpenedDocument, text: string): RenderedActiveDocument {
     const { resources } = this.dependencies;
     const isUntitled = isUntitledLocation(document.location);
-    const { html, outline, frontMatter } = this.dependencies.renderer.render(document.text, {
+    const { html, outline, frontMatter } = this.dependencies.renderer.render(text, {
       resolveResourceUrl: (source) =>
         isUntitled ? undefined : resources?.imageUrl(document.location.displayPath, source),
     });
@@ -570,10 +656,10 @@ export class ViewerController {
       isUntitled,
       html,
       outline,
-      statistics: measureDocument(document.text, this.dependencies.translator.locale),
+      statistics: measureDocument(text, this.dependencies.translator.locale),
       encoding: document.encoding,
       lineEnding: document.lineEnding,
-      source: document.text,
+      source: text,
       scrollRatio: this.dependencies.session.currentState().tabStrip.activeTab()?.scrollRatio ?? 0,
       ...(frontMatter === undefined ? {} : { frontMatter }),
     };
@@ -584,6 +670,9 @@ export class ViewerController {
       viewer: this.dependencies.session.currentState(),
       pathStatuses: this.pathStatuses,
       folderRevisions: this.folderRefresh.revisionsByFolder(),
+      unsavedDocumentKeys: this.editing.unsavedKeys(),
+      ...(this.editingActions.isActiveDocumentEditing() ? { isActiveDocumentEditing: true } : {}),
+      ...this.editorRequestPart(),
       ...(this.activeDocument ? { activeDocument: this.activeDocument } : {}),
       ...(notice === undefined ? {} : { notice }),
       ...(notice !== undefined && this.noticeActions.length > 0 ? { noticeActions: this.noticeActions } : {}),
@@ -593,6 +682,11 @@ export class ViewerController {
       ...(this.isSourceView ? { isSourceView: true } : {}),
       ...this.unsavedChangesPart(),
     };
+  }
+
+  private editorRequestPart(): Pick<ViewerSnapshot, 'editorRequest'> {
+    const editorRequest = this.editingActions.editorRequest();
+    return editorRequest ? { editorRequest } : {};
   }
 
   private unsavedChangesPart(): Pick<ViewerSnapshot, 'unsavedChanges'> {

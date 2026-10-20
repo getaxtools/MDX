@@ -165,7 +165,7 @@ impl SaveRequest {
     }
 }
 
-fn validated_path(path: &str) -> Result<PathBuf, DocumentError> {
+pub(crate) fn validated_path(path: &str) -> Result<PathBuf, DocumentError> {
     let is_valid = !path.trim().is_empty()
         && path.chars().count() <= MAX_PATH_CHARACTERS
         && !path.contains('\0');
