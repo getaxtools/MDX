@@ -57,6 +57,17 @@ export class MainWindowPage {
     return heading.getText();
   }
 
+  async waitForDocumentHeading(expectedHeading: string): Promise<void> {
+    await this.browser.waitUntil(
+      async () =>
+        (await this.browser
+          .$('main article h1')
+          .getText()
+          .catch(() => '')) === expectedHeading,
+      { timeout: 10_000, timeoutMsg: `The document heading never became "${expectedHeading}"` },
+    );
+  }
+
   async documentText(): Promise<string> {
     return this.browser.$('main article').getText();
   }
