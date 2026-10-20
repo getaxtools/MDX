@@ -1,4 +1,6 @@
 import { isUntitledLocation } from '@mdx/platform';
+import type { DocumentLocation } from '@mdx/platform';
+import { ExplorerFolders } from '../explorer/ExplorerFolders';
 import { FavouritesList, type Favourite, type FavouriteGroup } from '../favourites/FavouritesList';
 import { parseFavourites } from '../favourites/parseFavourites';
 import { RecentFilesList, type RecentFile } from '../recent-files/RecentFilesList';
@@ -14,6 +16,7 @@ export interface PersistedAppState {
   readonly recentFiles: readonly RecentFile[];
   readonly favourites: readonly Favourite[];
   readonly favouriteGroups: readonly FavouriteGroup[];
+  readonly explorerFolders: readonly DocumentLocation[];
   readonly view: ViewSettings;
 }
 
@@ -21,6 +24,7 @@ export interface ViewerState {
   readonly tabStrip: TabStrip;
   readonly recentFiles: RecentFilesList;
   readonly favourites: FavouritesList;
+  readonly explorerFolders: ExplorerFolders;
   readonly viewSettings: ViewSettings;
 }
 
@@ -32,6 +36,7 @@ export function toPersistedAppState({
   tabStrip,
   recentFiles,
   favourites,
+  explorerFolders,
   viewSettings,
 }: ViewerState): PersistedAppState {
   return {
@@ -40,6 +45,7 @@ export function toPersistedAppState({
     recentFiles: recentFiles.entries(),
     favourites: favourites.favourites(),
     favouriteGroups: favourites.groups(),
+    explorerFolders: explorerFolders.folders(),
     view: viewSettings,
   };
 }
@@ -61,6 +67,7 @@ export function restoreAppState(saved: unknown): RestoredAppState {
     tabStrip: TabStrip.fromSnapshot({ tabs: validEntries(savedTabs.tabs, parseTab), ...activeKey }),
     recentFiles: RecentFilesList.fromRecentFiles(validEntries(saved.recentFiles, parseRecentFile)),
     favourites: parseFavourites(saved.favourites, saved.favouriteGroups),
+    explorerFolders: ExplorerFolders.fromFolders(validEntries(saved.explorerFolders, parseLocation)),
     viewSettings: parseViewSettings(saved.view),
     wasReset: false,
   };
@@ -71,6 +78,7 @@ function emptyAppState({ wasReset }: { wasReset: boolean }): RestoredAppState {
     tabStrip: TabStrip.empty(),
     recentFiles: RecentFilesList.empty(),
     favourites: FavouritesList.empty(),
+    explorerFolders: ExplorerFolders.empty(),
     viewSettings: DEFAULT_VIEW_SETTINGS,
     wasReset,
   };

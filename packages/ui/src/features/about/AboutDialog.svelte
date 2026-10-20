@@ -3,14 +3,24 @@
   import Dialog from '../../components/Dialog.svelte';
   import type { AppInfo } from './AppInfo';
   import { INSTALLED_FEATURES } from './featureRegistry';
+  import type { ThirdPartyLicensesLoader } from './ThirdPartyLicenses';
+  import ThirdPartyLicensesList from './ThirdPartyLicensesList.svelte';
 
   interface Props {
     appInfo: AppInfo;
     translator: Translator;
     onClose: () => void;
+    loadThirdPartyLicenses?: ThirdPartyLicensesLoader | undefined;
   }
 
-  const { appInfo, translator, onClose }: Props = $props();
+  const {
+    appInfo,
+    translator,
+    onClose,
+    loadThirdPartyLicenses = () => Promise.resolve(undefined),
+  }: Props = $props();
+
+  let isShowingLicenses = $state(false);
 
   const COPYRIGHT_YEAR = 2026;
 </script>
@@ -36,6 +46,16 @@
     {translator.translate('about.copyright', { year: String(COPYRIGHT_YEAR) })}<br />
     {translator.translate('about.license')}
   </p>
+  <button
+    class="licenses-toggle"
+    aria-expanded={isShowingLicenses}
+    onclick={() => (isShowingLicenses = !isShowingLicenses)}
+  >
+    {translator.translate('about.thirdPartyLicenses')}
+  </button>
+  {#if isShowingLicenses}
+    <ThirdPartyLicensesList {translator} loadLicenses={loadThirdPartyLicenses} />
+  {/if}
 </Dialog>
 
 <style>
@@ -47,6 +67,20 @@
   .features {
     margin-top: 0;
     padding-inline-start: var(--space-6);
+  }
+
+  .licenses-toggle {
+    margin-block-end: var(--space-2);
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-small);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font: inherit;
+  }
+
+  .licenses-toggle:focus-visible {
+    outline: 2px solid var(--color-focus);
   }
 
   .legal {

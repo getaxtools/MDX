@@ -53,7 +53,7 @@ describe('ViewerApp', () => {
 
   it('hides and shows the sidebar from the activity bar', async () => {
     await renderViewer();
-    const sidebarButton = await screen.findByRole('button', { name: 'Favourites and recent files' });
+    const sidebarButton = await screen.findByRole('button', { name: 'Explorer' });
 
     await userEvent.click(sidebarButton);
     expect(screen.queryByRole('region', { name: 'Favourites' })).toBeNull();
@@ -112,13 +112,40 @@ describe('ViewerApp', () => {
     expect((await screen.findByRole('button', { name: 'Favourite' })).hasAttribute('disabled')).toBe(true);
   });
 
-  it('hides and shows the sidebar with Ctrl+B', async () => {
+  it('opens the command palette with Ctrl+Shift+P and opens a document from it', async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    await renderViewer([GUIDE, NOTES]);
+
+    await userEvent.keyboard('{Control>}{Shift>}P{/Shift}{/Control}');
+    await screen.findByRole('dialog', { name: 'Command palette' });
+    await screen.findByRole('option', { name: /Guide\.md/ });
+    await userEvent.keyboard('guide{Enter}');
+
+    expect(await screen.findByRole('tab', { name: 'Guide.md', selected: true })).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull();
+  });
+
+  it('switches to the source editor with Ctrl+/ and marks the tab while edits are unsaved', async () => {
+    const { controller } = await renderViewer([GUIDE]);
+    await screen.findByRole('heading', { name: 'Guide' });
+
+    await userEvent.keyboard('{Control>}/{/Control}');
+    await screen.findByRole('textbox', { name: 'Source of Guide.md' });
+    controller.updateEditedText(GUIDE.toLowerCase(), '# Guide\n\nEdited.');
+
+    expect(await screen.findByRole('tab', { name: 'Guide.md (unsaved changes)' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Preview' }).getAttribute('aria-pressed')).toBe('true');
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    expect(await screen.findByText('Edited.')).toBeTruthy();
+  });
+
+  it('hides and shows the Explorer with Ctrl+Shift+E', async () => {
     await renderViewer();
-    await screen.findByRole('navigation', { name: 'Favourites and recent files' });
+    await screen.findByRole('navigation', { name: 'Explorer' });
 
-    await userEvent.keyboard('{Control>}b{/Control}');
+    await userEvent.keyboard('{Control>}{Shift>}E{/Shift}{/Control}');
 
-    expect(screen.queryByRole('navigation', { name: 'Favourites and recent files' })).toBeNull();
+    expect(screen.queryByRole('navigation', { name: 'Explorer' })).toBeNull();
   });
 
   it('zooms the document with Ctrl+= and applies a chosen theme to the page', async () => {

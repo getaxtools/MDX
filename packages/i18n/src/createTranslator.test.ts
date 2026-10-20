@@ -15,6 +15,10 @@ const SAMPLE_VALUES = {
   encoding: 'UTF-8',
   lineEnding: 'LF',
   version: '1.0.0',
+  group: 'Theme',
+  action: 'Dark',
+  section: 'Favourites',
+  license: 'MIT',
   year: 2026,
   url: 'https://example.com',
 };

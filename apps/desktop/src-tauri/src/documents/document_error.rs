@@ -21,6 +21,10 @@ pub enum DocumentError {
     Unreadable,
     #[error("the request was invalid")]
     InvalidRequest,
+    #[error("another program changed the document since it was opened")]
+    ChangedOnDisk,
+    #[error("the document contains characters its encoding cannot store")]
+    CannotEncode,
 }
 
 impl From<io::Error> for DocumentError {

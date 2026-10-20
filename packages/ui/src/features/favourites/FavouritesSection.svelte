@@ -18,8 +18,11 @@
   import type { FavouriteCommand, FavouritesFileCommand } from './favouriteCommands';
   import FolderContents from '../folder-tree/FolderContents.svelte';
   import TreeChevron from '../folder-tree/TreeChevron.svelte';
+  import { activateWithKeyboard, treeKeyboard } from '../folder-tree/treeKeyboard';
   import TreeItemIcon from '../folder-tree/TreeItemIcon.svelte';
   import type { FolderTreeCommand } from '../folder-tree/folderTreeCommands';
+  import type { ExplorerActionCommand } from '../explorer/explorerCommands';
+  import ExplorerSectionHeader from '../explorer/ExplorerSectionHeader.svelte';
 
   interface Props {
     favourites: readonly Favourite[];
@@ -27,11 +30,16 @@
     pathStatuses: ReadonlyMap<string, PathStatus>;
     translator: Translator;
     onOpen: (favourite: Favourite) => void;
-    onCommand: (command: FavouriteCommand | FavouritesFileCommand | FolderTreeCommand) => void;
+    onCommand: (
+      command: FavouriteCommand | FavouritesFileCommand | FolderTreeCommand | ExplorerActionCommand,
+    ) => void;
     onListFolder: (folderPath: string) => Promise<FolderListing>;
     onOpenDocument: (documentPath: string) => void;
     folderRevisions?: ReadonlyMap<string, number>;
     onShowFolder?: (folderPath: string) => () => void;
+    isExpanded?: boolean;
+    onToggleExpanded?: () => void;
+    activeDocumentKey?: string | undefined;
   }
 
   const {
@@ -45,6 +53,9 @@
     onOpenDocument,
     folderRevisions = new Map(),
     onShowFolder = () => () => undefined,
+    isExpanded = true,
+    onToggleExpanded = () => undefined,
+    activeDocumentKey,
   }: Props = $props();
 
   type MenuRequest =
@@ -54,7 +65,7 @@
 
   const expandedFolderKeys = new SvelteSet<string>();
   const collapsedGroupIds = new SvelteSet<string>();
-  let itemButtons: HTMLButtonElement[] = $state([]);
+  let itemRows: HTMLElement[] = $state([]);
   let menuRequest: MenuRequest | undefined = $state();
   let renamingIndex: number | undefined = $state();
   let renamingGroupId: string | undefined = $state();
@@ -109,7 +120,7 @@
       canonicalKey: favourite.location.canonicalKey,
       toIndex: favourites.indexOf(neighbour),
     });
-    void tick().then(() => itemButtons[index + step]?.focus());
+    void tick().then(() => itemRows[index + step]?.focus());
   }
 
   const KEY_ACTIONS: Readonly<Record<string, (index: number) => void>> = {
@@ -118,6 +129,7 @@
   };
 
   function handleKeydown(event: KeyboardEvent, index: number) {
+    activateWithKeyboard(event);
     if (isContextMenuKey(event)) {
       openMenu(event, { kind: 'favourite', index });
       return;
@@ -134,6 +146,7 @@
   }
 
   function handleGroupKeydown(event: KeyboardEvent, group: FavouriteGroup) {
+    activateWithKeyboard(event);
     if (isContextMenuKey(event)) {
       openMenu(event, { kind: 'group', group });
       return;
@@ -203,7 +216,7 @@
   function closeMenu() {
     const request = menuRequest;
     menuRequest = undefined;
-    if (request?.kind === 'favourite' && renamingIndex === undefined) itemButtons[request.index]?.focus();
+    if (request?.kind === 'favourite' && renamingIndex === undefined) itemRows[request.index]?.focus();
   }
 
   function finishRename(input: HTMLInputElement, favourite: Favourite, shouldSave: boolean) {
@@ -217,7 +230,7 @@
         label: input.value,
       });
     }
-    void tick().then(() => itemButtons[index]?.focus());
+    void tick().then(() => itemRows[index]?.focus());
   }
 
   function finishGroupRename(input: HTMLInputElement, group: FavouriteGroup, shouldSave: boolean) {
@@ -244,9 +257,9 @@
   }
 </script>
 
-{#snippet favouriteItem(favourite: Favourite)}
+{#snippet favouriteItem(favourite: Favourite, level: number)}
   {@const index = shownFavourites.indexOf(favourite)}
-  <li>
+  <li role="none">
     {#if renamingIndex === index}
       <input
         aria-label={translator.translate('favourites.renameInput.label', { name: displayNameOf(favourite) })}
@@ -257,8 +270,12 @@
         onblur={(event) => finishRename(event.currentTarget, favourite, true)}
       />
     {:else}
-      <button
-        bind:this={itemButtons[index]}
+      <div
+        bind:this={itemRows[index]}
+        role="treeitem"
+        aria-selected="false"
+        tabindex="-1"
+        aria-level={level}
         class:unavailable={(pathStatuses.get(favourite.location.canonicalKey) ?? 'available') !== 'available'}
         title={favourite.location.displayPath}
         aria-expanded={favourite.kind === 'folder'
@@ -277,10 +294,12 @@
           <TreeItemIcon kind="document" />
         {/if}
         <span class="name">{labelOf(favourite)}</span>
-      </button>
+      </div>
       {#if expandedFolderKeys.has(favourite.location.canonicalKey)}
         <FolderContents
           folderPath={favourite.location.displayPath}
+          level={level + 1}
+          {activeDocumentKey}
           {translator}
           {folderRevisions}
           {onListFolder}
@@ -293,65 +312,88 @@
 {/snippet}
 
 <section aria-labelledby="favourites-heading">
-  <div class="heading">
-    <h2 id="favourites-heading">{translator.translate('favourites.sidebar.title')}</h2>
-    <button
-      class="header-menu"
-      aria-label={translator.translate('favourites.headerMenu.label')}
-      title={translator.translate('favourites.headerMenu.label')}
-      aria-haspopup="menu"
-      onclick={(event) => openMenu(event, { kind: 'header' })}
-    >
-      <span aria-hidden="true">⋯</span>
-    </button>
-  </div>
-  {#if favourites.length === 0 && groups.length === 0}
-    <p class="empty-state">{translator.translate('favourites.sidebar.emptyState')}</p>
-  {:else}
-    <ul>
-      {#each ungroupedFavourites as favourite (favourite.location.canonicalKey)}
-        <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a snippet is not a value -->
-        {@render favouriteItem(favourite)}
-      {/each}
-      {#each groupedFavourites as { group, items } (group.id)}
-        {@const isExpanded = !collapsedGroupIds.has(group.id)}
-        <li class="group">
-          {#if renamingGroupId === group.id}
-            <input
-              aria-label={translator.translate('favourites.group.renameInput.label', { name: group.name })}
-              value={group.name}
-              use:focusAndSelect
-              onkeydown={(event) =>
-                handleRenameKeydown(event, (input, save) => finishGroupRename(input, group, save))}
-              onblur={(event) => finishGroupRename(event.currentTarget, group, true)}
-            />
-          {:else}
-            <button
-              class="group-header"
-              aria-expanded={isExpanded}
-              onclick={() => toggle(collapsedGroupIds, group.id)}
-              onkeydown={(event) => handleGroupKeydown(event, group)}
-              oncontextmenu={(event) => openMenu(event, { kind: 'group', group })}
-            >
-              <TreeChevron {isExpanded} />
-              <span class="name">{group.name}</span>
-            </button>
-          {/if}
-          {#if isExpanded}
-            {#if items.length === 0}
-              <p class="empty-state group-empty">{translator.translate('favourites.group.emptyState')}</p>
+  <ExplorerSectionHeader
+    headingId="favourites-heading"
+    title={translator.translate('favourites.sidebar.title')}
+    {isExpanded}
+    onToggle={onToggleExpanded}
+  >
+    {#snippet actions()}
+      <button
+        class="header-menu"
+        aria-label={translator.translate('favourites.headerMenu.label')}
+        title={translator.translate('favourites.headerMenu.label')}
+        aria-haspopup="menu"
+        onclick={(event) => openMenu(event, { kind: 'header' })}
+      >
+        <span aria-hidden="true">⋯</span>
+      </button>
+    {/snippet}
+  </ExplorerSectionHeader>
+  {#if isExpanded}
+    {#if favourites.length === 0 && groups.length === 0}
+      <p class="empty-state">{translator.translate('favourites.sidebar.emptyState')}</p>
+    {:else}
+      <ul role="tree" aria-labelledby="favourites-heading" use:treeKeyboard>
+        {#each ungroupedFavourites as favourite (favourite.location.canonicalKey)}
+          <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a snippet is not a value -->
+          {@render favouriteItem(favourite, 1)}
+        {/each}
+        {#each groupedFavourites as { group, items } (group.id)}
+          {@const isExpanded = !collapsedGroupIds.has(group.id)}
+          <li class="group" role="none">
+            {#if renamingGroupId === group.id}
+              <input
+                aria-label={translator.translate('favourites.group.renameInput.label', { name: group.name })}
+                value={group.name}
+                use:focusAndSelect
+                onkeydown={(event) =>
+                  handleRenameKeydown(event, (input, save) => finishGroupRename(input, group, save))}
+                onblur={(event) => finishGroupRename(event.currentTarget, group, true)}
+              />
             {:else}
-              <ul class="group-items">
-                {#each items as favourite (favourite.location.canonicalKey)}
-                  <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a snippet is not a value -->
-                  {@render favouriteItem(favourite)}
-                {/each}
+              <div
+                class="group-header"
+                role="treeitem"
+                aria-selected="false"
+                tabindex="-1"
+                aria-level="1"
+                aria-expanded={isExpanded}
+                onclick={() => toggle(collapsedGroupIds, group.id)}
+                onkeydown={(event) => handleGroupKeydown(event, group)}
+                oncontextmenu={(event) => openMenu(event, { kind: 'group', group })}
+              >
+                <TreeChevron {isExpanded} />
+                <span class="name">{group.name}</span>
+              </div>
+            {/if}
+            {#if isExpanded}
+              <ul class="group-items" role="group">
+                {#if items.length === 0}
+                  <li role="none">
+                    <div
+                      class="group-empty"
+                      role="treeitem"
+                      aria-selected="false"
+                      aria-level="2"
+                      aria-disabled="true"
+                      tabindex="-1"
+                    >
+                      {translator.translate('favourites.group.emptyState')}
+                    </div>
+                  </li>
+                {:else}
+                  {#each items as favourite (favourite.location.canonicalKey)}
+                    <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a snippet is not a value -->
+                    {@render favouriteItem(favourite, 2)}
+                  {/each}
+                {/if}
               </ul>
             {/if}
-          {/if}
-        </li>
-      {/each}
-    </ul>
+          </li>
+        {/each}
+      </ul>
+    {/if}
   {/if}
 </section>
 {#if menuRequest?.kind === 'favourite' && menuFavourite}
@@ -391,12 +433,6 @@
 {/if}
 
 <style>
-  .heading {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-  }
-
   .header-menu {
     margin-inline-end: var(--space-1);
     padding: 0 var(--space-2);
@@ -435,6 +471,8 @@
   }
 
   .group-empty {
-    padding-inline-start: var(--space-6);
+    color: var(--color-text-secondary) !important;
+    font-size: var(--text-size-small) !important;
+    white-space: normal !important;
   }
 </style>

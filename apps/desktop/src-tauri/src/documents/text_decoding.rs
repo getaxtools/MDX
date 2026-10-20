@@ -15,6 +15,8 @@ pub struct DecodedText {
     pub text: String,
     pub encoding: &'static str,
     pub has_byte_order_mark: bool,
+    /// Bytes that do not fit the encoding were replaced with U+FFFD, so the text is not the file.
+    pub has_decoding_errors: bool,
 }
 
 pub fn decode_document_bytes(bytes: &[u8]) -> DecodedText {
@@ -27,6 +29,7 @@ pub fn decode_document_bytes(bytes: &[u8]) -> DecodedText {
             text: text.to_owned(),
             encoding: encoding_rs::UTF_8.name(),
             has_byte_order_mark: false,
+            has_decoding_errors: false,
         },
         Err(_) => decode_with(guess_legacy_encoding(bytes), bytes, false),
     }
@@ -36,11 +39,12 @@ pub fn decode_document_bytes(bytes: &[u8]) -> DecodedText {
 pub fn decode_document_bytes_as(bytes: &[u8], encoding: &'static Encoding) -> DecodedText {
     let has_byte_order_mark =
         Encoding::for_bom(bytes).is_some_and(|(bom_encoding, _)| bom_encoding == encoding);
-    let (text, _had_replacements) = encoding.decode_with_bom_removal(bytes);
+    let (text, has_decoding_errors) = encoding.decode_with_bom_removal(bytes);
     DecodedText {
         text: text.into_owned(),
         encoding: encoding.name(),
         has_byte_order_mark,
+        has_decoding_errors,
     }
 }
 
@@ -64,11 +68,12 @@ fn decode_with(
     content: &[u8],
     has_byte_order_mark: bool,
 ) -> DecodedText {
-    let (text, _had_replacements) = encoding.decode_without_bom_handling(content);
+    let (text, has_decoding_errors) = encoding.decode_without_bom_handling(content);
     DecodedText {
         text: text.into_owned(),
         encoding: encoding.name(),
         has_byte_order_mark,
+        has_decoding_errors,
     }
 }
 
@@ -89,6 +94,15 @@ mod tests {
         assert_eq!(decoded.text, "# నమస్తే");
         assert_eq!(decoded.encoding, "UTF-8");
         assert!(!decoded.has_byte_order_mark);
+    }
+
+    #[test]
+    fn reports_bytes_that_do_not_fit_a_chosen_encoding() {
+        let decoded = decode_document_bytes_as(b"caf\xE9", encoding_rs::UTF_8);
+
+        assert_eq!(decoded.text, "caf\u{FFFD}");
+        assert!(decoded.has_decoding_errors);
+        assert!(!decode_document_bytes(b"plain").has_decoding_errors);
     }
 
     #[test]

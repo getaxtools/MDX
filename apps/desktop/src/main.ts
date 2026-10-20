@@ -16,6 +16,7 @@ import { TauriFolderWatcher } from './ports/TauriFolderWatcher';
 import { TauriFolders } from './ports/TauriFolders';
 import { WebViewPrinter } from './ports/WebViewPrinter';
 import { tauriCommands } from './ports/tauriCommands';
+import { loadThirdPartyLicenses } from './loadThirdPartyLicenses';
 
 const appElement = document.getElementById('app');
 if (!appElement) throw new Error('The #app element is missing from index.html');
@@ -50,6 +51,7 @@ mount(ViewerApp, {
     appInfo,
     codeHighlighter: createCodeHighlighter(),
     richBlocks: createRichBlockRenderer({ window }),
+    loadThirdPartyLicenses,
   },
 });
 void controller.start();

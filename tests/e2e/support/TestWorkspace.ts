@@ -17,11 +17,21 @@ const SAVED_STATE_SCHEMA_VERSION = 1;
 
 interface SavedLocation {
   readonly location: { readonly fileName: string; readonly canonicalKey: string };
+  readonly scrollRatio?: number;
+}
+
+interface SavedFolderPlaces {
+  readonly asFavourite?: boolean;
+  readonly inExplorer?: boolean;
 }
 
 interface SavedAppState {
   readonly tabs: { readonly tabs: readonly SavedLocation[]; readonly activeKey?: string };
   readonly favourites: readonly SavedLocation[];
+  readonly view?: {
+    readonly collapsedExplorerSections?: readonly string[];
+    readonly explorerSectionHeights?: Readonly<Record<string, number>>;
+  };
 }
 
 export class TestWorkspace {
@@ -44,8 +54,8 @@ export class TestWorkspace {
     return join(this.documentsFolder, fileName);
   }
 
-  /** Starts the next launch with the documents folder as a folder favourite, as if the user had added it. */
-  saveDocumentsFolderAsFavourite(): void {
+  /** Starts the next launch with the documents folder already added, as if the user had chosen it. */
+  saveDocumentsFolder({ asFavourite = false, inExplorer = false }: SavedFolderPlaces): void {
     const displayPath = realpathSync.native(this.documentsFolder);
     const canonicalKey = process.platform === 'win32' ? displayPath.toLowerCase() : displayPath;
     const location = { canonicalKey, displayPath, fileName: basename(displayPath) };
@@ -53,10 +63,23 @@ export class TestWorkspace {
       schemaVersion: SAVED_STATE_SCHEMA_VERSION,
       tabs: { tabs: [] },
       recentFiles: [],
-      favourites: [{ location, kind: 'folder' }],
+      favourites: asFavourite ? [{ location, kind: 'folder' }] : [],
       favouriteGroups: [],
+      explorerFolders: inExplorer ? [location] : [],
     };
     writeFileSync(join(this.profileFolder, SAVED_STATE_FILE_NAME), JSON.stringify(state));
+  }
+
+  savedCollapsedExplorerSections(): readonly string[] | undefined {
+    return this.readSavedState()?.view?.collapsedExplorerSections;
+  }
+
+  savedScrollRatioOf(fileName: string): number | undefined {
+    return this.readSavedState()?.tabs.tabs.find((tab) => tab.location.fileName === fileName)?.scrollRatio;
+  }
+
+  savedSectionHeightOf(section: string): number | undefined {
+    return this.readSavedState()?.view?.explorerSectionHeights?.[section];
   }
 
   savedTabFileNames(): string[] | undefined {

@@ -1,6 +1,7 @@
 export type { AppStatePort } from './AppStatePort';
 export type {
   DocumentFilePort,
+  EditedDocumentSave,
   LineEnding,
   OpenedDocument,
   PathStatus,

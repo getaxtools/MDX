@@ -1,4 +1,5 @@
 import {
+  DocumentOpenError,
   untitledLocation,
   type AppStatePort,
   type DocumentFilePort,
@@ -7,6 +8,8 @@ import {
   type PathStatus,
   type SaveSource,
 } from '@mdx/platform';
+import { withDocumentLineBreaks } from '../documents/lineEndings';
+import { ExplorerFolders } from '../explorer/ExplorerFolders';
 import { FavouritesList } from '../favourites/FavouritesList';
 import { RecentFilesList } from '../recent-files/RecentFilesList';
 import { TabStrip } from '../tabs/TabStrip';
@@ -28,6 +31,7 @@ export class ViewerSession {
     tabStrip: TabStrip.empty(),
     recentFiles: RecentFilesList.empty(),
     favourites: FavouritesList.empty(),
+    explorerFolders: ExplorerFolders.empty(),
     viewSettings: DEFAULT_VIEW_SETTINGS,
   };
   private readonly openedDocuments = new Map<string, OpenedDocument>();
@@ -50,6 +54,7 @@ export class ViewerSession {
       tabStrip: restored.tabStrip,
       recentFiles: restored.recentFiles,
       favourites: restored.favourites,
+      explorerFolders: restored.explorerFolders,
       viewSettings: restored.viewSettings,
     });
     return { wasReset: restored.wasReset };
@@ -59,8 +64,12 @@ export class ViewerSession {
     await this.dependencies.appState.save(toPersistedAppState(this.state));
   }
 
+  /**
+   * Opens a document in a tab. A document already open only gets its tab focused: reading it again
+   * would drop the encoding the user chose and the file time that edits are checked against.
+   */
   async openDocument(path: string): Promise<OpenedDocument> {
-    const document = await this.dependencies.documentFiles.open(path);
+    const document = this.alreadyOpenDocument(path) ?? (await this.dependencies.documentFiles.open(path));
     this.openedDocuments.set(document.location.canonicalKey, document);
     this.replaceState({
       ...this.state,
@@ -86,16 +95,16 @@ export class ViewerSession {
     return document;
   }
 
-  /** Saves an open document where the user chooses and shows the saved file in its tab. */
-  async saveDocumentAs(canonicalKey: string): Promise<DocumentLocation | undefined> {
+  /**
+   * Saves an open document where the user chooses and shows the saved file in its tab. Edited text,
+   * when given, is saved as UTF-8; otherwise a document with a file is copied byte for byte.
+   */
+  async saveDocumentAs(canonicalKey: string, editedText?: string): Promise<DocumentLocation | undefined> {
     const tab = this.state.tabStrip
       .tabs()
       .find((candidate) => candidate.location.canonicalKey === canonicalKey);
     if (!tab) return undefined;
-    const untitled = this.untitledDocuments.get(canonicalKey);
-    const source: SaveSource = untitled
-      ? { kind: 'text', text: untitled.text, fileName: untitled.location.fileName }
-      : { kind: 'copy', path: tab.location.displayPath };
+    const source = this.saveSourceFor(tab.location, editedText);
     const savedPath = await this.dependencies.documentFiles.saveAs(source);
     if (savedPath === undefined) return undefined;
     const saved = await this.dependencies.documentFiles.open(savedPath);
@@ -107,6 +116,34 @@ export class ViewerSession {
       recentFiles: this.state.recentFiles.add(saved.location, this.dependencies.now()),
     });
     return saved.location;
+  }
+
+  /**
+   * Writes edited text over an open document in its own encoding and line breaks; rejects with
+   * `changedOnDisk` when another program changed the file since it was read, unless told to overwrite.
+   */
+  async saveEditedDocument(
+    canonicalKey: string,
+    editedText: string,
+    { shouldOverwriteChangesOnDisk = false } = {},
+  ): Promise<void> {
+    const document = this.openedDocuments.get(canonicalKey);
+    if (!document) throw new DocumentOpenError('unreadable', canonicalKey);
+    if (document.hasDecodingErrors === true) {
+      throw new DocumentOpenError('lossyDecoding', document.location.displayPath);
+    }
+    const text = withDocumentLineBreaks(editedText, document.lineEnding, document.text);
+    const modifiedAtMs = await this.dependencies.documentFiles.save({
+      path: document.location.displayPath,
+      text,
+      encoding: document.encoding,
+      hasByteOrderMark: document.hasByteOrderMark,
+      expectedModifiedAtMs: document.modifiedAtMs,
+      shouldOverwriteChangesOnDisk,
+    });
+    this.openedDocuments.set(canonicalKey, { ...document, text, modifiedAtMs });
+    this.chosenEncodings.set(canonicalKey, document.encoding);
+    this.replaceState({ ...this.state });
   }
 
   async loadActiveDocument(): Promise<OpenedDocument | undefined> {
@@ -155,8 +192,9 @@ export class ViewerSession {
     this.replaceState({ ...this.state });
   }
 
+  /** An open document as last read or saved, including documents that have no file yet. */
   openedDocument(canonicalKey: string): OpenedDocument | undefined {
-    return this.openedDocuments.get(canonicalKey);
+    return this.openedDocuments.get(canonicalKey) ?? this.untitledDocuments.get(canonicalKey);
   }
 
   updateTabs(change: (tabStrip: TabStrip) => TabStrip): void {
@@ -175,6 +213,10 @@ export class ViewerSession {
     this.replaceState({ ...this.state, favourites: change(this.state.favourites) });
   }
 
+  updateExplorerFolders(change: (explorerFolders: ExplorerFolders) => ExplorerFolders): void {
+    this.replaceState({ ...this.state, explorerFolders: change(this.state.explorerFolders) });
+  }
+
   checkPathStatuses(locations: readonly DocumentLocation[]): Promise<ReadonlyMap<string, PathStatus>> {
     return this.dependencies.documentFiles.checkPathStatuses(locations);
   }
@@ -186,6 +228,28 @@ export class ViewerSession {
   subscribe(listener: ViewerStateListener): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  private saveSourceFor(location: DocumentLocation, editedText: string | undefined): SaveSource {
+    const untitled = this.untitledDocuments.get(location.canonicalKey);
+    if (untitled)
+      return { kind: 'text', text: editedText ?? untitled.text, fileName: untitled.location.fileName };
+    if (editedText === undefined) return { kind: 'copy', path: location.displayPath };
+    const document = this.openedDocuments.get(location.canonicalKey);
+    const text = document
+      ? withDocumentLineBreaks(editedText, document.lineEnding, document.text)
+      : editedText;
+    return { kind: 'text', text, fileName: location.fileName };
+  }
+
+  private alreadyOpenDocument(path: string): OpenedDocument | undefined {
+    const pathKey = path.toLowerCase();
+    const tab = this.state.tabStrip
+      .tabs()
+      .find(
+        (candidate) => candidate.location.displayPath === path || candidate.location.canonicalKey === pathKey,
+      );
+    return tab ? this.openedDocuments.get(tab.location.canonicalKey) : undefined;
   }
 
   private replaceState(state: ViewerState): void {

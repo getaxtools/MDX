@@ -26,6 +26,10 @@ test-ts:
 build-frontend:
     pnpm --filter @mdx/desktop build:frontend
 
+# List the third-party packages and licenses shown in About (also part of build-frontend)
+licenses:
+    node scripts/generate-third-party-licenses.mjs
+
 # Run Rust unit and integration tests
 test-rust: build-frontend
     cargo nextest run --manifest-path {{ tauri_manifest }}

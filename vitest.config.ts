@@ -15,6 +15,7 @@ export default defineConfig({
           environment: 'jsdom',
         },
       },
+      { test: { name: 'editor', include: ['packages/editor/src/**/*.test.ts'], environment: 'jsdom' } },
       {
         plugins: [svelte(), svelteTesting()],
         test: {

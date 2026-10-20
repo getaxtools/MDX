@@ -31,7 +31,9 @@
     onkeydown={handleKeydown}
   >
     <h2 id="dialog-title">{title}</h2>
-    <div class="content">{@render children()}</div>
+    <!-- Long content scrolls, so keyboard users must be able to focus it to scroll it (WCAG 2.1.1). -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <div class="content" role="region" aria-labelledby="dialog-title" tabindex="0">{@render children()}</div>
     <div class="actions">
       <button bind:this={closeButton} onclick={onClose}>{closeLabel}</button>
     </div>
@@ -85,7 +87,8 @@
     font: inherit;
   }
 
-  button:focus-visible {
+  button:focus-visible,
+  .content:focus-visible {
     outline: 2px solid var(--color-focus);
   }
 </style>

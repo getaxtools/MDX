@@ -21,6 +21,7 @@ pub struct OpenedDocument {
     pub text: String,
     pub encoding: &'static str,
     pub has_byte_order_mark: bool,
+    pub has_decoding_errors: bool,
     pub line_ending: LineEnding,
     pub modified_at_ms: u64,
 }
@@ -39,6 +40,7 @@ pub fn open_allowed_document(
     if !access.is_allowed(&location) {
         return Err(DocumentError::AccessDenied);
     }
+    access.remember_opened(&location);
     read_located_document(location, None)
 }
 
@@ -52,6 +54,7 @@ pub fn open_allowed_document_as(
     if !access.is_allowed(&location) {
         return Err(DocumentError::AccessDenied);
     }
+    access.remember_opened(&location);
     read_located_document(location, Some(encoding))
 }
 
@@ -80,9 +83,15 @@ fn read_located_document(
         text: decoded.text,
         encoding: decoded.encoding,
         has_byte_order_mark: decoded.has_byte_order_mark,
+        has_decoding_errors: decoded.has_decoding_errors,
         modified_at_ms: modified_at_ms(&metadata),
         location,
     })
+}
+
+/// When a file was last written, as stored with an open document to notice changes by other programs.
+pub fn modified_at_ms_of(path: &Path) -> Result<u64, DocumentError> {
+    Ok(modified_at_ms(&fs::metadata(path)?))
 }
 
 fn modified_at_ms(metadata: &fs::Metadata) -> u64 {

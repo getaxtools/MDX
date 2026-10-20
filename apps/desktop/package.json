@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev:frontend": "vite",
-    "build:frontend": "vite build",
+    "build:frontend": "node ../../scripts/generate-third-party-licenses.mjs && vite build",
     "tauri": "tauri"
   },
   "dependencies": {

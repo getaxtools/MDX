@@ -37,7 +37,18 @@ pub fn saved_document_paths(state_json: &str) -> SavedDocumentPaths {
         };
         target.push(PathBuf::from(display_path));
     }
+    paths.folders.extend(explorer_folder_paths(&state));
     paths
+}
+
+fn explorer_folder_paths(state: &Value) -> impl Iterator<Item = PathBuf> + '_ {
+    state
+        .get("explorerFolders")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|folder| folder.get("displayPath").and_then(Value::as_str))
+        .map(PathBuf::from)
 }
 
 #[cfg(test)]
@@ -67,6 +78,18 @@ mod tests {
             ]
         );
         assert_eq!(paths.folders, vec![PathBuf::from("C:/specs")]);
+    }
+
+    #[test]
+    fn collects_the_folders_opened_in_the_explorer() {
+        let state = r#"{
+            "explorerFolders": [{ "displayPath": "D:/notes" }, { "displayPath": 3 }, "text"]
+        }"#;
+
+        let paths = saved_document_paths(state);
+
+        assert_eq!(paths.folders, vec![PathBuf::from("D:/notes")]);
+        assert!(paths.documents.is_empty());
     }
 
     #[test]

@@ -21,7 +21,7 @@ describe('an expanded folder favourite', () => {
 
   beforeEach(async () => {
     workspace = TestWorkspace.create();
-    workspace.saveDocumentsFolderAsFavourite();
+    workspace.saveDocumentsFolder({ asFavourite: true });
     app = await DesktopApp.launch({ workspace });
     mainWindow = new MainWindowPage(app.browser);
     await mainWindow.expandFavouriteFolder('documents');

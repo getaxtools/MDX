@@ -2,7 +2,7 @@ import { createTranslator } from '@mdx/i18n';
 import { InMemoryDocumentFiles, type FolderListing } from '@mdx/platform';
 import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import FolderContents from './FolderContents.svelte';
 
 const location = (path: string) => InMemoryDocumentFiles.locationOf(path);
@@ -14,6 +14,7 @@ function renderFolder(listingsByFolder: Record<string, FolderListing>) {
   const onShowFolder = vi.fn<(folderPath: string) => () => void>(() => stopShowing);
   const props = {
     folderPath: DOCS,
+    level: 2,
     translator: createTranslator(),
     folderRevisions: new Map<string, number>(),
     onListFolder: (folderPath: string) =>
@@ -26,9 +27,13 @@ function renderFolder(listingsByFolder: Record<string, FolderListing>) {
 }
 
 describe('FolderContents', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
   it('shows a chevron that turns when a subfolder is expanded', async () => {
     renderFolder({ [DOCS]: { folders: [location(SPECS)], documents: [] } });
-    const subfolder = await screen.findByRole('button', { name: 'Specs' });
+    const subfolder = await screen.findByRole('treeitem', { name: 'Specs' });
 
     await userEvent.click(subfolder);
 
@@ -46,14 +51,42 @@ describe('FolderContents', () => {
     expect(stopShowing).toHaveBeenCalledOnce();
   });
 
+  it('reveals the active document by expanding the subfolder that holds it', async () => {
+    const plan = location('C:\\Docs\\Specs\\Plan.md');
+    const { props, rerender } = renderFolder({
+      [DOCS]: { folders: [location(SPECS)], documents: [] },
+      [SPECS]: { folders: [], documents: [plan] },
+    });
+    await screen.findByRole('treeitem', { name: 'Specs' });
+
+    await rerender({ ...props, activeDocumentKey: plan.canonicalKey, shouldRevealActiveDocument: true });
+
+    const revealed = await screen.findByRole('treeitem', { name: 'Plan.md' });
+    expect(revealed.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('treeitem', { name: 'Specs' }).getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('marks the active document without expanding folders when not revealing', async () => {
+    const guide = location('C:\\Docs\\Guide.md');
+    const { props, rerender } = renderFolder({
+      [DOCS]: { folders: [location(SPECS)], documents: [guide] },
+    });
+    await screen.findByRole('treeitem', { name: 'Guide.md' });
+
+    await rerender({ ...props, activeDocumentKey: guide.canonicalKey });
+
+    expect(screen.getByRole('treeitem', { name: 'Guide.md' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('treeitem', { name: 'Specs' }).getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('lists the folder again when it changes on disk, keeping subfolders expanded', async () => {
     const listingsByFolder: Record<string, FolderListing> = {
       [DOCS]: { folders: [location(SPECS)], documents: [location('C:\\Docs\\Guide.md')] },
       [SPECS]: { folders: [], documents: [location('C:\\Docs\\Specs\\Plan.md')] },
     };
     const { props, rerender } = renderFolder(listingsByFolder);
-    await userEvent.click(await screen.findByRole('button', { name: 'Specs' }));
-    await screen.findByRole('button', { name: 'Plan.md' });
+    await userEvent.click(await screen.findByRole('treeitem', { name: 'Specs' }));
+    await screen.findByRole('treeitem', { name: 'Plan.md' });
     listingsByFolder[DOCS] = {
       folders: [location(SPECS)],
       documents: [location('C:\\Docs\\Guide.md'), location('C:\\Docs\\New.md')],
@@ -61,8 +94,8 @@ describe('FolderContents', () => {
 
     await rerender({ ...props, folderRevisions: new Map([[DOCS, 1]]) });
 
-    expect(await screen.findByRole('button', { name: 'New.md' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Specs' }).getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Plan.md' })).toBeTruthy();
+    expect(await screen.findByRole('treeitem', { name: 'New.md' })).toBeTruthy();
+    expect(screen.getByRole('treeitem', { name: 'Specs' }).getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('treeitem', { name: 'Plan.md' })).toBeTruthy();
   });
 });

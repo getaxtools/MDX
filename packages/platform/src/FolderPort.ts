@@ -10,4 +10,6 @@ export interface FolderPort {
   pickFolder(): Promise<DocumentLocation | undefined>;
   /** The subfolders and Markdown documents directly inside a folder the user has chosen. */
   listFolderContents(folderPath: string): Promise<FolderListing>;
+  /** The Markdown documents in chosen folders and all their subfolders, for finding one by name. */
+  findDocuments(folderPaths: readonly string[]): Promise<DocumentLocation[]>;
 }

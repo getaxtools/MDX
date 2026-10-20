@@ -11,6 +11,7 @@ export const INSTALLED_FEATURES: readonly InstalledFeature[] = [
   { id: 'favourites', labelKey: 'about.feature.favourites' },
   { id: 'favouriteGroups', labelKey: 'about.feature.favouriteGroups' },
   { id: 'favouritesFile', labelKey: 'about.feature.favouritesFile' },
+  { id: 'explorer', labelKey: 'about.feature.explorer' },
   { id: 'recentFiles', labelKey: 'about.feature.recentFiles' },
   { id: 'safeRendering', labelKey: 'about.feature.safeRendering' },
   { id: 'codeHighlighting', labelKey: 'about.feature.codeHighlighting' },
@@ -24,7 +25,9 @@ export const INSTALLED_FEATURES: readonly InstalledFeature[] = [
   { id: 'sourceView', labelKey: 'about.feature.sourceView' },
   { id: 'encodings', labelKey: 'about.feature.encodings' },
   { id: 'tablePaste', labelKey: 'about.feature.tablePaste' },
+  { id: 'editing', labelKey: 'about.feature.editing' },
   { id: 'saving', labelKey: 'about.feature.saving' },
   { id: 'printing', labelKey: 'about.feature.printing' },
   { id: 'keyboardShortcuts', labelKey: 'about.feature.keyboardShortcuts' },
+  { id: 'commandPalette', labelKey: 'about.feature.commandPalette' },
 ];

@@ -13,3 +13,4 @@ export {
 export { commandForShortcut } from './features/shortcuts/commandShortcuts';
 export type { DesktopPlatform, ViewerCommand } from './features/viewer/viewerCommands';
 export type { AppInfo } from './features/about/AppInfo';
+export type { ThirdPartyLicenses, ThirdPartyLicensesLoader } from './features/about/ThirdPartyLicenses';

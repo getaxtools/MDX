@@ -1,7 +1,10 @@
 import {
   resetZoom,
+  resizeExplorerSection,
+  toggleExplorerSection,
   zoomIn,
   zoomOut,
+  type ExplorerSection,
   type ReadingWidth,
   type ThemePreference,
   type ViewSettings,
@@ -15,7 +18,9 @@ export type ViewCommand =
   | { readonly kind: 'setReadingWidth'; readonly readingWidth: ReadingWidth }
   | { readonly kind: 'toggleSidebar' }
   | { readonly kind: 'toggleOutline' }
-  | { readonly kind: 'toggleStatusBar' };
+  | { readonly kind: 'toggleStatusBar' }
+  | { readonly kind: 'toggleExplorerSection'; readonly section: ExplorerSection }
+  | { readonly kind: 'resizeExplorerSection'; readonly section: ExplorerSection; readonly heightPx: number };
 
 type ViewCommandHandlers = {
   readonly [Kind in ViewCommand['kind']]: (
@@ -33,6 +38,9 @@ const VIEW_COMMAND_HANDLERS: ViewCommandHandlers = {
   toggleSidebar: (settings) => ({ ...settings, isSidebarVisible: !settings.isSidebarVisible }),
   toggleOutline: (settings) => ({ ...settings, isOutlineVisible: !settings.isOutlineVisible }),
   toggleStatusBar: (settings) => ({ ...settings, isStatusBarVisible: !settings.isStatusBarVisible }),
+  toggleExplorerSection: (settings, { section }) => toggleExplorerSection(settings, section),
+  resizeExplorerSection: (settings, { section, heightPx }) =>
+    resizeExplorerSection(settings, section, heightPx),
 };
 
 export function isViewCommand(command: { readonly kind: string }): command is ViewCommand {

@@ -1,4 +1,8 @@
 import type { ViewerSession } from '@mdx/core';
+import {
+  applyRemoveExplorerFolderCommand,
+  isRemoveExplorerFolderCommand,
+} from '../explorer/explorerCommands';
 import { applyFavouriteCommand, isFavouriteCommand } from '../favourites/favouriteCommands';
 import { applyRecentFileCommand, isRecentFileCommand } from '../recent-files/recentFileCommands';
 import { applyTabCommand, isTabCommand } from '../tabs/tabCommands';
@@ -17,6 +21,12 @@ export function applySessionCommand(session: ViewerSession, command: ViewerComma
   }
   if (isFavouriteCommand(command)) {
     session.updateFavourites((favourites) => applyFavouriteCommand(favourites, command));
+    return true;
+  }
+  if (isRemoveExplorerFolderCommand(command)) {
+    session.updateExplorerFolders((explorerFolders) =>
+      applyRemoveExplorerFolderCommand(explorerFolders, command),
+    );
     return true;
   }
   if (isRecentFileCommand(command)) {

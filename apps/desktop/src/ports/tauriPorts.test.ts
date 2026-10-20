@@ -8,6 +8,7 @@ import { TauriDocumentRequests } from './TauriDocumentRequests';
 import { TauriDocumentWatcher } from './TauriDocumentWatcher';
 import { TauriFavouritesFile } from './TauriFavouritesFile';
 import { TauriFolderWatcher } from './TauriFolderWatcher';
+import { TauriFolders } from './TauriFolders';
 
 type CommandArguments = Record<string, unknown>;
 
@@ -33,6 +34,42 @@ describe('TauriDocumentFiles', () => {
 
     expect(opened).toEqual(document);
     expect(calls).toEqual([{ command: 'open_document', args: { path: 'C:\\a.md', encoding: null } }]);
+  });
+
+  it('saves edited text through the save_document command', async () => {
+    const calls = mockCommands({ save_document: () => 42 });
+    const document = {
+      path: 'C:\\a.md',
+      text: '# A',
+      encoding: 'utf-8',
+      hasByteOrderMark: true,
+      expectedModifiedAtMs: 7,
+      shouldOverwriteChangesOnDisk: false,
+    };
+
+    const modifiedAtMs = await new TauriDocumentFiles().save(document);
+
+    expect(modifiedAtMs).toBe(42);
+    expect(calls).toEqual([{ command: 'save_document', args: { document } }]);
+  });
+
+  it('turns a refused save into a typed error', async () => {
+    mockCommands({
+      save_document: () => {
+        throw Object.assign(new Error('backend error'), { code: 'changedOnDisk' });
+      },
+    });
+
+    const saving = new TauriDocumentFiles().save({
+      path: 'C:\\a.md',
+      text: '',
+      encoding: 'utf-8',
+      hasByteOrderMark: false,
+      expectedModifiedAtMs: 0,
+      shouldOverwriteChangesOnDisk: false,
+    });
+
+    await expect(saving).rejects.toMatchObject({ failure: 'changedOnDisk' });
   });
 
   it('reopens a document with a chosen encoding', async () => {
@@ -189,5 +226,17 @@ describe('TauriFolderWatcher', () => {
     await new TauriFolderWatcher().watch(['C:\\Docs']);
 
     expect(calls).toEqual([{ command: 'watch_folders', args: { paths: ['C:\\Docs'] } }]);
+  });
+});
+
+describe('TauriFolders', () => {
+  it('finds the documents below chosen folders through the find_folder_documents command', async () => {
+    const plan = InMemoryDocumentFiles.locationOf('C:/Docs/plan.md');
+    const calls = mockCommands({ find_folder_documents: () => [plan] });
+
+    const documents = await new TauriFolders().findDocuments(['C:/Docs']);
+
+    expect(documents).toEqual([plan]);
+    expect(calls).toEqual([{ command: 'find_folder_documents', args: { folders: ['C:/Docs'] } }]);
   });
 });

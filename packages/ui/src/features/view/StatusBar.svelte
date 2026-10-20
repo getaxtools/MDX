@@ -13,6 +13,8 @@
     document: RenderedActiveDocument | undefined;
     zoomPercent: number;
     isSourceView: boolean;
+    isEditing?: boolean;
+    hasUnsavedChanges?: boolean;
     translator: Translator;
     onResetZoom: () => void;
     onReopenWithEncoding?: (encoding: string | undefined) => void;
@@ -22,6 +24,8 @@
     document,
     zoomPercent,
     isSourceView,
+    isEditing = false,
+    hasUnsavedChanges = false,
     translator,
     onResetZoom,
     onReopenWithEncoding = () => undefined,
@@ -33,10 +37,16 @@
     onReopenWithEncoding(itemId === DETECT_ENCODING_ITEM ? undefined : itemId);
   }
 
+  const modeKey = $derived.by(() => {
+    if (isEditing) return 'statusBar.mode.editing';
+    return isSourceView ? 'statusBar.mode.source' : 'statusBar.mode.preview';
+  });
+
   const details = $derived(
     document
       ? [
-          translator.translate(isSourceView ? 'statusBar.mode.source' : 'statusBar.mode.preview'),
+          translator.translate(modeKey),
+          ...(hasUnsavedChanges ? [translator.translate('statusBar.unsaved')] : []),
           translator.translate('statusBar.words', { count: document.statistics.words }),
           translator.translate('statusBar.characters', { count: document.statistics.characters }),
           translator.translate('statusBar.readingTime', { minutes: document.statistics.readingMinutes }),

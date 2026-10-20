@@ -1,5 +1,7 @@
 pub mod app_info;
 pub mod app_state;
+pub mod document_saving;
+pub mod document_search;
 pub mod documents;
 pub mod favourites_file;
 pub mod folders;
