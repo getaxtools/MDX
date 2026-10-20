@@ -1,6 +1,7 @@
 import { READING_WIDTHS, THEME_PREFERENCES } from '@mdx/core';
 import { DETECT_ENCODING_ITEM, isReopenEncoding } from '../encodings/reopenEncodings';
 import type { FavouriteCommand, FavouritesFileCommand } from '../favourites/favouriteCommands';
+import type { FolderTreeCommand } from '../folder-tree/folderTreeCommands';
 import type { LocateRecentFileCommand, RecentFileCommand } from '../recent-files/recentFileCommands';
 import type { TabCommand } from '../tabs/tabCommands';
 import type { ViewCommand } from '../view/viewCommands';
@@ -10,6 +11,7 @@ export type ViewerCommand =
   | ViewCommand
   | FavouriteCommand
   | FavouritesFileCommand
+  | FolderTreeCommand
   | RecentFileCommand
   | LocateRecentFileCommand
   | { readonly kind: 'openDocuments' }

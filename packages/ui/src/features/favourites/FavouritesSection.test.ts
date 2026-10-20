@@ -158,6 +158,26 @@ describe('FavouritesSection folders', () => {
 
     expect(await screen.findByText('No Markdown documents in this folder.')).toBeTruthy();
   });
+
+  it('refreshes folder listings from a folder favourite or the header menu', async () => {
+    const onCommand = vi.fn();
+    render(FavouritesSection, {
+      favourites: FavouritesList.empty().add(location('C:\\Specs'), 'folder').favourites(),
+      pathStatuses: new Map(),
+      translator: createTranslator(),
+      onOpen: vi.fn(),
+      onCommand,
+      onListFolder: () => Promise.resolve(EMPTY_LISTING),
+      onOpenDocument: vi.fn(),
+    });
+
+    await fireEvent.contextMenu(screen.getByRole('button', { name: 'Specs' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Refresh' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Favourites actions' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Refresh Folders' }));
+
+    expect(onCommand.mock.calls).toEqual([[{ kind: 'refreshFolders' }], [{ kind: 'refreshFolders' }]]);
+  });
 });
 
 describe('FavouritesSection groups', () => {

@@ -12,6 +12,7 @@ import { TauriDocumentRequests } from './ports/TauriDocumentRequests';
 import { TauriDocumentResources } from './ports/TauriDocumentResources';
 import { TauriDocumentWatcher } from './ports/TauriDocumentWatcher';
 import { TauriFavouritesFile } from './ports/TauriFavouritesFile';
+import { TauriFolderWatcher } from './ports/TauriFolderWatcher';
 import { TauriFolders } from './ports/TauriFolders';
 import { WebViewPrinter } from './ports/WebViewPrinter';
 import { tauriCommands } from './ports/tauriCommands';
@@ -35,6 +36,7 @@ const controller = new ViewerController({
   printer: new WebViewPrinter(),
   links: new TauriDocumentLinks(),
   folders: new TauriFolders(),
+  folderWatcher: new TauriFolderWatcher(),
   favouritesFile: new TauriFavouritesFile(),
 });
 

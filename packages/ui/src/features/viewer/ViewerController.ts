@@ -17,6 +17,7 @@ import {
   type FavouritesFilePort,
   type FolderListing,
   type FolderPort,
+  type FolderWatcherPort,
   type DocumentPrinterPort,
   type DocumentResourcesPort,
   type DocumentWatcherPort,
@@ -27,6 +28,7 @@ import {
 } from '@mdx/platform';
 import type { MarkdownRenderer, OutlineEntry } from '@mdx/renderer';
 import type { DocumentLink } from '../document-view/DocumentLink';
+import { FolderRefresh } from '../folder-tree/FolderRefresh';
 import {
   DocumentSaving,
   type UnsavedChangesChoice,
@@ -53,6 +55,7 @@ export interface ViewerControllerDependencies {
   readonly printer?: DocumentPrinterPort;
   readonly links?: DocumentLinksPort;
   readonly folders?: FolderPort;
+  readonly folderWatcher?: FolderWatcherPort;
   readonly favouritesFile?: FavouritesFilePort;
 }
 
@@ -82,6 +85,8 @@ export interface ViewerSnapshot {
   readonly isSourceView?: boolean;
   readonly unsavedChanges?: UnsavedChangesRequest;
   readonly pathStatuses: ReadonlyMap<string, PathStatus>;
+  /** How often each shown folder changed on disk, so its listing reloads when the count goes up. */
+  readonly folderRevisions: ReadonlyMap<string, number>;
 }
 
 /** A button in the notice bar that runs a command, such as Locate for a file that has moved. */
@@ -123,10 +128,15 @@ export class ViewerController {
   private pathStatuses: ReadonlyMap<string, PathStatus> = new Map();
   private checkedLocationKeys = '';
   private readonly liveReload: LiveReload | undefined;
+  private readonly folderRefresh: FolderRefresh;
   private readonly saving: DocumentSaving;
 
   constructor(private readonly dependencies: ViewerControllerDependencies) {
-    this.snapshot = { viewer: dependencies.session.currentState(), pathStatuses: this.pathStatuses };
+    this.snapshot = {
+      viewer: dependencies.session.currentState(),
+      pathStatuses: this.pathStatuses,
+      folderRevisions: new Map(),
+    };
     this.saving = new DocumentSaving(dependencies.session, {
       onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
       onSaveFailed: (fileName) => this.showNotice('errors.document.saveFailed', { path: fileName }),
@@ -136,6 +146,9 @@ export class ViewerController {
           this.refreshPathStatuses({ isForced: true }),
         )
       : undefined;
+    this.folderRefresh = new FolderRefresh(dependencies.folderWatcher, () =>
+      this.publish(this.composeSnapshot(this.snapshot.notice)),
+    );
   }
 
   async start(): Promise<void> {
@@ -148,6 +161,7 @@ export class ViewerController {
     this.listenToMenu();
     this.refreshPathStatuses();
     if (this.liveReload) this.stopActions.push(this.liveReload.start());
+    this.stopActions.push(this.folderRefresh.start());
     await this.openDocuments(await requests.takeStartupDocuments());
     await this.refreshActiveDocument();
   }
@@ -341,6 +355,7 @@ export class ViewerController {
     toggleFavourite: () => this.toggleActiveFavourite(),
     exportFavourites: () => this.exportFavourites(),
     importFavourites: () => this.importFavourites(),
+    refreshFolders: () => this.folderRefresh.refreshShownFolders(),
     print: () => {
       if (this.activeDocument) this.dependencies.printer?.printActiveDocument();
     },
@@ -423,6 +438,11 @@ export class ViewerController {
     } catch {
       return EMPTY_FOLDER_LISTING;
     }
+  }
+
+  /** Keeps a folder's listing current while it is shown; call the returned function when it is hidden. */
+  showFolder(folderPath: string): () => void {
+    return this.folderRefresh.showFolder(folderPath);
   }
 
   private async addFolderFavourite(): Promise<void> {
@@ -563,6 +583,7 @@ export class ViewerController {
     return {
       viewer: this.dependencies.session.currentState(),
       pathStatuses: this.pathStatuses,
+      folderRevisions: this.folderRefresh.revisionsByFolder(),
       ...(this.activeDocument ? { activeDocument: this.activeDocument } : {}),
       ...(notice === undefined ? {} : { notice }),
       ...(notice !== undefined && this.noticeActions.length > 0 ? { noticeActions: this.noticeActions } : {}),

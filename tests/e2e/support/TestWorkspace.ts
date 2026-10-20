@@ -1,9 +1,19 @@
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 const FIXTURE_DOCUMENTS_FOLDER = join(import.meta.dirname, '..', '..', 'fixtures', 'documents');
 const SAVED_STATE_FILE_NAME = 'app-state.json';
+const SAVED_STATE_SCHEMA_VERSION = 1;
 
 interface SavedLocation {
   readonly location: { readonly fileName: string; readonly canonicalKey: string };
@@ -32,6 +42,21 @@ export class TestWorkspace {
 
   documentPath(fileName: string): string {
     return join(this.documentsFolder, fileName);
+  }
+
+  /** Starts the next launch with the documents folder as a folder favourite, as if the user had added it. */
+  saveDocumentsFolderAsFavourite(): void {
+    const displayPath = realpathSync.native(this.documentsFolder);
+    const canonicalKey = process.platform === 'win32' ? displayPath.toLowerCase() : displayPath;
+    const location = { canonicalKey, displayPath, fileName: basename(displayPath) };
+    const state = {
+      schemaVersion: SAVED_STATE_SCHEMA_VERSION,
+      tabs: { tabs: [] },
+      recentFiles: [],
+      favourites: [{ location, kind: 'folder' }],
+      favouriteGroups: [],
+    };
+    writeFileSync(join(this.profileFolder, SAVED_STATE_FILE_NAME), JSON.stringify(state));
   }
 
   savedTabFileNames(): string[] | undefined {

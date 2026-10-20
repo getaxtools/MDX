@@ -4,7 +4,9 @@ use std::sync::Arc;
 use tauri::{App, AppHandle, Emitter, Manager};
 
 use crate::documents::DocumentAccessList;
-use crate::live_reload::{DOCUMENTS_CHANGED_EVENT, DocumentWatcher};
+use crate::live_reload::{
+    DOCUMENTS_CHANGED_EVENT, DocumentWatcher, FOLDERS_CHANGED_EVENT, FolderWatcher,
+};
 use crate::open_requests::{
     MAIN_WINDOW_LABEL, StartupDocuments, grant_documents, markdown_paths_from_arguments,
 };
@@ -26,6 +28,7 @@ pub fn initialize(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(access);
     app.manage(startup_documents);
     app.manage(start_document_watcher(app.handle().clone()));
+    app.manage(start_folder_watcher(app.handle().clone()));
     Ok(())
 }
 
@@ -33,6 +36,14 @@ fn start_document_watcher(app: AppHandle) -> DocumentWatcher {
     DocumentWatcher::start(move |display_paths| {
         if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
             let _ = window.emit(DOCUMENTS_CHANGED_EVENT, display_paths);
+        }
+    })
+}
+
+fn start_folder_watcher(app: AppHandle) -> FolderWatcher {
+    FolderWatcher::start(move |folder_paths| {
+        if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+            let _ = window.emit(FOLDERS_CHANGED_EVENT, folder_paths);
         }
     })
 }

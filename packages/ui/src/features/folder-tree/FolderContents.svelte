@@ -3,18 +3,33 @@
   import type { FolderListing } from '@mdx/platform';
   import { SvelteSet } from 'svelte/reactivity';
   import FolderContents from './FolderContents.svelte';
+  import TreeChevron from './TreeChevron.svelte';
+  import TreeItemIcon from './TreeItemIcon.svelte';
 
   interface Props {
     folderPath: string;
     translator: Translator;
+    folderRevisions: ReadonlyMap<string, number>;
     onListFolder: (folderPath: string) => Promise<FolderListing>;
+    onShowFolder: (folderPath: string) => () => void;
     onOpenDocument: (documentPath: string) => void;
   }
 
-  const { folderPath, translator, onListFolder, onOpenDocument }: Props = $props();
+  const { folderPath, translator, folderRevisions, onListFolder, onShowFolder, onOpenDocument }: Props =
+    $props();
 
-  const listing = $derived(onListFolder(folderPath));
+  const revision = $derived(folderRevisions.get(folderPath) ?? 0);
   const expandedSubfolderKeys = new SvelteSet<string>();
+  let listing: FolderListing | undefined = $state();
+
+  $effect(() => onShowFolder(folderPath));
+
+  $effect(() => {
+    const requestedRevision = revision;
+    void onListFolder(folderPath).then((nextListing) => {
+      if (requestedRevision === revision) listing = nextListing;
+    });
+  });
 
   function toggleSubfolder(key: string) {
     if (expandedSubfolderKeys.has(key)) expandedSubfolderKeys.delete(key);
@@ -22,42 +37,63 @@
   }
 </script>
 
-{#await listing}
+{#if listing === undefined}
   <p class="folder-status">{translator.translate('favourites.folder.loading')}</p>
-{:then { folders, documents }}
-  {#if folders.length === 0 && documents.length === 0}
-    <p class="folder-status">{translator.translate('favourites.folder.empty')}</p>
-  {:else}
-    <ul class="folder-contents">
-      {#each folders as folder (folder.canonicalKey)}
-        <li>
-          <button
-            title={folder.displayPath}
-            aria-expanded={expandedSubfolderKeys.has(folder.canonicalKey)}
-            onclick={() => toggleSubfolder(folder.canonicalKey)}
-          >
-            <span aria-hidden="true">📁</span>
-            {folder.fileName}
-          </button>
-          {#if expandedSubfolderKeys.has(folder.canonicalKey)}
-            <FolderContents folderPath={folder.displayPath} {translator} {onListFolder} {onOpenDocument} />
-          {/if}
-        </li>
-      {/each}
-      {#each documents as document (document.canonicalKey)}
-        <li>
-          <button title={document.displayPath} onclick={() => onOpenDocument(document.displayPath)}>
-            {document.fileName}
-          </button>
-        </li>
-      {/each}
-    </ul>
-  {/if}
-{/await}
+{:else if listing.folders.length === 0 && listing.documents.length === 0}
+  <p class="folder-status">{translator.translate('favourites.folder.empty')}</p>
+{:else}
+  <ul class="folder-contents">
+    {#each listing.folders as folder (folder.canonicalKey)}
+      {@const isExpanded = expandedSubfolderKeys.has(folder.canonicalKey)}
+      <li>
+        <button
+          title={folder.displayPath}
+          aria-expanded={isExpanded}
+          onclick={() => toggleSubfolder(folder.canonicalKey)}
+        >
+          <TreeChevron {isExpanded} />
+          <TreeItemIcon kind={isExpanded ? 'openFolder' : 'folder'} />
+          <span class="name">{folder.fileName}</span>
+        </button>
+        {#if isExpanded}
+          <FolderContents
+            folderPath={folder.displayPath}
+            {translator}
+            {folderRevisions}
+            {onListFolder}
+            {onShowFolder}
+            {onOpenDocument}
+          />
+        {/if}
+      </li>
+    {/each}
+    {#each listing.documents as document (document.canonicalKey)}
+      <li>
+        <button title={document.displayPath} onclick={() => onOpenDocument(document.displayPath)}>
+          <span class="chevron-space" aria-hidden="true"></span>
+          <TreeItemIcon kind="document" />
+          <span class="name">{document.fileName}</span>
+        </button>
+      </li>
+    {/each}
+  </ul>
+{/if}
 
 <style>
   .folder-contents {
-    padding-inline-start: var(--space-4) !important;
+    margin-inline-start: calc(var(--space-2) + 8px) !important;
+    padding-inline-start: var(--space-1) !important;
+    border-inline-start: 1px solid var(--color-border);
+  }
+
+  .chevron-space {
+    flex: none;
+    width: 16px;
+  }
+
+  .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .folder-status {

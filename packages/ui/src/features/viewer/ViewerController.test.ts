@@ -9,6 +9,7 @@ import {
   InMemoryDocumentWatcher,
   InMemoryFavouritesFile,
   InMemoryFolders,
+  InMemoryFolderWatcher,
 } from '@mdx/platform';
 import { createMarkdownRenderer } from '@mdx/renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -25,6 +26,7 @@ function createViewer({
   links = new InMemoryDocumentLinks(),
   folders = new InMemoryFolders({ 'C:\\Docs': { folders: ['C:\\Docs\\Specs'], documents: [GUIDE, NOTES] } }),
   favouritesFile = new InMemoryFavouritesFile(),
+  folderWatcher = new InMemoryFolderWatcher(),
 } = {}) {
   const documentFiles = new InMemoryDocumentFiles({ [GUIDE]: '# Guide', [NOTES]: '# Notes' });
   const requests = new InMemoryDocumentRequests(startupPaths);
@@ -39,6 +41,7 @@ function createViewer({
     links,
     folders,
     favouritesFile,
+    folderWatcher,
   });
   let latest: ViewerSnapshot | undefined;
   controller.subscribe((snapshot) => (latest = snapshot));
@@ -57,6 +60,7 @@ function createViewer({
     links,
     folders,
     favouritesFile,
+    folderWatcher,
     snapshot,
   };
 }
@@ -443,6 +447,37 @@ describe('ViewerController', () => {
 
       expect(listing.folders.map((folder) => folder.fileName)).toEqual(['Specs']);
       expect(listing.documents.map((document) => document.fileName)).toEqual(['Guide.md', 'Notes.md']);
+    });
+
+    it('watches the folders shown in the sidebar until they are hidden', async () => {
+      const { controller, folderWatcher } = createViewer();
+      await controller.start();
+
+      const hideDocs = controller.showFolder('C:\\Docs');
+      controller.showFolder('C:\\Docs\\Specs');
+      hideDocs();
+
+      expect(folderWatcher.watchedPaths).toEqual(['C:\\Docs\\Specs']);
+    });
+
+    it('publishes a new revision for a shown folder that changed on disk', async () => {
+      const { controller, folderWatcher, snapshot } = createViewer();
+      await controller.start();
+      controller.showFolder('C:\\Docs');
+
+      folderWatcher.reportChanges(['C:\\Docs']);
+
+      expect(snapshot().folderRevisions.get('C:\\Docs')).toBe(1);
+    });
+
+    it('reloads every shown folder when asked to refresh', async () => {
+      const { controller, snapshot } = createViewer();
+      await controller.start();
+      controller.showFolder('C:\\Docs');
+
+      await controller.execute({ kind: 'refreshFolders' });
+
+      expect(snapshot().folderRevisions.get('C:\\Docs')).toBe(1);
     });
 
     it('lists nothing when a folder cannot be read', async () => {

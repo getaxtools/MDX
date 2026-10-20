@@ -11,7 +11,7 @@ const groups = [
 describe('favourite context menu', () => {
   it('offers to move an ungrouped favourite into a new or an existing group', () => {
     const items = favouriteContextMenuItems(
-      { canMoveUp: false, canMoveDown: true, groups, groupId: undefined },
+      { canMoveUp: false, canMoveDown: true, groups, groupId: undefined, isFolder: false },
       translator,
     );
 
@@ -30,7 +30,7 @@ describe('favourite context menu', () => {
 
   it('offers the other groups and leaving the group for a grouped favourite', () => {
     const items = favouriteContextMenuItems(
-      { canMoveUp: true, canMoveDown: true, groups, groupId: 'group-1' },
+      { canMoveUp: true, canMoveDown: true, groups, groupId: 'group-1', isFolder: false },
       translator,
     );
     const labels = items.map((item) => item.label);
@@ -42,7 +42,7 @@ describe('favourite context menu', () => {
 
   it('shows the keys for rename, move and remove', () => {
     const items = favouriteContextMenuItems(
-      { canMoveUp: true, canMoveDown: true, groups: [], groupId: undefined },
+      { canMoveUp: true, canMoveDown: true, groups: [], groupId: undefined, isFolder: false },
       translator,
     );
 
@@ -52,6 +52,15 @@ describe('favourite context menu', () => {
       ['moveDown', 'Alt+↓'],
       ['remove', 'Delete'],
     ]);
+  });
+
+  it('offers to refresh a folder favourite', () => {
+    const items = favouriteContextMenuItems(
+      { canMoveUp: false, canMoveDown: false, groups: [], groupId: undefined, isFolder: true },
+      translator,
+    );
+
+    expect(items.map((item) => item.id).slice(0, 2)).toEqual(['open', 'refresh']);
   });
 
   it('reads the group from a move item', () => {

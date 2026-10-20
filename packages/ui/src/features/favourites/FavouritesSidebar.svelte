@@ -4,6 +4,7 @@
   import type { FolderListing, PathStatus } from '@mdx/platform';
   import type { LocateRecentFileCommand, RecentFileCommand } from '../recent-files/recentFileCommands';
   import RecentFilesSection from '../recent-files/RecentFilesSection.svelte';
+  import type { FolderTreeCommand } from '../folder-tree/folderTreeCommands';
   import type { FavouriteCommand, FavouritesFileCommand } from './favouriteCommands';
   import FavouritesSection from './FavouritesSection.svelte';
 
@@ -16,10 +17,17 @@
     onOpenFavourite: (favourite: Favourite) => void;
     onOpenRecentFile: (recentFile: RecentFile) => void;
     onCommand: (
-      command: FavouriteCommand | FavouritesFileCommand | RecentFileCommand | LocateRecentFileCommand,
+      command:
+        | FavouriteCommand
+        | FavouritesFileCommand
+        | FolderTreeCommand
+        | RecentFileCommand
+        | LocateRecentFileCommand,
     ) => void;
     onListFolder: (folderPath: string) => Promise<FolderListing>;
     onOpenDocument: (documentPath: string) => void;
+    folderRevisions?: ReadonlyMap<string, number>;
+    onShowFolder?: (folderPath: string) => () => void;
   }
 
   const {
@@ -33,6 +41,8 @@
     onCommand,
     onListFolder,
     onOpenDocument,
+    folderRevisions = new Map(),
+    onShowFolder = () => () => undefined,
   }: Props = $props();
 </script>
 
@@ -46,6 +56,8 @@
     {onCommand}
     {onListFolder}
     {onOpenDocument}
+    {folderRevisions}
+    {onShowFolder}
   />
   <RecentFilesSection {recentFiles} {pathStatuses} {translator} onOpen={onOpenRecentFile} {onCommand} />
 </nav>
@@ -79,7 +91,8 @@
   .sidebar :global(li > button),
   .sidebar :global(li > input) {
     display: flex;
-    gap: var(--space-2);
+    align-items: center;
+    gap: var(--space-1);
     width: 100%;
     box-sizing: border-box;
     padding: var(--space-1) var(--space-2);

@@ -68,6 +68,7 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::app_state::save_app_state,
         commands::app_info::get_app_info,
         commands::live_reload::watch_documents,
+        commands::live_reload::watch_folders,
         commands::links::resolve_document_link,
         commands::links::open_external_link,
         commands::folders::pick_folder,

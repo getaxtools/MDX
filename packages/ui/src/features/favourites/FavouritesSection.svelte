@@ -16,7 +16,10 @@
     type FavouritesHeaderMenuItemId,
   } from './favouriteContextMenu';
   import type { FavouriteCommand, FavouritesFileCommand } from './favouriteCommands';
-  import FolderContents from './FolderContents.svelte';
+  import FolderContents from '../folder-tree/FolderContents.svelte';
+  import TreeChevron from '../folder-tree/TreeChevron.svelte';
+  import TreeItemIcon from '../folder-tree/TreeItemIcon.svelte';
+  import type { FolderTreeCommand } from '../folder-tree/folderTreeCommands';
 
   interface Props {
     favourites: readonly Favourite[];
@@ -24,9 +27,11 @@
     pathStatuses: ReadonlyMap<string, PathStatus>;
     translator: Translator;
     onOpen: (favourite: Favourite) => void;
-    onCommand: (command: FavouriteCommand | FavouritesFileCommand) => void;
+    onCommand: (command: FavouriteCommand | FavouritesFileCommand | FolderTreeCommand) => void;
     onListFolder: (folderPath: string) => Promise<FolderListing>;
     onOpenDocument: (documentPath: string) => void;
+    folderRevisions?: ReadonlyMap<string, number>;
+    onShowFolder?: (folderPath: string) => () => void;
   }
 
   const {
@@ -38,6 +43,8 @@
     onCommand,
     onListFolder,
     onOpenDocument,
+    folderRevisions = new Map(),
+    onShowFolder = () => () => undefined,
   }: Props = $props();
 
   type MenuRequest =
@@ -175,6 +182,7 @@
       moveDown: () => move(index, 1),
       moveToNewGroup: () => createGroup(canonicalKey),
       removeFromGroup: () => onCommand({ kind: 'moveFavouriteToGroup', canonicalKey }),
+      refresh: () => onCommand({ kind: 'refreshFolders' }),
       remove: () => remove(index),
     };
     actions[itemId]?.();
@@ -260,14 +268,23 @@
         onkeydown={(event) => handleKeydown(event, index)}
         oncontextmenu={(event) => openMenu(event, { kind: 'favourite', index })}
       >
-        <span aria-hidden="true">{favourite.kind === 'folder' ? '📁' : '★'}</span>
-        {labelOf(favourite)}
+        {#if favourite.kind === 'folder'}
+          {@const isExpanded = expandedFolderKeys.has(favourite.location.canonicalKey)}
+          <TreeChevron {isExpanded} />
+          <TreeItemIcon kind={isExpanded ? 'openFolder' : 'folder'} />
+        {:else}
+          <span class="chevron-space" aria-hidden="true"></span>
+          <TreeItemIcon kind="document" />
+        {/if}
+        <span class="name">{labelOf(favourite)}</span>
       </button>
       {#if expandedFolderKeys.has(favourite.location.canonicalKey)}
         <FolderContents
           folderPath={favourite.location.displayPath}
           {translator}
+          {folderRevisions}
           {onListFolder}
+          {onShowFolder}
           {onOpenDocument}
         />
       {/if}
@@ -316,8 +333,8 @@
               onkeydown={(event) => handleGroupKeydown(event, group)}
               oncontextmenu={(event) => openMenu(event, { kind: 'group', group })}
             >
-              <span aria-hidden="true">{isExpanded ? '▾' : '▸'}</span>
-              {group.name}
+              <TreeChevron {isExpanded} />
+              <span class="name">{group.name}</span>
             </button>
           {/if}
           {#if isExpanded}
@@ -347,6 +364,7 @@
         canMoveDown: neighbourOf(index, 1) !== undefined,
         groups,
         groupId: menuFavourite.groupId,
+        isFolder: menuFavourite.kind === 'folder',
       },
       translator,
     )}
@@ -400,6 +418,16 @@
 
   .group-header {
     font-weight: 600;
+  }
+
+  .chevron-space {
+    flex: none;
+    width: 16px;
+  }
+
+  .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .group-items {

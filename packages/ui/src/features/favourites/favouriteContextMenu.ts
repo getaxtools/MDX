@@ -13,25 +13,31 @@ export type FavouriteMenuItemId =
   | 'moveToNewGroup'
   | `${typeof MOVE_TO_GROUP_PREFIX}${string}`
   | 'removeFromGroup'
+  | 'refresh'
   | 'remove';
 
 export type FavouriteGroupMenuItemId = 'renameGroup' | 'removeGroup';
 
-export type FavouritesHeaderMenuItemId = 'newGroup' | 'exportFavourites' | 'importFavourites';
+export type FavouritesHeaderMenuItemId =
+  'newGroup' | 'refreshFolders' | 'exportFavourites' | 'importFavourites';
 
 export interface FavouriteMenuState {
   readonly canMoveUp: boolean;
   readonly canMoveDown: boolean;
   readonly groups: readonly FavouriteGroup[];
   readonly groupId: string | undefined;
+  readonly isFolder: boolean;
 }
 
 export function favouriteContextMenuItems(
-  { canMoveUp, canMoveDown, groups, groupId }: FavouriteMenuState,
+  { canMoveUp, canMoveDown, groups, groupId, isFolder }: FavouriteMenuState,
   translator: Translator,
 ): ContextMenuItem<FavouriteMenuItemId>[] {
   return [
     { id: 'open', label: translator.translate('sidebar.open') },
+    ...(isFolder
+      ? [{ id: 'refresh' as const, label: translator.translate('favourites.folder.refresh') }]
+      : []),
     {
       id: 'rename',
       label: translator.translate('favourites.rename'),
@@ -109,6 +115,7 @@ export function favouritesHeaderMenuItems(
 ): ContextMenuItem<FavouritesHeaderMenuItemId>[] {
   return [
     { id: 'newGroup', label: translator.translate('favourites.group.new') },
+    { id: 'refreshFolders', label: translator.translate('favourites.folder.refreshAll') },
     {
       id: 'exportFavourites',
       label: translator.translate('menu.file.exportFavourites'),

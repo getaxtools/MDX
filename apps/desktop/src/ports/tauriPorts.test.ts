@@ -7,6 +7,7 @@ import { TauriDocumentFiles } from './TauriDocumentFiles';
 import { TauriDocumentRequests } from './TauriDocumentRequests';
 import { TauriDocumentWatcher } from './TauriDocumentWatcher';
 import { TauriFavouritesFile } from './TauriFavouritesFile';
+import { TauriFolderWatcher } from './TauriFolderWatcher';
 
 type CommandArguments = Record<string, unknown>;
 
@@ -178,5 +179,15 @@ describe('TauriDocumentWatcher', () => {
     await new TauriDocumentWatcher().watch(['C:\\Docs\\a.md']);
 
     expect(calls).toEqual([{ command: 'watch_documents', args: { paths: ['C:\\Docs\\a.md'] } }]);
+  });
+});
+
+describe('TauriFolderWatcher', () => {
+  it('watches the expanded folders through the watch_folders command', async () => {
+    const calls = mockCommands({ watch_folders: () => null });
+
+    await new TauriFolderWatcher().watch(['C:\\Docs']);
+
+    expect(calls).toEqual([{ command: 'watch_folders', args: { paths: ['C:\\Docs'] } }]);
   });
 });

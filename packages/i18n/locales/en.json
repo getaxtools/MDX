@@ -130,6 +130,8 @@
   "keys.alt": "Alt",
   "favourites.folder.loading": "Loading…",
   "favourites.folder.empty": "No Markdown documents in this folder.",
+  "favourites.folder.refresh": "Refresh",
+  "favourites.folder.refreshAll": "Refresh Folders",
   "menu.view.toggleSource": "Source View",
   "menu.file.save": "Save",
   "menu.file.saveAs": "Save As…",

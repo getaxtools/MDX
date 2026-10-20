@@ -22,6 +22,7 @@ export const tauriCommands = {
   updateViewMenu: (state: ViewMenuState) => invoke<null>('update_view_menu', { state }),
   updateRecentMenu: (displayPaths: readonly string[]) => invoke<null>('update_recent_menu', { displayPaths }),
   watchDocuments: (paths: readonly string[]) => invoke<null>('watch_documents', { paths }),
+  watchFolders: (paths: readonly string[]) => invoke<null>('watch_folders', { paths }),
   resolveDocumentLink: (document: string, href: string) =>
     invoke<string>('resolve_document_link', { document, href }),
   openExternalLink: (url: string) => invoke<null>('open_external_link', { url }),
@@ -35,3 +36,4 @@ export const tauriCommands = {
 export const OPEN_DOCUMENTS_EVENT = 'open-documents';
 export const MENU_COMMAND_EVENT = 'menu-command';
 export const DOCUMENTS_CHANGED_EVENT = 'documents-changed';
+export const FOLDERS_CHANGED_EVENT = 'folders-changed';

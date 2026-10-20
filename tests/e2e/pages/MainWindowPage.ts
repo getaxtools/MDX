@@ -115,6 +115,19 @@ export class MainWindowPage {
     await section.$(`button*=${name}`).click();
   }
 
+  async expandFavouriteFolder(name: string): Promise<void> {
+    const folder = await this.favouriteButton(name);
+    if ((await folder.getAttribute('aria-expanded')) !== 'true') await folder.click();
+  }
+
+  async waitForFolderEntries(folderName: string, expectedNames: readonly string[]): Promise<void> {
+    await this.waitForNames(
+      `entries of ${folderName}`,
+      () => this.folderEntryNames(folderName),
+      expectedNames,
+    );
+  }
+
   async recentFileNames(): Promise<string[]> {
     return this.sidebarEntryNames('recentFiles.title');
   }
@@ -140,6 +153,18 @@ export class MainWindowPage {
     }
   }
 
+  private async folderEntryNames(folderName: string): Promise<string[]> {
+    const folder = await this.favouriteButton(folderName);
+    return folder
+      .$$('./following-sibling::ul/li/button')
+      .map(async (entry) => (await entry.getText()).trim());
+  }
+
+  private async favouriteButton(name: string) {
+    const section = await this.sidebarSection('favourites.sidebar.title');
+    return section.$(`button*=${name}`);
+  }
+
   private toolbarButton(labelKey: MessageKey) {
     return this.browser.$('[role="toolbar"]').$(`button*=${translator.translate(labelKey)}`);
   }
@@ -157,8 +182,7 @@ export class MainWindowPage {
 
   private async sidebarEntryNames(titleKey: MessageKey): Promise<string[]> {
     const section = await this.sidebarSection(titleKey);
-    const names = await section.$$('li > button').map((button) => button.getText());
-    return names.map((name) => name.replace('★', '').trim());
+    return section.$$('li > button').map(async (button) => (await button.getText()).trim());
   }
 }
 
