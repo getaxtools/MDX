@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/getaxtools/MDX/compare/v0.3.0...v0.4.0) (2026-10-20)
+
+
+### Features
+
+* **favourites:** refresh expanded folders when their contents change ([6ad6b49](https://github.com/getaxtools/MDX/commit/6ad6b49a113a8406f6885074a0eaa14cd3eac316))
+
 ## [0.3.0](https://github.com/getaxtools/MDX/compare/v0.2.0...v0.3.0) (2026-10-19)
 
 
