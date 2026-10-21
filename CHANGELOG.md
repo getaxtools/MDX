@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.0](https://github.com/getaxtools/MDX/compare/v0.4.0...v0.5.0) (2026-10-20)
+
+
+### Features
+
+* **about:** list third-party licenses ([fb0eea8](https://github.com/getaxtools/MDX/commit/fb0eea8d5dd5770bf889a5ee7fdb63bcdcdaf953))
+* **about:** list third-party licenses ([232bf7b](https://github.com/getaxtools/MDX/commit/232bf7b42e0454240c8f52976386acf3861605a9))
+* **editor:** add a source editor with formatting keys, find and replace, and safe saving ([fb0eea8](https://github.com/getaxtools/MDX/commit/fb0eea8d5dd5770bf889a5ee7fdb63bcdcdaf953))
+* **editor:** add a source editor with formatting keys, find and replace, and safe saving ([232bf7b](https://github.com/getaxtools/MDX/commit/232bf7b42e0454240c8f52976386acf3861605a9))
+* **explorer:** add an Explorer with Favourites, Folders and Recent sections, Open Folder roots, ARIA trees and reveal of the active document ([fb0eea8](https://github.com/getaxtools/MDX/commit/fb0eea8d5dd5770bf889a5ee7fdb63bcdcdaf953))
+* **explorer:** add an Explorer with Favourites, Folders and Recent sections, Open Folder roots, ARIA trees and reveal of the active document ([232bf7b](https://github.com/getaxtools/MDX/commit/232bf7b42e0454240c8f52976386acf3861605a9))
+* **palette:** add a command palette with quick open ([fb0eea8](https://github.com/getaxtools/MDX/commit/fb0eea8d5dd5770bf889a5ee7fdb63bcdcdaf953))
+* **palette:** add a command palette with quick open ([232bf7b](https://github.com/getaxtools/MDX/commit/232bf7b42e0454240c8f52976386acf3861605a9))
+
 ## [0.4.0](https://github.com/getaxtools/MDX/compare/v0.3.0...v0.4.0) (2026-10-20)
 
 
