@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ReadingWidth } from '@mdx/core';
+  import type { ReadingWidth, Typography } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
   import type { CodeHighlighter, RichBlockRenderer } from '@mdx/renderer';
   import ContextMenu from '../../components/ContextMenu.svelte';
@@ -7,9 +7,15 @@
   import type { ViewerCommand } from '../viewer/viewerCommands';
   import type { RenderedActiveDocument } from '../viewer/ViewerController';
   import FindBar from '../find/FindBar.svelte';
+  import type { FindQuery } from '../find/findTextRanges';
   import { currentHeadingId } from '../outline/currentHeadingId';
   import type { DocumentLink } from './DocumentLink';
   import PropertiesPanel from './PropertiesPanel.svelte';
+  import { untrack } from 'svelte';
+  import type { ExportFormat } from '@mdx/platform';
+  import { standaloneDocumentHtml } from '../document-export/standaloneDocumentHtml';
+  import type { ExportRequest } from '../viewer/ViewerController';
+  import { documentClipboardHtml, documentExportHtml, documentPlainText } from './documentClipboardHtml';
   import { enhanceCodeBlocks } from './enhanceCodeBlocks';
   import { scrollToHeading } from './scrollToHeading';
   import {
@@ -22,10 +28,17 @@
     document: RenderedActiveDocument | undefined;
     zoomPercent: number;
     readingWidth: ReadingWidth;
+    typography?: Typography;
     translator: Translator;
     codeHighlighter?: CodeHighlighter | undefined;
     richBlocks?: RichBlockRenderer | undefined;
     findRequest?: number | undefined;
+    findQuery?: FindQuery | undefined;
+    /** Goes up each time the document should be copied as HTML; the value it starts with is ignored. */
+    copyAsHtmlRequest?: number | undefined;
+    /** Asks for an exported copy of the document; the request it starts with is ignored. */
+    exportRequest?: ExportRequest | undefined;
+    locale?: string;
     isSourceView?: boolean;
     onCloseFind?: () => void;
     onOpenLink: (link: DocumentLink) => void;
@@ -35,16 +48,23 @@
     isOutlineVisible?: boolean;
     isFavourite?: boolean;
     canBeFavourite?: boolean;
+    /** False for a preview beside the editor, which follows the editor instead of the tab's position. */
+    shouldRestoreScroll?: boolean;
   }
 
   const {
     document,
     zoomPercent,
     readingWidth,
+    typography = 'github',
     translator,
     codeHighlighter,
     richBlocks,
     findRequest,
+    findQuery,
+    copyAsHtmlRequest,
+    exportRequest,
+    locale = 'en',
     isSourceView = false,
     onCloseFind = () => undefined,
     onOpenLink,
@@ -54,6 +74,7 @@
     isOutlineVisible = true,
     isFavourite = false,
     canBeFavourite = true,
+    shouldRestoreScroll = true,
   }: Props = $props();
 
   const SCROLL_REPORT_DELAY_MS = 250;
@@ -63,7 +84,7 @@
 
   $effect(() => {
     const area = documentArea;
-    if (!document || !area || document === restoredDocument) return;
+    if (!shouldRestoreScroll || !document || !area || document === restoredDocument) return;
     restoredDocument = document;
     area.scrollTop = document.scrollRatio * Math.max(area.scrollHeight - area.clientHeight, 0);
   });
@@ -113,6 +134,42 @@
     return () => (isStillShown = false);
   });
 
+  let handledCopyRequest = untrack(() => copyAsHtmlRequest);
+  let handledExportRequest = untrack(() => exportRequest);
+
+  $effect(() => {
+    const request = exportRequest;
+    if (request === undefined || request === handledExportRequest) return;
+    handledExportRequest = request;
+    exportDocument(request.format);
+  });
+
+  function exportDocument(format: ExportFormat) {
+    if (!articleElement || !document) return;
+    const contents =
+      format === 'html'
+        ? standaloneDocumentHtml({
+            title: document.fileName,
+            locale,
+            typography,
+            bodyHtml: documentExportHtml(articleElement),
+          })
+        : documentPlainText(articleElement);
+    onCommand({ kind: 'saveExport', format, contents });
+  }
+
+  $effect(() => {
+    const request = copyAsHtmlRequest;
+    if (request === undefined || request === handledCopyRequest) return;
+    handledCopyRequest = request;
+    copyAsHtml();
+  });
+
+  function copyAsHtml() {
+    if (!articleElement || isSourceView) return;
+    onCommand({ kind: 'copyHtml', html: documentClipboardHtml(articleElement, globalThis.getSelection()) });
+  }
+
   const PERCENT = 100;
   const READING_MEASURES: Readonly<Record<ReadingWidth, string>> = {
     narrow: '60ch',
@@ -149,6 +206,7 @@
   function chooseMenuItem(itemId: DocumentMenuItemId) {
     const command = commandForDocumentMenuItem(itemId);
     if (command) onCommand(command);
+    if (itemId === 'copyAsHtml') copyAsHtml();
     if (itemId === 'copy' && menuRequest?.selectedText)
       void globalThis.navigator.clipboard.writeText(menuRequest.selectedText);
     if (itemId === 'selectAll' && articleElement)
@@ -171,9 +229,12 @@
   }
 </script>
 
+<!-- Focusable so keyboard users can scroll a document that has no links or other controls. -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <main
   bind:this={documentArea}
   class="document-area"
+  tabindex="0"
   style:--reading-measure={READING_MEASURES[readingWidth]}
   onscroll={reportScroll}
 >
@@ -182,6 +243,7 @@
       searchRoot={articleElement}
       contentKey={isSourceView ? document.source : document.html}
       focusRequest={findRequest}
+      initialQuery={findQuery}
       {translator}
       onClose={onCloseFind}
     />
@@ -194,6 +256,7 @@
     <article
       bind:this={articleElement}
       class="rendered-document"
+      data-typography={typography}
       aria-label={document.fileName}
       style:zoom={zoomPercent / PERCENT}
       onclick={handleClick}

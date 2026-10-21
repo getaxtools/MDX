@@ -4,9 +4,12 @@ import {
   type DocumentLocation,
   type FolderListing,
   type FolderPort,
+  type FolderSearchResults,
+  type TextSearchOptions,
 } from '@mdx/platform';
 
 const EMPTY_FOLDER_LISTING: FolderListing = { folders: [], documents: [] };
+const NO_SEARCH_RESULTS: FolderSearchResults = { documents: [], isIncomplete: false };
 /** The app searches at most this many folders at once. */
 const MAX_SEARCHED_FOLDERS = 100;
 
@@ -46,20 +49,38 @@ export class ExplorerFolderActions {
   }
 
   async quickOpenDocuments(): Promise<DocumentLocation[]> {
-    const { tabStrip, recentFiles, favourites, explorerFolders } = this.session.currentState();
+    const { tabStrip, recentFiles, favourites } = this.session.currentState();
     const favouriteFiles = favourites.favourites().filter((favourite) => favourite.kind === 'file');
-    const favouriteFolders = favourites.favourites().filter((favourite) => favourite.kind === 'folder');
     const known = [...tabStrip.tabs(), ...recentFiles.entries(), ...favouriteFiles].map(
       (entry) => entry.location,
     );
-    const folderPaths = withoutDuplicates([
+    const folderPaths = this.searchedFolderPaths();
+    const inFolders = folderPaths.length === 0 ? [] : await this.findDocuments(folderPaths);
+    return withoutDuplicates([...known, ...inFolders].filter((location) => !isUntitledLocation(location)));
+  }
+
+  /** Whether there is any opened or favourite folder to search in. */
+  hasSearchedFolders(): boolean {
+    return this.searchedFolderPaths().length > 0;
+  }
+
+  /** Finds text in the documents of the opened and favourite folders; rejects when the search fails. */
+  async searchDocuments(query: string, options: TextSearchOptions): Promise<FolderSearchResults> {
+    const folderPaths = this.searchedFolderPaths();
+    if (!this.folders || folderPaths.length === 0 || query.trim() === '') return NO_SEARCH_RESULTS;
+    return this.folders.searchDocuments(folderPaths, query, options);
+  }
+
+  /** The opened folders, then favourite folders, each once. */
+  private searchedFolderPaths(): string[] {
+    const { favourites, explorerFolders } = this.session.currentState();
+    const favouriteFolders = favourites.favourites().filter((favourite) => favourite.kind === 'folder');
+    return withoutDuplicates([
       ...explorerFolders.folders(),
       ...favouriteFolders.map((favourite) => favourite.location),
     ])
       .slice(0, MAX_SEARCHED_FOLDERS)
       .map((folder) => folder.displayPath);
-    const inFolders = folderPaths.length === 0 ? [] : await this.findDocuments(folderPaths);
-    return withoutDuplicates([...known, ...inFolders].filter((location) => !isUntitledLocation(location)));
   }
 
   /** The subfolders and Markdown documents in a folder; empty when the folder cannot be read. */

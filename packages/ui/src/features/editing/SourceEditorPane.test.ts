@@ -1,6 +1,6 @@
 import { createTranslator } from '@mdx/i18n';
 import { render, screen } from '@testing-library/svelte';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import SourceEditorPane from './SourceEditorPane.svelte';
 
 const KEY = 'c:\\docs\\guide.md';
@@ -20,6 +20,11 @@ function renderPane() {
 }
 
 describe('SourceEditorPane', () => {
+  // The editor is a separate chunk loaded on first use; loading it once here keeps each test within its time.
+  beforeAll(async () => {
+    await import('@mdx/editor');
+  }, 60_000);
+
   it('loads the editor with the document text and a label naming the file', async () => {
     renderPane();
 

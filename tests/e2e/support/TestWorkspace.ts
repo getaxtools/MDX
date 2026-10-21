@@ -31,6 +31,7 @@ interface SavedAppState {
   readonly view?: {
     readonly collapsedExplorerSections?: readonly string[];
     readonly explorerSectionHeights?: Readonly<Record<string, number>>;
+    readonly panelWidths?: Readonly<Record<string, number>>;
   };
 }
 
@@ -70,6 +71,20 @@ export class TestWorkspace {
     writeFileSync(join(this.profileFolder, SAVED_STATE_FILE_NAME), JSON.stringify(state));
   }
 
+  /** Starts the next launch in the given display language, as if it had been chosen in Settings. */
+  saveDisplayLanguage(language: string): void {
+    const state = {
+      schemaVersion: SAVED_STATE_SCHEMA_VERSION,
+      tabs: { tabs: [] },
+      recentFiles: [],
+      favourites: [],
+      favouriteGroups: [],
+      explorerFolders: [],
+      view: { language },
+    };
+    writeFileSync(join(this.profileFolder, SAVED_STATE_FILE_NAME), JSON.stringify(state));
+  }
+
   savedCollapsedExplorerSections(): readonly string[] | undefined {
     return this.readSavedState()?.view?.collapsedExplorerSections;
   }
@@ -80,6 +95,10 @@ export class TestWorkspace {
 
   savedSectionHeightOf(section: string): number | undefined {
     return this.readSavedState()?.view?.explorerSectionHeights?.[section];
+  }
+
+  savedPanelWidthOf(panel: string): number | undefined {
+    return this.readSavedState()?.view?.panelWidths?.[panel];
   }
 
   savedTabFileNames(): string[] | undefined {

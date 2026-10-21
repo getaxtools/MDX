@@ -36,14 +36,25 @@ export interface SourceEditor {
   text(): string;
   /** Scrolls to a place given from 0 (top) to 1 (end), such as where the preview was. */
   scrollToRatio(scrollRatio: number): void;
+  /** The zero-based line at the top of the view, with a fraction for how far into it the view starts. */
+  topLine(): number;
+  /** Scrolls so that a zero-based line, with an optional fraction, is at the top of the view. */
+  scrollToLine(line: number): void;
   /** Replaces the whole text, for example after the file was reloaded from disk. */
   replaceText(text: string): void;
   run(command: EditorMenuCommand): void;
   destroy(): void;
 }
 
-/** Keys the app itself owns while editing: Ctrl+/ switches back to preview and Ctrl+D stars the document. */
-const KEYS_LEFT_TO_THE_APP = new Set(['Mod-/', 'Mod-d', 'Alt-A', 'Shift-Alt-a']);
+/** Keys the app owns while editing: Ctrl+/ returns to preview, Ctrl+D stars the document, Alt+arrows go back and forward. */
+const KEYS_LEFT_TO_THE_APP = new Set([
+  'Mod-/',
+  'Mod-d',
+  'Alt-A',
+  'Shift-Alt-a',
+  'Alt-ArrowLeft',
+  'Alt-ArrowRight',
+]);
 const BRACKETS_CLOSED_AUTOMATICALLY = ['(', '[', '{', '"', '`'];
 
 export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
@@ -51,17 +62,7 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
     parent: options.parent,
     state: EditorState.create({ doc: options.text, extensions: editorExtensions(options) }),
   });
-  const commands: Readonly<Record<EditorMenuCommand, () => void>> = {
-    undo: () => undo(view),
-    redo: () => redo(view),
-    selectAll: () => selectAll(view),
-    find: () => openSearchPanel(view),
-    replace: () => {
-      openSearchPanel(view);
-      view.dom.querySelector<HTMLInputElement>('input[name="replace"]')?.focus();
-    },
-    goToLine: () => gotoLine(view),
-  };
+  const commands = menuCommandsOf(view);
   const scroller = view.scrollDOM;
   const scrollableHeight = () => Math.max(scroller.scrollHeight - scroller.clientHeight, 0);
   const reportScroll = () => {
@@ -75,6 +76,10 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
     scrollToRatio: (scrollRatio) => {
       scroller.scrollTop = scrollRatio * scrollableHeight();
     },
+    topLine: () => topLineOf(view),
+    scrollToLine: (line) => {
+      scroller.scrollTop = scrollTopForLine(view, line);
+    },
     replaceText: (text) => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } }),
     run: (command) => commands[command](),
     destroy: () => {
@@ -82,6 +87,36 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
       view.destroy();
     },
   };
+}
+
+function menuCommandsOf(view: EditorView): Readonly<Record<EditorMenuCommand, () => void>> {
+  return {
+    undo: () => undo(view),
+    redo: () => redo(view),
+    selectAll: () => selectAll(view),
+    find: () => openSearchPanel(view),
+    replace: () => {
+      openSearchPanel(view);
+      view.dom.querySelector<HTMLInputElement>('input[name="replace"]')?.focus();
+    },
+    goToLine: () => gotoLine(view),
+  };
+}
+
+function topLineOf(view: EditorView): number {
+  const height = Math.max(view.scrollDOM.scrollTop - view.documentPadding.top, 0);
+  const block = view.lineBlockAtHeight(height);
+  const lineIndex = view.state.doc.lineAt(block.from).number - 1;
+  const fraction = block.height > 0 ? (height - block.top) / block.height : 0;
+  return lineIndex + Math.min(Math.max(fraction, 0), 1);
+}
+
+function scrollTopForLine(view: EditorView, line: number): number {
+  const { doc } = view.state;
+  const lineIndex = Math.min(Math.max(Math.floor(line), 0), doc.lines - 1);
+  const block = view.lineBlockAt(doc.line(lineIndex + 1).from);
+  const fraction = Math.min(Math.max(line - lineIndex, 0), 1);
+  return block.top + fraction * block.height + view.documentPadding.top;
 }
 
 function editorExtensions(options: SourceEditorOptions): Extension[] {
@@ -96,7 +131,8 @@ function editorExtensions(options: SourceEditorOptions): Extension[] {
     syntaxHighlighting(markdownHighlightStyle),
     editorTheme,
     EditorState.phrases.of(options.phrases),
-    EditorView.contentAttributes.of({ 'aria-label': options.label, spellcheck: 'false' }),
+    // An explicit tab stop lets checkers see that the scrolling editor can be reached with the keyboard.
+    EditorView.contentAttributes.of({ 'aria-label': options.label, spellcheck: 'false', tabindex: '0' }),
     keymap.of(formattingKeymap()),
     keymap.of(
       withoutKeysLeftToTheApp([

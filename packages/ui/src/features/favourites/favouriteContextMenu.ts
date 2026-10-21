@@ -1,6 +1,7 @@
 import type { FavouriteGroup } from '@mdx/core';
 import type { Translator } from '@mdx/i18n';
 import type { ContextMenuItem } from '../../components/ContextMenuItem';
+import { pathMenuItems, type PathMenuItemId } from '../file-paths/pathCommands';
 import { describeCombination } from '../shortcuts/describeCombination';
 
 const MOVE_TO_GROUP_PREFIX = 'moveToGroup:';
@@ -14,7 +15,8 @@ export type FavouriteMenuItemId =
   | `${typeof MOVE_TO_GROUP_PREFIX}${string}`
   | 'removeFromGroup'
   | 'refresh'
-  | 'remove';
+  | 'remove'
+  | PathMenuItemId;
 
 export type FavouriteGroupMenuItemId = 'renameGroup' | 'removeGroup';
 
@@ -27,10 +29,11 @@ export interface FavouriteMenuState {
   readonly groups: readonly FavouriteGroup[];
   readonly groupId: string | undefined;
   readonly isFolder: boolean;
+  readonly isAvailable?: boolean;
 }
 
 export function favouriteContextMenuItems(
-  { canMoveUp, canMoveDown, groups, groupId, isFolder }: FavouriteMenuState,
+  { canMoveUp, canMoveDown, groups, groupId, isFolder, isAvailable = true }: FavouriteMenuState,
   translator: Translator,
 ): ContextMenuItem<FavouriteMenuItemId>[] {
   return [
@@ -57,6 +60,7 @@ export function favouriteContextMenuItems(
       shortcut: describeCombination(['alt', '↓'], translator),
     },
     ...groupMoveItems(groups, groupId, translator),
+    ...pathMenuItems(translator, { isAvailable }),
     {
       id: 'remove',
       label: translator.translate('favourites.remove'),

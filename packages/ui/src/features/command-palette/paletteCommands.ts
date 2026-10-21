@@ -1,4 +1,4 @@
-import { READING_WIDTHS, THEME_PREFERENCES } from '@mdx/core';
+import { READING_WIDTHS, THEME_PREFERENCES, TYPOGRAPHIES } from '@mdx/core';
 import type { MessageKey, Translator } from '@mdx/i18n';
 import { COMMAND_SHORTCUTS } from '../shortcuts/commandShortcuts';
 import { describeCombination } from '../shortcuts/describeCombination';
@@ -25,8 +25,13 @@ const COMMANDS_WITHOUT_SHORTCUTS: readonly CommandWithoutShortcut[] = [
   { command: { kind: 'togglePinActiveTab' }, actionKey: 'menu.window.togglePin' },
   { command: { kind: 'closeInactiveTabs' }, actionKey: 'menu.window.closeOthers' },
   { command: { kind: 'closeTabsRightOfActive' }, actionKey: 'menu.window.closeToTheRight' },
+  { command: { kind: 'copyAsHtml' }, actionKey: 'menu.edit.copyAsHtml' },
+  { command: { kind: 'exportDocument', format: 'html' }, actionKey: 'menu.file.exportAsHtml' },
+  { command: { kind: 'exportDocument', format: 'plainText' }, actionKey: 'menu.file.exportAsPlainText' },
   { command: { kind: 'toggleStatusBar' }, actionKey: 'menu.view.toggleStatusBar' },
+  { command: { kind: 'toggleBreadcrumbs' }, actionKey: 'settings.breadcrumbs.label' },
   { command: { kind: 'showAbout' }, actionKey: 'menu.help.about' },
+  { command: { kind: 'confirmClearAllData' }, actionKey: 'privacy.clearAllData' },
   { command: { kind: 'revertDocument' }, actionKey: 'menu.file.revert' },
   { command: { kind: 'runEditorCommand', command: 'undo' }, actionKey: 'menu.edit.undo' },
   { command: { kind: 'runEditorCommand', command: 'redo' }, actionKey: 'menu.edit.redo' },
@@ -55,6 +60,7 @@ export function paletteCommands(translator: Translator): PaletteCommand[] {
     ...withoutShortcuts,
     ...themeCommands(translator),
     ...readingWidthCommands(translator),
+    ...typographyCommands(translator),
   ];
 }
 
@@ -76,6 +82,17 @@ function readingWidthCommands(translator: Translator): PaletteCommand[] {
     label: translator.translate('palette.groupedAction', {
       group,
       action: translator.translate(`menu.view.readingWidth.${readingWidth}`),
+    }),
+  }));
+}
+
+function typographyCommands(translator: Translator): PaletteCommand[] {
+  const group = translator.translate('menu.view.typography');
+  return TYPOGRAPHIES.map((typography) => ({
+    command: { kind: 'setTypography', typography },
+    label: translator.translate('palette.groupedAction', {
+      group,
+      action: translator.translate(`menu.view.typography.${typography}`),
     }),
   }));
 }

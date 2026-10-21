@@ -1,10 +1,19 @@
 import type { Tab } from '@mdx/core';
 import type { Translator } from '@mdx/i18n';
+import { isUntitledLocation, type DocumentLocation } from '@mdx/platform';
 import type { ContextMenuItem } from '../../components/ContextMenuItem';
+import {
+  commandForPathMenuItem,
+  isPathMenuItem,
+  pathMenuItems,
+  type PathCommand,
+  type PathMenuItemId,
+} from '../file-paths/pathCommands';
 import { shortcutLabelFor } from '../shortcuts/commandShortcuts';
 import type { TabCommand } from './tabCommands';
 
-export type TabMenuItemId = 'close' | 'closeOthers' | 'closeToTheRight' | 'pin' | 'unpin' | 'reopenClosed';
+export type TabMenuItemId =
+  'close' | 'closeOthers' | 'closeToTheRight' | 'pin' | 'unpin' | 'reopenClosed' | PathMenuItemId;
 
 export interface TabPosition {
   readonly index: number;
@@ -32,6 +41,7 @@ export function tabContextMenuItems(
       label: translator.translate('tabs.closeToTheRight'),
       isDisabled: index === tabCount - 1,
     },
+    ...(isUntitledLocation(tab.location) ? [] : pathMenuItems(translator)),
     tab.isPinned
       ? { id: 'unpin', label: translator.translate('tabs.unpin'), hasSeparatorBefore: true }
       : { id: 'pin', label: translator.translate('tabs.pin'), hasSeparatorBefore: true },
@@ -44,8 +54,13 @@ export function tabContextMenuItems(
   ];
 }
 
-export function commandForTabMenuItem(itemId: TabMenuItemId, canonicalKey: string): TabCommand {
-  const commands: Record<TabMenuItemId, TabCommand> = {
+export function commandForTabMenuItem(
+  itemId: TabMenuItemId,
+  location: DocumentLocation,
+): TabCommand | PathCommand {
+  if (isPathMenuItem(itemId)) return commandForPathMenuItem(itemId, location.displayPath);
+  const { canonicalKey } = location;
+  const commands: Record<Exclude<TabMenuItemId, PathMenuItemId>, TabCommand> = {
     close: { kind: 'closeTab', canonicalKey },
     closeOthers: { kind: 'closeOtherTabs', canonicalKey },
     closeToTheRight: { kind: 'closeTabsToTheRight', canonicalKey },

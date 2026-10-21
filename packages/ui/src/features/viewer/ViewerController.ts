@@ -1,5 +1,6 @@
 import {
   measureDocument,
+  showSidebarView,
   type DocumentStatistics,
   type Favourite,
   type RecentFile,
@@ -13,6 +14,9 @@ import {
   DocumentOpenError,
   isUntitledLocation,
   type AppMenuPort,
+  type DesktopShellPort,
+  type DocumentExportPort,
+  type ExportFormat,
   type DocumentLinksPort,
   type FavouritesFilePort,
   type FolderListing,
@@ -23,6 +27,8 @@ import {
   type DocumentWatcherPort,
   type DocumentLocation,
   type DocumentRequestsPort,
+  type FolderSearchResults,
+  type TextSearchOptions,
   type LineEnding,
   type OpenedDocument,
   type PathStatus,
@@ -30,10 +36,12 @@ import {
 import type { MarkdownRenderer, OutlineEntry } from '@mdx/renderer';
 import type { DocumentLink } from '../document-view/DocumentLink';
 import { DocumentEditing } from '../editing/DocumentEditing';
+import type { FindQuery } from '../find/findTextRanges';
 import { EditingActions } from '../editing/EditingActions';
 import type { EditorRequest } from '../editing/editingCommands';
 import { ExplorerFolderActions } from '../explorer/ExplorerFolderActions';
 import { FolderRefresh } from '../folder-tree/FolderRefresh';
+import { DocumentNavigation } from '../navigation/DocumentNavigation';
 import {
   DocumentSaving,
   type UnsavedChangesChoice,
@@ -46,7 +54,18 @@ import { commandForMenuItem, type ViewerCommand } from './viewerCommands';
 
 export const STATE_SAVE_DELAY_MS = 500;
 export const MAX_RECENT_MENU_ENTRIES = 10;
+/** How long typing pauses before the preview beside the editor shows the new text. */
+export const LIVE_PREVIEW_DELAY_MS = 150;
+const LARGE_DOCUMENT_LIVE_PREVIEW_DELAY_MS = 500;
+const LARGE_DOCUMENT_CHARACTERS = 256_000;
 const SCROLL_RATIO_PRECISION = 0.001;
+const EXPORT_EXTENSIONS: Readonly<Record<ExportFormat, string>> = { html: '.html', plainText: '.txt' };
+
+/** `Guide.md` exports as `Guide.html` or `Guide.txt`. */
+function exportFileNameFor(fileName: string, format: ExportFormat): string {
+  const baseName = fileName.replace(/\.[^.]+$/, '') || fileName;
+  return `${baseName}${EXPORT_EXTENSIONS[format]}`;
+}
 
 export interface ViewerControllerDependencies {
   readonly session: ViewerSession;
@@ -61,6 +80,8 @@ export interface ViewerControllerDependencies {
   readonly folders?: FolderPort;
   readonly folderWatcher?: FolderWatcherPort;
   readonly favouritesFile?: FavouritesFilePort;
+  readonly desktopShell?: DesktopShellPort;
+  readonly documentExport?: DocumentExportPort;
 }
 
 export interface RenderedActiveDocument {
@@ -86,6 +107,14 @@ export interface ViewerSnapshot {
   readonly noticeActions?: readonly NoticeAction[];
   readonly openDialog?: ViewerDialog;
   readonly findRequest?: number;
+  /** What the find bar searches for when it opens, such as the query of a Find in Folders match. */
+  readonly findQuery?: FindQuery;
+  /** Goes up each time the Find in Folders box should get the keyboard focus. */
+  readonly folderSearchFocusRequest?: number;
+  /** Goes up each time the shown document should be copied as HTML, from the Edit menu or the palette. */
+  readonly copyAsHtmlRequest?: number;
+  /** The format the shown document should export to, numbered so the same format can be asked again. */
+  readonly exportRequest?: ExportRequest;
   readonly externalLinkRequest?: string;
   readonly isSourceView?: boolean;
   readonly unsavedChanges?: UnsavedChangesRequest;
@@ -104,13 +133,20 @@ export interface NoticeAction {
   readonly command: ViewerCommand;
 }
 
-export type ViewerDialog = 'about' | 'keyboardShortcuts' | 'pasteTable' | 'commandPalette';
+export interface ExportRequest {
+  readonly format: ExportFormat;
+  readonly number: number;
+}
+
+export type ViewerDialog =
+  'about' | 'keyboardShortcuts' | 'pasteTable' | 'commandPalette' | 'settings' | 'clearAllData';
 
 const DIALOGS_BY_COMMAND: Partial<Record<ViewerCommand['kind'], ViewerDialog>> = {
   showAbout: 'about',
   showKeyboardShortcuts: 'keyboardShortcuts',
   showPasteTable: 'pasteTable',
   showCommandPalette: 'commandPalette',
+  showSettings: 'settings',
 };
 
 type SnapshotListener = (snapshot: ViewerSnapshot) => void;
@@ -128,10 +164,16 @@ export class ViewerController {
   private pendingSave: ReturnType<typeof setTimeout> | undefined;
   private renderedDocument: OpenedDocument | undefined;
   private renderedText: string | undefined;
+  private hasRenderedSourceLines = false;
+  private pendingLivePreview: ReturnType<typeof setTimeout> | undefined;
   private activeDocument: RenderedActiveDocument | undefined;
   private openDialog: ViewerDialog | undefined;
   private noticeActions: readonly NoticeAction[] = [];
   private findRequest = 0;
+  private findQuery: FindQuery | undefined;
+  private folderSearchFocusRequest = 0;
+  private copyAsHtmlRequest = 0;
+  private exportRequest: ExportRequest | undefined;
   private externalLinkRequest: string | undefined;
   private isSourceView = false;
   private shownMenuViewState = '';
@@ -144,6 +186,7 @@ export class ViewerController {
   private readonly saving: DocumentSaving;
   private readonly editing = new DocumentEditing();
   private readonly editingActions: EditingActions;
+  private readonly navigation: DocumentNavigation;
 
   constructor(private readonly dependencies: ViewerControllerDependencies) {
     this.snapshot = {
@@ -178,6 +221,7 @@ export class ViewerController {
         })
       : undefined;
     this.explorerFolderActions = new ExplorerFolderActions(dependencies.session, dependencies.folders);
+    this.navigation = new DocumentNavigation(dependencies.session, (path) => this.openDocument(path));
     this.folderRefresh = new FolderRefresh(dependencies.folderWatcher, () =>
       this.publish(this.composeSnapshot(this.snapshot.notice)),
     );
@@ -186,6 +230,7 @@ export class ViewerController {
   async start(): Promise<void> {
     const { session, requests } = this.dependencies;
     const { wasReset } = await session.restore();
+    this.navigation.recordActiveDocument();
     this.publish(this.composeSnapshot(undefined));
     if (wasReset) this.showNotice('errors.appState.reset');
     this.stopActions.push(session.subscribe(() => this.handleSessionChange()));
@@ -201,6 +246,7 @@ export class ViewerController {
   stop(): void {
     for (const stopAction of this.stopActions.splice(0)) stopAction();
     clearTimeout(this.pendingSave);
+    clearTimeout(this.pendingLivePreview);
   }
 
   async saveNow(): Promise<void> {
@@ -352,6 +398,7 @@ export class ViewerController {
 
   closeFind(): void {
     this.findRequest = 0;
+    this.findQuery = undefined;
     this.publish(this.composeSnapshot(this.snapshot.notice));
   }
 
@@ -363,6 +410,10 @@ export class ViewerController {
   async execute(command: ViewerCommand): Promise<void> {
     if (isTabCommand(command)) {
       this.saving.runTabCommand(command);
+      return;
+    }
+    if (command.kind === 'setLanguage') {
+      this.changeLanguage(command.language);
       return;
     }
     if (applySessionCommand(this.dependencies.session, command)) return;
@@ -392,20 +443,48 @@ export class ViewerController {
     importFavourites: () => this.importFavourites(),
     refreshFolders: () => this.folderRefresh.refreshShownFolders(),
     toggleEditing: () => this.editingActions.toggleActiveDocument(),
+    togglePreviewBesideEditor: () => this.togglePreviewBesideEditor(),
+    newDocument: () => this.openNewDocument(),
+    goBack: () => this.navigation.goBack(),
+    goForward: () => this.navigation.goForward(),
+    copyPath: ({ path }) => this.copyPath(path),
+    revealInFileManager: ({ path }) => this.revealInFileManager(path),
+    toggleFullScreen: () => this.dependencies.desktopShell?.toggleFullScreen(),
     runEditorCommand: ({ command }) => {
       this.editingActions.runEditorCommand(command);
     },
     revertDocument: () => this.editingActions.revertActiveDocument(),
+    reloadActiveDocument: () => this.reloadActiveDocument(),
     reloadFromDisk: ({ canonicalKey }) => this.editingActions.reloadFromDisk(canonicalKey),
     overwriteChangesOnDisk: ({ canonicalKey }) => this.saving.overwriteChangesOnDisk(canonicalKey),
     print: () => {
       if (this.activeDocument) this.dependencies.printer?.printActiveDocument();
     },
+    showFolderSearch: () => {
+      this.dependencies.session.updateViewSettings((viewSettings) => showSidebarView(viewSettings, 'search'));
+      this.folderSearchFocusRequest += 1;
+      this.publish(this.composeSnapshot(this.snapshot.notice));
+    },
+    openSearchMatch: ({ path, query, options }) => this.openSearchMatch(path, { text: query, ...options }),
     showFind: () => {
       if (this.editingActions.runEditorCommand('find')) return;
       this.findRequest += 1;
       this.publish(this.composeSnapshot(this.snapshot.notice));
     },
+    copyAsHtml: () => {
+      if (!this.activeDocument) return;
+      this.copyAsHtmlRequest += 1;
+      this.publish(this.composeSnapshot(this.snapshot.notice));
+    },
+    copyHtml: ({ html }) => this.copyHtml(html),
+    exportDocument: ({ format }) => {
+      if (!this.activeDocument) return;
+      this.exportRequest = { format, number: (this.exportRequest?.number ?? 0) + 1 };
+      this.publish(this.composeSnapshot(this.snapshot.notice));
+    },
+    saveExport: ({ format, contents }) => this.saveExport(format, contents),
+    confirmClearAllData: () => this.confirmClearAllData(),
+    clearAllData: () => this.clearAllData(),
     toggleSourceView: () => {
       this.isSourceView = !this.isSourceView;
       this.publish(this.composeSnapshot(this.snapshot.notice));
@@ -433,15 +512,24 @@ export class ViewerController {
   private showViewStateInMenu(): void {
     const { menu, session } = this.dependencies;
     if (!menu) return;
-    const { theme, readingWidth, isSidebarVisible, isOutlineVisible, isStatusBarVisible } =
-      session.currentState().viewSettings;
+    const {
+      theme,
+      readingWidth,
+      typography,
+      isSidebarVisible,
+      isOutlineVisible,
+      isStatusBarVisible,
+      isPreviewBesideEditor,
+    } = session.currentState().viewSettings;
     const state = {
       theme,
       readingWidth,
+      typography,
       isSidebarVisible,
       isOutlineVisible,
       isStatusBarVisible,
       isSourceView: this.isSourceView,
+      isPreviewBesideEditor,
     };
     const stateKey = JSON.stringify(state);
     if (stateKey === this.shownMenuViewState) return;
@@ -479,6 +567,24 @@ export class ViewerController {
     return this.explorerFolderActions.listFolderContents(folderPath);
   }
 
+  /** Finds text in the opened and favourite folders, for the Search view. */
+  searchFolders(query: string, options: TextSearchOptions): Promise<FolderSearchResults> {
+    return this.explorerFolderActions.searchDocuments(query, options);
+  }
+
+  hasSearchableFolders(): boolean {
+    return this.explorerFolderActions.hasSearchedFolders();
+  }
+
+  /** Opens a document found by Find in Folders with the find bar showing the same matches. */
+  private async openSearchMatch(path: string, query: FindQuery): Promise<void> {
+    await this.openDocument(path);
+    if (this.editingActions.isActiveDocumentEditing()) return;
+    this.findQuery = query;
+    this.findRequest += 1;
+    this.publish(this.composeSnapshot(this.snapshot.notice));
+  }
+
   /** Documents to offer in quick open: open, recent and favourite ones first, then those in folders. */
   quickOpenDocuments(): Promise<DocumentLocation[]> {
     return this.explorerFolderActions.quickOpenDocuments();
@@ -487,6 +593,120 @@ export class ViewerController {
   /** Records the source editor's text for a document; the window shows when it has unsaved changes. */
   updateEditedText(canonicalKey: string, text: string): void {
     this.editingActions.updateText(canonicalKey, text);
+    if (this.isPreviewBesideEditor()) this.scheduleLivePreview(text.length);
+  }
+
+  private scheduleLivePreview(textLength: number): void {
+    clearTimeout(this.pendingLivePreview);
+    const delayMs =
+      textLength > LARGE_DOCUMENT_CHARACTERS ? LARGE_DOCUMENT_LIVE_PREVIEW_DELAY_MS : LIVE_PREVIEW_DELAY_MS;
+    this.pendingLivePreview = setTimeout(() => void this.refreshActiveDocument(), delayMs);
+  }
+
+  private isPreviewBesideEditor(): boolean {
+    return (
+      this.dependencies.session.currentState().viewSettings.isPreviewBesideEditor &&
+      this.editingActions.isActiveDocumentEditing()
+    );
+  }
+
+  /** Shows or hides the preview beside the editor; showing it opens the editor if it is not open yet. */
+  private togglePreviewBesideEditor(): void {
+    const { session } = this.dependencies;
+    const isShown = !session.currentState().viewSettings.isPreviewBesideEditor;
+    session.updateViewSettings((viewSettings) => ({ ...viewSettings, isPreviewBesideEditor: isShown }));
+    if (isShown) this.editingActions.startEditingActiveDocument();
+  }
+
+  /** Reads the active document from disk again; unsaved edits are dropped only once the user agrees. */
+  private async reloadActiveDocument(): Promise<void> {
+    const { session, translator } = this.dependencies;
+    const location = session.currentState().tabStrip.activeTab()?.location;
+    if (!location || isUntitledLocation(location)) return;
+    const { canonicalKey } = location;
+    if (!this.editing.hasUnsavedChanges(canonicalKey)) {
+      await this.editingActions.reloadFromDisk(canonicalKey);
+      return;
+    }
+    this.showNotice('editing.reloadLosesChanges', { path: location.fileName }, [
+      {
+        label: translator.translate('editing.conflict.reload'),
+        command: { kind: 'reloadFromDisk', canonicalKey },
+      },
+      { label: translator.translate('editing.conflict.keepMine'), command: { kind: 'keepEditedText' } },
+    ]);
+  }
+
+  private async copyPath(path: string): Promise<void> {
+    try {
+      await this.dependencies.desktopShell?.writeClipboardText(path);
+    } catch {
+      this.showNotice('errors.paths.copyFailed');
+    }
+  }
+
+  /** The translator is made once at startup, so a new language shows after the next start. */
+  private changeLanguage(language: string): void {
+    const { session } = this.dependencies;
+    if (session.currentState().viewSettings.language === language) return;
+    session.updateViewSettings((viewSettings) => ({ ...viewSettings, language }));
+    this.showNotice('settings.language.restartNeeded');
+  }
+
+  private confirmClearAllData(): void {
+    if (this.editing.unsavedKeys().size > 0) {
+      this.openDialog = undefined;
+      this.showNotice('privacy.clearAllData.unsavedChanges');
+      return;
+    }
+    this.openDialog = 'clearAllData';
+    this.publish(this.composeSnapshot(this.snapshot.notice));
+  }
+
+  private async clearAllData(): Promise<void> {
+    if (this.editing.unsavedKeys().size > 0) return;
+    this.openDialog = undefined;
+    this.editing.keepOnly(new Set());
+    this.dependencies.session.clearAllData();
+    this.navigation.forgetHistory();
+    this.navigation.recordActiveDocument();
+    await this.saveNow();
+    this.showNotice('privacy.clearAllData.done');
+  }
+
+  private async saveExport(format: ExportFormat, contents: string): Promise<void> {
+    const { documentExport } = this.dependencies;
+    const document = this.activeDocument;
+    if (!documentExport || !document) return;
+    const fileName = exportFileNameFor(document.fileName, format);
+    try {
+      const savedPath = await documentExport.exportDocument(contents, fileName, format);
+      if (savedPath) this.showNotice('export.done', { path: savedPath });
+    } catch {
+      this.showNotice('export.failed', { fileName: document.fileName });
+    }
+  }
+
+  private async copyHtml(html: string): Promise<void> {
+    try {
+      await this.dependencies.desktopShell?.writeClipboardHtml(html);
+    } catch {
+      this.showNotice('errors.document.copyHtmlFailed');
+    }
+  }
+
+  private async revealInFileManager(path: string): Promise<void> {
+    try {
+      await this.dependencies.desktopShell?.revealInFileManager(path);
+    } catch {
+      this.showNotice('errors.paths.revealFailed', { path });
+    }
+  }
+
+  /** Opens an empty Untitled document in the editor, ready to type. */
+  private openNewDocument(): void {
+    this.openAsNewDocument('');
+    this.editingActions.startEditingActiveDocument();
   }
 
   /** Keeps a folder's listing current while it is shown; call the returned function when it is hidden. */
@@ -564,6 +784,7 @@ export class ViewerController {
   }
 
   private handleSessionChange(): void {
+    this.navigation.recordActiveDocument();
     this.publish(this.composeSnapshot(this.snapshot.notice));
     this.showViewStateInMenu();
     this.showRecentFilesInMenu();
@@ -590,18 +811,28 @@ export class ViewerController {
   private async refreshActiveDocument(): Promise<void> {
     const document = await this.loadActiveDocument();
     const text = document ? this.textShownFor(document) : undefined;
-    if (document === this.renderedDocument && text === this.renderedText) return;
+    const shouldMarkSourceLines = this.isPreviewBesideEditor();
+    if (
+      document === this.renderedDocument &&
+      text === this.renderedText &&
+      shouldMarkSourceLines === this.hasRenderedSourceLines
+    ) {
+      return;
+    }
     this.renderedDocument = document;
     this.renderedText = text;
-    this.activeDocument = document && text !== undefined ? this.render(document, text) : undefined;
+    this.hasRenderedSourceLines = shouldMarkSourceLines;
+    this.activeDocument =
+      document && text !== undefined ? this.render(document, text, shouldMarkSourceLines) : undefined;
     this.publish(this.composeSnapshot(this.snapshot.notice));
   }
 
-  /** While the document is being edited the preview is hidden, so its last edited text is enough. */
+  /** While the document is edited without a preview beside it, its last rendered text is enough. */
   private textShownFor(document: OpenedDocument): string {
     const { canonicalKey } = document.location;
     if (
       this.editing.isEditing(canonicalKey) &&
+      !this.isPreviewBesideEditor() &&
       this.renderedDocument === document &&
       this.renderedText !== undefined
     ) {
@@ -642,12 +873,17 @@ export class ViewerController {
     }
   }
 
-  private render(document: OpenedDocument, text: string): RenderedActiveDocument {
+  private render(
+    document: OpenedDocument,
+    text: string,
+    shouldMarkSourceLines: boolean,
+  ): RenderedActiveDocument {
     const { resources } = this.dependencies;
     const isUntitled = isUntitledLocation(document.location);
     const { html, outline, frontMatter } = this.dependencies.renderer.render(text, {
       resolveResourceUrl: (source) =>
         isUntitled ? undefined : resources?.imageUrl(document.location.displayPath, source),
+      includeSourceLines: shouldMarkSourceLines,
     });
     return {
       canonicalKey: document.location.canonicalKey,
@@ -677,10 +913,25 @@ export class ViewerController {
       ...(notice === undefined ? {} : { notice }),
       ...(notice !== undefined && this.noticeActions.length > 0 ? { noticeActions: this.noticeActions } : {}),
       ...(this.openDialog === undefined ? {} : { openDialog: this.openDialog }),
-      ...(this.findRequest > 0 ? { findRequest: this.findRequest } : {}),
+      ...this.documentRequestsPart(),
       ...(this.externalLinkRequest === undefined ? {} : { externalLinkRequest: this.externalLinkRequest }),
       ...(this.isSourceView ? { isSourceView: true } : {}),
       ...this.unsavedChangesPart(),
+    };
+  }
+
+  private documentRequestsPart(): Pick<
+    ViewerSnapshot,
+    'findRequest' | 'findQuery' | 'copyAsHtmlRequest' | 'exportRequest' | 'folderSearchFocusRequest'
+  > {
+    return {
+      ...(this.findRequest > 0 ? { findRequest: this.findRequest } : {}),
+      ...(this.findQuery ? { findQuery: this.findQuery } : {}),
+      ...(this.folderSearchFocusRequest > 0
+        ? { folderSearchFocusRequest: this.folderSearchFocusRequest }
+        : {}),
+      ...(this.copyAsHtmlRequest > 0 ? { copyAsHtmlRequest: this.copyAsHtmlRequest } : {}),
+      ...(this.exportRequest ? { exportRequest: this.exportRequest } : {}),
     };
   }
 

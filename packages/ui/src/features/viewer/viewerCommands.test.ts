@@ -11,16 +11,22 @@ describe('commandForMenuItem', () => {
     ['clearUnpinnedRecentFiles', { kind: 'clearUnpinnedRecentFiles' }],
     ['closeActiveTab', { kind: 'closeActiveTab' }],
     ['showPasteTable', { kind: 'showPasteTable' }],
+    ['copyAsHtml', { kind: 'copyAsHtml' }],
+    ['exportAsHtml', { kind: 'exportDocument', format: 'html' }],
+    ['exportAsPlainText', { kind: 'exportDocument', format: 'plainText' }],
+    ['showFolderSearch', { kind: 'showFolderSearch' }],
     ['exportFavourites', { kind: 'exportFavourites' }],
     ['importFavourites', { kind: 'importFavourites' }],
     ['theme.dark', { kind: 'setTheme', theme: 'dark' }],
     ['readingWidth.narrow', { kind: 'setReadingWidth', readingWidth: 'narrow' }],
+    ['typography.book', { kind: 'setTypography', typography: 'book' }],
     ['toggleSidebar', { kind: 'toggleSidebar' }],
     ['toggleStatusBar', { kind: 'toggleStatusBar' }],
     ['moveTabLeft', { kind: 'moveActiveTab', step: -1 }],
     ['togglePinActiveTab', { kind: 'togglePinActiveTab' }],
     ['closeInactiveTabs', { kind: 'closeInactiveTabs' }],
     ['showAbout', { kind: 'showAbout' }],
+    ['showSettings', { kind: 'showSettings' }],
   ])('maps the %s menu item to %o', (menuItemId, command) => {
     expect(commandForMenuItem(menuItemId)).toEqual(command);
   });
@@ -41,6 +47,7 @@ describe('commandForMenuItem', () => {
 
   it('ignores unknown menu items', () => {
     expect(commandForMenuItem('theme.neon')).toBeUndefined();
+    expect(commandForMenuItem('typography.comic')).toBeUndefined();
     expect(commandForMenuItem('format-disk')).toBeUndefined();
     expect(commandForMenuItem('openRecent.x')).toBeUndefined();
     expect(commandForMenuItem('toString')).toBeUndefined();

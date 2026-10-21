@@ -14,13 +14,25 @@ describe('recent file context menu', () => {
     );
 
     expect(availableIds).not.toContain('locate');
-    expect(missingIds).toEqual(['open', 'locate', 'pin', 'remove', 'clearUnpinned']);
+    expect(missingIds).toEqual([
+      'open',
+      'locate',
+      'copyPath',
+      'revealInFileManager',
+      'pin',
+      'remove',
+      'clearUnpinned',
+    ]);
   });
 
   it('turns Locate into a command for that file', () => {
-    expect(commandForRecentFileMenuItem('locate', 'a.md')).toEqual({
+    expect(commandForRecentFileMenuItem('locate', recentFile)).toEqual({
       kind: 'locateRecentFile',
-      canonicalKey: 'a.md',
+      canonicalKey: recentFile.location.canonicalKey,
+    });
+    expect(commandForRecentFileMenuItem('copyPath', recentFile)).toEqual({
+      kind: 'copyPath',
+      path: recentFile.location.displayPath,
     });
   });
 });

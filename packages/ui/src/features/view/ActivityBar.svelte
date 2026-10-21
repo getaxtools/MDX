@@ -1,16 +1,27 @@
 <script lang="ts">
+  import type { SidebarView } from '@mdx/core';
   import type { MessageKey, Translator } from '@mdx/i18n';
   import { shortcutLabelFor } from '../shortcuts/commandShortcuts';
   import type { ViewerCommand } from '../viewer/viewerCommands';
 
   interface Props {
     isSidebarVisible: boolean;
+    sidebarView?: SidebarView;
     isOutlineVisible: boolean;
     translator: Translator;
     onCommand: (command: ViewerCommand) => void;
   }
 
-  const { isSidebarVisible, isOutlineVisible, translator, onCommand }: Props = $props();
+  const {
+    isSidebarVisible,
+    sidebarView = 'explorer',
+    isOutlineVisible,
+    translator,
+    onCommand,
+  }: Props = $props();
+
+  const explorerCommand: ViewerCommand = { kind: 'toggleSidebarView', sidebarView: 'explorer' };
+  const searchCommand: ViewerCommand = { kind: 'showFolderSearch' };
 
   function labelOf(labelKey: MessageKey, command: ViewerCommand): string {
     const label = translator.translate(labelKey);
@@ -22,13 +33,29 @@
 <nav class="activity-bar" aria-label={translator.translate('activityBar.label')}>
   <button
     aria-label={translator.translate('activityBar.sidebar')}
-    title={labelOf('activityBar.sidebar', { kind: 'toggleSidebar' })}
-    aria-pressed={isSidebarVisible}
-    onclick={() => onCommand({ kind: 'toggleSidebar' })}
+    title={labelOf('activityBar.sidebar', explorerCommand)}
+    aria-pressed={isSidebarVisible && sidebarView === 'explorer'}
+    onclick={() => onCommand(explorerCommand)}
   >
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M8 3.5h7l4 4v10H8z" />
       <path d="M15 3.5v4h4M5 7v13.5h11" />
+    </svg>
+  </button>
+  <button
+    aria-label={translator.translate('activityBar.search')}
+    title={labelOf('activityBar.search', searchCommand)}
+    aria-pressed={isSidebarVisible && sidebarView === 'search'}
+    onclick={() =>
+      onCommand(
+        isSidebarVisible && sidebarView === 'search'
+          ? { kind: 'toggleSidebarView', sidebarView: 'search' }
+          : searchCommand,
+      )}
+  >
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="10.5" cy="10.5" r="6" />
+      <path d="M15 15l5.5 5.5" />
     </svg>
   </button>
   <button
@@ -43,6 +70,18 @@
   </button>
   <button
     class="bottom"
+    aria-label={translator.translate('settings.title')}
+    title={labelOf('settings.title', { kind: 'showSettings' })}
+    onclick={() => onCommand({ kind: 'showSettings' })}
+  >
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" />
+      <path
+        d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"
+      />
+    </svg>
+  </button>
+  <button
     aria-label={translator.translate('menu.help.keyboardShortcuts')}
     title={labelOf('menu.help.keyboardShortcuts', { kind: 'showKeyboardShortcuts' })}
     onclick={() => onCommand({ kind: 'showKeyboardShortcuts' })}

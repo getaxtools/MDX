@@ -6,6 +6,7 @@ import { findAccessibilityViolations } from '../../support/findAccessibilityViol
 import { TestWorkspace } from '../../support/TestWorkspace';
 
 const FIXTURE_ENTRIES = [
+  'extended-syntax.md',
   'getting-started.md',
   'gfm-showcase.md',
   'math.md',
@@ -45,8 +46,9 @@ describe('an expanded folder favourite', () => {
     renameSync(workspace.documentPath('math.md'), workspace.documentPath('formulas.md'));
 
     await mainWindow.waitForFolderEntries('documents', [
+      'extended-syntax.md',
       'formulas.md',
-      ...FIXTURE_ENTRIES.filter((name) => name !== 'math.md'),
+      ...FIXTURE_ENTRIES.filter((name) => name !== 'math.md' && name !== 'extended-syntax.md'),
     ]);
   });
 

@@ -21,5 +21,5 @@ pub use document_writer::{
     write_text_atomically,
 };
 pub use path_status::{PathStatus, status_of_path};
-pub use text_decoding::encoding_for_label;
+pub use text_decoding::{decode_document_bytes, encoding_for_label};
 pub use text_encoding::encode_document_text;

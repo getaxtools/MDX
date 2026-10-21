@@ -105,6 +105,16 @@ describe('treeKeyboard', () => {
     expect(onClick).toHaveBeenCalledWith('Docs');
   });
 
+  it('swaps Left and Right in a right-to-left layout', async () => {
+    const { tree, row } = renderTree();
+    tree.dir = 'rtl';
+    row('Plan.md').focus();
+
+    await userEvent.keyboard('{ArrowRight}');
+
+    expect(focusedName()).toBe('Docs');
+  });
+
   it('opens a row with Enter or Space', async () => {
     const { row, onClick } = renderTree();
     row('README.md').focus();

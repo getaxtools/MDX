@@ -1,11 +1,10 @@
 import { createIntl, createIntlCache, type IntlShape } from '@formatjs/intl';
 import englishMessages from '../locales/en.json' with { type: 'json' };
+import { DEFAULT_LOCALE } from './supportedLocales';
 
 export type MessageKey = keyof typeof englishMessages;
 export type MessageCatalog = Readonly<Record<MessageKey, string>>;
 export type MessageValues = Readonly<Record<string, string | number | Date>>;
-
-export const DEFAULT_LOCALE = 'en';
 
 export interface Translator {
   readonly locale: string;

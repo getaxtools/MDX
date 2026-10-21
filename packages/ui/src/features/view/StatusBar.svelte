@@ -61,7 +61,7 @@
   );
 </script>
 
-<footer class="status-bar" aria-label={translator.translate('statusBar.label')}>
+<footer class="status-bar" data-focus-region aria-label={translator.translate('statusBar.label')}>
   <span class="location" title={location}>{location ?? ''}</span>
   <div class="details">
     {#each details as detail (detail)}

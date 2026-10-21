@@ -2,20 +2,25 @@ mod menu_labels;
 pub mod recent_files_menu;
 mod view_menu_state;
 
+use std::collections::HashMap;
+use std::sync::Mutex;
 use tauri::menu::{
     CheckMenuItem, CheckMenuItemBuilder, Menu, MenuEvent, MenuItem, MenuItemBuilder,
     PredefinedMenuItem, Submenu, SubmenuBuilder,
 };
+
 use tauri::{App, AppHandle, Emitter, Manager, State, Wry};
 
 pub use menu_labels::MenuLabels;
 pub use view_menu_state::ViewMenuState;
 
+use crate::documents::DocumentError;
 use crate::open_requests::MAIN_WINDOW_LABEL;
-use recent_files_menu::{RecentFilesMenu, fill_recent_menu};
+use recent_files_menu::fill_recent_menu;
 use view_menu_state::{
-    READING_WIDTH_ITEM_PREFIX, THEME_ITEM_PREFIX, TOGGLE_OUTLINE_ITEM_ID, TOGGLE_SIDEBAR_ITEM_ID,
-    TOGGLE_SOURCE_VIEW_ITEM_ID, TOGGLE_STATUS_BAR_ITEM_ID,
+    READING_WIDTH_ITEM_PREFIX, THEME_ITEM_PREFIX, TOGGLE_OUTLINE_ITEM_ID,
+    TOGGLE_PREVIEW_BESIDE_EDITOR_ITEM_ID, TOGGLE_SIDEBAR_ITEM_ID, TOGGLE_SOURCE_VIEW_ITEM_ID,
+    TOGGLE_STATUS_BAR_ITEM_ID, TYPOGRAPHY_ITEM_PREFIX,
 };
 
 pub const MENU_COMMAND_EVENT: &str = "menu-command";
@@ -39,19 +44,27 @@ const READING_WIDTH_CHOICES: CheckChoices = CheckChoices {
     choices: &["narrow", "medium", "wide", "full"],
 };
 
+const TYPOGRAPHY_CHOICES: CheckChoices = CheckChoices {
+    title_key: "menu.view.typography",
+    id_prefix: TYPOGRAPHY_ITEM_PREFIX,
+    choices: &["github", "book", "academic"],
+};
+
 /// Menu item id, label key and the shortcut shown next to it.
 type CommandItem = (&'static str, &'static str, Option<&'static str>);
 
-const FILE_OPEN_ITEMS: [CommandItem; 2] = [
+const FILE_OPEN_ITEMS: [CommandItem; 3] = [
+    ("newDocument", "menu.file.newDocument", Some("Ctrl+N")),
     ("openDocuments", "menu.file.open", Some("Ctrl+O")),
     ("openFolder", "menu.file.openFolder", None),
 ];
 
-const FILE_SAVE_ITEMS: [CommandItem; 4] = [
+const FILE_SAVE_ITEMS: [CommandItem; 5] = [
     ("saveDocument", "menu.file.save", Some("Ctrl+S")),
     ("saveDocumentAs", "menu.file.saveAs", Some("Ctrl+Shift+S")),
     ("saveAllDocuments", "menu.file.saveAll", Some("Ctrl+Alt+S")),
     ("revertDocument", "menu.file.revert", None),
+    ("reloadActiveDocument", "menu.file.reload", Some("F5")),
 ];
 
 const EDIT_HISTORY_ITEMS: [CommandItem; 2] = [
@@ -59,14 +72,23 @@ const EDIT_HISTORY_ITEMS: [CommandItem; 2] = [
     ("redo", "menu.edit.redo", Some("Ctrl+Y")),
 ];
 
-const EDIT_SEARCH_ITEMS: [CommandItem; 3] = [
+const EDIT_SEARCH_ITEMS: [CommandItem; 4] = [
     ("showFind", "menu.edit.find", Some("Ctrl+F")),
+    (
+        "showFolderSearch",
+        "menu.edit.findInFolders",
+        Some("Ctrl+Shift+F"),
+    ),
     ("showReplace", "menu.edit.replace", Some("Ctrl+H")),
     ("goToLine", "menu.edit.goToLine", Some("Ctrl+G")),
 ];
 
+const COPY_AS_HTML_ITEM: CommandItem = ("copyAsHtml", "menu.edit.copyAsHtml", None);
+
 const TOGGLE_EDITING_ITEM: CommandItem =
     ("toggleEditing", "menu.view.toggleEditing", Some("Ctrl+/"));
+
+const SETTINGS_ITEM: CommandItem = ("showSettings", "menu.file.settings", Some("Ctrl+,"));
 
 const FILE_OTHER_ITEMS: [CommandItem; 4] = [
     ("reopenClosedTab", "tabs.reopenClosed", Some("Ctrl+Shift+T")),
@@ -77,6 +99,11 @@ const FILE_OTHER_ITEMS: [CommandItem; 4] = [
     ),
     ("closeActiveTab", "menu.file.closeTab", Some("Ctrl+W")),
     ("print", "menu.file.print", Some("Ctrl+P")),
+];
+
+const EXPORT_ITEMS: [CommandItem; 2] = [
+    ("exportAsHtml", "menu.file.exportAsHtml", None),
+    ("exportAsPlainText", "menu.file.exportAsPlainText", None),
 ];
 
 const FAVOURITES_FILE_ITEMS: [CommandItem; 2] = [
@@ -118,6 +145,39 @@ const COMMAND_PALETTE_ITEM: CommandItem = (
     "menu.view.commandPalette",
     Some("Ctrl+Shift+P"),
 );
+
+const SOURCE_VIEW_TOGGLE_ITEM: CommandItem = (
+    TOGGLE_SOURCE_VIEW_ITEM_ID,
+    "menu.view.toggleSource",
+    Some("Ctrl+U"),
+);
+
+const PREVIEW_BESIDE_EDITOR_TOGGLE_ITEM: CommandItem = (
+    TOGGLE_PREVIEW_BESIDE_EDITOR_ITEM_ID,
+    "menu.view.previewBeside",
+    Some("Ctrl+\\"),
+);
+
+const PANEL_TOGGLE_ITEMS: [CommandItem; 3] = [
+    (
+        TOGGLE_SIDEBAR_ITEM_ID,
+        "menu.view.toggleSidebar",
+        Some("Ctrl+Shift+E"),
+    ),
+    (
+        TOGGLE_OUTLINE_ITEM_ID,
+        "menu.view.toggleOutline",
+        Some("Ctrl+Shift+O"),
+    ),
+    (TOGGLE_STATUS_BAR_ITEM_ID, "menu.view.toggleStatusBar", None),
+];
+
+const FULL_SCREEN_ITEM: CommandItem = ("toggleFullScreen", "menu.view.fullScreen", Some("F11"));
+
+const NAVIGATION_ITEMS: [CommandItem; 2] = [
+    ("goBack", "menu.view.goBack", Some("Alt+Left")),
+    ("goForward", "menu.view.goForward", Some("Alt+Right")),
+];
 
 const ZOOM_ITEMS: [CommandItem; 3] = [
     ("zoomIn", "menu.view.zoomIn", Some("Ctrl++")),
@@ -167,17 +227,33 @@ const HELP_ITEMS: [CommandItem; 2] = [
     ("showAbout", "menu.help.about", None),
 ];
 
-pub struct ViewMenuItems(Vec<CheckMenuItem<Wry>>);
+const MAX_TRANSLATED_LABELS: usize = 5_000;
+const MAX_TRANSLATED_LABEL_CHARACTERS: usize = 1_000;
+
+/// The parts of the main menu that change after it is built: check marks, Open Recent and labels.
+pub struct MainMenuParts {
+    pub labels: MenuLabels,
+    pub view_items: Vec<CheckMenuItem<Wry>>,
+    pub recent_files: Submenu<Wry>,
+}
+
+pub struct MainMenu(pub Mutex<MainMenuParts>);
 
 pub fn install_main_menu(app: &App) -> tauri::Result<()> {
+    let parts = build_main_menu(app.handle(), MenuLabels::english())?;
+    app.manage(MainMenu(Mutex::new(parts)));
+    Ok(())
+}
+
+fn build_main_menu(app: &AppHandle, labels: MenuLabels) -> tauri::Result<MainMenuParts> {
     let mut builder = MainMenuBuilder {
         app,
-        labels: MenuLabels::english(),
+        labels,
         view_items: Vec::new(),
     };
     let recent_files =
         SubmenuBuilder::new(app, builder.labels.label("menu.file.openRecent")).build()?;
-    fill_recent_menu(app.handle(), &recent_files, &[])?;
+    fill_recent_menu(app, &recent_files, &[], &builder.labels)?;
     let menu = Menu::with_items(
         app,
         &[
@@ -189,9 +265,36 @@ pub fn install_main_menu(app: &App) -> tauri::Result<()> {
         ],
     )?;
     app.set_menu(menu)?;
-    app.manage(ViewMenuItems(builder.view_items));
-    app.manage(RecentFilesMenu(recent_files));
+    Ok(MainMenuParts {
+        labels: builder.labels,
+        view_items: builder.view_items,
+        recent_files,
+    })
+}
+
+/// Builds the menu again in the display language the window chose, from the saved language or
+/// the language of Windows. Labels the translation does not have stay in English.
+#[tauri::command]
+pub fn update_menu_language(
+    labels: HashMap<String, String>,
+    app: AppHandle,
+    menu: State<'_, MainMenu>,
+) -> Result<(), DocumentError> {
+    if !are_valid_menu_labels(&labels) {
+        return Err(DocumentError::InvalidRequest);
+    }
+    let parts = build_main_menu(&app, MenuLabels::with_translations(labels))
+        .map_err(|_| DocumentError::InvalidRequest)?;
+    *menu.0.lock().map_err(|_| DocumentError::InvalidRequest)? = parts;
     Ok(())
+}
+
+fn are_valid_menu_labels(labels: &HashMap<String, String>) -> bool {
+    labels.len() <= MAX_TRANSLATED_LABELS
+        && labels.iter().all(|(key, label)| {
+            key.len() <= MAX_TRANSLATED_LABEL_CHARACTERS
+                && label.chars().count() <= MAX_TRANSLATED_LABEL_CHARACTERS
+        })
 }
 
 pub fn handle_menu_event(app: &AppHandle, event: &MenuEvent) {
@@ -206,14 +309,17 @@ pub fn handle_menu_event(app: &AppHandle, event: &MenuEvent) {
 }
 
 #[tauri::command]
-pub fn update_view_menu(state: ViewMenuState, items: State<'_, ViewMenuItems>) {
-    for item in &items.0 {
+pub fn update_view_menu(state: ViewMenuState, menu: State<'_, MainMenu>) {
+    let Ok(parts) = menu.0.lock() else {
+        return;
+    };
+    for item in &parts.view_items {
         let _ = item.set_checked(state.is_checked(item.id().as_ref()));
     }
 }
 
 struct MainMenuBuilder<'a> {
-    app: &'a App,
+    app: &'a AppHandle,
     labels: MenuLabels,
     view_items: Vec<CheckMenuItem<Wry>>,
 }
@@ -229,8 +335,9 @@ impl MainMenuBuilder<'_> {
             .item(&reopen_closed?)
             .item(&self.reopen_with_encoding_menu()?)
             .separator();
+        let builder = self.with_items(builder, &FILE_SAVE_ITEMS)?.separator();
         let builder = self
-            .with_items(builder, &FILE_SAVE_ITEMS)?
+            .with_items(builder, &EXPORT_ITEMS)?
             .separator()
             .item(&favourite?);
         self.with_items(builder, &FAVOURITES_FILE_ITEMS)?
@@ -238,6 +345,8 @@ impl MainMenuBuilder<'_> {
             .item(&close_tab?)
             .separator()
             .item(&print?)
+            .separator()
+            .item(&self.command_item(SETTINGS_ITEM)?)
             .separator()
             .item(&self.command_item((EXIT_ITEM_ID, "menu.file.exit", Some("Alt+F4")))?)
             .build()
@@ -283,6 +392,7 @@ impl MainMenuBuilder<'_> {
             .separator()
             .item(&cut)
             .item(&copy)
+            .item(&self.command_item(COPY_AS_HTML_ITEM)?)
             .item(&paste)
             .item(&select_all)
             .separator();
@@ -295,44 +405,41 @@ impl MainMenuBuilder<'_> {
     fn view_menu(&mut self) -> tauri::Result<Submenu<Wry>> {
         let themes = self.check_submenu(&THEME_CHOICES)?;
         let reading_widths = self.check_submenu(&READING_WIDTH_CHOICES)?;
-        let source_view = self.toggle_item(
-            TOGGLE_SOURCE_VIEW_ITEM_ID,
-            "menu.view.toggleSource",
-            Some("Ctrl+U"),
-        )?;
-        let sidebar = self.toggle_item(
-            TOGGLE_SIDEBAR_ITEM_ID,
-            "menu.view.toggleSidebar",
-            Some("Ctrl+Shift+E"),
-        )?;
-        let outline = self.toggle_item(
-            TOGGLE_OUTLINE_ITEM_ID,
-            "menu.view.toggleOutline",
-            Some("Ctrl+Shift+O"),
-        )?;
-        let status_bar =
-            self.toggle_item(TOGGLE_STATUS_BAR_ITEM_ID, "menu.view.toggleStatusBar", None)?;
+        let typographies = self.check_submenu(&TYPOGRAPHY_CHOICES)?;
+        let source_view = self.toggle_item(SOURCE_VIEW_TOGGLE_ITEM)?;
+        let panels = PANEL_TOGGLE_ITEMS
+            .iter()
+            .map(|item| self.toggle_item(*item))
+            .collect::<tauri::Result<Vec<_>>>()?;
+        let preview_beside_editor = self.toggle_item(PREVIEW_BESIDE_EDITOR_TOGGLE_ITEM)?;
         let command_palette = self.command_item(COMMAND_PALETTE_ITEM)?;
         let toggle_editing = self.command_item(TOGGLE_EDITING_ITEM)?;
+        let full_screen = self.command_item(FULL_SCREEN_ITEM)?;
         let builder = SubmenuBuilder::new(self.app, self.labels.label("menu.view"))
             .item(&command_palette)
             .item(&toggle_editing)
+            .item(&preview_beside_editor)
             .separator()
             .item(&themes)
             .item(&reading_widths)
+            .item(&typographies)
             .separator();
-        self.with_items(builder, &ZOOM_ITEMS)?
+        let builder = self
+            .with_items(builder, &ZOOM_ITEMS)?
             .separator()
             .item(&source_view)
+            .separator();
+        panels
+            .iter()
+            .fold(builder, |builder, item| builder.item(item))
             .separator()
-            .item(&sidebar)
-            .item(&outline)
-            .item(&status_bar)
+            .item(&full_screen)
             .build()
     }
 
     fn window_menu(&self) -> tauri::Result<Submenu<Wry>> {
         let builder = SubmenuBuilder::new(self.app, self.labels.label("menu.window"));
+        let builder = self.with_items(builder, &NAVIGATION_ITEMS)?.separator();
         let builder = self.with_items(builder, &TAB_SWITCH_ITEMS)?.separator();
         let builder = self.with_items(builder, &TAB_ARRANGE_ITEMS)?.separator();
         self.with_items(builder, &TAB_CLOSE_ITEMS)?.build()
@@ -349,9 +456,9 @@ impl MainMenuBuilder<'_> {
 
     fn with_items<'m>(
         &self,
-        builder: SubmenuBuilder<'m, Wry, App>,
+        builder: SubmenuBuilder<'m, Wry, AppHandle>,
         items: &[CommandItem],
-    ) -> tauri::Result<SubmenuBuilder<'m, Wry, App>> {
+    ) -> tauri::Result<SubmenuBuilder<'m, Wry, AppHandle>> {
         let menu_items = self.command_items(items)?;
         Ok(menu_items
             .iter()
@@ -364,9 +471,7 @@ impl MainMenuBuilder<'_> {
 
     fn toggle_item(
         &mut self,
-        id: &str,
-        label_key: &str,
-        shortcut: Option<&str>,
+        (id, label_key, shortcut): CommandItem,
     ) -> tauri::Result<CheckMenuItem<Wry>> {
         let item = CheckMenuItemBuilder::with_id(id, self.label_for(label_key, shortcut))
             .checked(true)
@@ -437,7 +542,16 @@ mod tests {
             .chain(&FAVOURITES_FILE_ITEMS)
             .chain(&EDIT_HISTORY_ITEMS)
             .chain(&EDIT_SEARCH_ITEMS)
-            .chain(&[PASTE_TABLE_ITEM, TOGGLE_EDITING_ITEM, COMMAND_PALETTE_ITEM])
+            .chain(&[
+                PASTE_TABLE_ITEM,
+                COPY_AS_HTML_ITEM,
+                SETTINGS_ITEM,
+                TOGGLE_EDITING_ITEM,
+                COMMAND_PALETTE_ITEM,
+                FULL_SCREEN_ITEM,
+            ])
+            .chain(&EXPORT_ITEMS)
+            .chain(&NAVIGATION_ITEMS)
             .chain(&ZOOM_ITEMS)
             .chain(&TAB_SWITCH_ITEMS)
             .chain(&TAB_ARRANGE_ITEMS)
@@ -450,10 +564,26 @@ mod tests {
     }
 
     #[test]
+    fn accepts_a_translated_catalog_but_not_an_oversized_one() {
+        let catalog = HashMap::from([("menu.file".to_owned(), "Fichier".to_owned())]);
+        let overlong = HashMap::from([(
+            "menu.file".to_owned(),
+            "x".repeat(MAX_TRANSLATED_LABEL_CHARACTERS + 1),
+        )]);
+        let too_many: HashMap<String, String> = (0..=MAX_TRANSLATED_LABELS)
+            .map(|index| (format!("key.{index}"), "label".to_owned()))
+            .collect();
+
+        assert!(are_valid_menu_labels(&catalog));
+        assert!(!are_valid_menu_labels(&overlong));
+        assert!(!are_valid_menu_labels(&too_many));
+    }
+
+    #[test]
     fn every_menu_choice_has_a_label_in_the_catalog() {
         let labels = MenuLabels::english();
 
-        for choices in [THEME_CHOICES, READING_WIDTH_CHOICES] {
+        for choices in [THEME_CHOICES, READING_WIDTH_CHOICES, TYPOGRAPHY_CHOICES] {
             for choice in choices.choices {
                 let key = format!("{}.{choice}", choices.title_key);
                 assert!(labels.has(&key), "{key}");

@@ -5,7 +5,12 @@ import { FavouritesList } from '../favourites/FavouritesList';
 import { RecentFilesList } from '../recent-files/RecentFilesList';
 import { TabStrip } from '../tabs/TabStrip';
 import { DEFAULT_VIEW_SETTINGS } from '../view/ViewSettings';
-import { APP_STATE_SCHEMA_VERSION, restoreAppState, toPersistedAppState } from './persistedAppState';
+import {
+  APP_STATE_SCHEMA_VERSION,
+  restoreAppState,
+  savedLanguagePreference,
+  toPersistedAppState,
+} from './persistedAppState';
 
 const location = (path: string) => InMemoryDocumentFiles.locationOf(path);
 
@@ -103,5 +108,18 @@ describe('persisted app state', () => {
     expect(restored.tabStrip.tabs()).toEqual([]);
     expect(restored.recentFiles.entries()).toEqual([]);
     expect(restored.viewSettings).toEqual(DEFAULT_VIEW_SETTINGS);
+  });
+});
+
+describe('savedLanguagePreference', () => {
+  it('reads the language chosen in Settings', () => {
+    expect(
+      savedLanguagePreference({ schemaVersion: APP_STATE_SCHEMA_VERSION, view: { language: 'hi' } }),
+    ).toBe('hi');
+  });
+
+  it('follows the system when nothing valid was saved', () => {
+    expect(savedLanguagePreference(undefined)).toBe('system');
+    expect(savedLanguagePreference({ schemaVersion: 999, view: { language: 'hi' } })).toBe('system');
   });
 });

@@ -15,6 +15,7 @@
     type FavouriteMenuItemId,
     type FavouritesHeaderMenuItemId,
   } from './favouriteContextMenu';
+  import { commandForPathMenuItem, isPathMenuItem, type PathCommand } from '../file-paths/pathCommands';
   import type { FavouriteCommand, FavouritesFileCommand } from './favouriteCommands';
   import FolderContents from '../folder-tree/FolderContents.svelte';
   import TreeChevron from '../folder-tree/TreeChevron.svelte';
@@ -31,7 +32,8 @@
     translator: Translator;
     onOpen: (favourite: Favourite) => void;
     onCommand: (
-      command: FavouriteCommand | FavouritesFileCommand | FolderTreeCommand | ExplorerActionCommand,
+      command:
+        FavouriteCommand | FavouritesFileCommand | FolderTreeCommand | ExplorerActionCommand | PathCommand,
     ) => void;
     onListFolder: (folderPath: string) => Promise<FolderListing>;
     onOpenDocument: (documentPath: string) => void;
@@ -182,6 +184,10 @@
     if (menuRequest?.kind !== 'favourite' || !menuFavourite) return;
     const { index } = menuRequest;
     const canonicalKey = menuFavourite.location.canonicalKey;
+    if (isPathMenuItem(itemId)) {
+      onCommand(commandForPathMenuItem(itemId, menuFavourite.location.displayPath));
+      return;
+    }
     const targetGroupId = groupIdOfMenuItem(itemId);
     if (targetGroupId !== undefined) {
       onCommand({ kind: 'moveFavouriteToGroup', canonicalKey, groupId: targetGroupId });
@@ -407,6 +413,7 @@
         groups,
         groupId: menuFavourite.groupId,
         isFolder: menuFavourite.kind === 'folder',
+        isAvailable: (pathStatuses.get(menuFavourite.location.canonicalKey) ?? 'available') !== 'missing',
       },
       translator,
     )}

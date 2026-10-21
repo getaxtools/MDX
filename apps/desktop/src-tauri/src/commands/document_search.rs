@@ -52,7 +52,10 @@ impl SearchBudget {
     }
 }
 
-fn documents_in_folders(folders: &[String], access: &DocumentAccessList) -> Vec<DocumentLocation> {
+pub fn documents_in_folders(
+    folders: &[String],
+    access: &DocumentAccessList,
+) -> Vec<DocumentLocation> {
     let mut budget = SearchBudget {
         folders_left: MAX_VISITED_FOLDERS,
         found: Vec::new(),

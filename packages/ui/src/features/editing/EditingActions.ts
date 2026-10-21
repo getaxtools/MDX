@@ -34,6 +34,14 @@ export class EditingActions {
     return key !== undefined && this.editing.isEditing(key);
   }
 
+  /** Opens the active document in the editor unless it is already there. */
+  startEditingActiveDocument(): void {
+    const location = this.activeLocation();
+    if (!location || this.editing.isEditing(location.canonicalKey)) return;
+    this.editing.toggleEditing(location.canonicalKey);
+    this.callbacks.onChange();
+  }
+
   toggleActiveDocument(): void {
     const location = this.activeLocation();
     if (!location) return;

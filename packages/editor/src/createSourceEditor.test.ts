@@ -72,6 +72,29 @@ describe('createSourceEditor', () => {
     expect(togglePreview.defaultPrevented).toBe(false);
   });
 
+  it('leaves Alt+Left and Alt+Right to the app for going back and forward', () => {
+    const { parent } = openEditor('word');
+    const textBox = parent.querySelector('[contenteditable="true"]') ?? parent;
+
+    const back = new KeyboardEvent('keydown', {
+      key: 'ArrowLeft',
+      altKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    textBox.dispatchEvent(back);
+
+    expect(back.defaultPrevented).toBe(false);
+  });
+
+  it('starts at the first line', () => {
+    const { editor: opened } = openEditor('one\ntwo\nthree');
+
+    opened.scrollToLine(0);
+
+    expect(opened.topLine()).toBe(0);
+  });
+
   it('opens the search panel in the user language', () => {
     const { parent, editor: opened } = openEditor();
 

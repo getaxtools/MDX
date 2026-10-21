@@ -3,6 +3,8 @@ import { createTranslator } from '@mdx/i18n';
 import {
   InMemoryAppMenu,
   InMemoryAppState,
+  InMemoryDesktopShell,
+  InMemoryDocumentExport,
   InMemoryDocumentFiles,
   InMemoryDocumentLinks,
   InMemoryDocumentRequests,
@@ -13,7 +15,12 @@ import {
 } from '@mdx/platform';
 import { createMarkdownRenderer } from '@mdx/renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { STATE_SAVE_DELAY_MS, ViewerController, type ViewerSnapshot } from './ViewerController';
+import {
+  LIVE_PREVIEW_DELAY_MS,
+  STATE_SAVE_DELAY_MS,
+  ViewerController,
+  type ViewerSnapshot,
+} from './ViewerController';
 
 const GUIDE = 'C:\\Docs\\Guide.md';
 const NOTES = 'C:\\Docs\\Notes.md';
@@ -28,6 +35,8 @@ function createViewer({
   favouritesFile = new InMemoryFavouritesFile(),
   folderWatcher = new InMemoryFolderWatcher(),
 } = {}) {
+  const desktopShell = new InMemoryDesktopShell();
+  const documentExport = new InMemoryDocumentExport();
   const documentFiles = new InMemoryDocumentFiles({ [GUIDE]: '# Guide', [NOTES]: '# Notes' });
   const requests = new InMemoryDocumentRequests(startupPaths);
   const session = new ViewerSession({ documentFiles, appState, now: () => Date.now() });
@@ -42,6 +51,8 @@ function createViewer({
     folders,
     favouritesFile,
     folderWatcher,
+    desktopShell,
+    documentExport,
   });
   let latest: ViewerSnapshot | undefined;
   controller.subscribe((snapshot) => (latest = snapshot));
@@ -61,6 +72,8 @@ function createViewer({
     folders,
     favouritesFile,
     folderWatcher,
+    desktopShell,
+    documentExport,
     snapshot,
   };
 }
@@ -696,6 +709,19 @@ describe('ViewerController', () => {
       expect(snapshot().editorRequest).toMatchObject({ kind: 'replaceText', text: '# Theirs' });
     });
 
+    it('reloads a document from disk with F5, asking first when it has unsaved changes', async () => {
+      const { controller, documentFiles, snapshot } = await editGuide('# Mine');
+      documentFiles.write(GUIDE, '# Theirs');
+
+      await controller.execute({ kind: 'reloadActiveDocument' });
+      expect(snapshot().notice).toBe('Guide.md has unsaved changes. Reload it from disk and lose them?');
+      const reload = snapshot().noticeActions?.find((action) => action.label === 'Reload from Disk');
+      if (reload) await controller.runNoticeAction(reload);
+
+      expect(snapshot().unsavedDocumentKeys.size).toBe(0);
+      expect(snapshot().editorRequest).toMatchObject({ kind: 'replaceText', text: '# Theirs' });
+    });
+
     it('shows the new text in the editor when a document without edits changes on disk', async () => {
       const { controller, documentFiles, watcher, snapshot } = createViewer({ startupPaths: [GUIDE] });
       await controller.start();
@@ -852,8 +878,185 @@ describe('ViewerController', () => {
     });
   });
 
+  describe('preview beside the editor', () => {
+    const guideKey = InMemoryDocumentFiles.locationOf(GUIDE).canonicalKey;
+
+    it('opens the editor with the preview beside it, marking blocks with their source lines', async () => {
+      const { controller, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+
+      await controller.execute({ kind: 'togglePreviewBesideEditor' });
+
+      expect(snapshot().viewer.viewSettings.isPreviewBesideEditor).toBe(true);
+      expect(snapshot().isActiveDocumentEditing).toBe(true);
+      await vi.waitFor(() => expect(snapshot().activeDocument?.html).toContain('data-mdx-source-line="0"'));
+    });
+
+    it('shows the edited text in the preview once typing pauses', async () => {
+      const { controller, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+      await controller.execute({ kind: 'togglePreviewBesideEditor' });
+
+      controller.updateEditedText(guideKey, '# Guide edited live');
+      expect(snapshot().activeDocument?.html).not.toContain('Guide edited live');
+      await vi.advanceTimersByTimeAsync(LIVE_PREVIEW_DELAY_MS);
+
+      expect(snapshot().activeDocument?.html).toContain('Guide edited live');
+    });
+
+    it('keeps the editor open when the preview beside it is hidden again', async () => {
+      const { controller, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+      await controller.execute({ kind: 'togglePreviewBesideEditor' });
+
+      await controller.execute({ kind: 'togglePreviewBesideEditor' });
+
+      expect(snapshot().viewer.viewSettings.isPreviewBesideEditor).toBe(false);
+      expect(snapshot().isActiveDocumentEditing).toBe(true);
+    });
+  });
+
+  describe('back and forward', () => {
+    it('returns to the documents shown before and after', async () => {
+      const { controller, snapshot } = createViewer({ startupPaths: [GUIDE, NOTES] });
+      await controller.start();
+
+      await controller.execute({ kind: 'goBack' });
+      expect(snapshot().viewer.tabStrip.activeTab()?.location.fileName).toBe('Guide.md');
+      await controller.execute({ kind: 'goForward' });
+
+      expect(snapshot().viewer.tabStrip.activeTab()?.location.fileName).toBe('Notes.md');
+    });
+
+    it('opens a closed document again when going back to it', async () => {
+      const { controller, snapshot } = createViewer({ startupPaths: [GUIDE, NOTES] });
+      await controller.start();
+      await controller.execute({ kind: 'activateTabNumber', numberKey: 1 });
+      await controller.execute({ kind: 'closeActiveTab' });
+
+      await controller.execute({ kind: 'goBack' });
+
+      await vi.waitFor(() =>
+        expect(snapshot().viewer.tabStrip.activeTab()?.location.fileName).toBe('Guide.md'),
+      );
+      expect(tabNames(snapshot())).toEqual(['Notes.md', 'Guide.md']);
+    });
+  });
+
+  describe('paths and window', () => {
+    it('copies a path and shows it in File Explorer', async () => {
+      const { controller, desktopShell } = createViewer();
+      await controller.start();
+
+      await controller.execute({ kind: 'copyPath', path: GUIDE });
+      await controller.execute({ kind: 'revealInFileManager', path: GUIDE });
+
+      expect(desktopShell.clipboardText).toBe(GUIDE);
+      expect(desktopShell.revealedPaths).toEqual([GUIDE]);
+    });
+
+    it('explains when an item cannot be shown in File Explorer', async () => {
+      const { controller, desktopShell, snapshot } = createViewer();
+      desktopShell.unrevealablePaths.add(GUIDE);
+      await controller.start();
+
+      await controller.execute({ kind: 'revealInFileManager', path: GUIDE });
+
+      expect(snapshot().notice).toContain('could not be shown in File Explorer');
+    });
+
+    it('asks the shown document to copy itself as HTML, each time again', async () => {
+      const { controller, snapshot } = createViewer();
+      await controller.start();
+      await controller.openDocuments([GUIDE]);
+
+      await controller.execute({ kind: 'copyAsHtml' });
+      await controller.execute({ kind: 'copyAsHtml' });
+
+      expect(snapshot().copyAsHtmlRequest).toBe(2);
+    });
+
+    it('does not ask to copy as HTML without a document', async () => {
+      const { controller, snapshot } = createViewer();
+      await controller.start();
+
+      await controller.execute({ kind: 'copyAsHtml' });
+
+      expect(snapshot().copyAsHtmlRequest).toBeUndefined();
+    });
+
+    it('puts copied HTML on the clipboard, or explains why it could not', async () => {
+      const { controller, desktopShell, snapshot } = createViewer();
+      await controller.start();
+
+      await controller.execute({ kind: 'copyHtml', html: '<h1>Guide</h1>' });
+      desktopShell.isClipboardBlocked = true;
+      await controller.execute({ kind: 'copyHtml', html: '<h1>Other</h1>' });
+
+      expect(desktopShell.clipboardHtml).toBe('<h1>Guide</h1>');
+      expect(snapshot().notice).toBe('The document could not be copied to the clipboard.');
+    });
+
+    it('asks the shown document for an export, then saves it with a matching file name', async () => {
+      const { controller, documentExport, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+
+      await controller.execute({ kind: 'exportDocument', format: 'html' });
+      expect(snapshot().exportRequest).toEqual({ format: 'html', number: 1 });
+      await controller.execute({ kind: 'saveExport', format: 'html', contents: '<html></html>' });
+
+      expect(documentExport.exported).toEqual([
+        { contents: '<html></html>', suggestedFileName: 'Guide.html', format: 'html' },
+      ]);
+      expect(snapshot().notice).toBe('Exported to C:\\Exports\\Guide.html.');
+    });
+
+    it('says when an export fails, and nothing when it is cancelled', async () => {
+      const { controller, documentExport, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+      documentExport.chosenFolder = undefined;
+
+      await controller.execute({ kind: 'saveExport', format: 'plainText', contents: 'Guide' });
+      expect(snapshot().notice).toBeUndefined();
+      documentExport.isFailing = true;
+      await controller.execute({ kind: 'saveExport', format: 'plainText', contents: 'Guide' });
+
+      expect(snapshot().notice).toBe('Guide.md could not be exported.');
+    });
+
+    it('switches full screen on and off', async () => {
+      const { controller, desktopShell } = createViewer();
+      await controller.start();
+
+      await controller.execute({ kind: 'toggleFullScreen' });
+
+      expect(desktopShell.isFullScreen).toBe(true);
+    });
+  });
+
   describe('new documents and saving', () => {
     const TABLE = 'C:\\Docs\\Table.md';
+
+    it('opens an empty new document in the editor', async () => {
+      const { controller, snapshot } = createViewer();
+      await controller.start();
+
+      await controller.execute({ kind: 'newDocument' });
+
+      expect(tabNames(snapshot())).toEqual(['Untitled-1.md']);
+      expect(snapshot().isActiveDocumentEditing).toBe(true);
+    });
+
+    it('closes an empty new document without asking to save it', async () => {
+      const { controller, snapshot } = createViewer();
+      await controller.start();
+      await controller.execute({ kind: 'newDocument' });
+
+      await controller.execute({ kind: 'closeActiveTab' });
+
+      expect(snapshot().unsavedChanges).toBeUndefined();
+      expect(tabNames(snapshot())).toEqual([]);
+    });
 
     async function viewerWithNewDocument(startupPaths: string[] = []) {
       const viewer = createViewer({ startupPaths });
@@ -1017,10 +1220,12 @@ describe('ViewerController', () => {
       expect(menu.shownViewState).toEqual({
         theme: 'system',
         readingWidth: 'medium',
+        typography: 'github',
         isSidebarVisible: true,
         isOutlineVisible: true,
         isStatusBarVisible: true,
         isSourceView: false,
+        isPreviewBesideEditor: false,
       });
 
       menu.choose('theme.dark');
@@ -1088,6 +1293,64 @@ describe('ViewerController', () => {
       menu.choose('showKeyboardShortcuts');
 
       await vi.waitFor(() => expect(snapshot().openDialog).toBe('keyboardShortcuts'));
+    });
+
+    it('asks before clearing all data, then forgets the session and says so', async () => {
+      const { controller, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+      await controller.execute({ kind: 'toggleFavourite' });
+
+      await controller.execute({ kind: 'confirmClearAllData' });
+      expect(snapshot().openDialog).toBe('clearAllData');
+      await controller.execute({ kind: 'clearAllData' });
+
+      expect(snapshot().openDialog).toBeUndefined();
+      expect(snapshot().viewer.tabStrip.tabs()).toEqual([]);
+      expect(snapshot().viewer.favourites.favourites()).toEqual([]);
+      expect(snapshot().viewer.recentFiles.entries()).toEqual([]);
+      expect(snapshot().notice).toBe('All MDX data on this PC was cleared.');
+    });
+
+    it('does not clear all data while a document has unsaved changes', async () => {
+      const { controller, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+      await controller.execute({ kind: 'toggleEditing' });
+      controller.updateEditedText(snapshot().activeDocument?.canonicalKey ?? '', '# Changed');
+
+      await controller.execute({ kind: 'confirmClearAllData' });
+      await controller.execute({ kind: 'clearAllData' });
+
+      expect(snapshot().openDialog).toBeUndefined();
+      expect(snapshot().viewer.tabStrip.tabs()).toHaveLength(1);
+      expect(snapshot().notice).toContain('unsaved changes');
+    });
+
+    it('remembers a chosen language and says it shows after a restart', async () => {
+      const { controller, snapshot } = createViewer();
+      await controller.start();
+
+      await controller.execute({ kind: 'setLanguage', language: 'en-XA' });
+
+      expect(snapshot().viewer.viewSettings.language).toBe('en-XA');
+      expect(snapshot().notice).toBe('MDX will use the new language the next time it starts.');
+    });
+
+    it('says nothing when the same language is chosen again', async () => {
+      const { controller, snapshot } = createViewer();
+      await controller.start();
+
+      await controller.execute({ kind: 'setLanguage', language: 'system' });
+
+      expect(snapshot().notice).toBeUndefined();
+    });
+
+    it('opens Settings from the File menu', async () => {
+      const { controller, menu, snapshot } = createViewer();
+      await controller.start();
+
+      menu.choose('showSettings');
+
+      await vi.waitFor(() => expect(snapshot().openDialog).toBe('settings'));
     });
   });
 

@@ -26,14 +26,16 @@ export type { ViewerState } from './persistedAppState';
 
 type ViewerStateListener = (state: ViewerState) => void;
 
+const EMPTY_STATE: ViewerState = {
+  tabStrip: TabStrip.empty(),
+  recentFiles: RecentFilesList.empty(),
+  favourites: FavouritesList.empty(),
+  explorerFolders: ExplorerFolders.empty(),
+  viewSettings: DEFAULT_VIEW_SETTINGS,
+};
+
 export class ViewerSession {
-  private state: ViewerState = {
-    tabStrip: TabStrip.empty(),
-    recentFiles: RecentFilesList.empty(),
-    favourites: FavouritesList.empty(),
-    explorerFolders: ExplorerFolders.empty(),
-    viewSettings: DEFAULT_VIEW_SETTINGS,
-  };
+  private state: ViewerState = EMPTY_STATE;
   private readonly openedDocuments = new Map<string, OpenedDocument>();
   private readonly untitledDocuments = new Map<string, OpenedDocument>();
   /** Encodings the user chose with Reopen with Encoding, kept for live reload. */
@@ -58,6 +60,15 @@ export class ViewerSession {
       viewSettings: restored.viewSettings,
     });
     return { wasReset: restored.wasReset };
+  }
+
+  /** Forgets every tab, recent file, favourite, opened folder and view setting, as on a first start. */
+  clearAllData(): void {
+    this.openedDocuments.clear();
+    this.untitledDocuments.clear();
+    this.chosenEncodings.clear();
+    this.untitledCount = 0;
+    this.replaceState(EMPTY_STATE);
   }
 
   async save(): Promise<void> {

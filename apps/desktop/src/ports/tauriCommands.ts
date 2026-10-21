@@ -2,10 +2,13 @@ import { invoke } from '@tauri-apps/api/core';
 import type {
   DocumentLocation,
   EditedDocumentSave,
+  ExportFormat,
   FolderListing,
+  FolderSearchResults,
   OpenedDocument,
   PathStatus,
   SaveSource,
+  TextSearchOptions,
   ViewMenuState,
 } from '@mdx/platform';
 import type { AppInfo } from '@mdx/ui';
@@ -23,18 +26,26 @@ export const tauriCommands = {
   getAppInfo: () => invoke<AppInfo>('get_app_info'),
   updateViewMenu: (state: ViewMenuState) => invoke<null>('update_view_menu', { state }),
   updateRecentMenu: (displayPaths: readonly string[]) => invoke<null>('update_recent_menu', { displayPaths }),
+  updateMenuLanguage: (labels: Readonly<Record<string, string>>) =>
+    invoke<null>('update_menu_language', { labels }),
   watchDocuments: (paths: readonly string[]) => invoke<null>('watch_documents', { paths }),
   watchFolders: (paths: readonly string[]) => invoke<null>('watch_folders', { paths }),
   resolveDocumentLink: (document: string, href: string) =>
     invoke<string>('resolve_document_link', { document, href }),
   openExternalLink: (url: string) => invoke<null>('open_external_link', { url }),
+  revealInFileManager: (path: string) => invoke<null>('reveal_in_file_manager', { path }),
+  toggleFullScreen: () => invoke<null>('toggle_full_screen'),
   pickFolder: () => invoke<DocumentLocation | null>('pick_folder'),
   listFolderContents: (folder: string) => invoke<FolderListing>('list_folder_contents', { folder }),
   findFolderDocuments: (folders: readonly string[]) =>
     invoke<DocumentLocation[]>('find_folder_documents', { folders }),
+  searchFolderDocuments: (folders: readonly string[], query: string, options: TextSearchOptions) =>
+    invoke<FolderSearchResults>('search_folder_documents', { folders, query, options }),
   exportFavourites: (contents: string, suggestedFileName: string) =>
     invoke<string | null>('export_favourites', { contents, suggestedFileName }),
   importFavourites: () => invoke<string | null>('import_favourites'),
+  exportDocument: (contents: string, suggestedFileName: string, format: ExportFormat) =>
+    invoke<string | null>('export_document', { contents, suggestedFileName, format }),
 };
 
 export const OPEN_DOCUMENTS_EVENT = 'open-documents';

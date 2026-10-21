@@ -38,7 +38,9 @@
 
 <style>
   .outline {
-    width: 16rem;
+    flex: none;
+    box-sizing: border-box;
+    width: var(--outline-width, 16rem);
     padding: var(--space-3) var(--space-2);
     border-inline-start: 1px solid var(--color-border);
     background: var(--color-surface);

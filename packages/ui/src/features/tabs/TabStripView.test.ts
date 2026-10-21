@@ -72,6 +72,17 @@ describe('TabStripView', () => {
     expect(onActivate).toHaveBeenNthCalledWith(2, location('Guide.md').canonicalKey);
   });
 
+  it('moves to the tab on the left with Right in a right-to-left layout', async () => {
+    document.documentElement.dir = 'rtl';
+    const { onActivate } = renderTabs('Guide.md', 'Notes.md', 'Plan.md');
+    screen.getByRole('tab', { name: 'Notes.md' }).focus();
+
+    await userEvent.keyboard('{ArrowRight}');
+    document.documentElement.removeAttribute('dir');
+
+    expect(onActivate).toHaveBeenCalledWith(location('Guide.md').canonicalKey);
+  });
+
   it('closes a tab with a middle click', async () => {
     const { onCommand } = renderTabs('Guide.md');
 

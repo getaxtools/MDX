@@ -71,6 +71,75 @@ describe('createMarkdownRenderer', () => {
     });
   });
 
+  describe('extended syntax', () => {
+    it('renders footnotes whose links point at each other', () => {
+      const element = renderToElement('Claim.[^1]\n\n[^1]: The source.');
+      const reference = element.querySelector('sup.footnote-ref a');
+      const footnote = element.querySelector('section.footnotes li');
+
+      expect(reference?.getAttribute('href')).toBe(`#${footnote?.id ?? 'missing'}`);
+      expect(footnote?.id).toMatch(/^mdx-fn/);
+      expect(footnote?.querySelector('a.footnote-backref')?.getAttribute('href')).toBe(
+        `#${reference?.id ?? ''}`,
+      );
+      expect(reference?.getAttribute('data-mdx-link')).toBe('anchor');
+    });
+
+    it('renders definition lists', () => {
+      const element = renderToElement('Term\n: Definition');
+
+      expect(element.querySelector('dl dt')?.textContent).toBe('Term');
+      expect(element.querySelector('dl dd')?.textContent).toBe('Definition');
+    });
+
+    it('renders subscript, superscript and marked text', () => {
+      const element = renderToElement('H~2~O, x^2^ and ==important==');
+
+      expect(element.querySelector('sub')?.textContent).toBe('2');
+      expect(element.querySelector('sup')?.textContent).toBe('2');
+      expect(element.querySelector('mark')?.textContent).toBe('important');
+    });
+
+    it('explains abbreviations with a title', () => {
+      const element = renderToElement('*[HTML]: Hyper Text Markup Language\n\nWrite HTML.');
+
+      expect(element.querySelector('abbr')?.getAttribute('title')).toBe('Hyper Text Markup Language');
+    });
+
+    it('turns emoji shortcodes into emoji but leaves emoticons as typed', () => {
+      const element = renderToElement(':rocket: :white_check_mark: :)');
+
+      expect(element.textContent.trim()).toBe('🚀 ✅ :)');
+    });
+
+    it('renders GitHub alerts with a title', () => {
+      const element = renderToElement('> [!WARNING]\n> Back up first.');
+      const alert = element.querySelector('div.markdown-alert');
+
+      expect(alert?.classList.contains('markdown-alert-warning')).toBe(true);
+      expect(alert?.querySelector('p.markdown-alert-title')?.textContent).toBe('Warning');
+      expect(alert?.textContent).toContain('Back up first.');
+      expect(alert?.textContent).not.toContain('[!WARNING]');
+    });
+
+    it('names alerts in the language it is given', () => {
+      const translated = createMarkdownRenderer({
+        window,
+        alertTitles: {
+          note: 'नोट',
+          tip: 'Tip',
+          important: 'Important',
+          warning: 'Warning',
+          caution: 'Caution',
+        },
+      });
+
+      expect(translated.render('> [!NOTE]\n> Text').html).toContain(
+        '<p class="markdown-alert-title">नोट</p>',
+      );
+    });
+  });
+
   describe('headings and outline', () => {
     it('builds an outline with stable, unique anchors', () => {
       const { outline } = renderer.render('# Guide\n## Install `mdx`\n## Install `mdx`');
@@ -143,6 +212,34 @@ describe('createMarkdownRenderer', () => {
       const image = renderToElement('![dot](data:image/png;base64,iVBORw0KGgo=)').querySelector('img');
 
       expect(image?.getAttribute('src')).toBe('data:image/png;base64,iVBORw0KGgo=');
+    });
+  });
+
+  describe('source lines', () => {
+    function sourceLinesOf(source: string): string[] {
+      const container = document.createElement('div');
+      container.innerHTML = renderer.render(source, { includeSourceLines: true }).html;
+      return [...container.querySelectorAll('[data-mdx-source-line]')].map(
+        (element) => `${element.tagName.toLowerCase()}:${element.getAttribute('data-mdx-source-line') ?? ''}`,
+      );
+    }
+
+    it('marks each block with the line it starts on', () => {
+      expect(sourceLinesOf('# Title\n\nFirst paragraph\n\n- one\n- two')).toEqual([
+        'h1:0',
+        'p:2',
+        'ul:4',
+        'li:4',
+        'li:5',
+      ]);
+    });
+
+    it('counts the hidden front matter lines', () => {
+      expect(sourceLinesOf('---\ntitle: Guide\n---\n# Title')).toEqual(['h1:3']);
+    });
+
+    it('adds no markers unless asked to', () => {
+      expect(renderer.render('# Title').html).not.toContain('data-mdx-source-line');
     });
   });
 });

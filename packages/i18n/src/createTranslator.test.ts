@@ -21,6 +21,9 @@ const SAMPLE_VALUES = {
   license: 'MIT',
   year: 2026,
   url: 'https://example.com',
+  query: 'theme',
+  matches: 3,
+  documents: 2,
 };
 
 describe('createTranslator', () => {

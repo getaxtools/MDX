@@ -49,6 +49,36 @@ describe('view options', () => {
     );
   });
 
+  it('narrows find to the exact case with Match Case', async () => {
+    await mainWindow.pressShortcut('Ctrl+F');
+    const findBar = app.browser.$('[role="search"]');
+    await findBar.$('input').waitForDisplayed();
+    await findBar.$('input').setValue('getting started');
+    await app.browser.waitUntil(async () => /^1 of [1-9]/.test(await findBar.$('[role="status"]').getText()));
+
+    await findBar.$('button[aria-pressed]').click();
+
+    await app.browser.waitUntil(async () => (await findBar.$('[role="status"]').getText()) === 'No matches');
+  });
+
+  it('moves focus from the Explorer to the tabs and the document with F6', async () => {
+    const focusedRegion = () =>
+      app.browser.execute(() => {
+        const region = document.activeElement?.closest('[data-focus-region]');
+        return region?.getAttribute('role') ?? region?.tagName.toLowerCase() ?? '';
+      });
+
+    await mainWindow.pressShortcut('F6');
+    expect(await focusedRegion()).toBe('nav');
+    await mainWindow.pressShortcut('F6');
+    expect(await focusedRegion()).toBe('tablist');
+    await mainWindow.pressShortcut('F6');
+    expect(await app.browser.execute(() => document.activeElement?.tagName)).toBe('MAIN');
+    await mainWindow.pressShortcut('Shift+F6');
+
+    expect(await focusedRegion()).toBe('tablist');
+  });
+
   it('shows the Markdown source with Ctrl+U and goes back to the preview', async () => {
     await mainWindow.pressShortcut('Ctrl+U');
     await app.browser.$('main pre.source-view').waitForDisplayed();
@@ -66,6 +96,18 @@ describe('view options', () => {
 
     await app.browser.waitUntil(async () =>
       app.browser.execute(() => document.documentElement.dataset.theme === 'dark'),
+    );
+  });
+
+  it('sets the Book typography from the command palette', async () => {
+    await mainWindow.searchInCommandPalette('>typography book');
+    await mainWindow.waitForCommandPaletteOption('Typography: Book');
+    await mainWindow.pressShortcut('Enter');
+
+    await app.browser.waitUntil(async () =>
+      app.browser.execute(
+        () => document.querySelector<HTMLElement>('main article')?.dataset.typography === 'book',
+      ),
     );
   });
 

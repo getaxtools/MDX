@@ -1,15 +1,13 @@
 use tauri::menu::{MenuItemBuilder, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, State, Wry};
 
-use super::MenuLabels;
+use super::{MainMenu, MenuLabels};
 use crate::documents::DocumentError;
 
 pub const MAX_RECENT_MENU_ENTRIES: usize = 10;
 const MAX_LABEL_CHARACTERS: usize = 260;
 const OPEN_RECENT_ITEM_PREFIX: &str = "openRecent.";
 const CLEAR_RECENT_ITEM_ID: &str = "clearUnpinnedRecentFiles";
-
-pub struct RecentFilesMenu(pub Submenu<Wry>);
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct RecentMenuEntry {
@@ -22,21 +20,23 @@ pub struct RecentMenuEntry {
 pub fn update_recent_menu(
     display_paths: Vec<String>,
     app: AppHandle,
-    menu: State<'_, RecentFilesMenu>,
+    menu: State<'_, MainMenu>,
 ) -> Result<(), DocumentError> {
     let entries = recent_menu_entries(&display_paths);
-    fill_recent_menu(&app, &menu.0, &entries).map_err(|_| DocumentError::InvalidRequest)
+    let parts = menu.0.lock().map_err(|_| DocumentError::InvalidRequest)?;
+    fill_recent_menu(&app, &parts.recent_files, &entries, &parts.labels)
+        .map_err(|_| DocumentError::InvalidRequest)
 }
 
 pub fn fill_recent_menu(
     app: &AppHandle,
     submenu: &Submenu<Wry>,
     entries: &[RecentMenuEntry],
+    labels: &MenuLabels,
 ) -> tauri::Result<()> {
     for item in submenu.items()? {
         submenu.remove(&item)?;
     }
-    let labels = MenuLabels::english();
     if entries.is_empty() {
         let placeholder = MenuItemBuilder::new(labels.label("menu.file.noRecentFiles"))
             .enabled(false)

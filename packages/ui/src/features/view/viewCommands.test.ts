@@ -3,24 +3,49 @@ import { describe, expect, it } from 'vitest';
 import { applyViewCommand, isViewCommand } from './viewCommands';
 
 describe('view commands', () => {
-  it('changes zoom, theme, reading width and sidebar visibility', () => {
+  it('changes zoom, theme, reading width, typography and sidebar visibility', () => {
     const zoomed = applyViewCommand(DEFAULT_VIEW_SETTINGS, { kind: 'zoomIn' });
     const themed = applyViewCommand(zoomed, { kind: 'setTheme', theme: 'dark' });
     const widened = applyViewCommand(themed, { kind: 'setReadingWidth', readingWidth: 'full' });
-    const withoutSidebar = applyViewCommand(widened, { kind: 'toggleSidebar' });
+    const restyled = applyViewCommand(widened, { kind: 'setTypography', typography: 'academic' });
+    const withoutSidebar = applyViewCommand(restyled, { kind: 'toggleSidebar' });
 
     expect(withoutSidebar).toEqual({
       theme: 'dark',
       zoomPercent: 110,
       readingWidth: 'full',
+      typography: 'academic',
+      language: 'system',
       isSidebarVisible: false,
+      sidebarView: 'explorer',
       isOutlineVisible: true,
       isStatusBarVisible: true,
+      isBreadcrumbsVisible: true,
       collapsedExplorerSections: [],
       explorerSectionHeights: {},
+      panelWidths: {},
+      isPreviewBesideEditor: false,
+      editorSharePercent: 50,
     });
     expect(applyViewCommand(withoutSidebar, { kind: 'resetZoom' }).zoomPercent).toBe(100);
     expect(applyViewCommand(withoutSidebar, { kind: 'zoomOut' }).zoomPercent).toBe(100);
+  });
+
+  it('sets the zoom to a chosen step', () => {
+    expect(applyViewCommand(DEFAULT_VIEW_SETTINGS, { kind: 'setZoom', zoomPercent: 150 }).zoomPercent).toBe(
+      150,
+    );
+  });
+
+  it('shows and hides the breadcrumbs, and shows a side bar view', () => {
+    const withoutBreadcrumbs = applyViewCommand(DEFAULT_VIEW_SETTINGS, { kind: 'toggleBreadcrumbs' });
+    const hidden = { ...DEFAULT_VIEW_SETTINGS, isSidebarVisible: false };
+
+    expect(withoutBreadcrumbs.isBreadcrumbsVisible).toBe(false);
+    expect(applyViewCommand(hidden, { kind: 'showSidebarView', sidebarView: 'explorer' })).toMatchObject({
+      isSidebarVisible: true,
+      sidebarView: 'explorer',
+    });
   });
 
   it('shows and hides the status bar', () => {
@@ -42,5 +67,18 @@ describe('view commands', () => {
   it('tells view commands apart from document commands', () => {
     expect(isViewCommand({ kind: 'zoomIn' })).toBe(true);
     expect(isViewCommand({ kind: 'closeActiveTab' })).toBe(false);
+  });
+
+  it('resizes side panels, returns them to their default width and sets the editor share', () => {
+    const resized = applyViewCommand(DEFAULT_VIEW_SETTINGS, {
+      kind: 'resizePanel',
+      panel: 'outline',
+      widthPx: 300,
+    });
+    const shared = applyViewCommand(resized, { kind: 'setEditorShare', sharePercent: 70 });
+
+    expect(shared.panelWidths).toEqual({ outline: 300 });
+    expect(shared.editorSharePercent).toBe(70);
+    expect(applyViewCommand(shared, { kind: 'resetPanelWidth', panel: 'outline' }).panelWidths).toEqual({});
   });
 });

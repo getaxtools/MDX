@@ -44,4 +44,14 @@ describe('createHtmlSanitizer', () => {
 
     expect(sanitize('<img src="cid:image001" alt="a">', () => 'asset://resolved')).toBe('<img alt="a">');
   });
+
+  it('keeps source line markers only when asked to and only as plain numbers', () => {
+    const sanitize = createHtmlSanitizer(window);
+    const html = '<p data-mdx-source-line="4">a</p><p data-mdx-source-line="x()">b</p>';
+
+    expect(sanitize(html, undefined, { keepSourceLines: true })).toBe(
+      '<p data-mdx-source-line="4">a</p><p>b</p>',
+    );
+    expect(sanitize(html)).toBe('<p>a</p><p>b</p>');
+  });
 });

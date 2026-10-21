@@ -1,28 +1,44 @@
 <script lang="ts">
-  import type { Favourite, RecentFile } from '@mdx/core';
+  import {
+    DEFAULT_EDITOR_SHARE_PERCENT,
+    MAX_PANEL_WIDTH_PX,
+    MIN_PANEL_WIDTH_PX,
+    panelWidthOf,
+    type Favourite,
+    type RecentFile,
+    type ResizablePanel,
+  } from '@mdx/core';
+  import type { SourceEditor } from '@mdx/editor';
   import type { Translator } from '@mdx/i18n';
   import type { CodeHighlighter, RichBlockRenderer } from '@mdx/renderer';
   import CommandPalette from '../command-palette/CommandPalette.svelte';
   import { paletteCommands } from '../command-palette/paletteCommands';
   import ExplorerSidebar from '../explorer/ExplorerSidebar.svelte';
+  import FolderSearchPanel from '../folder-search/FolderSearchPanel.svelte';
+  import EditingLayout from '../editing/EditingLayout.svelte';
+  import type { ScrollSync } from '../editing/ScrollSync';
   import SourceEditorPane from '../editing/SourceEditorPane.svelte';
+  import PanelResizer from '../../components/PanelResizer.svelte';
+  import SettingsDialog from '../settings/SettingsDialog.svelte';
+  import StartPage from '../start-page/StartPage.svelte';
   import AboutDialog from '../about/AboutDialog.svelte';
   import type { AppInfo } from '../about/AppInfo';
   import type { ThirdPartyLicensesLoader } from '../about/ThirdPartyLicenses';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
   import type { DocumentLink } from '../document-view/DocumentLink';
   import DocumentView from '../document-view/DocumentView.svelte';
-  import { isUntitledLocation } from '@mdx/platform';
+  import { isUntitledLocation, type TextSearchOptions } from '@mdx/platform';
   import KeyboardShortcutsDialog from '../help/KeyboardShortcutsDialog.svelte';
   import PasteTableDialog from '../table-paste/PasteTableDialog.svelte';
   import OutlinePanel from '../outline/OutlinePanel.svelte';
-  import type { TabCommand } from '../tabs/tabCommands';
   import TabStripView from '../tabs/TabStripView.svelte';
+  import Breadcrumbs from '../breadcrumbs/Breadcrumbs.svelte';
   import { applyTheme } from '../view/applyTheme';
   import ActivityBar from '../view/ActivityBar.svelte';
   import StatusBar from '../view/StatusBar.svelte';
   import ViewOptions from '../view/ViewOptions.svelte';
   import NoticeBar from './NoticeBar.svelte';
+  import { moveFocusBetweenRegions } from './focusRegions';
   import { commandForShortcut } from '../shortcuts/commandShortcuts';
   import type { DesktopPlatform, ViewerCommand } from './viewerCommands';
   import type { NoticeAction, ViewerController, ViewerSnapshot } from './ViewerController';
@@ -70,13 +86,60 @@
     activeTab ? (snapshot?.viewer.favourites.isFavourite(activeTab.location.canonicalKey) ?? false) : false,
   );
 
+  /** Widths while a splitter is dragged; the settings keep the width once the drag ends. */
+  let draggedPanelWidths: Partial<Record<ResizablePanel, number>> = $state({});
+
+  function shownPanelWidth(panel: ResizablePanel): number {
+    const dragged = draggedPanelWidths[panel];
+    if (dragged !== undefined) return dragged;
+    return snapshot ? panelWidthOf(snapshot.viewer.viewSettings, panel) : 0;
+  }
+
+  function finishPanelResize(panel: ResizablePanel, widthPx: number) {
+    draggedPanelWidths = { ...draggedPanelWidths, [panel]: undefined };
+    void controller.execute({ kind: 'resizePanel', panel, widthPx });
+  }
+
+  function lineCountOf(text: string): number {
+    return text.split('\n').length;
+  }
+
+  function followEditorScroll(sync: ScrollSync, scrollRatio: number) {
+    controller.rememberScrollPosition(scrollRatio);
+    sync.editorScrolled();
+  }
+
   // The webview's own menu offers browser actions such as Back and Refresh that make no sense in the app.
   function preventBrowserContextMenu(event: MouseEvent) {
     event.preventDefault();
   }
 
+  const MOUSE_BACK_BUTTON = 3;
+  const MOUSE_FORWARD_BUTTON = 4;
+
+  function handleMouseUp(event: MouseEvent) {
+    const commands: Partial<Record<number, ViewerCommand>> = {
+      [MOUSE_BACK_BUTTON]: { kind: 'goBack' },
+      [MOUSE_FORWARD_BUTTON]: { kind: 'goForward' },
+    };
+    const command = commands[event.button];
+    if (!command) return;
+    event.preventDefault();
+    void controller.execute(command);
+  }
+
+  function isRegionKey(event: KeyboardEvent): boolean {
+    return event.key === 'F6' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.isComposing;
+  }
+
   function handleKeydown(event: KeyboardEvent) {
     if (event.defaultPrevented) return;
+    if (isRegionKey(event)) {
+      const direction = event.shiftKey ? -1 : 1;
+      if (moveFocusBetweenRegions(globalThis.document, direction, globalThis.document.activeElement))
+        event.preventDefault();
+      return;
+    }
     const command = commandForShortcut(event, platform);
     if (!command) return;
     event.preventDefault();
@@ -84,19 +147,37 @@
   }
 </script>
 
-<svelte:window onkeydown={handleKeydown} oncontextmenu={preventBrowserContextMenu} />
+<svelte:window
+  onkeydown={handleKeydown}
+  onmouseup={handleMouseUp}
+  oncontextmenu={preventBrowserContextMenu}
+/>
 
 {#if snapshot}
   {@const viewSettings = snapshot.viewer.viewSettings}
   <div class="app-shell">
-    <div class="viewer" class:without-sidebar={!viewSettings.isSidebarVisible}>
+    <div
+      class="viewer"
+      class:without-sidebar={!viewSettings.isSidebarVisible}
+      style:--explorer-width="{shownPanelWidth('explorer')}px"
+    >
       <ActivityBar
         isSidebarVisible={viewSettings.isSidebarVisible}
+        sidebarView={viewSettings.sidebarView}
         isOutlineVisible={viewSettings.isOutlineVisible}
         {translator}
         onCommand={(command: ViewerCommand) => void controller.execute(command)}
       />
-      {#if viewSettings.isSidebarVisible}
+      {#if viewSettings.isSidebarVisible && viewSettings.sidebarView === 'search'}
+        <FolderSearchPanel
+          {translator}
+          focusRequest={snapshot.folderSearchFocusRequest}
+          hasFolders={controller.hasSearchableFolders()}
+          onSearch={(query: string, options: TextSearchOptions) => controller.searchFolders(query, options)}
+          onOpenMatch={(path: string, query: string, options: TextSearchOptions) =>
+            void controller.execute({ kind: 'openSearchMatch', path, query, options })}
+        />
+      {:else if viewSettings.isSidebarVisible}
         <ExplorerSidebar
           favourites={snapshot.viewer.favourites.favourites()}
           favouriteGroups={snapshot.viewer.favourites.groups()}
@@ -114,6 +195,16 @@
           {translator}
           onOpenFavourite={(favourite: Favourite) => void controller.openFavourite(favourite)}
           onOpenRecentFile={(recentFile: RecentFile) => void controller.openRecentFile(recentFile)}
+        />
+        <PanelResizer
+          label={translator.translate('sidebar.resize')}
+          size={shownPanelWidth('explorer')}
+          growDirection={1}
+          minSize={MIN_PANEL_WIDTH_PX}
+          maxSize={MAX_PANEL_WIDTH_PX}
+          onPreview={(widthPx: number) => (draggedPanelWidths = { ...draggedPanelWidths, explorer: widthPx })}
+          onResize={(widthPx: number) => finishPanelResize('explorer', widthPx)}
+          onReset={() => void controller.execute({ kind: 'resetPanelWidth', panel: 'explorer' })}
         />
       {/if}
       <div class="workspace">
@@ -136,6 +227,13 @@
           >
             {translator.translate(snapshot.isActiveDocumentEditing ? 'toolbar.preview' : 'toolbar.edit')}
           </button>
+          <button
+            aria-pressed={viewSettings.isPreviewBesideEditor}
+            disabled={!snapshot.activeDocument}
+            onclick={() => void controller.execute({ kind: 'togglePreviewBesideEditor' })}
+          >
+            {translator.translate('toolbar.previewBeside')}
+          </button>
           <ViewOptions
             settings={viewSettings}
             {translator}
@@ -156,31 +254,94 @@
           unsavedKeys={snapshot.unsavedDocumentKeys}
           {translator}
           onActivate={(canonicalKey: string) => controller.activateTab(canonicalKey)}
-          onCommand={(command: TabCommand) => void controller.execute(command)}
+          onCommand={(command: ViewerCommand) => void controller.execute(command)}
         />
-        <div class="reading-area">
-          {#if editedDocument}
+        {#if viewSettings.isBreadcrumbsVisible && activeTab && snapshot.activeDocument}
+          <Breadcrumbs
+            displayPath={snapshot.activeDocument.displayPath}
+            fileName={snapshot.activeDocument.fileName}
+            hasFolder={!snapshot.activeDocument.isUntitled}
+            outline={snapshot.activeDocument.outline}
+            {currentHeadingId}
+            {translator}
+            onRevealInExplorer={() =>
+              void controller.execute({ kind: 'showSidebarView', sidebarView: 'explorer' })}
+          />
+        {:else}
+          <div></div>
+        {/if}
+        <div class="reading-area" data-focus-region style:--outline-width="{shownPanelWidth('outline')}px">
+          {#if !activeTab}
+            <StartPage
+              recentFiles={snapshot.viewer.recentFiles.entries()}
+              {translator}
+              onCommand={(command: ViewerCommand) => void controller.execute(command)}
+              onOpenRecentFile={(recentFile: RecentFile) => void controller.openRecentFile(recentFile)}
+            />
+          {:else if editedDocument}
             {#key editedDocument.canonicalKey}
-              <SourceEditorPane
-                canonicalKey={editedDocument.canonicalKey}
-                fileName={editedDocument.fileName}
-                text={editedDocument.source}
-                zoomPercent={viewSettings.zoomPercent}
-                scrollRatio={editedDocument.scrollRatio}
+              <EditingLayout
+                isPreviewBeside={viewSettings.isPreviewBesideEditor}
+                editorSharePercent={viewSettings.editorSharePercent}
+                lineCount={lineCountOf(editedDocument.source)}
+                previewContent={editedDocument.html}
                 {translator}
-                editorRequest={snapshot.editorRequest}
-                onScroll={(scrollRatio: number) => controller.rememberScrollPosition(scrollRatio)}
-                onChange={(text: string) => controller.updateEditedText(editedDocument.canonicalKey, text)}
-              />
+                onShareChange={(sharePercent: number) =>
+                  void controller.execute({ kind: 'setEditorShare', sharePercent })}
+                onShareReset={() =>
+                  void controller.execute({
+                    kind: 'setEditorShare',
+                    sharePercent: DEFAULT_EDITOR_SHARE_PERCENT,
+                  })}
+              >
+                {#snippet editor(sync: ScrollSync)}
+                  <SourceEditorPane
+                    canonicalKey={editedDocument.canonicalKey}
+                    fileName={editedDocument.fileName}
+                    text={editedDocument.source}
+                    zoomPercent={viewSettings.zoomPercent}
+                    scrollRatio={editedDocument.scrollRatio}
+                    {translator}
+                    editorRequest={snapshot?.editorRequest}
+                    onReady={(sourceEditor: SourceEditor | undefined) => sync.attachEditor(sourceEditor)}
+                    onScroll={(scrollRatio: number) => followEditorScroll(sync, scrollRatio)}
+                    onChange={(text: string) =>
+                      controller.updateEditedText(editedDocument.canonicalKey, text)}
+                  />
+                {/snippet}
+                {#snippet preview()}
+                  <DocumentView
+                    document={editedDocument}
+                    zoomPercent={viewSettings.zoomPercent}
+                    readingWidth={viewSettings.readingWidth}
+                    typography={viewSettings.typography}
+                    {codeHighlighter}
+                    {richBlocks}
+                    {translator}
+                    shouldRestoreScroll={false}
+                    copyAsHtmlRequest={snapshot?.copyAsHtmlRequest}
+                    onOpenLink={(link: DocumentLink) => void controller.openLink(link)}
+                    onCommand={(command: ViewerCommand) => void controller.execute(command)}
+                    isOutlineVisible={false}
+                    isFavourite={isActiveFavourite}
+                    canBeFavourite={!isActiveUntitled}
+                  />
+                {/snippet}
+              </EditingLayout>
             {/key}
           {:else}
             <DocumentView
               document={snapshot.activeDocument}
               zoomPercent={viewSettings.zoomPercent}
               readingWidth={viewSettings.readingWidth}
+              typography={viewSettings.typography}
               {codeHighlighter}
               {richBlocks}
               findRequest={snapshot.findRequest}
+              findQuery={snapshot.findQuery}
+              copyAsHtmlRequest={snapshot.copyAsHtmlRequest}
+              exportRequest={snapshot.exportRequest}
+              locale={translator.locale}
               isSourceView={snapshot.isSourceView ?? false}
               onCloseFind={() => controller.closeFind()}
               {translator}
@@ -193,7 +354,18 @@
               canBeFavourite={!isActiveUntitled}
             />
           {/if}
-          {#if snapshot.activeDocument && viewSettings.isOutlineVisible && !snapshot.isActiveDocumentEditing}
+          {#if activeTab && snapshot.activeDocument && viewSettings.isOutlineVisible && !snapshot.isActiveDocumentEditing}
+            <PanelResizer
+              label={translator.translate('outline.resize')}
+              size={shownPanelWidth('outline')}
+              growDirection={-1}
+              minSize={MIN_PANEL_WIDTH_PX}
+              maxSize={MAX_PANEL_WIDTH_PX}
+              onPreview={(widthPx: number) =>
+                (draggedPanelWidths = { ...draggedPanelWidths, outline: widthPx })}
+              onResize={(widthPx: number) => finishPanelResize('outline', widthPx)}
+              onReset={() => void controller.execute({ kind: 'resetPanelWidth', panel: 'outline' })}
+            />
             <OutlinePanel outline={snapshot.activeDocument.outline} {currentHeadingId} {translator} />
           {/if}
         </div>
@@ -240,6 +412,14 @@
       onOpenAsNewDocument={(markdown: string) => controller.openAsNewDocument(markdown)}
       onClose={() => controller.closeDialog()}
     />
+  {:else if snapshot.openDialog === 'settings'}
+    <SettingsDialog
+      settings={snapshot.viewer.viewSettings}
+      dataFolder={appInfo.dataFolder}
+      {translator}
+      onCommand={(command: ViewerCommand) => void controller.execute(command)}
+      onClose={() => controller.closeDialog()}
+    />
   {:else if snapshot.openDialog === 'commandPalette'}
     <CommandPalette
       {translator}
@@ -248,6 +428,16 @@
       onRunCommand={(command: ViewerCommand) => void controller.execute(command)}
       onOpenDocument={(documentPath: string) => void controller.openDocuments([documentPath])}
       onClose={() => controller.closeDialog()}
+    />
+  {/if}
+  {#if snapshot.openDialog === 'clearAllData'}
+    <ConfirmDialog
+      title={translator.translate('privacy.clearAllData.title')}
+      message={translator.translate('privacy.clearAllData.message')}
+      confirmLabel={translator.translate('privacy.clearAllData.confirm')}
+      cancelLabel={translator.translate('privacy.clearAllData.cancel')}
+      onConfirm={() => void controller.execute({ kind: 'clearAllData' })}
+      onCancel={() => controller.closeDialog()}
     />
   {/if}
   {#if snapshot.unsavedChanges}
@@ -282,7 +472,7 @@
 
   .viewer {
     display: grid;
-    grid-template-columns: auto minmax(180px, 260px) 1fr;
+    grid-template-columns: auto var(--explorer-width) auto 1fr;
     min-height: 0;
   }
 
@@ -292,7 +482,7 @@
 
   .workspace {
     display: grid;
-    grid-template-rows: auto auto auto 1fr;
+    grid-template-rows: auto auto auto auto 1fr;
     min-width: 0;
     min-height: 0;
   }

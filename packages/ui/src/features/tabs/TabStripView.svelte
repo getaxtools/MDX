@@ -4,6 +4,8 @@
   import { isUntitledLocation, type PathStatus } from '@mdx/platform';
   import ContextMenu from '../../components/ContextMenu.svelte';
   import { contextMenuPosition, isContextMenuKey } from '../../components/ContextMenuItem';
+  import { logicalArrowKey } from '../../components/textDirection';
+  import type { PathCommand } from '../file-paths/pathCommands';
   import type { TabCommand } from './tabCommands';
   import { commandForTabMenuItem, tabContextMenuItems, type TabMenuItemId } from './tabContextMenu';
 
@@ -14,7 +16,7 @@
     unsavedKeys?: ReadonlySet<string>;
     translator: Translator;
     onActivate: (canonicalKey: string) => void;
-    onCommand: (command: TabCommand) => void;
+    onCommand: (command: TabCommand | PathCommand) => void;
   }
 
   const {
@@ -61,7 +63,10 @@
       return;
     }
     const moves: Record<string, number> = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: -1 };
-    const target = moves[event.key];
+    const target =
+      event.currentTarget instanceof Element
+        ? moves[logicalArrowKey(event.key, event.currentTarget)]
+        : undefined;
     if (target === undefined) return;
     event.preventDefault();
     focusTab(target);
@@ -77,7 +82,7 @@
   }
 
   function chooseMenuItem(itemId: TabMenuItemId) {
-    if (menuTab) onCommand(commandForTabMenuItem(itemId, menuTab.location.canonicalKey));
+    if (menuTab) onCommand(commandForTabMenuItem(itemId, menuTab.location));
   }
 
   function closeMenu() {
@@ -110,7 +115,7 @@
 
 <svelte:window onpointerup={finishDrag} />
 
-<div class="tab-strip" role="tablist" aria-label={translator.translate('tabs.label')}>
+<div class="tab-strip" data-focus-region role="tablist" aria-label={translator.translate('tabs.label')}>
   {#each tabs as tab, index (tab.location.canonicalKey)}
     {@const isActive = tab.location.canonicalKey === activeKey}
     <div

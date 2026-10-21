@@ -2,7 +2,7 @@
   import type { Translator } from '@mdx/i18n';
   import Dialog from '../../components/Dialog.svelte';
   import { describeCombination } from '../shortcuts/describeCombination';
-  import { KEYBOARD_SHORTCUTS } from './keyboardShortcuts';
+  import { matchingShortcuts } from './keyboardShortcuts';
 
   interface Props {
     translator: Translator;
@@ -10,6 +10,13 @@
   }
 
   const { translator, onClose }: Props = $props();
+
+  let query = $state('');
+  let searchInput: HTMLInputElement | undefined = $state();
+
+  $effect(() => searchInput?.focus());
+
+  const shownShortcuts = $derived(matchingShortcuts(query, translator));
 </script>
 
 <Dialog
@@ -17,6 +24,14 @@
   closeLabel={translator.translate('about.close')}
   {onClose}
 >
+  <input
+    bind:this={searchInput}
+    bind:value={query}
+    class="search"
+    type="search"
+    aria-label={translator.translate('shortcuts.search.label')}
+    placeholder={translator.translate('shortcuts.search.label')}
+  />
   <table>
     <thead>
       <tr>
@@ -25,7 +40,7 @@
       </tr>
     </thead>
     <tbody>
-      {#each KEYBOARD_SHORTCUTS as shortcut (shortcut.actionKey)}
+      {#each shownShortcuts as shortcut (shortcut.actionKey)}
         <tr>
           <td>{translator.translate(shortcut.actionKey).replace('…', '')}</td>
           <td>
@@ -38,9 +53,32 @@
       {/each}
     </tbody>
   </table>
+  {#if shownShortcuts.length === 0}
+    <p class="no-matches" role="status">{translator.translate('shortcuts.noMatches', { query })}</p>
+  {/if}
 </Dialog>
 
 <style>
+  .search {
+    box-sizing: border-box;
+    width: 100%;
+    margin-bottom: var(--space-3);
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-small);
+    background: var(--color-background);
+    color: var(--color-text);
+    font: inherit;
+  }
+
+  .no-matches {
+    color: var(--color-text-secondary);
+  }
+
+  .search:focus-visible {
+    outline: 2px solid var(--color-focus);
+  }
+
   table {
     border-collapse: collapse;
     width: 100%;

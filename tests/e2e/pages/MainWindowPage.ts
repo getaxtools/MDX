@@ -215,6 +215,20 @@ export class MainWindowPage {
     return this.browser.$(`//*[@role="tab"][contains(normalize-space(.), "${fileName}")]`);
   }
 
+  /** Picks an option the way the native drop-down does; the embedded driver cannot open that pop-up. */
+  async chooseOption(selectSelector: string, value: string): Promise<void> {
+    await this.browser.execute(
+      (selector, optionValue) => {
+        const select = document.querySelector<HTMLSelectElement>(selector);
+        if (!select) throw new Error(`No drop-down ${selector}`);
+        select.value = optionValue;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      },
+      selectSelector,
+      value,
+    );
+  }
+
   async treeItem(sectionTitleKey: MessageKey, name: string): Promise<ChainablePromiseElement> {
     const section = await this.sidebarSection(sectionTitleKey);
     return section.$(treeItemContaining(name));
@@ -254,6 +268,63 @@ export class MainWindowPage {
 
   async documentScrollTop(): Promise<number> {
     return this.browser.execute(() => document.querySelector('main')?.scrollTop ?? 0);
+  }
+
+  /** Presses a key on one element, whatever has the focus. */
+  async pressKeyOn(element: ChainablePromiseElement, key: string): Promise<void> {
+    await this.browser.execute(
+      (target, pressedKey) => {
+        target.dispatchEvent(
+          new KeyboardEvent('keydown', { key: pressedKey, bubbles: true, cancelable: true }),
+        );
+      },
+      await element.getElement(),
+      key,
+    );
+  }
+
+  /** Double-clicks an element; the embedded driver has no double-click of its own. */
+  async doubleClick(element: ChainablePromiseElement): Promise<void> {
+    await this.browser.execute(
+      (target) => target.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true })),
+      await element.getElement(),
+    );
+  }
+
+  splitter(labelKey: MessageKey): ChainablePromiseElement {
+    return this.browser.$(`[role="separator"][aria-label="${translator.translate(labelKey)}"]`);
+  }
+
+  async splitterValue(labelKey: MessageKey): Promise<number> {
+    return Number(await this.splitter(labelKey).getAttribute('aria-valuenow'));
+  }
+
+  /** Drags a splitter sideways by a number of pixels, as the mouse would. */
+  async dragSplitter(labelKey: MessageKey, movementPx: number): Promise<void> {
+    const splitter = await this.splitter(labelKey).getElement();
+    await this.browser.execute(
+      (target, movement) => {
+        const bounds = target.getBoundingClientRect();
+        const pointer = { bubbles: true, pointerId: 1, button: 0, clientY: bounds.top + 10 };
+        target.setPointerCapture = () => undefined;
+        target.dispatchEvent(new PointerEvent('pointerdown', { ...pointer, clientX: bounds.left }));
+        target.dispatchEvent(
+          new PointerEvent('pointermove', { ...pointer, clientX: bounds.left + movement }),
+        );
+        target.dispatchEvent(new PointerEvent('pointerup', { ...pointer, clientX: bounds.left + movement }));
+      },
+      splitter,
+      movementPx,
+    );
+  }
+
+  toolbarToggle(labelKey: MessageKey): ChainablePromiseElement {
+    return this.toolbarButton(labelKey);
+  }
+
+  /** The rendered preview shown beside the source editor. */
+  previewBesideEditor(): ChainablePromiseElement {
+    return this.browser.$(`section[aria-label="${translator.translate('editing.previewBeside.label')}"]`);
   }
 
   async searchInCommandPalette(text: string): Promise<void> {

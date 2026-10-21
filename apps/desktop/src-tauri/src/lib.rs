@@ -63,6 +63,7 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::documents::take_startup_documents,
         commands::documents::save_document_as,
         commands::document_saving::save_document,
+        commands::document_export::export_document,
         commands::favourites_file::export_favourites,
         commands::favourites_file::import_favourites,
         commands::app_state::load_app_state,
@@ -75,7 +76,11 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::folders::pick_folder,
         commands::folders::list_folder_contents,
         commands::document_search::find_folder_documents,
+        commands::folder_text_search::search_folder_documents,
+        commands::file_manager::reveal_in_file_manager,
+        commands::window::toggle_full_screen,
         menu::update_view_menu,
+        menu::update_menu_language,
         menu::recent_files_menu::update_recent_menu,
     ])
 }

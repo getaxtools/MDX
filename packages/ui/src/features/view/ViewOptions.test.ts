@@ -41,4 +41,12 @@ describe('ViewOptions', () => {
 
     expect(onCommand).toHaveBeenCalledWith({ kind: 'setReadingWidth', readingWidth: 'full' });
   });
+
+  it('chooses a typography preset', async () => {
+    const { onCommand } = renderViewOptions();
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Typography' }), 'Book');
+
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'setTypography', typography: 'book' });
+  });
 });
