@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/getaxtools/MDX/compare/v0.5.0...v0.6.0) (2026-10-21)
+
+
+### Features
+
+* add settings, find in folders, export, extended Markdown and display languages ([8de6356](https://github.com/getaxtools/MDX/commit/8de63561539109d21caee3bb5bbe1138fc74a79d))
+
 ## [0.5.0](https://github.com/getaxtools/MDX/compare/v0.4.0...v0.5.0) (2026-10-20)
 
 
