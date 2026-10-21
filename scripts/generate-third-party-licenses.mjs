@@ -1,7 +1,7 @@
 // Writes the third-party licenses shown in About from the lockfiles' dependency trees.
 // Run with `just licenses`; the release build runs it before bundling.
 import { execFileSync, execSync } from 'node:child_process';
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 const ROOT = join(import.meta.dirname, '..');
@@ -111,6 +111,7 @@ function withSharedTexts(packages) {
 }
 
 const licenses = withSharedTexts([...npmPackages(), ...cargoPackages()]);
+mkdirSync(dirname(OUTPUT), { recursive: true });
 writeFileSync(OUTPUT, `${JSON.stringify(licenses, null, 1)}\n`);
 console.log(
   `Wrote ${String(licenses.packages.length)} packages and ${String(licenses.texts.length)} license texts.`,
