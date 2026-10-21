@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1](https://github.com/getaxtools/MDX/compare/v0.6.0...v0.6.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* **build:** create the generated folder before writing the licenses list ([fd92641](https://github.com/getaxtools/MDX/commit/fd92641a904adcd54b75f35440c9fad94e571aa2))
+* **build:** create the generated folder before writing the licenses list ([d7609df](https://github.com/getaxtools/MDX/commit/d7609df43f1c7ed0c44f6eee49855ad976f0e9b0))
+
 ## [0.6.0](https://github.com/getaxtools/MDX/compare/v0.5.0...v0.6.0) (2026-10-21)
 
 
