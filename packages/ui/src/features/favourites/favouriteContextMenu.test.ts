@@ -23,6 +23,8 @@ describe('favourite context menu', () => {
       'Move to New Group',
       'Move to Specs',
       'Move to Notes',
+      'Copy Path',
+      'Reveal in File Explorer',
       'Remove from Favourites',
     ]);
     expect(items.filter((item) => item.isDisabled).map((item) => item.id)).toEqual(['moveUp']);

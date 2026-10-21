@@ -2,8 +2,11 @@ import type { EditorMenuCommand } from '@mdx/editor';
 
 export type EditingCommand =
   | { readonly kind: 'toggleEditing' }
+  | { readonly kind: 'togglePreviewBesideEditor' }
+  | { readonly kind: 'newDocument' }
   | { readonly kind: 'runEditorCommand'; readonly command: EditorMenuCommand }
   | { readonly kind: 'revertDocument' }
+  | { readonly kind: 'reloadActiveDocument' }
   | { readonly kind: 'reloadFromDisk'; readonly canonicalKey: string }
   | { readonly kind: 'overwriteChangesOnDisk'; readonly canonicalKey: string }
   | { readonly kind: 'keepEditedText' };

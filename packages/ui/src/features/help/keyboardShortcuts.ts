@@ -1,7 +1,7 @@
 import { EDITOR_SHORTCUTS } from '@mdx/editor/shortcuts';
-import type { MessageKey } from '@mdx/i18n';
+import type { MessageKey, Translator } from '@mdx/i18n';
 import { COMMAND_SHORTCUTS } from '../shortcuts/commandShortcuts';
-import type { KeyCombination } from '../shortcuts/describeCombination';
+import { describeCombination, type KeyCombination } from '../shortcuts/describeCombination';
 
 export interface KeyboardShortcut {
   readonly combinations: readonly KeyCombination[];
@@ -23,6 +23,7 @@ const SHORTCUTS_HANDLED_IN_PLACE: readonly KeyboardShortcut[] = [
     actionKey: 'shortcuts.moveFavourite',
   },
   { combinations: [['shift', 'F10']], actionKey: 'shortcuts.contextMenu' },
+  { combinations: [['F6'], ['shift', 'F6']], actionKey: 'shortcuts.moveBetweenRegions' },
   { combinations: [['alt', 'F4']], actionKey: 'menu.file.exit' },
   { combinations: [['ctrl', 'Z']], actionKey: 'menu.edit.undo' },
   { combinations: [['ctrl', 'Y']], actionKey: 'menu.edit.redo' },
@@ -39,3 +40,16 @@ export const KEYBOARD_SHORTCUTS: readonly KeyboardShortcut[] = [
   ...SHORTCUTS_HANDLED_IN_PLACE,
   ...EDITOR_FORMATTING_SHORTCUTS,
 ];
+
+/** The shortcuts whose action or keys contain the query, such as "save" or "ctrl+s". */
+export function matchingShortcuts(query: string, translator: Translator): readonly KeyboardShortcut[] {
+  const needle = query.trim().toLocaleLowerCase().replaceAll(' ', '');
+  if (needle.length === 0) return KEYBOARD_SHORTCUTS;
+  return KEYBOARD_SHORTCUTS.filter((shortcut) => {
+    const action = translator.translate(shortcut.actionKey).toLocaleLowerCase().replaceAll(' ', '');
+    const keys = shortcut.combinations.map((combination) =>
+      describeCombination(combination, translator).toLocaleLowerCase(),
+    );
+    return action.includes(needle) || keys.some((key) => key.includes(needle));
+  });
+}

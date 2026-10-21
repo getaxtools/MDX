@@ -1,31 +1,43 @@
 <script lang="ts">
   import type { Translator } from '@mdx/i18n';
-  import { findTextRanges } from './findTextRanges';
+  import { findTextRanges, type FindQuery } from './findTextRanges';
   import { clearFindHighlights, paintFindHighlights } from './paintFindHighlights';
 
   interface Props {
     searchRoot: HTMLElement | undefined;
     contentKey: string;
     focusRequest: number;
+    /** Text and options to search for when the bar opens, instead of starting empty. */
+    initialQuery?: FindQuery | undefined;
     translator: Translator;
     onClose: () => void;
   }
 
-  const { searchRoot, contentKey, focusRequest, translator, onClose }: Props = $props();
+  const { searchRoot, contentKey, focusRequest, initialQuery, translator, onClose }: Props = $props();
 
   let query = $state('');
+  let isCaseSensitive = $state(false);
+  let isWholeWord = $state(false);
   let currentIndex = $state(0);
   let ranges: Range[] = $state.raw([]);
   let input: HTMLInputElement | undefined = $state();
 
   $effect(() => {
     if (focusRequest === 0) return;
+    if (initialQuery) {
+      query = initialQuery.text;
+      isCaseSensitive = initialQuery.isCaseSensitive;
+      isWholeWord = initialQuery.isWholeWord;
+    }
     input?.focus();
     input?.select();
   });
 
   $effect(() => {
-    ranges = searchRoot && contentKey.length > 0 ? findTextRanges(searchRoot, query) : [];
+    ranges =
+      searchRoot && contentKey.length > 0
+        ? findTextRanges(searchRoot, query, { isCaseSensitive, isWholeWord })
+        : [];
     currentIndex = 0;
   });
 
@@ -48,6 +60,10 @@
   }
 
   function handleInputKeydown(event: KeyboardEvent) {
+    if (event.altKey && toggleOptionForKey(event.key.toLowerCase())) {
+      event.preventDefault();
+      return;
+    }
     if (event.key === 'Enter') {
       event.preventDefault();
       step(event.shiftKey ? -1 : 1);
@@ -56,6 +72,13 @@
       event.preventDefault();
       onClose();
     }
+  }
+
+  function toggleOptionForKey(key: string): boolean {
+    if (key === 'c') isCaseSensitive = !isCaseSensitive;
+    else if (key === 'w') isWholeWord = !isWholeWord;
+    else return false;
+    return true;
   }
 
   function handleWindowKeydown(event: KeyboardEvent) {
@@ -76,6 +99,27 @@
     placeholder={translator.translate('find.input.label')}
     onkeydown={handleInputKeydown}
   />
+  <button
+    class="option"
+    aria-pressed={isCaseSensitive}
+    aria-label={translator.translate('find.matchCase')}
+    title={translator.translate('find.matchCase.hint')}
+    onclick={() => (isCaseSensitive = !isCaseSensitive)}
+    ><span class="symbol" aria-hidden="true" data-symbol={translator.translate('find.matchCase.symbol')}
+    ></span></button
+  >
+  <button
+    class="option"
+    aria-pressed={isWholeWord}
+    aria-label={translator.translate('find.wholeWord')}
+    title={translator.translate('find.wholeWord.hint')}
+    onclick={() => (isWholeWord = !isWholeWord)}
+    ><span
+      class="symbol whole-word"
+      aria-hidden="true"
+      data-symbol={translator.translate('find.wholeWord.symbol')}
+    ></span></button
+  >
   <span class="status" role="status">{status}</span>
   <button
     aria-label={translator.translate('find.previous')}
@@ -142,6 +186,21 @@
 
   button:hover:not(:disabled) {
     background: var(--color-surface-hover);
+  }
+
+  .option[aria-pressed='true'] {
+    background: var(--color-surface-hover);
+    outline: 1px solid var(--color-accent);
+  }
+
+  /* Drawn by CSS so the symbol is not text that the button's name would have to contain. */
+  .symbol::before {
+    content: attr(data-symbol);
+  }
+
+  .whole-word {
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 
   button:disabled {

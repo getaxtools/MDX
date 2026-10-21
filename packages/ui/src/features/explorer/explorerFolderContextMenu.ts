@@ -1,8 +1,9 @@
 import type { Translator } from '@mdx/i18n';
 import type { ContextMenuItem } from '../../components/ContextMenuItem';
+import { pathMenuItems, type PathMenuItemId } from '../file-paths/pathCommands';
 import { describeCombination } from '../shortcuts/describeCombination';
 
-export type ExplorerFolderMenuItemId = 'addToFavourites' | 'refresh' | 'remove';
+export type ExplorerFolderMenuItemId = 'addToFavourites' | 'refresh' | 'remove' | PathMenuItemId;
 
 export type ExplorerFoldersHeaderMenuItemId = 'openFolder' | 'refreshFolders';
 
@@ -17,6 +18,7 @@ export function explorerFolderContextMenuItems(
       isDisabled: isFavourite,
     },
     { id: 'refresh', label: translator.translate('favourites.folder.refresh') },
+    ...pathMenuItems(translator),
     {
       id: 'remove',
       label: translator.translate('explorer.folders.remove'),

@@ -21,6 +21,7 @@ describe('document context menu', () => {
 
     expect(items.map((item) => [item.label, item.shortcut])).toEqual([
       ['Copy', 'Ctrl+C'],
+      ['Copy as HTML', undefined],
       ['Select All', 'Ctrl+A'],
       ['Find…', 'Ctrl+F'],
       ['Show Source', 'Ctrl+U'],

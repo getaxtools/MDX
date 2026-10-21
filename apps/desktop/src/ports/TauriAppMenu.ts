@@ -15,4 +15,8 @@ export class TauriAppMenu implements AppMenuPort {
   async showRecentFiles(displayPaths: readonly string[]): Promise<void> {
     await tauriCommands.updateRecentMenu(displayPaths);
   }
+
+  async showLabels(labels: Readonly<Record<string, string>>): Promise<void> {
+    await tauriCommands.updateMenuLanguage(labels);
+  }
 }

@@ -1,8 +1,8 @@
 import { ViewerSession } from '@mdx/core';
-import { createTranslator } from '@mdx/i18n';
+import { DEFAULT_LOCALE } from '@mdx/i18n';
 import { createCodeHighlighter, createMarkdownRenderer, createRichBlockRenderer } from '@mdx/renderer';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { ViewerApp, ViewerController } from '@mdx/ui';
+import { ViewerApp, ViewerController, prepareDisplayLanguage, translatedAlertTitles } from '@mdx/ui';
 import { mount } from 'svelte';
 import { TauriAppMenu } from './ports/TauriAppMenu';
 import { TauriAppState } from './ports/TauriAppState';
@@ -10,6 +10,8 @@ import { TauriDocumentFiles } from './ports/TauriDocumentFiles';
 import { TauriDocumentLinks } from './ports/TauriDocumentLinks';
 import { TauriDocumentRequests } from './ports/TauriDocumentRequests';
 import { TauriDocumentResources } from './ports/TauriDocumentResources';
+import { TauriDesktopShell } from './ports/TauriDesktopShell';
+import { TauriDocumentExport } from './ports/TauriDocumentExport';
 import { TauriDocumentWatcher } from './ports/TauriDocumentWatcher';
 import { TauriFavouritesFile } from './ports/TauriFavouritesFile';
 import { TauriFolderWatcher } from './ports/TauriFolderWatcher';
@@ -21,17 +23,25 @@ import { loadThirdPartyLicenses } from './loadThirdPartyLicenses';
 const appElement = document.getElementById('app');
 if (!appElement) throw new Error('The #app element is missing from index.html');
 
-const translator = createTranslator();
+const appState = new TauriAppState();
+const menu = new TauriAppMenu();
+const { locale, messages, translator } = await prepareDisplayLanguage({
+  savedState: await appState.load(),
+  systemLocales: navigator.languages,
+  root: document.documentElement,
+});
+if (locale !== DEFAULT_LOCALE) await menu.showLabels(messages);
+
 const controller = new ViewerController({
   session: new ViewerSession({
     documentFiles: new TauriDocumentFiles(),
-    appState: new TauriAppState(),
+    appState,
     now: () => Date.now(),
   }),
   requests: new TauriDocumentRequests(),
-  renderer: createMarkdownRenderer({ window }),
+  renderer: createMarkdownRenderer({ window, alertTitles: translatedAlertTitles(translator) }),
   translator,
-  menu: new TauriAppMenu(),
+  menu,
   watcher: new TauriDocumentWatcher(),
   resources: new TauriDocumentResources(),
   printer: new WebViewPrinter(),
@@ -39,6 +49,8 @@ const controller = new ViewerController({
   folders: new TauriFolders(),
   folderWatcher: new TauriFolderWatcher(),
   favouritesFile: new TauriFavouritesFile(),
+  desktopShell: new TauriDesktopShell(),
+  documentExport: new TauriDocumentExport(),
 });
 
 const appInfo = await tauriCommands.getAppInfo();

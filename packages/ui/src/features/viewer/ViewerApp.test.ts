@@ -51,6 +51,39 @@ describe('ViewerApp', () => {
     expect(await screen.findByRole('heading', { name: 'Guide' })).toBeTruthy();
   });
 
+  it('greets an empty window with a start page that creates a new document', async () => {
+    await renderViewer();
+
+    expect(await screen.findByRole('heading', { name: 'Welcome' })).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'New Document' }));
+
+    expect(await screen.findByRole('tab', { name: /Untitled-1\.md/ })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Welcome' })).toBeNull();
+  });
+
+  it('widens the Explorer with the arrow keys on its splitter', async () => {
+    await renderViewer();
+    const splitter = await screen.findByRole('separator', { name: 'Resize Explorer' });
+
+    splitter.focus();
+    await userEvent.keyboard('{ArrowRight}');
+
+    await vi.waitFor(() =>
+      expect(screen.getByRole('separator', { name: 'Resize Explorer' }).getAttribute('aria-valuenow')).toBe(
+        '276',
+      ),
+    );
+  });
+
+  it('shows the preview beside the editor with its own splitter', async () => {
+    await renderViewer([GUIDE]);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Side by Side' }));
+
+    expect(await screen.findByRole('region', { name: 'Preview' })).toBeTruthy();
+    expect(screen.getByRole('separator', { name: 'Resize editor and preview' })).toBeTruthy();
+  });
+
   it('hides and shows the sidebar from the activity bar', async () => {
     await renderViewer();
     const sidebarButton = await screen.findByRole('button', { name: 'Explorer' });
@@ -157,6 +190,22 @@ describe('ViewerApp', () => {
 
     expect(screen.getByRole('button', { name: 'Zoom 110%' })).toBeTruthy();
     expect(document.documentElement.dataset.theme).toBe('dark');
+  });
+
+  it('moves focus between the Explorer, the tabs, the document and the status bar with F6', async () => {
+    await renderViewer([GUIDE]);
+    const article = await screen.findByRole('article', { name: 'Guide.md' });
+    const documentArea = article.closest('main');
+
+    await userEvent.keyboard('{F6}');
+    expect(screen.getByRole('navigation', { name: 'Explorer' }).contains(document.activeElement)).toBe(true);
+    await userEvent.keyboard('{F6}');
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: /Guide\.md/ }));
+    await userEvent.keyboard('{F6}');
+    expect(document.activeElement).toBe(documentArea);
+    await userEvent.keyboard('{Shift>}{F6}{/Shift}');
+
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: /Guide\.md/ }));
   });
 
   it('shows statistics for the active document in the status bar', async () => {

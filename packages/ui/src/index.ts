@@ -10,6 +10,8 @@ export {
   type ViewerControllerDependencies,
   type ViewerSnapshot,
 } from './features/viewer/ViewerController';
+export { prepareDisplayLanguage, type DisplayLanguage } from './features/settings/prepareDisplayLanguage';
+export { translatedAlertTitles } from './features/document-view/translatedAlertTitles';
 export { commandForShortcut } from './features/shortcuts/commandShortcuts';
 export type { DesktopPlatform, ViewerCommand } from './features/viewer/viewerCommands';
 export type { AppInfo } from './features/about/AppInfo';

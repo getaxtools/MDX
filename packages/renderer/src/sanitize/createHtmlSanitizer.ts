@@ -1,5 +1,6 @@
 import createDOMPurify from 'dompurify';
 import { HEADING_ID_PREFIX } from '../plugins/headingAnchorsPlugin';
+import { SOURCE_LINE_ATTRIBUTE } from '../plugins/sourceLinesPlugin';
 
 export type ResourceUrlResolver = (relativeUrl: string) => string | undefined;
 
@@ -27,6 +28,7 @@ const FORBIDDEN_ATTRIBUTES = ['style', 'target', 'srcset', 'formaction', 'ping']
 const EXTERNAL_LINK = /^(https?:|mailto:)/i;
 const REMOTE_URL = /^(https?:)?\/\//i;
 const HAS_SCHEME = /^[a-z][a-z\d+.-]*:/i;
+const LINE_NUMBER = /^\d{1,9}$/;
 
 const SELF_CHECK_HTML = '<p>safe</p><script>unsafe()</script><img src="x.png" onerror="unsafe()">';
 
@@ -39,19 +41,30 @@ export class UnsafeSanitizerEnvironmentError extends Error {
 
 export type BrowserWindow = Window & typeof globalThis;
 
-export type HtmlSanitizer = (html: string, resolveResourceUrl?: ResourceUrlResolver) => string;
+export interface SanitizeOptions {
+  /** Keeps the source line markers the renderer put on blocks, for a preview beside the editor. */
+  readonly keepSourceLines?: boolean;
+}
+
+export type HtmlSanitizer = (
+  html: string,
+  resolveResourceUrl?: ResourceUrlResolver,
+  options?: SanitizeOptions,
+) => string;
 
 export function createHtmlSanitizer(window: BrowserWindow): HtmlSanitizer {
   const purifier = createDOMPurify(window);
   // Some DOM implementations report support but let scripts through; fail closed instead of rendering unsafely.
   assertSanitizerWorks(purifier.sanitize(SELF_CHECK_HTML));
-  return (html, resolveResourceUrl) => {
+  return (html, resolveResourceUrl, options = {}) => {
     const fragment = purifier.sanitize(html, {
       FORBID_TAGS: FORBIDDEN_TAGS,
       FORBID_ATTR: FORBIDDEN_ATTRIBUTES,
       ALLOW_DATA_ATTR: false,
+      ADD_ATTR: options.keepSourceLines === true ? [SOURCE_LINE_ATTRIBUTE] : [],
       RETURN_DOM_FRAGMENT: true,
     });
+    keepOnlyLineNumbersAsSourceLines(fragment);
     keepOnlyPrefixedIds(fragment);
     keepOnlyDisabledCheckboxes(fragment);
     classifyLinks(fragment);
@@ -65,6 +78,15 @@ export function createHtmlSanitizer(window: BrowserWindow): HtmlSanitizer {
 function assertSanitizerWorks(sanitizedSelfCheck: string): void {
   const isSafe = sanitizedSelfCheck.includes('<p>safe</p>') && !/script|onerror/i.test(sanitizedSelfCheck);
   if (!isSafe) throw new UnsafeSanitizerEnvironmentError();
+}
+
+// Raw HTML in a document may carry the same attribute; only plain line numbers are trusted.
+function keepOnlyLineNumbersAsSourceLines(fragment: DocumentFragment): void {
+  for (const element of fragment.querySelectorAll(`[${SOURCE_LINE_ATTRIBUTE}]`)) {
+    if (!LINE_NUMBER.test(String(element.getAttribute(SOURCE_LINE_ATTRIBUTE)))) {
+      element.removeAttribute(SOURCE_LINE_ATTRIBUTE);
+    }
+  }
 }
 
 function keepOnlyPrefixedIds(fragment: DocumentFragment): void {

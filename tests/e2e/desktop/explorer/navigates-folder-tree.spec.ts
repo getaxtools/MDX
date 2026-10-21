@@ -21,6 +21,7 @@ describe('the Explorer folder tree', () => {
     app = await DesktopApp.launch({ workspace });
     const mainWindow = new MainWindowPage(app.browser);
     await mainWindow.waitForExplorerFolderEntries('documents', [
+      'extended-syntax.md',
       'getting-started.md',
       'gfm-showcase.md',
       'math.md',
@@ -30,6 +31,7 @@ describe('the Explorer folder tree', () => {
     ]);
     await mainWindow.focusExplorerFolder('documents');
 
+    await mainWindow.pressShortcut('ArrowDown');
     await mainWindow.pressShortcut('ArrowDown');
     await mainWindow.pressShortcut('ArrowDown');
     expect(await mainWindow.focusedTreeItemName()).toBe('gfm-showcase.md');

@@ -9,6 +9,19 @@ impl MenuLabels {
         Self(serde_json::from_str(ENGLISH_CATALOG).unwrap_or_default())
     }
 
+    /// English labels replaced by the given translations; keys English does not have are ignored.
+    pub fn with_translations(translations: HashMap<String, String>) -> Self {
+        let mut labels = Self::english();
+        for (key, label) in translations {
+            if !label.is_empty()
+                && let Some(english) = labels.0.get_mut(&key)
+            {
+                *english = label;
+            }
+        }
+        labels
+    }
+
     pub fn label(&self, key: &str) -> String {
         self.0.get(key).cloned().unwrap_or_else(|| key.to_owned())
     }
@@ -39,6 +52,19 @@ mod tests {
         let labels = MenuLabels::english();
 
         assert_eq!(labels.label("menu.file"), "File");
+    }
+
+    #[test]
+    fn uses_translations_and_keeps_english_for_missing_or_empty_ones() {
+        let labels = MenuLabels::with_translations(HashMap::from([
+            ("menu.file".to_owned(), "फ़ाइल".to_owned()),
+            ("menu.edit".to_owned(), String::new()),
+            ("menu.invented".to_owned(), "Invented".to_owned()),
+        ]));
+
+        assert_eq!(labels.label("menu.file"), "फ़ाइल");
+        assert_eq!(labels.label("menu.edit"), "Edit");
+        assert!(!labels.has("menu.invented"));
     }
 
     #[test]

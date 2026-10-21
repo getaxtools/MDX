@@ -22,6 +22,7 @@ describe('the command palette', () => {
     app = await DesktopApp.launch({ workspace });
     const mainWindow = new MainWindowPage(app.browser);
     await mainWindow.waitForExplorerFolderEntries('documents', [
+      'extended-syntax.md',
       'getting-started.md',
       'gfm-showcase.md',
       'math.md',

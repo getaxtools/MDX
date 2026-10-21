@@ -146,3 +146,151 @@
   overflow-y: hidden;
   text-align: center;
 }
+
+.rendered-document[data-typography='book'] {
+  font-family: var(--font-serif);
+  font-size: 1.125em;
+  line-height: 1.75;
+  hyphens: auto;
+}
+
+.rendered-document[data-typography='book'] :is(h1, h2) {
+  border-bottom: 0;
+  padding-bottom: 0;
+  font-weight: 500;
+}
+
+.rendered-document[data-typography='book'] h1 {
+  margin-top: 0.5em;
+  text-align: center;
+}
+
+.rendered-document[data-typography='book'] p + p {
+  margin-top: -0.5em;
+  text-indent: 1.5em;
+}
+
+.rendered-document[data-typography='academic'] {
+  counter-reset: academic-section;
+  font-family: var(--font-serif);
+  line-height: 1.5;
+  text-align: justify;
+  hyphens: auto;
+}
+
+.rendered-document[data-typography='academic'] :is(h1, h2, h3, h4, h5, h6, pre, table, figure) {
+  text-align: start;
+}
+
+.rendered-document[data-typography='academic'] :is(h1, h2) {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.rendered-document[data-typography='academic'] h1 {
+  font-size: 1.75em;
+  text-align: center;
+}
+
+.rendered-document[data-typography='academic'] h2 {
+  counter-increment: academic-section;
+  counter-reset: academic-subsection;
+  font-size: 1.3em;
+}
+
+.rendered-document[data-typography='academic'] h3 {
+  counter-increment: academic-subsection;
+  font-size: 1.1em;
+}
+
+.rendered-document[data-typography='academic'] h2::before {
+  content: counter(academic-section) '. ';
+}
+
+.rendered-document[data-typography='academic'] h3::before {
+  content: counter(academic-section) '.' counter(academic-subsection) ' ';
+}
+
+.rendered-document[data-typography='academic'] blockquote {
+  border-inline-start: 0;
+  margin-inline: 2em;
+  font-size: 0.95em;
+}
+
+.rendered-document mark {
+  background: var(--color-mark-background);
+  color: var(--color-mark-text);
+  border-radius: 2px;
+  padding: 0 0.1em;
+}
+
+.rendered-document abbr[title] {
+  text-decoration: underline dotted;
+  cursor: help;
+}
+
+.rendered-document dt {
+  font-weight: 600;
+}
+
+.rendered-document dd {
+  margin: 0 0 0.75em;
+  margin-inline-start: 1.5em;
+}
+
+.rendered-document .markdown-alert {
+  --alert-color: var(--color-alert-note);
+  margin: 0 0 1em;
+  padding: var(--space-2) var(--space-4);
+  border-inline-start: 4px solid var(--alert-color);
+}
+
+.rendered-document .markdown-alert > :last-child {
+  margin-bottom: 0;
+}
+
+.rendered-document .markdown-alert-tip {
+  --alert-color: var(--color-alert-tip);
+}
+
+.rendered-document .markdown-alert-important {
+  --alert-color: var(--color-alert-important);
+}
+
+.rendered-document .markdown-alert-warning {
+  --alert-color: var(--color-alert-warning);
+}
+
+.rendered-document .markdown-alert-caution {
+  --alert-color: var(--color-alert-caution);
+}
+
+.rendered-document .markdown-alert-title {
+  margin-bottom: 0.25em;
+  color: var(--alert-color);
+  font-weight: 600;
+}
+
+.rendered-document .footnotes {
+  font-size: 0.875em;
+  color: var(--color-text-secondary);
+}
+
+.rendered-document .footnotes-sep {
+  margin-top: 2em;
+}
+
+@media (forced-colors: active) {
+  .rendered-document .markdown-alert {
+    border-inline-start-color: CanvasText;
+  }
+
+  .rendered-document .markdown-alert-title {
+    color: CanvasText;
+  }
+
+  .rendered-document mark {
+    background: Mark;
+    color: MarkText;
+  }
+}

@@ -12,6 +12,7 @@ export { MAX_RECENT_FILES, RecentFilesList, type RecentFile } from './recent-fil
 export {
   APP_STATE_SCHEMA_VERSION,
   restoreAppState,
+  savedLanguagePreference,
   toPersistedAppState,
   type PersistedAppState,
   type RestoredAppState,
@@ -26,21 +27,39 @@ export {
   type TabStripSnapshot,
 } from './tabs/TabStrip';
 export {
+  DEFAULT_EDITOR_SHARE_PERCENT,
   DEFAULT_VIEW_SETTINGS,
   EXPLORER_SECTIONS,
+  MAX_EDITOR_SHARE_PERCENT,
+  MAX_PANEL_WIDTH_PX,
+  MIN_EDITOR_SHARE_PERCENT,
   MIN_EXPLORER_SECTION_HEIGHT_PX,
+  MIN_PANEL_WIDTH_PX,
   READING_WIDTHS,
   THEME_PREFERENCES,
+  TYPOGRAPHIES,
+  ZOOM_LEVELS_PERCENT,
+  panelWidthOf,
   parseViewSettings,
+  resetPanelWidth,
   resetZoom,
   resizeExplorerSection,
+  resizePanel,
+  setEditorShare,
+  setZoom,
   showExplorerSection,
+  showSidebarView,
+  toggleSidebarView,
   toggleExplorerSection,
   zoomIn,
   zoomOut,
   type ExplorerSection,
+  type LanguagePreference,
   type ReadingWidth,
+  type ResizablePanel,
+  type SidebarView,
   type ThemePreference,
+  type Typography,
   type ViewSettings,
 } from './view/ViewSettings';
 export {
@@ -52,3 +71,8 @@ export { withDocumentLineBreaks, withUnixLineBreaks } from './documents/lineEndi
 export { parseSpreadsheetCells } from './tables/parseSpreadsheetCells';
 export { toMarkdownTable, type MarkdownTableOptions } from './tables/toMarkdownTable';
 export { fuzzyMatch, rankByFuzzyMatch, type FuzzyMatch } from './search/fuzzyMatch';
+export {
+  MAX_NAVIGATION_ENTRIES,
+  NavigationHistory,
+  type NavigationStep,
+} from './navigation/NavigationHistory';

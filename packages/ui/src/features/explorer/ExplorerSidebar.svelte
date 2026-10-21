@@ -90,7 +90,7 @@
   {/if}
 {/snippet}
 
-<nav class="sidebar" aria-label={translator.translate('sidebar.label')}>
+<nav class="sidebar" data-focus-region aria-label={translator.translate('sidebar.label')}>
   <div class="section-slot" style:height={heightOf('favourites')} bind:this={sectionSlots.favourites}>
     <FavouritesSection
       {favourites}

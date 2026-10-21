@@ -11,6 +11,8 @@ body {
     'Segoe UI Variable Text', 'Segoe UI', -apple-system, BlinkMacSystemFont, Cantarell, Ubuntu, 'Noto Sans',
     system-ui, sans-serif;
   --font-reading: var(--font-ui);
+  --font-serif:
+    'Sitka Text', Charter, 'Iowan Old Style', Georgia, Cambria, 'Noto Serif', 'DejaVu Serif', serif;
   --font-mono:
     'Cascadia Code', 'Cascadia Mono', ui-monospace, 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
   --font-indic:
@@ -49,6 +51,13 @@ body {
   --color-notice-background: #fff4e5;
   --color-notice-border: #f0b35b;
   --color-code-background: #f2f3f5;
+  --color-alert-note: #0969da;
+  --color-alert-tip: #1a7f37;
+  --color-alert-important: #8250df;
+  --color-alert-warning: #9a6700;
+  --color-alert-caution: #cf222e;
+  --color-mark-background: #fff3a3;
+  --color-mark-text: #1b1d22;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -66,6 +75,13 @@ body {
     --color-notice-background: #3a2e1a;
     --color-notice-border: #a87a35;
     --color-code-background: #262a31;
+    --color-alert-note: #4493f8;
+    --color-alert-tip: #3fb950;
+    --color-alert-important: #ab7df8;
+    --color-alert-warning: #d29922;
+    --color-alert-caution: #f85149;
+    --color-mark-background: #5c4d00;
+    --color-mark-text: #f4f0d9;
   }
 }
 
@@ -88,6 +104,13 @@ body {
   --color-notice-background: #3a2e1a;
   --color-notice-border: #a87a35;
   --color-code-background: #262a31;
+  --color-alert-note: #4493f8;
+  --color-alert-tip: #3fb950;
+  --color-alert-important: #ab7df8;
+  --color-alert-warning: #d29922;
+  --color-alert-caution: #f85149;
+  --color-mark-background: #5c4d00;
+  --color-mark-text: #f4f0d9;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -104,4 +127,20 @@ body {
 :lang(bn) {
   font-family: var(--font-indic);
   line-height: var(--line-height-indic);
+}
+
+:lang(ja) {
+  font-family: 'Yu Gothic UI', 'Meiryo UI', 'Hiragino Sans', 'Noto Sans JP', var(--font-ui);
+}
+
+:lang(zh-Hans) {
+  font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans SC', var(--font-ui);
+}
+
+:lang(ko) {
+  font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', var(--font-ui);
+}
+
+:lang(ar) {
+  font-family: 'Segoe UI', 'Geeza Pro', 'Noto Sans Arabic', var(--font-ui);
 }

@@ -80,6 +80,26 @@ describe('ViewerSession', () => {
     expect(activeDocument?.text).toBe('# Guide');
   });
 
+  it('forgets everything when all data is cleared, and saves the empty state', async () => {
+    const { session, appState } = createSession();
+    const guide = await session.openDocument(GUIDE_PATH);
+    session.updateFavourites((favourites) => favourites.add(guide.location, 'file'));
+    session.updateViewSettings((viewSettings) => ({ ...viewSettings, theme: 'dark' }));
+
+    session.clearAllData();
+    await session.save();
+    const restarted = createSession(appState);
+    await restarted.session.restore();
+
+    for (const state of [session.currentState(), restarted.session.currentState()]) {
+      expect(state.tabStrip.tabs()).toEqual([]);
+      expect(state.recentFiles.entries()).toEqual([]);
+      expect(state.favourites.favourites()).toEqual([]);
+      expect(state.viewSettings.theme).toBe('system');
+    }
+    expect(session.openedDocument(guide.location.canonicalKey)).toBeUndefined();
+  });
+
   it('reports a reset when the saved state is corrupt', async () => {
     const { session } = createSession(new InMemoryAppState('corrupt'));
 

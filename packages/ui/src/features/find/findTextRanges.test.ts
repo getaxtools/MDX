@@ -27,6 +27,30 @@ describe('findTextRanges', () => {
     expect(findTextRanges(articleWith('<p>aaaa</p>'), 'aa')).toHaveLength(2);
   });
 
+  it('finds only the exact case with Match Case', () => {
+    const article = articleWith('<p>Install, install, INSTALL</p>');
+
+    const ranges = findTextRanges(article, 'install', { isCaseSensitive: true, isWholeWord: false });
+
+    expect(ranges.map((range) => range.toString())).toEqual(['install']);
+  });
+
+  it('skips matches inside longer words with Match Whole Word', () => {
+    const article = articleWith('<p>cat, concat, cats and the cat_box; Cat.</p>');
+
+    const ranges = findTextRanges(article, 'cat', { isCaseSensitive: false, isWholeWord: true });
+
+    expect(ranges.map((range) => range.toString())).toEqual(['cat', 'Cat']);
+  });
+
+  it('treats combining marks as part of a word with Match Whole Word', () => {
+    const article = articleWith('<p>నమ నమస్తే</p>');
+
+    const ranges = findTextRanges(article, 'నమ', { isCaseSensitive: false, isWholeWord: true });
+
+    expect(ranges).toHaveLength(1);
+  });
+
   it('finds text in scripts such as Telugu', () => {
     const ranges = findTextRanges(articleWith('<p>నమస్తే ప్రపంచం</p>'), 'ప్రపంచం');
 

@@ -12,6 +12,7 @@
   import ExplorerSectionHeader from '../explorer/ExplorerSectionHeader.svelte';
   import TreeItemIcon from '../folder-tree/TreeItemIcon.svelte';
   import { activateWithKeyboard, treeKeyboard } from '../folder-tree/treeKeyboard';
+  import type { PathCommand } from '../file-paths/pathCommands';
   import type { LocateRecentFileCommand, RecentFileCommand } from './recentFileCommands';
 
   interface Props {
@@ -19,7 +20,7 @@
     pathStatuses: ReadonlyMap<string, PathStatus>;
     translator: Translator;
     onOpen: (recentFile: RecentFile) => void;
-    onCommand: (command: RecentFileCommand | LocateRecentFileCommand) => void;
+    onCommand: (command: RecentFileCommand | LocateRecentFileCommand | PathCommand) => void;
     isExpanded?: boolean;
     onToggleExpanded?: () => void;
   }
@@ -64,7 +65,7 @@
   function chooseMenuItem(itemId: RecentFileMenuItemId) {
     if (!menuRecentFile) return;
     if (itemId === 'open') onOpen(menuRecentFile);
-    else onCommand(commandForRecentFileMenuItem(itemId, menuRecentFile.location.canonicalKey));
+    else onCommand(commandForRecentFileMenuItem(itemId, menuRecentFile));
   }
 
   function closeMenu() {

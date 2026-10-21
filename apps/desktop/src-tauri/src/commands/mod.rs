@@ -1,9 +1,13 @@
 pub mod app_info;
 pub mod app_state;
+pub mod document_export;
 pub mod document_saving;
 pub mod document_search;
 pub mod documents;
 pub mod favourites_file;
+pub mod file_manager;
+pub mod folder_text_search;
 pub mod folders;
 pub mod links;
 pub mod live_reload;
+pub mod window;

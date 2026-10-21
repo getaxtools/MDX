@@ -14,8 +14,14 @@ export type ShortcutKeyEvent = Pick<
 >;
 
 export const COMMAND_SHORTCUTS: readonly CommandShortcut[] = [
+  { command: { kind: 'newDocument' }, combinations: [['ctrl', 'N']], actionKey: 'menu.file.newDocument' },
   { command: { kind: 'openDocuments' }, combinations: [['ctrl', 'O']], actionKey: 'menu.file.open' },
   { command: { kind: 'saveDocument' }, combinations: [['ctrl', 'S']], actionKey: 'menu.file.save' },
+  {
+    command: { kind: 'reloadActiveDocument' },
+    combinations: [['F5']],
+    actionKey: 'menu.file.reload',
+  },
   {
     command: { kind: 'saveDocumentAs' },
     combinations: [['ctrl', 'shift', 'S']],
@@ -45,7 +51,17 @@ export const COMMAND_SHORTCUTS: readonly CommandShortcut[] = [
     actionKey: 'menu.file.toggleFavourite',
   },
   { command: { kind: 'print' }, combinations: [['ctrl', 'P']], actionKey: 'menu.file.print' },
+  {
+    command: { kind: 'showSettings' },
+    combinations: [['ctrl', ',']],
+    actionKey: 'menu.file.settings',
+  },
   { command: { kind: 'showFind' }, combinations: [['ctrl', 'F']], actionKey: 'menu.edit.find' },
+  {
+    command: { kind: 'showFolderSearch' },
+    combinations: [['ctrl', 'shift', 'F']],
+    actionKey: 'menu.edit.findInFolders',
+  },
   {
     command: { kind: 'showPasteTable' },
     combinations: [['ctrl', 'alt', 'V']],
@@ -67,7 +83,7 @@ export const COMMAND_SHORTCUTS: readonly CommandShortcut[] = [
     actionKey: 'menu.view.toggleSource',
   },
   {
-    command: { kind: 'toggleSidebar' },
+    command: { kind: 'toggleSidebarView', sidebarView: 'explorer' },
     combinations: [['ctrl', 'shift', 'E']],
     actionKey: 'menu.view.toggleSidebar',
   },
@@ -98,10 +114,18 @@ export const COMMAND_SHORTCUTS: readonly CommandShortcut[] = [
     actionKey: 'menu.view.toggleEditing',
   },
   {
+    command: { kind: 'togglePreviewBesideEditor' },
+    combinations: [['ctrl', '\\']],
+    actionKey: 'menu.view.previewBeside',
+  },
+  {
     command: { kind: 'showCommandPalette' },
     combinations: [['ctrl', 'shift', 'P']],
     actionKey: 'menu.view.commandPalette',
   },
+  { command: { kind: 'goBack' }, combinations: [['alt', 'ArrowLeft']], actionKey: 'menu.view.goBack' },
+  { command: { kind: 'goForward' }, combinations: [['alt', 'ArrowRight']], actionKey: 'menu.view.goForward' },
+  { command: { kind: 'toggleFullScreen' }, combinations: [['F11']], actionKey: 'menu.view.fullScreen' },
   {
     command: { kind: 'showKeyboardShortcuts' },
     combinations: [['F1']],

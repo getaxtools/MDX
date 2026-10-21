@@ -18,9 +18,14 @@ describe('paletteCommands', () => {
     expect(commands).toContainEqual({ command: { kind: 'openFolder' }, label: 'Open Folder…' });
   });
 
-  it('names theme and reading width choices after their menu', () => {
+  it('names theme, reading width and typography choices after their menu', () => {
     expect(labels).toContain('Theme: Dark');
     expect(labels).toContain('Reading Width: Full Width');
+    expect(labels).toContain('Typography: Academic');
+  });
+
+  it('offers Settings, Copy as HTML and Clear All Data', () => {
+    expect(labels).toEqual(expect.arrayContaining(['Settings…', 'Copy as HTML', 'Clear All Data…']));
   });
 
   it('leaves out the command palette itself', () => {

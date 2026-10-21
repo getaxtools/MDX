@@ -1,5 +1,5 @@
 import { createTranslator } from '@mdx/i18n';
-import { InMemoryDocumentFiles } from '@mdx/platform';
+import { InMemoryDocumentFiles, untitledLocation } from '@mdx/platform';
 import { describe, expect, it } from 'vitest';
 import { commandForTabMenuItem, tabContextMenuItems } from './tabContextMenu';
 
@@ -14,6 +14,8 @@ describe('tab context menu', () => {
       'Close',
       'Close Others',
       'Close to the Right',
+      'Copy Path',
+      'Reveal in File Explorer',
       'Pin Tab',
       'Reopen Closed Tab',
     ]);
@@ -49,11 +51,23 @@ describe('tab context menu', () => {
     expect(items.map((item) => item.id)).not.toContain('pin');
   });
 
+  it('offers no path for a new document that has never been saved', () => {
+    const untitled = { ...tab, location: untitledLocation(1, 'Untitled-1.md') };
+
+    const items = tabContextMenuItems(untitled, { index: 0, tabCount: 1 }, translator);
+
+    expect(items.map((item) => item.id)).not.toContain('copyPath');
+  });
+
   it('turns a chosen item into a command for that tab', () => {
-    expect(commandForTabMenuItem('closeOthers', 'key')).toEqual({
+    expect(commandForTabMenuItem('closeOthers', tab.location)).toEqual({
       kind: 'closeOtherTabs',
-      canonicalKey: 'key',
+      canonicalKey: tab.location.canonicalKey,
     });
-    expect(commandForTabMenuItem('reopenClosed', 'key')).toEqual({ kind: 'reopenClosedTab' });
+    expect(commandForTabMenuItem('reopenClosed', tab.location)).toEqual({ kind: 'reopenClosedTab' });
+    expect(commandForTabMenuItem('copyPath', tab.location)).toEqual({
+      kind: 'copyPath',
+      path: tab.location.displayPath,
+    });
   });
 });

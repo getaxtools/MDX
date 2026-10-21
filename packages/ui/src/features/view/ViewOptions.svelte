@@ -2,8 +2,10 @@
   import {
     READING_WIDTHS,
     THEME_PREFERENCES,
+    TYPOGRAPHIES,
     type ReadingWidth,
     type ThemePreference,
+    type Typography,
     type ViewSettings,
   } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
@@ -23,6 +25,10 @@
 
   function chooseReadingWidth(event: Event & { currentTarget: HTMLSelectElement }) {
     onCommand({ kind: 'setReadingWidth', readingWidth: event.currentTarget.value as ReadingWidth });
+  }
+
+  function chooseTypography(event: Event & { currentTarget: HTMLSelectElement }) {
+    onCommand({ kind: 'setTypography', typography: event.currentTarget.value as Typography });
   }
 </script>
 
@@ -56,6 +62,15 @@
   >
     {#each READING_WIDTHS as readingWidth (readingWidth)}
       <option value={readingWidth}>{translator.translate(`menu.view.readingWidth.${readingWidth}`)}</option>
+    {/each}
+  </select>
+  <select
+    aria-label={translator.translate('menu.view.typography')}
+    value={settings.typography}
+    onchange={chooseTypography}
+  >
+    {#each TYPOGRAPHIES as typography (typography)}
+      <option value={typography}>{translator.translate(`menu.view.typography.${typography}`)}</option>
     {/each}
   </select>
 </div>

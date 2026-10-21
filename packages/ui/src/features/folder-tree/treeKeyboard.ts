@@ -1,3 +1,5 @@
+import { logicalArrowKey } from '../../components/textDirection';
+
 const TREE_ITEM_SELECTOR = '[role="treeitem"]';
 const TYPE_AHEAD_RESET_MS = 700;
 
@@ -24,7 +26,7 @@ export function treeKeyboard(tree: HTMLElement): { destroy: () => void } {
     const current = treeItemReceiving(event);
     if (!current) return;
     const rows = treeItemsOf(tree);
-    const action = KEY_ACTIONS[event.key];
+    const action = KEY_ACTIONS[logicalArrowKey(event.key, tree)];
     const target = action ? action(rows, current) : typeAhead(event, rows, current);
     if (!action && !target) return;
     event.preventDefault();

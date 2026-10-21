@@ -1,4 +1,10 @@
-import type { DocumentLocation, FolderListing, FolderPort } from '@mdx/platform';
+import type {
+  DocumentLocation,
+  FolderListing,
+  FolderPort,
+  FolderSearchResults,
+  TextSearchOptions,
+} from '@mdx/platform';
 import { tauriCommands } from './tauriCommands';
 
 export class TauriFolders implements FolderPort {
@@ -12,5 +18,13 @@ export class TauriFolders implements FolderPort {
 
   findDocuments(folderPaths: readonly string[]): Promise<DocumentLocation[]> {
     return tauriCommands.findFolderDocuments(folderPaths);
+  }
+
+  searchDocuments(
+    folderPaths: readonly string[],
+    query: string,
+    options: TextSearchOptions,
+  ): Promise<FolderSearchResults> {
+    return tauriCommands.searchFolderDocuments(folderPaths, query, options);
   }
 }

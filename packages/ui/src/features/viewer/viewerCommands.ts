@@ -1,9 +1,12 @@
-import { READING_WIDTHS, THEME_PREFERENCES } from '@mdx/core';
+import { READING_WIDTHS, THEME_PREFERENCES, TYPOGRAPHIES } from '@mdx/core';
 import { DETECT_ENCODING_ITEM, isReopenEncoding } from '../encodings/reopenEncodings';
+import type { ExportFormat, TextSearchOptions } from '@mdx/platform';
 import type { EditingCommand } from '../editing/editingCommands';
 import type { ExplorerActionCommand, RemoveExplorerFolderCommand } from '../explorer/explorerCommands';
 import type { FavouriteCommand, FavouritesFileCommand } from '../favourites/favouriteCommands';
+import type { PathCommand } from '../file-paths/pathCommands';
 import type { FolderTreeCommand } from '../folder-tree/folderTreeCommands';
+import type { NavigationCommand } from '../navigation/DocumentNavigation';
 import type { LocateRecentFileCommand, RecentFileCommand } from '../recent-files/recentFileCommands';
 import type { TabCommand } from '../tabs/tabCommands';
 import type { ViewCommand } from '../view/viewCommands';
@@ -19,6 +22,9 @@ export type ViewerCommand =
   | RemoveExplorerFolderCommand
   | RecentFileCommand
   | LocateRecentFileCommand
+  | PathCommand
+  | NavigationCommand
+  | { readonly kind: 'toggleFullScreen' }
   | { readonly kind: 'openDocuments' }
   | { readonly kind: 'openRecentFileAt'; readonly index: number }
   | { readonly kind: 'saveDocument' }
@@ -26,7 +32,21 @@ export type ViewerCommand =
   | { readonly kind: 'saveAllDocuments' }
   | { readonly kind: 'toggleFavourite' }
   | { readonly kind: 'showAbout' }
+  | { readonly kind: 'showSettings' }
+  | { readonly kind: 'confirmClearAllData' }
+  | { readonly kind: 'clearAllData' }
   | { readonly kind: 'showFind' }
+  | { readonly kind: 'showFolderSearch' }
+  | {
+      readonly kind: 'openSearchMatch';
+      readonly path: string;
+      readonly query: string;
+      readonly options: TextSearchOptions;
+    }
+  | { readonly kind: 'copyAsHtml' }
+  | { readonly kind: 'copyHtml'; readonly html: string }
+  | { readonly kind: 'exportDocument'; readonly format: ExportFormat }
+  | { readonly kind: 'saveExport'; readonly format: ExportFormat; readonly contents: string }
   | { readonly kind: 'showPasteTable' }
   | { readonly kind: 'print' }
   | { readonly kind: 'showKeyboardShortcuts' }
@@ -51,6 +71,10 @@ const COMMANDS_BY_MENU_ITEM: Readonly<Record<string, ViewerCommand>> = {
   closeActiveTab: { kind: 'closeActiveTab' },
   print: { kind: 'print' },
   showFind: { kind: 'showFind' },
+  showFolderSearch: { kind: 'showFolderSearch' },
+  copyAsHtml: { kind: 'copyAsHtml' },
+  exportAsHtml: { kind: 'exportDocument', format: 'html' },
+  exportAsPlainText: { kind: 'exportDocument', format: 'plainText' },
   showPasteTable: { kind: 'showPasteTable' },
   zoomIn: { kind: 'zoomIn' },
   zoomOut: { kind: 'zoomOut' },
@@ -69,12 +93,19 @@ const COMMANDS_BY_MENU_ITEM: Readonly<Record<string, ViewerCommand>> = {
   showKeyboardShortcuts: { kind: 'showKeyboardShortcuts' },
   showCommandPalette: { kind: 'showCommandPalette' },
   toggleEditing: { kind: 'toggleEditing' },
+  togglePreviewBesideEditor: { kind: 'togglePreviewBesideEditor' },
+  newDocument: { kind: 'newDocument' },
+  goBack: { kind: 'goBack' },
+  goForward: { kind: 'goForward' },
+  toggleFullScreen: { kind: 'toggleFullScreen' },
   revertDocument: { kind: 'revertDocument' },
+  reloadActiveDocument: { kind: 'reloadActiveDocument' },
   undo: { kind: 'runEditorCommand', command: 'undo' },
   redo: { kind: 'runEditorCommand', command: 'redo' },
   showReplace: { kind: 'runEditorCommand', command: 'replace' },
   goToLine: { kind: 'runEditorCommand', command: 'goToLine' },
   showAbout: { kind: 'showAbout' },
+  showSettings: { kind: 'showSettings' },
 };
 
 const RECENT_FILE_MENU_ITEM = /^openRecent\.(\d{1,2})$/;
@@ -85,6 +116,8 @@ export function commandForMenuItem(menuItemId: string): ViewerCommand | undefine
   if (theme) return { kind: 'setTheme', theme };
   const readingWidth = READING_WIDTHS.find((width) => menuItemId === `readingWidth.${width}`);
   if (readingWidth) return { kind: 'setReadingWidth', readingWidth };
+  const typography = TYPOGRAPHIES.find((preset) => menuItemId === `typography.${preset}`);
+  if (typography) return { kind: 'setTypography', typography };
   if (menuItemId.startsWith(REOPEN_WITH_ENCODING_PREFIX)) {
     return reopenCommandFor(menuItemId.slice(REOPEN_WITH_ENCODING_PREFIX.length));
   }

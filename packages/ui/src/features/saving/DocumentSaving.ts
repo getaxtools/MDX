@@ -188,8 +188,11 @@ export class DocumentSaving {
     this.session.updateTabs((tabStrip) => applyTabCommand(tabStrip, command));
   }
 
+  /** A new document counts once it has text, so closing an empty one does not ask to save it. */
   private isUnsaved(location: DocumentLocation): boolean {
-    return isUntitledLocation(location) || this.editing.hasUnsavedChanges(location.canonicalKey);
+    const { canonicalKey } = location;
+    if (this.editing.hasUnsavedChanges(canonicalKey)) return true;
+    return isUntitledLocation(location) && (this.session.openedDocument(canonicalKey)?.text ?? '') !== '';
   }
 
   private openLocation(canonicalKey: string): DocumentLocation | undefined {

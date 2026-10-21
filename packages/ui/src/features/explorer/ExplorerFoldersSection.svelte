@@ -10,6 +10,7 @@
   import { activateWithKeyboard, treeKeyboard } from '../folder-tree/treeKeyboard';
   import TreeChevron from '../folder-tree/TreeChevron.svelte';
   import TreeItemIcon from '../folder-tree/TreeItemIcon.svelte';
+  import { commandForPathMenuItem, isPathMenuItem, type PathCommand } from '../file-paths/pathCommands';
   import type { ExplorerActionCommand, RemoveExplorerFolderCommand } from './explorerCommands';
   import {
     explorerFolderContextMenuItems,
@@ -20,7 +21,11 @@
   import ExplorerSectionHeader from './ExplorerSectionHeader.svelte';
 
   type ExplorerFoldersCommand =
-    ExplorerActionCommand | RemoveExplorerFolderCommand | FolderTreeCommand | { readonly kind: 'openFolder' };
+    | ExplorerActionCommand
+    | RemoveExplorerFolderCommand
+    | FolderTreeCommand
+    | PathCommand
+    | { readonly kind: 'openFolder' };
 
   interface Props {
     folders: readonly DocumentLocation[];
@@ -107,7 +112,8 @@
   function chooseFolderItem(itemId: ExplorerFolderMenuItemId) {
     if (!menuFolder) return;
     const { canonicalKey } = menuFolder;
-    if (itemId === 'addToFavourites') onCommand({ kind: 'addExplorerFolderToFavourites', canonicalKey });
+    if (isPathMenuItem(itemId)) onCommand(commandForPathMenuItem(itemId, menuFolder.displayPath));
+    else if (itemId === 'addToFavourites') onCommand({ kind: 'addExplorerFolderToFavourites', canonicalKey });
     else if (itemId === 'refresh') onCommand({ kind: 'refreshFolders' });
     else onCommand({ kind: 'removeExplorerFolder', canonicalKey });
   }

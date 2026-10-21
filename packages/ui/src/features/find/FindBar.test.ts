@@ -3,8 +3,9 @@ import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FindBar from './FindBar.svelte';
+import type { FindQuery } from './findTextRanges';
 
-function renderFindBar(html: string) {
+function renderFindBar(html: string, initialQuery?: FindQuery) {
   const article = document.createElement('article');
   article.innerHTML = html;
   document.body.append(article);
@@ -13,6 +14,7 @@ function renderFindBar(html: string) {
     searchRoot: article,
     contentKey: html,
     focusRequest: 1,
+    initialQuery,
     translator: createTranslator(),
     onClose,
   });
@@ -64,6 +66,47 @@ describe('FindBar', () => {
 
     expect(screen.getByRole('status').textContent).toBe('No matches');
     expect(screen.getByRole('button', { name: 'Next match' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('matches the exact case once Match Case is pressed', async () => {
+    renderFindBar('<p>Word word WORD</p>');
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Find' }), 'word');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Match Case' }));
+
+    expect(screen.getByRole('button', { name: 'Match Case' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('status').textContent).toBe('1 of 1');
+  });
+
+  it('toggles Match Whole Word with Alt+W in the search box', async () => {
+    renderFindBar('<p>art party art</p>');
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Find' }), 'art');
+    expect(screen.getByRole('status').textContent).toBe('1 of 3');
+
+    await userEvent.keyboard('{Alt>}w{/Alt}');
+
+    expect(screen.getByRole('button', { name: 'Match Whole Word' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect(screen.getByRole('status').textContent).toBe('1 of 2');
+    expect(screen.getByRole<HTMLInputElement>('searchbox', { name: 'Find' }).value).toBe('art');
+  });
+
+  it('toggles Match Case with Alt+C in the search box', async () => {
+    renderFindBar('<p>Art art</p>');
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Find' }), 'art');
+
+    await userEvent.keyboard('{Alt>}c{/Alt}');
+
+    expect(screen.getByRole('status').textContent).toBe('1 of 1');
+  });
+
+  it('starts with a query carried over from Find in Folders', () => {
+    renderFindBar('<p>Setup and setup</p>', { text: 'Setup', isCaseSensitive: true, isWholeWord: false });
+
+    expect(screen.getByRole<HTMLInputElement>('searchbox', { name: 'Find' }).value).toBe('Setup');
+    expect(screen.getByRole('button', { name: 'Match Case' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('status').textContent).toBe('1 of 1');
   });
 
   it('closes with Escape', async () => {

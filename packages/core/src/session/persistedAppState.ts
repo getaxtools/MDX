@@ -5,7 +5,12 @@ import { FavouritesList, type Favourite, type FavouriteGroup } from '../favourit
 import { parseFavourites } from '../favourites/parseFavourites';
 import { RecentFilesList, type RecentFile } from '../recent-files/RecentFilesList';
 import { TabStrip, type Tab, type TabStripSnapshot } from '../tabs/TabStrip';
-import { DEFAULT_VIEW_SETTINGS, parseViewSettings, type ViewSettings } from '../view/ViewSettings';
+import {
+  DEFAULT_VIEW_SETTINGS,
+  parseViewSettings,
+  type LanguagePreference,
+  type ViewSettings,
+} from '../view/ViewSettings';
 import { isRecord, parseLocation, validEntries } from './savedValues';
 
 export const APP_STATE_SCHEMA_VERSION = 1;
@@ -55,6 +60,13 @@ function withoutUntitledTabs({ tabs, activeKey }: TabStripSnapshot): TabStripSna
   const savedTabs = tabs.filter((tab) => !isUntitledLocation(tab.location));
   const isActiveTabSaved = savedTabs.some((tab) => tab.location.canonicalKey === activeKey);
   return activeKey !== undefined && isActiveTabSaved ? { tabs: savedTabs, activeKey } : { tabs: savedTabs };
+}
+
+/** The language chosen in Settings, read before anything else so the window starts in it. */
+export function savedLanguagePreference(saved: unknown): LanguagePreference {
+  return isRecord(saved) && saved.schemaVersion === APP_STATE_SCHEMA_VERSION
+    ? parseViewSettings(saved.view).language
+    : DEFAULT_VIEW_SETTINGS.language;
 }
 
 export function restoreAppState(saved: unknown): RestoredAppState {

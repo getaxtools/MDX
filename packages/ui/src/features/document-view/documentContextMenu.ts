@@ -5,6 +5,7 @@ import type { ViewerCommand } from '../viewer/viewerCommands';
 
 export type DocumentMenuItemId =
   | 'copy'
+  | 'copyAsHtml'
   | 'selectAll'
   | 'find'
   | 'toggleSource'
@@ -25,7 +26,11 @@ export interface DocumentMenuState {
   readonly canBeFavourite: boolean;
 }
 
-const COMMANDS_BY_ITEM: Readonly<Record<Exclude<DocumentMenuItemId, 'copy' | 'selectAll'>, ViewerCommand>> = {
+type ItemHandledByTheView = 'copy' | 'copyAsHtml' | 'selectAll';
+
+const ITEMS_HANDLED_BY_THE_VIEW: readonly DocumentMenuItemId[] = ['copy', 'copyAsHtml', 'selectAll'];
+
+const COMMANDS_BY_ITEM: Readonly<Record<Exclude<DocumentMenuItemId, ItemHandledByTheView>, ViewerCommand>> = {
   find: { kind: 'showFind' },
   toggleSource: { kind: 'toggleSourceView' },
   zoomIn: { kind: 'zoomIn' },
@@ -54,6 +59,7 @@ export function documentContextMenuItems(
   });
   return [
     item('copy', 'menu.edit.copy', { isDisabled: !state.hasSelection }),
+    item('copyAsHtml', 'menu.edit.copyAsHtml', { isDisabled: state.isSourceView }),
     item('selectAll', 'menu.edit.selectAll'),
     item('find', 'menu.edit.find', { hasSeparatorBefore: true }),
     item('toggleSource', state.isSourceView ? 'document.menu.showPreview' : 'document.menu.showSource'),
@@ -72,7 +78,9 @@ export function documentContextMenuItems(
 }
 
 export function commandForDocumentMenuItem(itemId: DocumentMenuItemId): ViewerCommand | undefined {
-  return itemId === 'copy' || itemId === 'selectAll' ? undefined : COMMANDS_BY_ITEM[itemId];
+  return ITEMS_HANDLED_BY_THE_VIEW.includes(itemId)
+    ? undefined
+    : COMMANDS_BY_ITEM[itemId as Exclude<DocumentMenuItemId, ItemHandledByTheView>];
 }
 
 const SHORTCUTS_HANDLED_BY_THE_WEBVIEW: Readonly<Partial<Record<DocumentMenuItemId, string>>> = {

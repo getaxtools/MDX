@@ -15,6 +15,8 @@
     editorRequest?: EditorRequest | undefined;
     onChange: (text: string) => void;
     onScroll?: (scrollRatio: number) => void;
+    /** Called once the editor has loaded, for example to keep a preview beside it in step. */
+    onReady?: (editor: SourceEditor | undefined) => void;
   }
 
   const {
@@ -27,6 +29,7 @@
     onChange,
     scrollRatio = 0,
     onScroll = () => undefined,
+    onReady = () => undefined,
   }: Props = $props();
 
   let container: HTMLDivElement | undefined = $state();
@@ -50,11 +53,15 @@
       });
       editor = created;
       const startingEditor = created;
-      globalThis.requestAnimationFrame(() => startingEditor.scrollToRatio(untrack(() => scrollRatio)));
+      globalThis.requestAnimationFrame(() => {
+        startingEditor.scrollToRatio(untrack(() => scrollRatio));
+        onReady(startingEditor);
+      });
       created.focus();
     });
     return () => {
       isClosed = true;
+      onReady(undefined);
       created?.destroy();
       editor = undefined;
     };

@@ -1,8 +1,9 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { InMemoryDocumentFiles } from '@mdx/platform';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TauriAppMenu } from './TauriAppMenu';
 import { TauriAppState } from './TauriAppState';
+import { TauriDesktopShell } from './TauriDesktopShell';
 import { TauriDocumentFiles } from './TauriDocumentFiles';
 import { TauriDocumentRequests } from './TauriDocumentRequests';
 import { TauriDocumentWatcher } from './TauriDocumentWatcher';
@@ -166,6 +167,52 @@ describe('TauriDocumentRequests', () => {
   });
 });
 
+describe('TauriDesktopShell', () => {
+  it('reveals a path and toggles full screen through the backend', async () => {
+    const calls = mockCommands({ reveal_in_file_manager: () => null, toggle_full_screen: () => null });
+    const shell = new TauriDesktopShell();
+
+    await shell.revealInFileManager('C:\\Docs\\guide.md');
+    await shell.toggleFullScreen();
+
+    expect(calls).toEqual([
+      { command: 'reveal_in_file_manager', args: { path: 'C:\\Docs\\guide.md' } },
+      { command: 'toggle_full_screen', args: {} },
+    ]);
+  });
+});
+
+describe('TauriDesktopShell clipboard', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('puts HTML on the clipboard as rich text and as its markup', async () => {
+    const written: Record<string, Blob>[] = [];
+    vi.stubGlobal(
+      'ClipboardItem',
+      class {
+        constructor(readonly items: Record<string, Blob>) {}
+      },
+    );
+    vi.stubGlobal('navigator', {
+      clipboard: {
+        write: (items: { items: Record<string, Blob> }[]) => {
+          written.push(...items.map((item) => item.items));
+          return Promise.resolve();
+        },
+      },
+    });
+
+    await new TauriDesktopShell().writeClipboardHtml('<h1>Guide</h1>');
+
+    const [item] = written;
+    expect(Object.keys(item ?? {})).toEqual(['text/html', 'text/plain']);
+    expect(await item?.['text/html']?.text()).toBe('<h1>Guide</h1>');
+    expect(await item?.['text/plain']?.text()).toBe('<h1>Guide</h1>');
+  });
+});
+
 describe('TauriFavouritesFile', () => {
   it('exports and imports favourites through the backend, reporting cancelled dialogs as undefined', async () => {
     const calls = mockCommands({
@@ -189,15 +236,25 @@ describe('TauriAppMenu', () => {
     const state = {
       theme: 'dark',
       readingWidth: 'wide',
+      typography: 'book',
       isSidebarVisible: false,
       isOutlineVisible: true,
       isStatusBarVisible: true,
       isSourceView: false,
+      isPreviewBesideEditor: false,
     };
 
     await new TauriAppMenu().showViewState(state);
 
     expect(calls).toEqual([{ command: 'update_view_menu', args: { state } }]);
+  });
+
+  it('translates the native menu through the update_menu_language command', async () => {
+    const calls = mockCommands({ update_menu_language: () => null });
+
+    await new TauriAppMenu().showLabels({ 'menu.file': 'फ़ाइल' });
+
+    expect(calls).toEqual([{ command: 'update_menu_language', args: { labels: { 'menu.file': 'फ़ाइल' } } }]);
   });
 
   it('lists recent documents in the native menu through the update_recent_menu command', async () => {
@@ -238,5 +295,18 @@ describe('TauriFolders', () => {
 
     expect(documents).toEqual([plan]);
     expect(calls).toEqual([{ command: 'find_folder_documents', args: { folders: ['C:/Docs'] } }]);
+  });
+
+  it('searches the text of documents below chosen folders through the search_folder_documents command', async () => {
+    const results = { documents: [], isIncomplete: false };
+    const calls = mockCommands({ search_folder_documents: () => results });
+    const options = { isCaseSensitive: true, isWholeWord: false };
+
+    const found = await new TauriFolders().searchDocuments(['C:/Docs'], 'setup', options);
+
+    expect(found).toEqual(results);
+    expect(calls).toEqual([
+      { command: 'search_folder_documents', args: { folders: ['C:/Docs'], query: 'setup', options } },
+    ]);
   });
 });

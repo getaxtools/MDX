@@ -1,4 +1,4 @@
-import type { ReadingWidth } from '@mdx/core';
+import type { ReadingWidth, Typography } from '@mdx/core';
 import type { RichBlockRenderer } from '@mdx/renderer';
 import { createTranslator } from '@mdx/i18n';
 import { fireEvent, render, screen } from '@testing-library/svelte';
@@ -8,9 +8,11 @@ import DocumentView from './DocumentView.svelte';
 interface ViewOptions {
   readonly zoomPercent?: number;
   readonly readingWidth?: ReadingWidth;
+  readonly typography?: Typography;
   readonly onScroll?: (scrollRatio: number) => void;
   readonly isSourceView?: boolean;
   readonly richBlocks?: RichBlockRenderer;
+  readonly copyAsHtmlRequest?: number;
 }
 
 function renderDocument(
@@ -18,9 +20,11 @@ function renderDocument(
   {
     zoomPercent = 100,
     readingWidth = 'medium',
+    typography = 'github',
     onScroll = () => undefined,
     isSourceView = false,
     richBlocks,
+    copyAsHtmlRequest,
   }: ViewOptions = {},
 ) {
   const onOpenLink = vi.fn();
@@ -41,10 +45,12 @@ function renderDocument(
           scrollRatio: 0.5,
           source: '# Source',
         };
-  render(DocumentView, {
+  const view = render(DocumentView, {
     document,
+    copyAsHtmlRequest,
     zoomPercent,
     readingWidth,
+    typography,
     translator: createTranslator(),
     onOpenLink,
     onScroll,
@@ -52,7 +58,7 @@ function renderDocument(
     onCommand,
     richBlocks,
   });
-  return { onOpenLink, onCommand };
+  return { onOpenLink, onCommand, rerender: view.rerender };
 }
 
 describe('DocumentView', () => {
@@ -155,6 +161,12 @@ describe('DocumentView', () => {
     expect(screen.getByRole('main').style.getPropertyValue('--reading-measure')).toBe('none');
   });
 
+  it('styles the document with the chosen typography preset', () => {
+    renderDocument('<p>Text</p>', { typography: 'academic' });
+
+    expect(screen.getByRole('article', { name: 'a.md' }).dataset.typography).toBe('academic');
+  });
+
   it('offers Select All from the right-click menu and keeps Copy disabled without a selection', async () => {
     renderDocument('<p>First</p><p>Second</p>');
     const article = screen.getByRole('article', { name: 'a.md' });
@@ -165,6 +177,40 @@ describe('DocumentView', () => {
 
     expect(globalThis.getSelection()?.toString()).toContain('Second');
     expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('copies the document as HTML from the right-click menu', async () => {
+    const { onCommand } = renderDocument('<h1 data-source-line="0">Guide</h1>');
+
+    await fireEvent.contextMenu(screen.getByRole('article', { name: 'a.md' }), { clientX: 5, clientY: 5 });
+    await fireEvent.click(screen.getByRole('menuitem', { name: 'Copy as HTML' }));
+
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'copyHtml', html: '<h1>Guide</h1>' });
+  });
+
+  it('copies as HTML for each new request, but not for the one it was shown with', async () => {
+    const { onCommand, rerender } = renderDocument('<p>Text</p>', { copyAsHtmlRequest: 3 });
+    expect(onCommand).not.toHaveBeenCalled();
+
+    await rerender({ copyAsHtmlRequest: 4 });
+
+    expect(onCommand).toHaveBeenCalledExactlyOnceWith({ kind: 'copyHtml', html: '<p>Text</p>' });
+  });
+
+  it('exports the document as a standalone page or as plain text when asked', async () => {
+    const { onCommand, rerender } = renderDocument('<h1>Guide</h1>');
+
+    await rerender({ exportRequest: { format: 'html', number: 1 } });
+    await rerender({ exportRequest: { format: 'plainText', number: 2 } });
+
+    const [[htmlExport], [textExport]] = onCommand.mock.calls as [
+      [{ contents: string }],
+      [{ contents: string }],
+    ];
+    expect(htmlExport.contents).toMatch(/^<!doctype html>/);
+    expect(htmlExport.contents).toContain('<article class="rendered-document" data-typography="github">');
+    expect(htmlExport.contents).toContain('<h1>Guide</h1>');
+    expect(textExport).toEqual({ kind: 'saveExport', format: 'plainText', contents: 'Guide' });
   });
 
   it('runs viewer actions such as Show Source from the right-click menu', async () => {
