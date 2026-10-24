@@ -1,21 +1,32 @@
+import type { SidebarView } from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
 import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import ActivityBar from './ActivityBar.svelte';
 
-function renderActivityBar({ isSidebarVisible = true, isOutlineVisible = false } = {}) {
+function renderActivityBar({
+  isSidebarVisible = true,
+  sidebarView = 'explorer',
+}: { isSidebarVisible?: boolean; sidebarView?: SidebarView } = {}) {
   const onCommand = vi.fn();
-  render(ActivityBar, { isSidebarVisible, isOutlineVisible, translator: createTranslator(), onCommand });
+  render(ActivityBar, { isSidebarVisible, sidebarView, translator: createTranslator(), onCommand });
   return { onCommand };
 }
 
 describe('ActivityBar', () => {
   it('shows whether the sidebar and the outline are open', () => {
-    renderActivityBar({ isSidebarVisible: true, isOutlineVisible: false });
+    renderActivityBar({ isSidebarVisible: true });
 
     expect(screen.getByRole('button', { name: 'Explorer' }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByRole('button', { name: 'Outline' }).getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('shows the Outline as the pressed side bar view while it is shown', () => {
+    renderActivityBar({ isSidebarVisible: true, sidebarView: 'outline' });
+
+    expect(screen.getByRole('button', { name: 'Outline' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Explorer' }).getAttribute('aria-pressed')).toBe('false');
   });
 
   it('opens Find in Folders and closes it again when it is shown', async () => {
@@ -23,7 +34,6 @@ describe('ActivityBar', () => {
     render(ActivityBar, {
       isSidebarVisible: true,
       sidebarView: 'search',
-      isOutlineVisible: false,
       translator: createTranslator(),
       onCommand,
     });

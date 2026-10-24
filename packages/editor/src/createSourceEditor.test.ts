@@ -95,6 +95,17 @@ describe('createSourceEditor', () => {
     expect(opened.topLine()).toBe(0);
   });
 
+  it('puts the caret at the start of a line it reveals, such as a heading chosen in the outline', () => {
+    const { parent, editor: opened } = openEditor('# Guide\n\ntext\n\n## Usage\n');
+    const textBox = parent.querySelector('[contenteditable="true"]') ?? parent;
+
+    opened.revealLine(4);
+    textBox.dispatchEvent(new KeyboardEvent('keydown', { key: '2', ctrlKey: true, bubbles: true }));
+
+    expect(opened.text()).toBe('# Guide\n\ntext\n\nUsage\n');
+    expect(parent.contains(document.activeElement)).toBe(true);
+  });
+
   it('opens the search panel in the user language', () => {
     const { parent, editor: opened } = openEditor();
 

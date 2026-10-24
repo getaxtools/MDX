@@ -48,6 +48,7 @@ export {
   setEditorShare,
   setZoom,
   showExplorerSection,
+  isSidebarViewShown,
   showSidebarView,
   toggleSidebarView,
   toggleExplorerSection,

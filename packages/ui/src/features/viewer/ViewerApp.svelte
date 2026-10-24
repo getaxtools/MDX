@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     DEFAULT_EDITOR_SHARE_PERCENT,
+    isSidebarViewShown,
     MAX_PANEL_WIDTH_PX,
     MIN_PANEL_WIDTH_PX,
     panelWidthOf,
@@ -10,7 +11,7 @@
   } from '@mdx/core';
   import type { SourceEditor } from '@mdx/editor';
   import type { Translator } from '@mdx/i18n';
-  import type { CodeHighlighter, RichBlockRenderer } from '@mdx/renderer';
+  import type { CodeHighlighter, OutlineEntry, RichBlockRenderer } from '@mdx/renderer';
   import CommandPalette from '../command-palette/CommandPalette.svelte';
   import { paletteCommands } from '../command-palette/paletteCommands';
   import ExplorerSidebar from '../explorer/ExplorerSidebar.svelte';
@@ -31,6 +32,8 @@
   import KeyboardShortcutsDialog from '../help/KeyboardShortcutsDialog.svelte';
   import PasteTableDialog from '../table-paste/PasteTableDialog.svelte';
   import OutlinePanel from '../outline/OutlinePanel.svelte';
+  import type { HeadingRequest } from '../outline/HeadingRequest';
+  import { headingIdAtLine } from '../outline/headingIdAtLine';
   import TabStripView from '../tabs/TabStripView.svelte';
   import Breadcrumbs from '../breadcrumbs/Breadcrumbs.svelte';
   import { applyTheme } from '../view/applyTheme';
@@ -66,7 +69,6 @@
   // Raw, not deep state: a deep proxy gives the same document a new identity on every
   // snapshot, and the document view treats that as a newly opened document.
   let snapshot: ViewerSnapshot | undefined = $state.raw();
-  let currentHeadingId: string | undefined = $state();
   $effect(() => controller.subscribe((latest) => (snapshot = latest)));
 
   $effect(() => {
@@ -74,6 +76,20 @@
   });
 
   const activeTab = $derived(snapshot?.viewer.tabStrip.activeTab());
+  const activeKey = $derived(activeTab?.location.canonicalKey);
+  let headingRequest: HeadingRequest | undefined = $state();
+  let shownEditor: SourceEditor | undefined;
+  /** Kept with its document, so another tab never shows the section of the previous one. */
+  let currentHeading: { readonly documentKey?: string; readonly id?: string } = $state({});
+  const currentHeadingId = $derived(currentHeading.documentKey === activeKey ? currentHeading.id : undefined);
+
+  function showCurrentHeading(headingId: string | undefined) {
+    currentHeading = {
+      ...(activeKey === undefined ? {} : { documentKey: activeKey }),
+      ...(headingId === undefined ? {} : { id: headingId }),
+    };
+  }
+
   /** The document in the editor, once the shown document has caught up with the active tab. */
   const editedDocument = $derived(
     snapshot?.isActiveDocumentEditing &&
@@ -87,7 +103,7 @@
   );
 
   /** Widths while a splitter is dragged; the settings keep the width once the drag ends. */
-  let draggedPanelWidths: Partial<Record<ResizablePanel, number>> = $state({});
+  let draggedPanelWidths: Partial<Record<ResizablePanel, number | undefined>> = $state({});
 
   function shownPanelWidth(panel: ResizablePanel): number {
     const dragged = draggedPanelWidths[panel];
@@ -107,6 +123,23 @@
   function followEditorScroll(sync: ScrollSync, scrollRatio: number) {
     controller.rememberScrollPosition(scrollRatio);
     sync.editorScrolled();
+    if (shownEditor && editedDocument)
+      showCurrentHeading(headingIdAtLine(editedDocument.outline, shownEditor.topLine()));
+  }
+
+  function attachEditor(sync: ScrollSync, sourceEditor: SourceEditor | undefined) {
+    shownEditor = sourceEditor;
+    sync.attachEditor(sourceEditor);
+  }
+
+  /** While editing the caret moves to the heading; otherwise the shown document scrolls to it. */
+  function goToHeading(entry: OutlineEntry) {
+    showCurrentHeading(entry.id);
+    if (editedDocument && shownEditor) {
+      shownEditor.revealLine(entry.line);
+      return;
+    }
+    headingRequest = { entry, number: (headingRequest?.number ?? 0) + 1 };
   }
 
   // The webview's own menu offers browser actions such as Back and Refresh that make no sense in the app.
@@ -164,7 +197,6 @@
       <ActivityBar
         isSidebarVisible={viewSettings.isSidebarVisible}
         sidebarView={viewSettings.sidebarView}
-        isOutlineVisible={viewSettings.isOutlineVisible}
         {translator}
         onCommand={(command: ViewerCommand) => void controller.execute(command)}
       />
@@ -176,6 +208,13 @@
           onSearch={(query: string, options: TextSearchOptions) => controller.searchFolders(query, options)}
           onOpenMatch={(path: string, query: string, options: TextSearchOptions) =>
             void controller.execute({ kind: 'openSearchMatch', path, query, options })}
+        />
+      {:else if viewSettings.isSidebarVisible && viewSettings.sidebarView === 'outline'}
+        <OutlinePanel
+          outline={activeTab ? snapshot.activeDocument?.outline : undefined}
+          {currentHeadingId}
+          {translator}
+          onSelectHeading={goToHeading}
         />
       {:else if viewSettings.isSidebarVisible}
         <ExplorerSidebar
@@ -196,6 +235,8 @@
           onOpenFavourite={(favourite: Favourite) => void controller.openFavourite(favourite)}
           onOpenRecentFile={(recentFile: RecentFile) => void controller.openRecentFile(recentFile)}
         />
+      {/if}
+      {#if viewSettings.isSidebarVisible}
         <PanelResizer
           label={translator.translate('sidebar.resize')}
           size={shownPanelWidth('explorer')}
@@ -266,11 +307,12 @@
             {translator}
             onRevealInExplorer={() =>
               void controller.execute({ kind: 'showSidebarView', sidebarView: 'explorer' })}
+            onSelectHeading={goToHeading}
           />
         {:else}
           <div></div>
         {/if}
-        <div class="reading-area" data-focus-region style:--outline-width="{shownPanelWidth('outline')}px">
+        <div class="reading-area" data-focus-region>
           {#if !activeTab}
             <StartPage
               recentFiles={snapshot.viewer.recentFiles.entries()}
@@ -303,7 +345,7 @@
                     scrollRatio={editedDocument.scrollRatio}
                     {translator}
                     editorRequest={snapshot?.editorRequest}
-                    onReady={(sourceEditor: SourceEditor | undefined) => sync.attachEditor(sourceEditor)}
+                    onReady={(sourceEditor: SourceEditor | undefined) => attachEditor(sync, sourceEditor)}
                     onScroll={(scrollRatio: number) => followEditorScroll(sync, scrollRatio)}
                     onChange={(text: string) =>
                       controller.updateEditedText(editedDocument.canonicalKey, text)}
@@ -341,32 +383,19 @@
               findQuery={snapshot.findQuery}
               copyAsHtmlRequest={snapshot.copyAsHtmlRequest}
               exportRequest={snapshot.exportRequest}
+              {headingRequest}
               locale={translator.locale}
               isSourceView={snapshot.isSourceView ?? false}
               onCloseFind={() => controller.closeFind()}
               {translator}
               onOpenLink={(link: DocumentLink) => void controller.openLink(link)}
               onScroll={(scrollRatio: number) => controller.rememberScrollPosition(scrollRatio)}
-              onCurrentHeadingChange={(headingId: string | undefined) => (currentHeadingId = headingId)}
+              onCurrentHeadingChange={showCurrentHeading}
               onCommand={(command: ViewerCommand) => void controller.execute(command)}
-              isOutlineVisible={viewSettings.isOutlineVisible}
+              isOutlineVisible={isSidebarViewShown(viewSettings, 'outline')}
               isFavourite={isActiveFavourite}
               canBeFavourite={!isActiveUntitled}
             />
-          {/if}
-          {#if activeTab && snapshot.activeDocument && viewSettings.isOutlineVisible && !snapshot.isActiveDocumentEditing}
-            <PanelResizer
-              label={translator.translate('outline.resize')}
-              size={shownPanelWidth('outline')}
-              growDirection={-1}
-              minSize={MIN_PANEL_WIDTH_PX}
-              maxSize={MAX_PANEL_WIDTH_PX}
-              onPreview={(widthPx: number) =>
-                (draggedPanelWidths = { ...draggedPanelWidths, outline: widthPx })}
-              onResize={(widthPx: number) => finishPanelResize('outline', widthPx)}
-              onReset={() => void controller.execute({ kind: 'resetPanelWidth', panel: 'outline' })}
-            />
-            <OutlinePanel outline={snapshot.activeDocument.outline} {currentHeadingId} {translator} />
           {/if}
         </div>
       </div>

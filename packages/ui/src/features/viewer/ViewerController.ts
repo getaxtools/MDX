@@ -1,5 +1,6 @@
 import {
   measureDocument,
+  isSidebarViewShown,
   showSidebarView,
   type DocumentStatistics,
   type Favourite,
@@ -56,6 +57,8 @@ export const STATE_SAVE_DELAY_MS = 500;
 export const MAX_RECENT_MENU_ENTRIES = 10;
 /** How long typing pauses before the preview beside the editor shows the new text. */
 export const LIVE_PREVIEW_DELAY_MS = 150;
+/** How long typing pauses before the outline lists the headings of the edited text. */
+export const OUTLINE_REFRESH_DELAY_MS = 300;
 const LARGE_DOCUMENT_LIVE_PREVIEW_DELAY_MS = 500;
 const LARGE_DOCUMENT_CHARACTERS = 256_000;
 const SCROLL_RATIO_PRECISION = 0.001;
@@ -166,6 +169,7 @@ export class ViewerController {
   private renderedText: string | undefined;
   private hasRenderedSourceLines = false;
   private pendingLivePreview: ReturnType<typeof setTimeout> | undefined;
+  private pendingOutlineRefresh: ReturnType<typeof setTimeout> | undefined;
   private activeDocument: RenderedActiveDocument | undefined;
   private openDialog: ViewerDialog | undefined;
   private noticeActions: readonly NoticeAction[] = [];
@@ -512,21 +516,14 @@ export class ViewerController {
   private showViewStateInMenu(): void {
     const { menu, session } = this.dependencies;
     if (!menu) return;
-    const {
-      theme,
-      readingWidth,
-      typography,
-      isSidebarVisible,
-      isOutlineVisible,
-      isStatusBarVisible,
-      isPreviewBesideEditor,
-    } = session.currentState().viewSettings;
+    const { viewSettings } = session.currentState();
+    const { theme, readingWidth, typography, isStatusBarVisible, isPreviewBesideEditor } = viewSettings;
     const state = {
       theme,
       readingWidth,
       typography,
-      isSidebarVisible,
-      isOutlineVisible,
+      isSidebarVisible: isSidebarViewShown(viewSettings, 'explorer'),
+      isOutlineVisible: isSidebarViewShown(viewSettings, 'outline'),
       isStatusBarVisible,
       isSourceView: this.isSourceView,
       isPreviewBesideEditor,
@@ -594,6 +591,18 @@ export class ViewerController {
   updateEditedText(canonicalKey: string, text: string): void {
     this.editingActions.updateText(canonicalKey, text);
     if (this.isPreviewBesideEditor()) this.scheduleLivePreview(text.length);
+    else this.scheduleOutlineRefresh(canonicalKey, text);
+  }
+
+  /** Without the preview beside it the edited text is not rendered, so only its headings are read again. */
+  private scheduleOutlineRefresh(canonicalKey: string, text: string): void {
+    clearTimeout(this.pendingOutlineRefresh);
+    this.pendingOutlineRefresh = setTimeout(() => {
+      const shown = this.activeDocument;
+      if (shown?.canonicalKey !== canonicalKey) return;
+      this.activeDocument = { ...shown, outline: this.dependencies.renderer.outlineOf(text) };
+      this.publish(this.composeSnapshot(this.snapshot.notice));
+    }, OUTLINE_REFRESH_DELAY_MS);
   }
 
   private scheduleLivePreview(textLength: number): void {

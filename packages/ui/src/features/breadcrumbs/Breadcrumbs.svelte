@@ -3,7 +3,6 @@
   import type { OutlineEntry } from '@mdx/renderer';
   import ContextMenu from '../../components/ContextMenu.svelte';
   import { contextMenuPosition, type ContextMenuRequest } from '../../components/ContextMenuItem';
-  import { scrollToHeading } from '../document-view/scrollToHeading';
   import { breadcrumbFolders } from './breadcrumbFolders';
 
   interface Props {
@@ -15,6 +14,7 @@
     currentHeadingId?: string | undefined;
     translator: Translator;
     onRevealInExplorer: () => void;
+    onSelectHeading: (entry: OutlineEntry) => void;
   }
 
   const {
@@ -25,6 +25,7 @@
     currentHeadingId,
     translator,
     onRevealInExplorer,
+    onSelectHeading,
   }: Props = $props();
 
   let headingsMenu: ContextMenuRequest | undefined = $state();
@@ -37,6 +38,11 @@
 
   function openHeadings(event: MouseEvent) {
     headingsMenu = contextMenuPosition(event);
+  }
+
+  function chooseHeading(headingId: string) {
+    const entry = outline.find((candidate) => candidate.id === headingId);
+    if (entry) onSelectHeading(entry);
   }
 </script>
 
@@ -71,7 +77,7 @@
     label={translator.translate('breadcrumbs.headings')}
     items={headingItems}
     position={headingsMenu}
-    onChoose={(headingId: string) => scrollToHeading(globalThis.document, headingId)}
+    onChoose={chooseHeading}
     onClose={() => (headingsMenu = undefined)}
   />
 {/if}
