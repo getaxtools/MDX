@@ -270,6 +270,40 @@ export class MainWindowPage {
     return this.browser.execute(() => document.querySelector('main')?.scrollTop ?? 0);
   }
 
+  outline(): ChainablePromiseElement {
+    return this.browser.$(`nav[aria-labelledby="outline-heading"]`);
+  }
+
+  async showOutline(): Promise<void> {
+    await this.pressShortcut('Ctrl+Shift+O');
+    await this.outline().waitForDisplayed();
+  }
+
+  async chooseOutlineHeading(text: string): Promise<void> {
+    await this.clickInPage(this.outline().$(`button=${text}`));
+  }
+
+  /** Clicks from inside the page; the embedded driver moves focus back to what it clicked itself. */
+  private async clickInPage(element: ChainablePromiseElement): Promise<void> {
+    await this.browser.execute((target) => (target as HTMLElement).click(), await element.getElement());
+  }
+
+  async waitForCurrentOutlineHeading(text: string): Promise<void> {
+    await this.outline().$(`button[aria-current="location"]=${text}`).waitForExist();
+  }
+
+  async clickDocumentLink(text: string): Promise<void> {
+    await this.clickInPage(this.browser.$('main article').$(`a=${text}`));
+  }
+
+  /** How far the source editor is scrolled, and whether the keyboard focus is in its text. */
+  async editorState(): Promise<{ readonly scrollTop: number; readonly hasFocus: boolean }> {
+    return this.browser.execute(() => ({
+      scrollTop: document.querySelector('.cm-scroller')?.scrollTop ?? 0,
+      hasFocus: document.activeElement?.closest('.cm-content') !== null,
+    }));
+  }
+
   /** Presses a key on one element, whatever has the focus. */
   async pressKeyOn(element: ChainablePromiseElement, key: string): Promise<void> {
     await this.browser.execute(

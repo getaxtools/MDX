@@ -5,7 +5,6 @@ import { findAccessibilityViolations } from '../../support/findAccessibilityViol
 import { TestWorkspace } from '../../support/TestWorkspace';
 
 const DEFAULT_EXPLORER_WIDTH_PX = 260;
-const DEFAULT_OUTLINE_WIDTH_PX = 256;
 
 describe('resizing the side panels', () => {
   let workspace: TestWorkspace;
@@ -40,20 +39,21 @@ describe('resizing the side panels', () => {
     expect(await secondRun.splitterValue('sidebar.resize')).toBe(DEFAULT_EXPLORER_WIDTH_PX + 100);
   });
 
-  it('narrows the Outline with the arrow keys and returns it to its width with a double-click', async () => {
+  it('narrows the side bar showing the Outline with the arrow keys and restores it with a double-click', async () => {
     app = await DesktopApp.launch({ workspace, documentFileNames: ['getting-started.md'] });
     const mainWindow = new MainWindowPage(app.browser);
     await mainWindow.documentHeading();
-    const splitter = mainWindow.splitter('outline.resize');
+    await mainWindow.pressShortcut('Ctrl+Shift+O');
+    const splitter = mainWindow.splitter('sidebar.resize');
 
-    await mainWindow.pressKeyOn(splitter, 'ArrowRight');
+    await mainWindow.pressKeyOn(splitter, 'ArrowLeft');
     await app.browser.waitUntil(
-      async () => (await mainWindow.splitterValue('outline.resize')) === DEFAULT_OUTLINE_WIDTH_PX - 16,
+      async () => (await mainWindow.splitterValue('sidebar.resize')) === DEFAULT_EXPLORER_WIDTH_PX - 16,
     );
     await mainWindow.doubleClick(splitter);
 
     await app.browser.waitUntil(
-      async () => (await mainWindow.splitterValue('outline.resize')) === DEFAULT_OUTLINE_WIDTH_PX,
+      async () => (await mainWindow.splitterValue('sidebar.resize')) === DEFAULT_EXPLORER_WIDTH_PX,
     );
   });
 });

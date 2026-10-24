@@ -4,8 +4,9 @@ export type Typography = 'github' | 'book' | 'academic';
 /** A language tag such as `hi` or `pt-BR`, or `system` to follow the language of Windows. */
 export type LanguagePreference = 'system' | (string & {});
 export type ExplorerSection = 'favourites' | 'folders' | 'recentFiles';
-export type ResizablePanel = 'explorer' | 'outline';
-export type SidebarView = 'explorer' | 'search';
+/** The side bar, whatever view it shows; saved as `explorer` by earlier versions. */
+export type ResizablePanel = 'explorer';
+export type SidebarView = 'explorer' | 'search' | 'outline';
 
 export interface ViewSettings {
   readonly theme: ThemePreference;
@@ -14,9 +15,8 @@ export interface ViewSettings {
   readonly typography: Typography;
   readonly language: LanguagePreference;
   readonly isSidebarVisible: boolean;
-  /** What the side bar shows: the Explorer, or Find in Folders. */
+  /** What the side bar shows: the Explorer, Find in Folders or the outline of the document. */
   readonly sidebarView: SidebarView;
-  readonly isOutlineVisible: boolean;
   readonly isStatusBarVisible: boolean;
   /** Folder, file and current heading above the document. */
   readonly isBreadcrumbsVisible: boolean;
@@ -37,11 +37,10 @@ export const TYPOGRAPHIES: readonly Typography[] = ['github', 'book', 'academic'
 export const EXPLORER_SECTIONS: readonly ExplorerSection[] = ['favourites', 'folders', 'recentFiles'];
 export const MIN_EXPLORER_SECTION_HEIGHT_PX = 48;
 export const MAX_EXPLORER_SECTION_HEIGHT_PX = 4000;
-export const RESIZABLE_PANELS: readonly ResizablePanel[] = ['explorer', 'outline'];
-export const SIDEBAR_VIEWS: readonly SidebarView[] = ['explorer', 'search'];
+export const RESIZABLE_PANELS: readonly ResizablePanel[] = ['explorer'];
+export const SIDEBAR_VIEWS: readonly SidebarView[] = ['explorer', 'search', 'outline'];
 export const DEFAULT_PANEL_WIDTHS_PX: Readonly<Record<ResizablePanel, number>> = {
   explorer: 260,
-  outline: 256,
 };
 export const MIN_PANEL_WIDTH_PX = 160;
 export const MAX_PANEL_WIDTH_PX = 800;
@@ -64,7 +63,6 @@ export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
   language: 'system',
   isSidebarVisible: true,
   sidebarView: 'explorer',
-  isOutlineVisible: true,
   isStatusBarVisible: true,
   isBreadcrumbsVisible: true,
   collapsedExplorerSections: [],
@@ -95,8 +93,11 @@ export function resetZoom(settings: ViewSettings): ViewSettings {
 
 /** Shows a side bar view, or hides the side bar when that view is already shown. */
 export function toggleSidebarView(settings: ViewSettings, sidebarView: SidebarView): ViewSettings {
-  const isShown = settings.isSidebarVisible && settings.sidebarView === sidebarView;
-  return { ...settings, isSidebarVisible: !isShown, sidebarView };
+  return { ...settings, isSidebarVisible: !isSidebarViewShown(settings, sidebarView), sidebarView };
+}
+
+export function isSidebarViewShown(settings: ViewSettings, sidebarView: SidebarView): boolean {
+  return settings.isSidebarVisible && settings.sidebarView === sidebarView;
 }
 
 export function showSidebarView(settings: ViewSettings, sidebarView: SidebarView): ViewSettings {
@@ -165,7 +166,6 @@ export function parseViewSettings(saved: unknown): ViewSettings {
     language,
     isSidebarVisible,
     sidebarView,
-    isOutlineVisible,
     isStatusBarVisible,
     isBreadcrumbsVisible,
     collapsedExplorerSections,
@@ -182,7 +182,6 @@ export function parseViewSettings(saved: unknown): ViewSettings {
     language: typeof language === 'string' && LANGUAGE_TAG.test(language) ? language : 'system',
     isSidebarVisible: booleanOr(isSidebarVisible, true),
     sidebarView: oneOf(SIDEBAR_VIEWS, sidebarView, DEFAULT_VIEW_SETTINGS.sidebarView),
-    isOutlineVisible: booleanOr(isOutlineVisible, true),
     isStatusBarVisible: booleanOr(isStatusBarVisible, true),
     isBreadcrumbsVisible: booleanOr(isBreadcrumbsVisible, true),
     collapsedExplorerSections: EXPLORER_SECTIONS.filter(

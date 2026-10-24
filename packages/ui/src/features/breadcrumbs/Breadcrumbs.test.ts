@@ -5,12 +5,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import Breadcrumbs from './Breadcrumbs.svelte';
 
 const OUTLINE = [
-  { level: 1, text: 'Guide', id: 'mdx-guide' },
-  { level: 2, text: 'Install', id: 'mdx-install' },
+  { level: 1, text: 'Guide', id: 'mdx-guide', line: 0 },
+  { level: 2, text: 'Install', id: 'mdx-install', line: 4 },
 ];
 
 function renderBreadcrumbs({ hasFolder = true, currentHeadingId = 'mdx-install' } = {}) {
   const onRevealInExplorer = vi.fn();
+  const onSelectHeading = vi.fn();
   render(Breadcrumbs, {
     displayPath: 'C:\\Docs\\guides\\Guide.md',
     fileName: 'Guide.md',
@@ -19,8 +20,9 @@ function renderBreadcrumbs({ hasFolder = true, currentHeadingId = 'mdx-install' 
     currentHeadingId,
     translator: createTranslator(),
     onRevealInExplorer,
+    onSelectHeading,
   });
-  return { onRevealInExplorer };
+  return { onRevealInExplorer, onSelectHeading };
 }
 
 describe('Breadcrumbs', () => {
@@ -46,19 +48,13 @@ describe('Breadcrumbs', () => {
     expect(onRevealInExplorer).toHaveBeenCalledOnce();
   });
 
-  it('jumps to a heading chosen from the heading list', async () => {
-    renderBreadcrumbs();
-    const heading = document.createElement('h1');
-    heading.id = 'mdx-guide';
-    const scrollIntoView = vi.fn();
-    heading.scrollIntoView = scrollIntoView;
-    document.body.append(heading);
+  it('asks to go to a heading chosen from the heading list', async () => {
+    const { onSelectHeading } = renderBreadcrumbs();
 
     await userEvent.click(screen.getByRole('button', { name: 'Install' }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Guide' }));
 
-    expect(scrollIntoView).toHaveBeenCalled();
-    expect(document.activeElement).toBe(heading);
+    expect(onSelectHeading).toHaveBeenCalledWith(OUTLINE[0]);
   });
 
   it('shows only the document name for a new document', () => {

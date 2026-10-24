@@ -29,7 +29,7 @@ describe('SettingsDialog', () => {
   });
 
   it('shows the current settings in labelled controls with descriptions', () => {
-    renderSettings({ ...DEFAULT_VIEW_SETTINGS, theme: 'dark', isOutlineVisible: false });
+    renderSettings({ ...DEFAULT_VIEW_SETTINGS, theme: 'dark' });
 
     const theme = screen.getByRole<HTMLSelectElement>('combobox', { name: 'Theme' });
     const outline = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Show Outline' });

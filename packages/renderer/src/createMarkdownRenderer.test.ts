@@ -145,9 +145,44 @@ describe('createMarkdownRenderer', () => {
       const { outline } = renderer.render('# Guide\n## Install `mdx`\n## Install `mdx`');
 
       expect(outline).toEqual([
-        { level: 1, text: 'Guide', id: 'mdx-guide' },
-        { level: 2, text: 'Install mdx', id: 'mdx-install-mdx' },
-        { level: 2, text: 'Install mdx', id: 'mdx-install-mdx-1' },
+        { level: 1, text: 'Guide', id: 'mdx-guide', line: 0 },
+        { level: 2, text: 'Install mdx', id: 'mdx-install-mdx', line: 1 },
+        { level: 2, text: 'Install mdx', id: 'mdx-install-mdx-1', line: 2 },
+      ]);
+    });
+
+    it('never gives two headings the same anchor, even when a heading already ends in a number', () => {
+      const { outline } = renderer.render('# Intro\n# Intro\n# Intro 1\n# Intro-1');
+
+      expect(outline.map((entry) => entry.id)).toEqual([
+        'mdx-intro',
+        'mdx-intro-1',
+        'mdx-intro-1-1',
+        'mdx-intro-1-2',
+      ]);
+    });
+
+    it('keeps underscores in anchors, as GitHub does', () => {
+      expect(renderer.render('## snake_case names').outline[0]?.id).toBe('mdx-snake_case-names');
+    });
+
+    it('keeps emoji and math in the outline text but not in the anchor', () => {
+      const [entry] = renderer.render('## :tada: Release $x^2$').outline;
+
+      expect(entry?.text).toBe('🎉 Release x^2');
+      expect(entry?.id).toBe('mdx-release');
+    });
+
+    it('counts the hidden front matter lines in the outline', () => {
+      const { outline } = renderer.render('---\ntitle: Guide\n---\n# Guide\n\n## Usage');
+
+      expect(outline.map((entry) => entry.line)).toEqual([3, 5]);
+    });
+
+    it('lists the outline of a text without rendering it', () => {
+      expect(renderer.outlineOf('---\ntitle: Guide\n---\n# Guide\n## Guide')).toEqual([
+        { level: 1, text: 'Guide', id: 'mdx-guide', line: 3 },
+        { level: 2, text: 'Guide', id: 'mdx-guide-1', line: 4 },
       ]);
     });
 

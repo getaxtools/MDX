@@ -10,6 +10,7 @@ import {
   setEditorShare,
   setZoom,
   showExplorerSection,
+  isSidebarViewShown,
   toggleSidebarView,
   toggleExplorerSection,
   zoomIn,
@@ -28,7 +29,6 @@ describe('view settings', () => {
       language: 'system',
       isSidebarVisible: true,
       sidebarView: 'explorer',
-      isOutlineVisible: true,
       isStatusBarVisible: true,
       isBreadcrumbsVisible: true,
       collapsedExplorerSections: [],
@@ -67,18 +67,27 @@ describe('view settings', () => {
       typography: 'book',
       language: 'pt-BR',
       isSidebarVisible: false,
-      sidebarView: 'search',
-      isOutlineVisible: false,
+      sidebarView: 'outline',
       isStatusBarVisible: false,
       isBreadcrumbsVisible: false,
       collapsedExplorerSections: ['favourites', 'recentFiles'],
       explorerSectionHeights: { favourites: 120, folders: 300 },
-      panelWidths: { explorer: 320, outline: 200 },
+      panelWidths: { explorer: 320 },
       isPreviewBesideEditor: true,
       editorSharePercent: 60,
     };
 
     expect(parseViewSettings(saved)).toEqual(saved);
+  });
+
+  it('loads settings saved before the outline moved into the side bar', () => {
+    const settings = parseViewSettings({
+      isOutlineVisible: false,
+      panelWidths: { explorer: 300, outline: 200 },
+    });
+
+    expect(settings).not.toHaveProperty('isOutlineVisible');
+    expect(settings.panelWidths).toEqual({ explorer: 300 });
   });
 
   it('falls back to defaults for missing or invalid values', () => {
@@ -101,6 +110,14 @@ describe('view settings', () => {
     expect([search.isSidebarVisible, search.sidebarView]).toEqual([true, 'search']);
     expect(toggleSidebarView(search, 'search').isSidebarVisible).toBe(false);
     expect(toggleSidebarView(DEFAULT_VIEW_SETTINGS, 'explorer').isSidebarVisible).toBe(false);
+  });
+
+  it('shows the outline as a side bar view in place of the Explorer', () => {
+    const outline = toggleSidebarView(DEFAULT_VIEW_SETTINGS, 'outline');
+
+    expect(isSidebarViewShown(outline, 'outline')).toBe(true);
+    expect(isSidebarViewShown(outline, 'explorer')).toBe(false);
+    expect(isSidebarViewShown(toggleSidebarView(outline, 'outline'), 'outline')).toBe(false);
   });
 
   it('keeps only known Explorer sections from saved settings', () => {
@@ -149,12 +166,11 @@ describe('view settings', () => {
 
     expect(panelWidthOf(DEFAULT_VIEW_SETTINGS, 'explorer')).toBe(260);
     expect(panelWidthOf(resized, 'explorer')).toBe(334);
-    expect(panelWidthOf(resized, 'outline')).toBe(256);
   });
 
   it('keeps side panels between their smallest and largest widths', () => {
-    expect(panelWidthOf(resizePanel(DEFAULT_VIEW_SETTINGS, 'outline', 20), 'outline')).toBe(160);
-    expect(panelWidthOf(resizePanel(DEFAULT_VIEW_SETTINGS, 'outline', 5000), 'outline')).toBe(800);
+    expect(panelWidthOf(resizePanel(DEFAULT_VIEW_SETTINGS, 'explorer', 20), 'explorer')).toBe(160);
+    expect(panelWidthOf(resizePanel(DEFAULT_VIEW_SETTINGS, 'explorer', 5000), 'explorer')).toBe(800);
   });
 
   it('returns a dragged panel to its default width', () => {
@@ -171,12 +187,12 @@ describe('view settings', () => {
 
   it('keeps only valid saved panel widths and editor shares', () => {
     const settings = parseViewSettings({
-      panelWidths: { explorer: 'wide', outline: 9000, other: 300 },
+      panelWidths: { explorer: 9000, other: 300 },
       isPreviewBesideEditor: 'yes',
       editorSharePercent: Number.NaN,
     });
 
-    expect(settings.panelWidths).toEqual({ outline: 800 });
+    expect(settings.panelWidths).toEqual({ explorer: 800 });
     expect(settings.isPreviewBesideEditor).toBe(false);
     expect(settings.editorSharePercent).toBe(50);
   });
