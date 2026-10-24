@@ -285,7 +285,7 @@ export class MainWindowPage {
 
   /** Clicks from inside the page; the embedded driver moves focus back to what it clicked itself. */
   private async clickInPage(element: ChainablePromiseElement): Promise<void> {
-    await this.browser.execute((target) => (target as HTMLElement).click(), await element.getElement());
+    await this.browser.execute((target) => target.click(), await element.getElement());
   }
 
   async waitForCurrentOutlineHeading(text: string): Promise<void> {
