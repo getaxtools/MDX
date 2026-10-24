@@ -17,6 +17,7 @@ import { createMarkdownRenderer } from '@mdx/renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   LIVE_PREVIEW_DELAY_MS,
+  OUTLINE_REFRESH_DELAY_MS,
   STATE_SAVE_DELAY_MS,
   ViewerController,
   type ViewerSnapshot,
@@ -93,7 +94,9 @@ describe('ViewerController', () => {
     expect(tabNames(snapshot())).toEqual(['Guide.md', 'Notes.md']);
     expect(snapshot().activeDocument?.fileName).toBe('Notes.md');
     expect(snapshot().activeDocument?.html).toContain('<h1 id="mdx-notes">Notes</h1>');
-    expect(snapshot().activeDocument?.outline).toEqual([{ level: 1, text: 'Notes', id: 'mdx-notes' }]);
+    expect(snapshot().activeDocument?.outline).toEqual([
+      { level: 1, text: 'Notes', id: 'mdx-notes', line: 0 },
+    ]);
   });
 
   it('opens documents requested from outside, such as a drop or a second launch', async () => {
@@ -649,6 +652,20 @@ describe('ViewerController', () => {
 
       await vi.waitFor(() => expect(snapshot().activeDocument?.html).toContain('An edited line.'));
       expect(snapshot().isActiveDocumentEditing).toBeUndefined();
+    });
+
+    it('keeps the outline up to date while typing without the preview beside the editor', async () => {
+      const { controller, snapshot } = await editGuide('# Guide');
+      await vi.advanceTimersByTimeAsync(OUTLINE_REFRESH_DELAY_MS);
+
+      controller.updateEditedText(guideKey, '# Guide\n\n## New section');
+      expect(snapshot().activeDocument?.outline).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(OUTLINE_REFRESH_DELAY_MS);
+
+      expect(snapshot().activeDocument?.outline.map((entry) => [entry.text, entry.line])).toEqual([
+        ['Guide', 0],
+        ['New section', 2],
+      ]);
     });
 
     it('saves edited text over the file and clears the unsaved mark', async () => {
@@ -1222,7 +1239,7 @@ describe('ViewerController', () => {
         readingWidth: 'medium',
         typography: 'github',
         isSidebarVisible: true,
-        isOutlineVisible: true,
+        isOutlineVisible: false,
         isStatusBarVisible: true,
         isSourceView: false,
         isPreviewBesideEditor: false,

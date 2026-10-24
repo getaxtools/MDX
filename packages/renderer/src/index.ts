@@ -6,7 +6,7 @@ export {
   type RenderedDocument,
 } from './createMarkdownRenderer';
 export { splitFrontMatter, type SplitDocument } from './front-matter/splitFrontMatter';
-export { slugify, type OutlineEntry } from './plugins/headingAnchorsPlugin';
+export { HEADING_ID_PREFIX, slugify, type OutlineEntry } from './plugins/headingAnchorsPlugin';
 export { ALERT_KINDS, type AlertKind, type AlertTitles } from './plugins/alertsPlugin';
 export {
   createHtmlSanitizer,

@@ -1,4 +1,5 @@
 import {
+  isSidebarViewShown,
   READING_WIDTHS,
   THEME_PREFERENCES,
   TYPOGRAPHIES,
@@ -150,7 +151,7 @@ export const SETTING_DEFINITIONS: readonly SettingDefinition[] = [
       descriptionKey: 'settings.explorer.description',
       toggleCommand: { kind: 'toggleSidebar' },
     },
-    (settings) => settings.isSidebarVisible,
+    (settings) => isSidebarViewShown(settings, 'explorer'),
   ),
   layoutToggle(
     {
@@ -159,7 +160,7 @@ export const SETTING_DEFINITIONS: readonly SettingDefinition[] = [
       descriptionKey: 'settings.outline.description',
       toggleCommand: { kind: 'toggleOutline' },
     },
-    (settings) => settings.isOutlineVisible,
+    (settings) => isSidebarViewShown(settings, 'outline'),
   ),
   layoutToggle(
     {

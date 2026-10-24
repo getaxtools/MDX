@@ -1,23 +1,26 @@
 <script lang="ts">
   import type { Translator } from '@mdx/i18n';
   import type { OutlineEntry } from '@mdx/renderer';
-  import { scrollToHeading } from '../document-view/scrollToHeading';
 
   interface Props {
-    outline: readonly OutlineEntry[];
+    /** Undefined while no document is open. */
+    outline: readonly OutlineEntry[] | undefined;
     currentHeadingId?: string | undefined;
     translator: Translator;
+    onSelectHeading: (entry: OutlineEntry) => void;
   }
 
-  const { outline, currentHeadingId, translator }: Props = $props();
+  const { outline, currentHeadingId, translator, onSelectHeading }: Props = $props();
 
   const INDENT_PER_LEVEL_REM = 0.75;
-  const shallowestLevel = $derived(Math.min(...outline.map((entry) => entry.level)));
+  const shallowestLevel = $derived(Math.min(...(outline ?? []).map((entry) => entry.level)));
 </script>
 
-<nav class="outline" aria-labelledby="outline-heading">
+<nav class="outline" data-focus-region aria-labelledby="outline-heading">
   <h2 id="outline-heading">{translator.translate('outline.title')}</h2>
-  {#if outline.length === 0}
+  {#if outline === undefined}
+    <p class="empty-state">{translator.translate('outline.noDocument')}</p>
+  {:else if outline.length === 0}
     <p class="empty-state">{translator.translate('outline.emptyState')}</p>
   {:else}
     <ul>
@@ -26,7 +29,7 @@
           <button
             title={entry.text}
             aria-current={entry.id === currentHeadingId ? 'location' : undefined}
-            onclick={() => scrollToHeading(globalThis.document, entry.id)}
+            onclick={() => onSelectHeading(entry)}
           >
             {entry.text}
           </button>
@@ -38,11 +41,8 @@
 
 <style>
   .outline {
-    flex: none;
-    box-sizing: border-box;
-    width: var(--outline-width, 16rem);
+    min-height: 0;
     padding: var(--space-3) var(--space-2);
-    border-inline-start: 1px solid var(--color-border);
     background: var(--color-surface);
     overflow-y: auto;
   }

@@ -18,7 +18,6 @@ describe('view commands', () => {
       language: 'system',
       isSidebarVisible: false,
       sidebarView: 'explorer',
-      isOutlineVisible: true,
       isStatusBarVisible: true,
       isBreadcrumbsVisible: true,
       collapsedExplorerSections: [],
@@ -48,6 +47,22 @@ describe('view commands', () => {
     });
   });
 
+  it('shows the Explorer from the menu the same way as from the activity bar, even while Search is shown', () => {
+    const searching = { ...DEFAULT_VIEW_SETTINGS, sidebarView: 'search' as const };
+
+    expect(applyViewCommand(searching, { kind: 'toggleSidebar' })).toMatchObject({
+      isSidebarVisible: true,
+      sidebarView: 'explorer',
+    });
+  });
+
+  it('shows the outline in the side bar and hides it again', () => {
+    const outline = applyViewCommand(DEFAULT_VIEW_SETTINGS, { kind: 'toggleOutline' });
+
+    expect(outline).toMatchObject({ isSidebarVisible: true, sidebarView: 'outline' });
+    expect(applyViewCommand(outline, { kind: 'toggleOutline' }).isSidebarVisible).toBe(false);
+  });
+
   it('shows and hides the status bar', () => {
     const withoutStatusBar = applyViewCommand(DEFAULT_VIEW_SETTINGS, { kind: 'toggleStatusBar' });
 
@@ -72,13 +87,13 @@ describe('view commands', () => {
   it('resizes side panels, returns them to their default width and sets the editor share', () => {
     const resized = applyViewCommand(DEFAULT_VIEW_SETTINGS, {
       kind: 'resizePanel',
-      panel: 'outline',
+      panel: 'explorer',
       widthPx: 300,
     });
     const shared = applyViewCommand(resized, { kind: 'setEditorShare', sharePercent: 70 });
 
-    expect(shared.panelWidths).toEqual({ outline: 300 });
+    expect(shared.panelWidths).toEqual({ explorer: 300 });
     expect(shared.editorSharePercent).toBe(70);
-    expect(applyViewCommand(shared, { kind: 'resetPanelWidth', panel: 'outline' }).panelWidths).toEqual({});
+    expect(applyViewCommand(shared, { kind: 'resetPanelWidth', panel: 'explorer' }).panelWidths).toEqual({});
   });
 });

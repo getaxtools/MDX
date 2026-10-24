@@ -48,8 +48,8 @@ describe('setting definitions', () => {
 
     const toggled = applyViewCommand(DEFAULT_VIEW_SETTINGS, outline.toggleCommand);
 
-    expect(outline.isOnIn(DEFAULT_VIEW_SETTINGS)).toBe(true);
-    expect(outline.isOnIn(toggled)).toBe(false);
+    expect(outline.isOnIn(DEFAULT_VIEW_SETTINGS)).toBe(false);
+    expect(outline.isOnIn(toggled)).toBe(true);
   });
 });
 

@@ -97,6 +97,28 @@ describe('DocumentView', () => {
     expect(onOpenLink).not.toHaveBeenCalled();
   });
 
+  it('scrolls to a heading for GitHub-style links written without the anchor prefix', async () => {
+    renderDocument('<a href="#install" data-mdx-link="anchor">install</a><h2 id="mdx-install">Install</h2>');
+    const scrollIntoView = vi.fn();
+    screen.getByRole('heading', { name: 'Install' }).scrollIntoView = scrollIntoView;
+
+    await fireEvent.click(screen.getByRole('link', { name: 'install' }));
+
+    expect(scrollIntoView).toHaveBeenCalledOnce();
+  });
+
+  it('goes to a heading chosen in the outline, but not to one asked for before it was shown', async () => {
+    const entry = { level: 2, text: 'Install', id: 'mdx-install', line: 4 };
+    const { rerender } = renderDocument('<h2 id="mdx-install">Install</h2>');
+    const scrollIntoView = vi.fn();
+    screen.getByRole('heading', { name: 'Install' }).scrollIntoView = scrollIntoView;
+
+    await rerender({ headingRequest: { entry, number: 1 } });
+
+    expect(scrollIntoView).toHaveBeenCalledOnce();
+    expect(document.activeElement?.textContent).toBe('Install');
+  });
+
   it('ignores clicks outside links', async () => {
     const { onOpenLink } = renderDocument('<p>plain text</p>');
 

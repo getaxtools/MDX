@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { ReadingWidth, Typography } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
-  import type { CodeHighlighter, RichBlockRenderer } from '@mdx/renderer';
+  import type { CodeHighlighter, OutlineEntry, RichBlockRenderer } from '@mdx/renderer';
   import ContextMenu from '../../components/ContextMenu.svelte';
   import { contextMenuPosition } from '../../components/ContextMenuItem';
   import type { ViewerCommand } from '../viewer/viewerCommands';
@@ -9,6 +9,7 @@
   import FindBar from '../find/FindBar.svelte';
   import type { FindQuery } from '../find/findTextRanges';
   import { currentHeadingId } from '../outline/currentHeadingId';
+  import type { HeadingRequest } from '../outline/HeadingRequest';
   import type { DocumentLink } from './DocumentLink';
   import PropertiesPanel from './PropertiesPanel.svelte';
   import { untrack } from 'svelte';
@@ -17,7 +18,9 @@
   import type { ExportRequest } from '../viewer/ViewerController';
   import { documentClipboardHtml, documentExportHtml, documentPlainText } from './documentClipboardHtml';
   import { enhanceCodeBlocks } from './enhanceCodeBlocks';
-  import { scrollToHeading } from './scrollToHeading';
+  import { findLinkedHeading } from './findLinkedHeading';
+  import { revealHeading } from './scrollToHeading';
+  import { headingIdInSourceView, scrollSourceLineToTop } from './sourceViewLines';
   import {
     commandForDocumentMenuItem,
     documentContextMenuItems,
@@ -38,6 +41,8 @@
     copyAsHtmlRequest?: number | undefined;
     /** Asks for an exported copy of the document; the request it starts with is ignored. */
     exportRequest?: ExportRequest | undefined;
+    /** A heading chosen in the outline; the request it starts with is ignored. */
+    headingRequest?: HeadingRequest | undefined;
     locale?: string;
     isSourceView?: boolean;
     onCloseFind?: () => void;
@@ -64,6 +69,7 @@
     findQuery,
     copyAsHtmlRequest,
     exportRequest,
+    headingRequest,
     locale = 'en',
     isSourceView = false,
     onCloseFind = () => undefined,
@@ -109,8 +115,36 @@
       if (!area) return;
       const scrollableHeight = area.scrollHeight - area.clientHeight;
       onScroll(scrollableHeight > 0 ? area.scrollTop / scrollableHeight : 0);
-      if (articleElement) onCurrentHeadingChange(currentHeadingId(articleElement, area));
+      if (articleElement) onCurrentHeadingChange(headingAtTopOf(articleElement, area));
     }, SCROLL_REPORT_DELAY_MS);
+  }
+
+  function headingAtTopOf(article: HTMLElement, area: HTMLElement): string | undefined {
+    if (!isSourceView) return currentHeadingId(article, area);
+    const sourceView = article.querySelector('pre');
+    return sourceView && document ? headingIdInSourceView(area, sourceView, document.outline) : undefined;
+  }
+
+  let handledHeadingRequest = untrack(() => headingRequest);
+
+  $effect(() => {
+    const request = headingRequest;
+    if (request === undefined || request === handledHeadingRequest) return;
+    handledHeadingRequest = request;
+    goToHeading(request.entry);
+  });
+
+  function goToHeading(entry: OutlineEntry) {
+    const area = documentArea;
+    const article = articleElement;
+    if (!area || !article) return;
+    if (isSourceView) {
+      const sourceView = article.querySelector('pre');
+      if (sourceView) scrollSourceLineToTop(area, sourceView, entry.line);
+      return;
+    }
+    const heading = article.ownerDocument.getElementById(entry.id);
+    if (heading && article.contains(heading)) revealHeading(heading);
   }
 
   $effect(() => {
@@ -220,7 +254,8 @@
     // The webview must never navigate away from the app, so every link is handled here.
     event.preventDefault();
     if (link.dataset.mdxLink === 'anchor') {
-      scrollToHeading(globalThis.document, decodeURIComponent(link.hash.slice(1)));
+      const heading = articleElement ? findLinkedHeading(articleElement, link.hash.slice(1)) : undefined;
+      if (heading) revealHeading(heading);
       return;
     }
     const kind = link.dataset.mdxLink;

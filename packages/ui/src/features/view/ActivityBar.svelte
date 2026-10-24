@@ -7,18 +7,11 @@
   interface Props {
     isSidebarVisible: boolean;
     sidebarView?: SidebarView;
-    isOutlineVisible: boolean;
     translator: Translator;
     onCommand: (command: ViewerCommand) => void;
   }
 
-  const {
-    isSidebarVisible,
-    sidebarView = 'explorer',
-    isOutlineVisible,
-    translator,
-    onCommand,
-  }: Props = $props();
+  const { isSidebarVisible, sidebarView = 'explorer', translator, onCommand }: Props = $props();
 
   const explorerCommand: ViewerCommand = { kind: 'toggleSidebarView', sidebarView: 'explorer' };
   const searchCommand: ViewerCommand = { kind: 'showFolderSearch' };
@@ -61,7 +54,7 @@
   <button
     aria-label={translator.translate('activityBar.outline')}
     title={labelOf('activityBar.outline', { kind: 'toggleOutline' })}
-    aria-pressed={isOutlineVisible}
+    aria-pressed={isSidebarVisible && sidebarView === 'outline'}
     onclick={() => onCommand({ kind: 'toggleOutline' })}
   >
     <svg viewBox="0 0 24 24" aria-hidden="true">

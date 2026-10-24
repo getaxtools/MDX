@@ -57,22 +57,6 @@ describe('document features', () => {
     await mainWindow.waitForRenderedElement('pre code span[style]');
   });
 
-  it('jumps to a heading from the outline', async () => {
-    const sections = Array.from(
-      { length: 40 },
-      (_, index) => `## Section ${String(index + 1)}\n\nText.\n`,
-    ).join('\n');
-    writeFileSync(workspace.documentPath('sections.md'), `# Sections\n\n${sections}`);
-    await open('sections.md');
-
-    await app.browser.$('nav.outline').$('button=Section 30').click();
-
-    await app.browser.waitUntil(
-      async () => (await app.browser.execute(() => document.activeElement?.textContent)) === 'Section 30',
-    );
-    expect(await mainWindow.documentScrollTop()).toBeGreaterThan(0);
-  });
-
   it('shows a relative image and opens a relative link in a new tab', async () => {
     mkdirSync(workspace.documentPath('images'));
     writeFileSync(workspace.documentPath('images/pixel.png'), PIXEL_PNG);

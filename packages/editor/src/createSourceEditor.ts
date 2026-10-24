@@ -40,6 +40,8 @@ export interface SourceEditor {
   topLine(): number;
   /** Scrolls so that a zero-based line, with an optional fraction, is at the top of the view. */
   scrollToLine(line: number): void;
+  /** Moves the caret to the start of a zero-based line, shows that line at the top and focuses the editor. */
+  revealLine(line: number): void;
   /** Replaces the whole text, for example after the file was reloaded from disk. */
   replaceText(text: string): void;
   run(command: EditorMenuCommand): void;
@@ -80,6 +82,7 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
     scrollToLine: (line) => {
       scroller.scrollTop = scrollTopForLine(view, line);
     },
+    revealLine: (line) => revealLine(view, line),
     replaceText: (text) => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } }),
     run: (command) => commands[command](),
     destroy: () => {
@@ -101,6 +104,16 @@ function menuCommandsOf(view: EditorView): Readonly<Record<EditorMenuCommand, ()
     },
     goToLine: () => gotoLine(view),
   };
+}
+
+function revealLine(view: EditorView, line: number): void {
+  const { doc } = view.state;
+  const lineStart = doc.line(Math.min(Math.max(Math.floor(line), 0), doc.lines - 1) + 1).from;
+  view.dispatch({
+    selection: { anchor: lineStart },
+    effects: EditorView.scrollIntoView(lineStart, { y: 'start' }),
+  });
+  view.focus();
 }
 
 function topLineOf(view: EditorView): number {
