@@ -47,10 +47,10 @@ jobs:
         with:
           node-version-file: .node-version
           cache: pnpm
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: apps/desktop/src-tauri
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2.87.30
         with:
           tool: cargo-nextest,cargo-deny
       - run: pnpm install --frozen-lockfile
@@ -72,7 +72,7 @@ jobs:
         with:
           node-version-file: .node-version
           cache: pnpm
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: apps/desktop/src-tauri
       - run: pnpm install --frozen-lockfile
@@ -90,7 +90,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2.87.30
         with:
           tool: osv-scanner
       - run: pnpm audit --audit-level high
@@ -116,7 +116,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: trufflesecurity/trufflehog@e76dff8a7e57d6df0c60ad8cbf5d5cba505a8fc9 # v3.99.2
+      - uses: trufflesecurity/trufflehog@c85580b712841eda4c53bc28fc6ace6100e8c16c # v3.99.4
         with:
           extra_args: --results=verified,unknown
 
