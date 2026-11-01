@@ -17,6 +17,6 @@
     "@mdx/i18n": "workspace:*",
     "@mdx/platform": "workspace:*",
     "@mdx/renderer": "workspace:*",
-    "svelte": "5.57.2"
+    "svelte": "5.57.3"
   }
 }
