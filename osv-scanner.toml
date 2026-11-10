@@ -1,5 +1,5 @@
-# Advisories for crates that only build on Linux. None of them are compiled into the Windows app.
-# Each entry expires so it is re-checked; remove it as soon as the named upstream release lands.
+# Advisories for crates that only build on Linux and for npm packages used only by build, lint and test tooling.
+# None of them ship in the app. Each entry expires so it is re-checked; remove it as soon as the named upstream release lands.
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2024-0429"
@@ -30,3 +30,18 @@ reason = "zbus_names is unmaintained, merged into zbus 6 (Linux-only, via tauri-
 id = "RUSTSEC-2026-0372"
 ignoreUntil = 2027-01-31
 reason = "zvariant_derive is unmaintained, merged into zbus 6 (Linux-only, via tauri-plugin-single-instance). Resolved when the plugin moves to zbus 6."
+
+[[IgnoredVulns]]
+id = "GHSA-gcqx-w48m-w2h4"
+ignoreUntil = 2027-01-31
+reason = "deepmerge 4.3.1 (build-time only, via @sveltejs/vite-plugin-svelte). No fixed release yet."
+
+[[IgnoredVulns]]
+id = "GHSA-3g3m-2fjr-6pw4"
+ignoreUntil = 2027-01-31
+reason = "glob 10 (end-to-end tests only, via @wdio/config). Fixed in glob 14; resolved when webdriverio moves to it."
+
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+ignoreUntil = 2027-01-31
+reason = "minimatch 9 and 10 (lint and end-to-end tests only, via eslint and glob 10). Fixed in minimatch 11; resolved when eslint and webdriverio move to it."
