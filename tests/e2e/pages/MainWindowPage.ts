@@ -450,7 +450,7 @@ export class MainWindowPage {
   }
 
   private toolbarButton(labelKey: MessageKey) {
-    return this.browser.$('[role="toolbar"]').$(`button*=${translator.translate(labelKey)}`);
+    return this.browser.$('[role="toolbar"]').$(`button[aria-label="${translator.translate(labelKey)}"]`);
   }
 
   private async sidebarSection(titleKey: MessageKey) {

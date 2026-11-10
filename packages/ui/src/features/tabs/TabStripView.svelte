@@ -156,7 +156,7 @@
         title={translator.translate('tabs.closeTab', { fileName: tab.location.fileName })}
         onclick={() => onCommand({ kind: 'closeTab', canonicalKey: tab.location.canonicalKey })}
       >
-        ×
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" /></svg>
       </button>
     </div>
   {/each}
@@ -178,48 +178,56 @@
 <style>
   .tab-strip {
     display: flex;
-    gap: var(--space-1);
-    padding: var(--space-1) var(--space-2) 0;
+    flex: none;
+    min-height: 36px;
     background: var(--color-surface);
-    border-bottom: 1px solid var(--color-border);
+    box-shadow: inset 0 -1px 0 var(--color-border);
     overflow-x: auto;
+    scrollbar-width: thin;
   }
 
   .tab {
+    position: relative;
     display: flex;
+    flex: none;
     align-items: center;
-    border-radius: var(--radius-medium) var(--radius-medium) 0 0;
     max-width: 220px;
+    border-inline-end: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    transition: background-color var(--motion-fast) ease-out;
   }
 
   .tab.active {
     background: var(--color-background);
     box-shadow: inset 0 2px 0 var(--color-accent);
+    color: var(--color-text);
   }
 
   .tab:not(.active):hover {
     background: var(--color-surface-hover);
+    color: var(--color-text);
   }
 
   .tab-label,
   .tab-close {
     border: 0;
     background: none;
-    color: var(--color-text);
+    color: inherit;
     font: inherit;
     font-size: var(--text-size-body);
     cursor: default;
   }
 
   .tab-label {
-    padding: var(--space-2) var(--space-1) var(--space-2) var(--space-3);
+    align-self: stretch;
+    padding: 0 var(--space-1) 0 var(--space-3);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .tab.missing .tab-label {
-    color: var(--color-text-secondary);
+    color: var(--color-text-tertiary);
     text-decoration: line-through;
   }
 
@@ -228,9 +236,29 @@
   }
 
   .tab-close {
-    padding: var(--space-1) var(--space-2);
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    margin-inline-end: var(--space-2);
+    padding: 0;
+    border-radius: var(--radius-xsmall);
     color: var(--color-text-secondary);
-    border-radius: var(--radius-small);
+    opacity: 0;
+    transition: opacity var(--motion-fast) ease-out;
+  }
+
+  .tab-close svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentcolor;
+    stroke-linecap: round;
+    stroke-width: 1.5;
+  }
+
+  .tab:is(:hover, .active) .tab-close {
+    opacity: 1;
   }
 
   .tab-close:hover {

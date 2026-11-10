@@ -7,6 +7,7 @@
     --color-text: #000000 !important;
     --color-text-secondary: #444444 !important;
     --color-border: #cccccc !important;
+    --color-border-strong: #999999 !important;
     --color-accent: #1a4fd0 !important;
     --color-code-background: #f4f4f4 !important;
   }
@@ -17,7 +18,7 @@
   }
 
   .sidebar,
-  .toolbar,
+  .document-header,
   .tab-strip,
   .notice-region,
   .status-bar,

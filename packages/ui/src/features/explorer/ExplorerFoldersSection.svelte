@@ -239,9 +239,9 @@
   .open-folder {
     margin: var(--space-2);
     padding: var(--space-1) var(--space-3);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-small);
-    background: var(--color-background);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-medium);
+    background: var(--color-surface-raised);
     color: var(--color-text);
     font: inherit;
   }

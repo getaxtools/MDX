@@ -169,19 +169,22 @@
 
 <style>
   .palette {
+    animation: fade-in var(--motion-fast) var(--easing-standard);
     position: fixed;
-    inset-block-start: 10vh;
+    inset-block-start: min(96px, 12vh);
     inset-inline-start: 50%;
     z-index: 30;
     display: flex;
     flex-direction: column;
     width: min(40rem, calc(100vw - 2rem));
     max-height: 60vh;
+    padding: var(--space-2);
+    box-sizing: border-box;
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-medium);
-    background: var(--color-background);
+    border-radius: var(--radius-large);
+    background: var(--color-surface-raised);
     color: var(--color-text);
-    box-shadow: 0 8px 24px rgb(0 0 0 / 25%);
+    box-shadow: var(--shadow-medium);
     transform: translateX(-50%);
   }
 
@@ -190,18 +193,30 @@
   }
 
   input {
-    margin: var(--space-2);
-    padding: var(--space-2);
+    flex: none;
+    height: 40px;
+    margin-block-end: var(--space-2);
+    padding: 0 var(--space-3);
     border: 1px solid var(--color-focus);
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-medium);
     background: var(--color-background);
     color: var(--color-text);
     font: inherit;
+    font-size: var(--text-size-reading);
+  }
+
+  input:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: -1px;
+  }
+
+  input::placeholder {
+    color: var(--color-text-tertiary);
   }
 
   ul {
     margin: 0;
-    padding: 0 0 var(--space-2);
+    padding: 0;
     list-style: none;
     overflow-y: auto;
   }
@@ -210,7 +225,8 @@
     display: flex;
     align-items: baseline;
     gap: var(--space-2);
-    padding: var(--space-1) var(--space-3);
+    padding: 6px var(--space-3);
+    border-radius: var(--radius-medium);
     cursor: default;
   }
 
@@ -242,8 +258,10 @@
     margin-inline-start: auto;
     padding: 0 var(--space-1);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-xsmall);
     background: var(--color-surface);
+    box-shadow: inset 0 -1px 0 var(--color-border);
+    color: var(--color-text-secondary);
     font-family: var(--font-ui);
     font-size: var(--text-size-small);
     white-space: nowrap;
@@ -251,7 +269,13 @@
 
   .empty {
     margin: 0;
-    padding: var(--space-2) var(--space-3) var(--space-3);
+    padding: var(--space-2) var(--space-3);
     color: var(--color-text-secondary);
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
   }
 </style>

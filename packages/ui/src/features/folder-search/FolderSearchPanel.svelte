@@ -188,8 +188,6 @@
     color: var(--color-text-secondary);
     font-size: var(--text-size-small);
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
   }
 
   .search-row {
@@ -200,12 +198,22 @@
   input {
     flex: 1;
     min-width: 0;
-    padding: var(--space-1) var(--space-2);
-    border: 1px solid var(--color-border);
+    height: 28px;
+    box-sizing: border-box;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-small);
     background: var(--color-background);
     color: var(--color-text);
     font: inherit;
+  }
+
+  input::placeholder {
+    color: var(--color-text-tertiary);
+  }
+
+  input:focus {
+    border-color: var(--color-focus);
   }
 
   .option {
@@ -217,9 +225,13 @@
     font: inherit;
   }
 
-  .option[aria-pressed='true'] {
+  .option:hover {
     background: var(--color-surface-hover);
-    outline: 1px solid var(--color-accent);
+  }
+
+  .option[aria-pressed='true'] {
+    background: var(--color-surface-selected);
+    color: var(--color-accent);
   }
 
   /* Drawn by CSS so the symbol is not text that the button's name would have to contain. */

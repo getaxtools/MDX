@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { SidebarView } from '@mdx/core';
   import type { MessageKey, Translator } from '@mdx/i18n';
-  import { shortcutLabelFor } from '../shortcuts/commandShortcuts';
+  import { tooltipWithShortcut } from '../shortcuts/commandShortcuts';
   import type { ViewerCommand } from '../viewer/viewerCommands';
 
   interface Props {
@@ -17,9 +17,7 @@
   const searchCommand: ViewerCommand = { kind: 'showFolderSearch' };
 
   function labelOf(labelKey: MessageKey, command: ViewerCommand): string {
-    const label = translator.translate(labelKey);
-    const shortcut = shortcutLabelFor(command, translator);
-    return shortcut ? `${label} (${shortcut})` : label;
+    return tooltipWithShortcut(translator.translate(labelKey), command, translator);
   }
 </script>
 
@@ -92,7 +90,7 @@
     flex-direction: column;
     gap: var(--space-1);
     align-items: center;
-    width: 2.75rem;
+    width: 44px;
     padding: var(--space-2) 0;
     border-inline-end: 1px solid var(--color-border);
     background: var(--color-surface);
@@ -101,13 +99,15 @@
   button {
     display: grid;
     place-items: center;
-    width: 2.25rem;
-    height: 2.25rem;
+    width: 32px;
+    height: 32px;
     border: 0;
-    border-inline-start: 2px solid transparent;
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-medium);
     background: none;
     color: var(--color-text-secondary);
+    transition:
+      background-color var(--motion-fast) ease-out,
+      color var(--motion-fast) ease-out;
   }
 
   button:hover {
@@ -116,8 +116,8 @@
   }
 
   button[aria-pressed='true'] {
-    border-inline-start-color: var(--color-focus);
-    color: var(--color-text);
+    color: var(--color-accent);
+    background: var(--color-surface-selected);
   }
 
   button:focus-visible {
@@ -129,8 +129,8 @@
   }
 
   svg {
-    width: 1.25rem;
-    height: 1.25rem;
+    width: 20px;
+    height: 20px;
     fill: none;
     stroke: currentcolor;
     stroke-linecap: round;

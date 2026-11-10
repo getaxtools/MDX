@@ -42,18 +42,16 @@
 <style>
   .outline {
     min-height: 0;
-    padding: var(--space-3) var(--space-2);
+    padding: var(--space-2);
     background: var(--color-surface);
     overflow-y: auto;
   }
 
   h2 {
-    margin: 0 var(--space-2) var(--space-2);
+    margin: var(--space-1) var(--space-2) var(--space-2);
     font-size: var(--text-size-small);
     font-weight: 600;
     color: var(--color-text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
   }
 
   ul {
@@ -65,7 +63,8 @@
   button {
     display: block;
     width: 100%;
-    padding: var(--space-1) var(--space-2);
+    min-height: 28px;
+    padding: 0 var(--space-2);
     border: 0;
     border-radius: var(--radius-small);
     background: none;
@@ -84,7 +83,8 @@
 
   button[aria-current='location'] {
     background: var(--color-surface-selected);
-    font-weight: 600;
+    color: var(--color-accent);
+    font-weight: 500;
   }
 
   button:focus-visible {

@@ -150,19 +150,17 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
-    padding: var(--space-3) var(--space-2);
+    padding: var(--space-2);
     background: var(--color-surface);
     border-inline-end: 1px solid var(--color-border);
     overflow-y: auto;
   }
 
   .sidebar :global(h2) {
-    margin: 0 var(--space-2) var(--space-2);
+    margin: 0 var(--space-2) var(--space-1);
     font-size: var(--text-size-small);
     font-weight: 600;
     color: var(--color-text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
   }
 
   .sidebar :global(ul) {
@@ -175,10 +173,11 @@
   .sidebar :global(li > input) {
     display: flex;
     align-items: center;
-    gap: var(--space-1);
+    gap: 6px;
     width: 100%;
+    min-height: 28px;
     box-sizing: border-box;
-    padding: var(--space-1) var(--space-2);
+    padding: 0 var(--space-2);
     border: 0;
     border-radius: var(--radius-small);
     background: none;
@@ -198,6 +197,7 @@
 
   .sidebar :global(li > [role='treeitem']) {
     cursor: default;
+    transition: background-color var(--motion-fast) ease-out;
   }
 
   .sidebar :global(li > [role='treeitem']:hover) {
@@ -206,10 +206,11 @@
 
   .sidebar :global(li > [role='treeitem'].selected) {
     background: var(--color-surface-selected);
+    font-weight: 500;
   }
 
   .sidebar :global(li > [role='treeitem'].unavailable) {
-    color: var(--color-text-secondary);
+    color: var(--color-text-tertiary);
     font-style: italic;
   }
 

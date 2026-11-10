@@ -73,14 +73,15 @@
     flex: 1;
     min-width: 0;
     overflow-y: auto;
-    padding: var(--space-8) var(--space-6);
+    padding: 12vh max(var(--space-6), calc((100% - 52rem) / 2)) var(--space-8);
     background: var(--color-background);
   }
 
   h1 {
     margin: 0 0 var(--space-2);
     font-size: 1.75rem;
-    font-weight: 400;
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
 
   .introduction {
@@ -91,17 +92,22 @@
   .columns {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-8);
+    gap: var(--space-4);
   }
 
   section {
     flex: 1 1 16rem;
     min-width: 0;
+    padding: var(--space-4) var(--space-5);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-large);
+    background: var(--color-surface);
   }
 
   h2 {
     margin: 0 0 var(--space-2);
-    font-size: var(--text-size-body);
+    color: var(--color-text-secondary);
+    font-size: var(--text-size-small);
     font-weight: 600;
   }
 

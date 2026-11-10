@@ -42,7 +42,8 @@
     align-items: center;
     gap: var(--space-1);
     width: 100%;
-    padding: var(--space-1);
+    min-height: 28px;
+    padding: 0 var(--space-1);
     border: 0;
     border-radius: var(--radius-small);
     background: none;
@@ -55,6 +56,7 @@
 
   .section-toggle:hover {
     background: var(--color-surface-hover);
+    color: var(--color-text);
   }
 
   .section-toggle:focus-visible {

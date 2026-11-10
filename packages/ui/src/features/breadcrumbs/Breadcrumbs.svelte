@@ -84,10 +84,9 @@
 
 <style>
   .breadcrumbs {
-    padding: 0 var(--space-3);
-    border-bottom: 1px solid var(--color-border);
-    background: var(--color-background);
-    font-size: var(--text-size-small);
+    flex: 1;
+    min-width: 0;
+    font-size: var(--text-size-body);
     color: var(--color-text-secondary);
   }
 
@@ -107,7 +106,8 @@
 
   li + li::before {
     content: '›';
-    padding: 0 var(--space-1);
+    padding: 0 2px;
+    color: var(--color-text-tertiary);
   }
 
   :global([dir='rtl']) li + li::before {
@@ -116,7 +116,7 @@
 
   button,
   .file {
-    padding: var(--space-1);
+    padding: 2px var(--space-1);
     border: 0;
     border-radius: var(--radius-small);
     background: none;
@@ -126,6 +126,7 @@
 
   .file {
     color: var(--color-text);
+    font-weight: 500;
   }
 
   button:hover {

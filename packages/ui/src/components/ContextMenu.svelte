@@ -88,6 +88,7 @@
 
 <style>
   .context-menu {
+    animation: fade-in var(--motion-fast) var(--easing-standard);
     position: fixed;
     z-index: 10;
     display: flex;
@@ -97,18 +98,20 @@
     overflow-y: auto;
     padding: var(--space-1);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-medium);
-    background: var(--color-background);
-    box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
+    border-radius: var(--radius-large);
+    background: var(--color-surface-raised);
+    box-shadow: var(--shadow-medium);
   }
 
   button {
     display: flex;
     gap: var(--space-6);
     justify-content: space-between;
-    padding: var(--space-1) var(--space-3);
+    align-items: center;
+    min-height: 28px;
+    padding: 0 var(--space-2);
     border: 0;
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-medium);
     background: none;
     color: var(--color-text);
     font: inherit;
@@ -122,7 +125,7 @@
   }
 
   button:disabled {
-    color: var(--color-text-secondary);
+    color: var(--color-text-tertiary);
   }
 
   .shortcut {
@@ -133,7 +136,13 @@
 
   .separator {
     height: 1px;
-    margin: var(--space-1) 0;
+    margin: var(--space-1) var(--space-2);
     background: var(--color-border);
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
   }
 </style>
