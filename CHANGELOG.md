@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.3](https://github.com/getaxtools/MDX/compare/v0.6.2...v0.6.3) (2026-10-24)
+
+
+### Bug Fixes
+
+* **ui:** show the outline in every mode and jump to GitHub-style anchors ([3c01841](https://github.com/getaxtools/MDX/commit/3c018419bbbc69a3bc3bfcf87a76d2a9d71dda65))
+
 ## [0.6.2](https://github.com/getaxtools/MDX/compare/v0.6.1...v0.6.2) (2026-10-24)
 
 
