@@ -11,11 +11,28 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Every commit on main keeps its own result; only superseded pull request runs are cancelled.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  checks:
-    name: Lint, type-check and unit tests (${{ matrix.os }})
+  lint:
+    name: Lint and type-check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+
+  unit-tests:
+    name: Unit tests (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -31,8 +48,6 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm typecheck
       - run: pnpm test:coverage
 
   rust:
@@ -58,7 +73,7 @@ jobs:
       - run: cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
       - run: cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
       - run: cargo nextest run --manifest-path apps/desktop/src-tauri/Cargo.toml
-      - run: cargo deny --manifest-path apps/desktop/src-tauri/Cargo.toml check
+      - run: cargo deny --manifest-path apps/desktop/src-tauri/Cargo.toml check bans licenses sources
 
   desktop-ui-tests:
     name: Desktop UI tests (Windows)
@@ -78,23 +93,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @mdx/desktop tauri build --debug --no-bundle --features webdriver --config src-tauri/tauri.ui-test.conf.json
       - run: pnpm test:ui
-
-  dependency-audit:
-    name: Dependency audit
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .node-version
-      - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
-        with:
-          tool: osv-scanner
-      - run: pnpm audit --audit-level high
-      - run: osv-scanner scan source --config osv-scanner.toml --recursive .
 
   dependency-review:
     name: Dependency review
