@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0](https://github.com/getaxtools/MDX/compare/v0.7.0...v0.8.0) (2026-11-11)
+
+
+### Features
+
+* **ui:** separate explorer sections and add more themes ([f50e191](https://github.com/getaxtools/MDX/commit/f50e1911f345925180614bb27834b9b64c0efb0b))
+* **view:** add sepia, Solarized, Nord and high-contrast themes ([90b7007](https://github.com/getaxtools/MDX/commit/90b700766e382b286669efcfe5b24bbf98aab3b7))
+
 ## [0.7.0](https://github.com/getaxtools/MDX/compare/v0.6.3...v0.7.0) (2026-11-11)
 
 
