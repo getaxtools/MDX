@@ -8,9 +8,9 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@shikijs/themes": "4.5.0",
+    "@shikijs/themes": "4.6.0",
     "dompurify": "3.4.17",
-    "katex": "0.19.0",
+    "katex": "0.19.1",
     "markdown-it": "15.0.3",
     "markdown-it-abbr": "2.0.0",
     "markdown-it-deflist": "4.0.0",
@@ -19,6 +19,6 @@
     "markdown-it-mark": "4.0.0",
     "markdown-it-sub": "2.0.0",
     "markdown-it-sup": "2.0.0",
-    "shiki": "4.5.0"
+    "shiki": "4.6.0"
   }
 }
