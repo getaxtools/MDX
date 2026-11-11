@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.7.0](https://github.com/getaxtools/MDX/compare/v0.6.3...v0.7.0) (2026-11-11)
+
+
+### Features
+
+* **ui:** refresh the window design and move document actions into a toolbar ([289201d](https://github.com/getaxtools/MDX/commit/289201d3cb40afc07844c4f482b48821a8214cb1))
+
+
+### Bug Fixes
+
+* **ui:** keep breadcrumb buttons at least 24 px tall ([101c6a4](https://github.com/getaxtools/MDX/commit/101c6a46a53c34e180b7ff915d15b8e27c3d4bea))
+* **ui:** wrap the document header instead of squeezing the breadcrumbs ([fd63d76](https://github.com/getaxtools/MDX/commit/fd63d761a158b4856e62f66510b449c969d0a5f6))
+
 ## [0.6.3](https://github.com/getaxtools/MDX/compare/v0.6.2...v0.6.3) (2026-10-24)
 
 
