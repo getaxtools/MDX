@@ -1,0 +1,40 @@
+name: Dependency audit
+
+# Advisories are published independently of our changes, so a daily run reports new ones
+# without failing unrelated pull requests; Dependency review in CI blocks newly added vulnerable packages.
+on:
+  pull_request:
+    paths:
+      - pnpm-lock.yaml
+      - apps/desktop/src-tauri/Cargo.lock
+      - osv-scanner.toml
+      - deny.toml
+      - .github/workflows/audit.yml
+  push:
+    branches: [main]
+    paths:
+      - pnpm-lock.yaml
+      - apps/desktop/src-tauri/Cargo.lock
+      - osv-scanner.toml
+      - deny.toml
+      - .github/workflows/audit.yml
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+        with:
+          tool: osv-scanner,cargo-deny
+      - run: osv-scanner scan source --config osv-scanner.toml --recursive .
+      - run: cargo deny --manifest-path apps/desktop/src-tauri/Cargo.toml check advisories
