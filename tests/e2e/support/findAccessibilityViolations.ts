@@ -14,6 +14,6 @@ export async function findAccessibilityViolations(
   const results = await new AxeBuilder({ client: browser }).withTags(WCAG_TAGS).setLegacyMode(true).analyze();
   return results.violations.map((violation) => ({
     rule: violation.id,
-    targets: violation.nodes.map((node) => node.target.join(' ')),
+    targets: violation.nodes.map((node) => `${node.target.join(' ')}: ${node.failureSummary ?? ''}`),
   }));
 }

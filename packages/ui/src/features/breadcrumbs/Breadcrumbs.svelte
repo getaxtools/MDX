@@ -84,7 +84,7 @@
 
 <style>
   .breadcrumbs {
-    flex: 1;
+    flex: 1 1 auto;
     min-width: 0;
     font-size: var(--text-size-body);
     color: var(--color-text-secondary);

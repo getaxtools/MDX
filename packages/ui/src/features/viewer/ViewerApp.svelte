@@ -496,11 +496,12 @@
   .document-header {
     display: flex;
     flex: none;
-    gap: var(--space-2);
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-2);
     align-items: center;
     justify-content: flex-end;
     min-height: 40px;
-    padding: 0 var(--space-2) 0 var(--space-3);
+    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
     border-bottom: 1px solid var(--color-border);
   }
 

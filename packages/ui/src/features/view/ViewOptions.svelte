@@ -78,8 +78,10 @@
 <style>
   .view-options {
     display: flex;
+    flex-wrap: wrap;
     gap: 2px;
     align-items: center;
+    justify-content: flex-end;
   }
 
   button,

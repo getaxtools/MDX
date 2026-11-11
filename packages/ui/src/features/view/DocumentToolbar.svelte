@@ -91,9 +91,12 @@
 <style>
   .toolbar {
     display: flex;
-    flex: none;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
     gap: 2px;
     align-items: center;
+    justify-content: flex-end;
+    min-width: 0;
   }
 
   button {
