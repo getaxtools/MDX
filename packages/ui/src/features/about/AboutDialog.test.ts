@@ -1,9 +1,9 @@
-import { createTranslator, englishCatalog } from '@mdx/i18n';
+import { createTranslator, englishCatalog, SUPPORTED_LOCALES } from '@mdx/i18n';
 import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import AboutDialog from './AboutDialog.svelte';
-import { INSTALLED_FEATURES } from './featureRegistry';
+import { INSTALLED_FEATURE_GROUPS, INSTALLED_FEATURES } from './featureRegistry';
 
 function renderAbout() {
   const onClose = vi.fn();
@@ -23,25 +23,54 @@ describe('AboutDialog', () => {
 
     expect(dialog.textContent).toContain('Version 1.2.3');
     expect(dialog.textContent).toContain('makes no network connections');
+    expect(dialog.textContent).toContain('Your settings, favourites, recent files and open tabs');
     expect(dialog.textContent).toContain('C:\\Users\\Ada\\AppData\\Roaming\\getaxtools\\MDX');
     expect(dialog.textContent).toContain('Copyright © 2026 getaxtools');
   });
 
-  it('lists the features of this version', () => {
+  it('shows where to get new versions and the source code', () => {
     renderAbout();
 
-    const features = screen.getByRole('list');
+    const dialog = screen.getByRole('dialog', { name: 'About MDX' });
 
-    expect(features.children).toHaveLength(INSTALLED_FEATURES.length);
-    expect(features.textContent).toContain('Paste cells from Excel as a Markdown table');
+    expect(dialog.textContent).toContain('New versions and the source code: github.com/getaxtools/MDX');
   });
 
-  it('names every installed feature with a message from the catalog, once', () => {
-    const ids = INSTALLED_FEATURES.map((feature) => feature.id);
+  it('lists the features of this version in named groups', () => {
+    renderAbout();
 
-    expect(INSTALLED_FEATURES.filter((feature) => !Object.hasOwn(englishCatalog, feature.labelKey))).toEqual(
-      [],
+    const editing = screen.getByRole('list', { name: 'Editing' });
+
+    expect(screen.getAllByRole('list')).toHaveLength(INSTALLED_FEATURE_GROUPS.length);
+    expect(editing.textContent).toContain('Paste cells from Excel as a Markdown table');
+  });
+
+  it('lists every installed feature once across the groups', () => {
+    renderAbout();
+
+    const listedFeatures = screen.getAllByRole('list').flatMap((list) => [...list.children]);
+
+    expect(listedFeatures).toHaveLength(INSTALLED_FEATURES.length);
+  });
+
+  it('counts the display languages that Settings offers', () => {
+    renderAbout();
+
+    const languages = screen.getByRole('list', { name: 'Languages and text' });
+
+    expect(languages.textContent).toContain(
+      `Menus, dialogs and messages in ${String(SUPPORTED_LOCALES.length)} languages`,
     );
+  });
+
+  it('names every group and installed feature with a message from the catalog, once', () => {
+    const ids = INSTALLED_FEATURES.map((feature) => feature.id);
+    const labelKeys = [
+      ...INSTALLED_FEATURE_GROUPS.map((group) => group.labelKey),
+      ...INSTALLED_FEATURES.map((feature) => feature.labelKey),
+    ];
+
+    expect(labelKeys.filter((key) => !Object.hasOwn(englishCatalog, key))).toEqual([]);
     expect(new Set(ids).size).toBe(ids.length);
   });
 

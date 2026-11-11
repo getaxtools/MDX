@@ -21,6 +21,7 @@ const SAMPLE_VALUES = {
   license: 'MIT',
   year: 2026,
   url: 'https://example.com',
+  address: 'example.com/project',
   query: 'theme',
   matches: 3,
   documents: 2,
