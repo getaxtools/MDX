@@ -16,7 +16,7 @@
     "@mdx/renderer": "workspace:*",
     "@mdx/ui": "workspace:*",
     "@tauri-apps/api": "2.12.4",
-    "svelte": "5.57.2"
+    "svelte": "5.57.3"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "7.3.1",
