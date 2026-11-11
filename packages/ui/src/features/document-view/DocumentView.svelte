@@ -20,6 +20,7 @@
   import { enhanceCodeBlocks } from './enhanceCodeBlocks';
   import { findLinkedHeading } from './findLinkedHeading';
   import { revealHeading } from './scrollToHeading';
+  import { showBlockedRemoteImages } from './showBlockedRemoteImages';
   import { headingIdInSourceView, scrollSourceLineToTop } from './sourceViewLines';
   import {
     commandForDocumentMenuItem,
@@ -158,6 +159,12 @@
       writeClipboard: (text) => globalThis.navigator.clipboard.writeText(text),
     });
     return () => (isStillShown = false);
+  });
+
+  $effect(() => {
+    const article = articleElement;
+    if (!document?.html || !article || isSourceView) return;
+    showBlockedRemoteImages(article, translator);
   });
 
   $effect(() => {

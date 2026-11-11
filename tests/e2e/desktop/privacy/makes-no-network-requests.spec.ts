@@ -52,4 +52,18 @@ describe('privacy', () => {
     expect(outsideTheApp).toEqual([]);
     expect(loadedUrls.length).toBeGreaterThan(0);
   });
+
+  it('says which remote images were not loaded', async () => {
+    app = await DesktopApp.launch({ workspace, documentFileNames: [REMOTE_DOCUMENT] });
+    const mainWindow = new MainWindowPage(app.browser);
+    await mainWindow.waitForDocumentHeading('Remote content');
+    await mainWindow.waitForRenderedElement('.blocked-remote-image-reason');
+
+    const notes = await mainWindow.renderedTexts('.blocked-remote-image-reason');
+
+    expect(notes).toEqual([
+      'Remote image not loaded: https://example.com/pixel.png',
+      'Remote image not loaded: https://example.com/inline.png',
+    ]);
+  });
 });
