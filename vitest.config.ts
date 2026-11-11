@@ -8,6 +8,7 @@ export default defineConfig({
       { test: { name: 'core', include: ['packages/core/src/**/*.test.ts'], environment: 'node' } },
       { test: { name: 'platform', include: ['packages/platform/src/**/*.test.ts'], environment: 'node' } },
       { test: { name: 'i18n', include: ['packages/i18n/src/**/*.test.ts'], environment: 'node' } },
+      { test: { name: 'e2e-support', include: ['tests/e2e/support/**/*.test.ts'], environment: 'node' } },
       {
         test: {
           name: 'renderer',

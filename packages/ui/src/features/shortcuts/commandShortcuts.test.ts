@@ -4,6 +4,7 @@ import {
   COMMAND_SHORTCUTS,
   commandForShortcut,
   shortcutLabelFor,
+  tooltipWithShortcut,
   type ShortcutKeyEvent,
 } from './commandShortcuts';
 
@@ -100,6 +101,16 @@ describe('shortcutLabelFor', () => {
 
   it('has no label for a command without a shortcut', () => {
     expect(shortcutLabelFor({ kind: 'showAbout' }, createTranslator())).toBeUndefined();
+  });
+});
+
+describe('tooltipWithShortcut', () => {
+  it('adds the shortcut after the label', () => {
+    expect(tooltipWithShortcut('Open', { kind: 'openDocuments' }, createTranslator())).toBe('Open (Ctrl+O)');
+  });
+
+  it('is only the label for a command without a shortcut', () => {
+    expect(tooltipWithShortcut('About', { kind: 'showAbout' }, createTranslator())).toBe('About');
   });
 });
 

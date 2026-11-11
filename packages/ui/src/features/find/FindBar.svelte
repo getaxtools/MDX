@@ -150,19 +150,22 @@
     align-items: center;
     width: fit-content;
     margin-inline-start: auto;
-    padding: var(--space-1) var(--space-2);
+    margin-block-start: var(--space-2);
+    margin-inline-end: var(--space-3);
+    padding: var(--space-1);
     border: 1px solid var(--color-border);
-    border-top: 0;
-    border-radius: 0 0 var(--radius-medium) var(--radius-medium);
-    background: var(--color-surface);
-    box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+    border-radius: var(--radius-medium);
+    background: var(--color-surface-raised);
+    box-shadow: var(--shadow-small);
     font-size: var(--text-size-body);
   }
 
   input {
     width: 14rem;
-    padding: var(--space-1) var(--space-2);
-    border: 1px solid var(--color-border);
+    height: 28px;
+    box-sizing: border-box;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-small);
     background: var(--color-background);
     color: var(--color-text);
@@ -189,8 +192,8 @@
   }
 
   .option[aria-pressed='true'] {
-    background: var(--color-surface-hover);
-    outline: 1px solid var(--color-accent);
+    background: var(--color-surface-selected);
+    color: var(--color-accent);
   }
 
   /* Drawn by CSS so the symbol is not text that the button's name would have to contain. */

@@ -52,15 +52,17 @@
     z-index: 20;
     display: grid;
     place-items: center;
-    background: rgb(0 0 0 / 35%);
+    background: var(--color-overlay);
   }
 
   .dialog {
+    animation: rise-in var(--motion-fast) var(--easing-standard);
     max-width: 30rem;
-    padding: var(--space-6);
+    padding: var(--space-5);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-medium);
-    background: var(--color-background);
+    border-radius: var(--radius-xlarge);
+    background: var(--color-surface-raised);
+    box-shadow: var(--shadow-medium);
     color: var(--color-text);
     font-size: var(--text-size-body);
     line-height: 1.5;
@@ -68,8 +70,14 @@
   }
 
   h2 {
-    margin-top: 0;
-    font-size: 1.1rem;
+    margin: 0 0 var(--space-2);
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  p {
+    margin: 0 0 var(--space-5);
+    color: var(--color-text-secondary);
   }
 
   .actions {
@@ -79,22 +87,40 @@
   }
 
   button {
-    padding: var(--space-1) var(--space-4);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-small);
-    background: var(--color-surface);
+    height: 32px;
+    padding: 0 var(--space-4);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-medium);
+    background: var(--color-surface-raised);
     color: var(--color-text);
     font: inherit;
+    font-weight: 500;
+    transition: background-color var(--motion-fast) ease-out;
   }
 
-  .primary {
-    border-color: var(--color-accent);
+  button:hover:not(:disabled) {
+    background: var(--color-surface-hover);
+  }
+
+  .primary:not(:disabled) {
+    border-color: transparent;
     background: var(--color-accent);
     color: var(--color-accent-text);
+  }
+
+  .primary:hover:not(:disabled) {
+    background: var(--color-accent-hover);
   }
 
   button:focus-visible {
     outline: 2px solid var(--color-focus);
     outline-offset: 2px;
+  }
+
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: scale(0.98);
+    }
   }
 </style>

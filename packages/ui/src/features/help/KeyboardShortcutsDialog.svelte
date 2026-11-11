@@ -63,12 +63,21 @@
     box-sizing: border-box;
     width: 100%;
     margin-bottom: var(--space-3);
-    padding: var(--space-1) var(--space-2);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-small);
+    height: 32px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-medium);
     background: var(--color-background);
     color: var(--color-text);
     font: inherit;
+  }
+
+  .search::placeholder {
+    color: var(--color-text-tertiary);
+  }
+
+  .search:focus {
+    border-color: var(--color-focus);
   }
 
   .no-matches {
@@ -92,15 +101,16 @@
   }
 
   :is(th, td) {
-    padding: var(--space-1) var(--space-3) var(--space-1) 0;
+    padding: 6px var(--space-3) 6px 0;
     border-bottom: 1px solid var(--color-border);
   }
 
   kbd {
     padding: 0 var(--space-1);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-xsmall);
     background: var(--color-surface);
+    box-shadow: inset 0 -1px 0 var(--color-border);
     font-family: var(--font-ui);
     font-size: var(--text-size-small);
     white-space: nowrap;

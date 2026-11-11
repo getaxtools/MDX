@@ -78,32 +78,49 @@
 <style>
   .view-options {
     display: flex;
-    gap: var(--space-1);
+    flex-wrap: wrap;
+    gap: 2px;
     align-items: center;
-    margin-inline-start: auto;
+    justify-content: flex-end;
   }
 
   button,
   select {
-    padding: var(--space-1) var(--space-2);
-    border: 1px solid var(--color-border);
+    height: 28px;
+    padding: 0 var(--space-2);
+    border: 0;
     border-radius: var(--radius-small);
-    background: var(--color-surface);
-    color: var(--color-text);
+    background: none;
+    color: var(--color-text-secondary);
     font: inherit;
     font-size: var(--text-size-body);
+    transition:
+      background-color var(--motion-fast) ease-out,
+      color var(--motion-fast) ease-out;
   }
 
-  button:hover {
+  select {
+    max-width: 9rem;
+  }
+
+  :is(button, select):hover {
     background: var(--color-surface-hover);
+    color: var(--color-text);
+  }
+
+  option {
+    background: var(--color-surface-raised);
+    color: var(--color-text);
   }
 
   .zoom-level {
-    min-width: 5.5em;
+    min-width: 4.5em;
+    font-variant-numeric: tabular-nums;
   }
 
   button:focus-visible,
   select:focus-visible {
     outline: 2px solid var(--color-focus);
+    outline-offset: -2px;
   }
 </style>

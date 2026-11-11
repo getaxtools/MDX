@@ -39,7 +39,7 @@
   import { applyTheme } from '../view/applyTheme';
   import ActivityBar from '../view/ActivityBar.svelte';
   import StatusBar from '../view/StatusBar.svelte';
-  import ViewOptions from '../view/ViewOptions.svelte';
+  import DocumentToolbar from '../view/DocumentToolbar.svelte';
   import NoticeBar from './NoticeBar.svelte';
   import { moveFocusBetweenRegions } from './focusRegions';
   import { commandForShortcut } from '../shortcuts/commandShortcuts';
@@ -249,34 +249,35 @@
         />
       {/if}
       <div class="workspace">
-        <div class="toolbar" role="toolbar" aria-label={translator.translate('toolbar.label')}>
-          <button onclick={() => void controller.execute({ kind: 'openDocuments' })}>
-            {translator.translate('toolbar.open')}
-          </button>
-          <button
-            aria-pressed={isActiveFavourite}
-            disabled={!activeTab || isActiveUntitled}
-            onclick={() => void controller.execute({ kind: 'toggleFavourite' })}
-          >
-            <span aria-hidden="true">{isActiveFavourite ? '★' : '☆'}</span>
-            {translator.translate('favourites.toggle')}
-          </button>
-          <button
-            aria-pressed={snapshot.isActiveDocumentEditing ?? false}
-            disabled={!snapshot.activeDocument}
-            onclick={() => void controller.execute({ kind: 'toggleEditing' })}
-          >
-            {translator.translate(snapshot.isActiveDocumentEditing ? 'toolbar.preview' : 'toolbar.edit')}
-          </button>
-          <button
-            aria-pressed={viewSettings.isPreviewBesideEditor}
-            disabled={!snapshot.activeDocument}
-            onclick={() => void controller.execute({ kind: 'togglePreviewBesideEditor' })}
-          >
-            {translator.translate('toolbar.previewBeside')}
-          </button>
-          <ViewOptions
-            settings={viewSettings}
+        <TabStripView
+          tabs={snapshot.viewer.tabStrip.tabs()}
+          activeKey={activeTab?.location.canonicalKey}
+          pathStatuses={snapshot.pathStatuses}
+          unsavedKeys={snapshot.unsavedDocumentKeys}
+          {translator}
+          onActivate={(canonicalKey: string) => controller.activateTab(canonicalKey)}
+          onCommand={(command: ViewerCommand) => void controller.execute(command)}
+        />
+        <div class="document-header">
+          {#if viewSettings.isBreadcrumbsVisible && activeTab && snapshot.activeDocument}
+            <Breadcrumbs
+              displayPath={snapshot.activeDocument.displayPath}
+              fileName={snapshot.activeDocument.fileName}
+              hasFolder={!snapshot.activeDocument.isUntitled}
+              outline={snapshot.activeDocument.outline}
+              {currentHeadingId}
+              {translator}
+              onRevealInExplorer={() =>
+                void controller.execute({ kind: 'showSidebarView', sidebarView: 'explorer' })}
+              onSelectHeading={goToHeading}
+            />
+          {/if}
+          <DocumentToolbar
+            {viewSettings}
+            hasDocument={snapshot.activeDocument !== undefined}
+            canBeFavourite={activeTab !== undefined && !isActiveUntitled}
+            isFavourite={isActiveFavourite}
+            isEditing={snapshot.isActiveDocumentEditing ?? false}
             {translator}
             onCommand={(command: ViewerCommand) => void controller.execute(command)}
           />
@@ -288,30 +289,6 @@
           onAction={(action: NoticeAction) => void controller.runNoticeAction(action)}
           onDismiss={() => controller.dismissNotice()}
         />
-        <TabStripView
-          tabs={snapshot.viewer.tabStrip.tabs()}
-          activeKey={activeTab?.location.canonicalKey}
-          pathStatuses={snapshot.pathStatuses}
-          unsavedKeys={snapshot.unsavedDocumentKeys}
-          {translator}
-          onActivate={(canonicalKey: string) => controller.activateTab(canonicalKey)}
-          onCommand={(command: ViewerCommand) => void controller.execute(command)}
-        />
-        {#if viewSettings.isBreadcrumbsVisible && activeTab && snapshot.activeDocument}
-          <Breadcrumbs
-            displayPath={snapshot.activeDocument.displayPath}
-            fileName={snapshot.activeDocument.fileName}
-            hasFolder={!snapshot.activeDocument.isUntitled}
-            outline={snapshot.activeDocument.outline}
-            {currentHeadingId}
-            {translator}
-            onRevealInExplorer={() =>
-              void controller.execute({ kind: 'showSidebarView', sidebarView: 'explorer' })}
-            onSelectHeading={goToHeading}
-          />
-        {:else}
-          <div></div>
-        {/if}
         <div class="reading-area" data-focus-region>
           {#if !activeTab}
             <StartPage
@@ -510,51 +487,32 @@
   }
 
   .workspace {
-    display: grid;
-    grid-template-rows: auto auto auto auto 1fr;
+    display: flex;
+    flex-direction: column;
     min-width: 0;
     min-height: 0;
   }
 
+  .document-header {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-2);
+    align-items: center;
+    justify-content: flex-end;
+    min-height: 40px;
+    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+    border-bottom: 1px solid var(--color-border);
+  }
+
   .reading-area {
     display: flex;
+    flex: 1;
     min-height: 0;
   }
 
   .reading-area > :global(main) {
     flex: 1;
     min-width: 0;
-  }
-
-  .toolbar {
-    display: flex;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    border-bottom: 1px solid var(--color-border);
-  }
-
-  .toolbar button {
-    display: flex;
-    gap: var(--space-1);
-    align-items: center;
-    padding: var(--space-1) var(--space-3);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-small);
-    background: var(--color-surface);
-    color: var(--color-text);
-    font: inherit;
-    font-size: var(--text-size-body);
-  }
-
-  .toolbar button:hover:not(:disabled) {
-    background: var(--color-surface-hover);
-  }
-
-  .toolbar button:disabled {
-    color: var(--color-text-secondary);
-  }
-
-  .toolbar button:focus-visible {
-    outline: 2px solid var(--color-focus);
   }
 </style>

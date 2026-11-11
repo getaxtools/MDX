@@ -156,6 +156,12 @@ export function shortcutLabelFor(command: ViewerCommand, translator: Translator)
   return combination ? describeCombination(combination, translator) : undefined;
 }
 
+/** A button tooltip that names the shortcut, such as "Search (Ctrl+Shift+F)". */
+export function tooltipWithShortcut(label: string, command: ViewerCommand, translator: Translator): string {
+  const shortcut = shortcutLabelFor(command, translator);
+  return shortcut ? `${label} (${shortcut})` : label;
+}
+
 function isTabNumberShortcut(event: ShortcutKeyEvent, platform: DesktopPlatform): boolean {
   const isCommandModifierPressed = platform === 'macos' ? event.metaKey : event.ctrlKey;
   return isCommandModifierPressed && !event.shiftKey && !event.altKey && TAB_NUMBER_KEY.test(event.key);

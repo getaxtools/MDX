@@ -131,12 +131,21 @@
     box-sizing: border-box;
     width: 100%;
     margin-bottom: var(--space-2);
-    padding: var(--space-1) var(--space-2);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-small);
+    height: 32px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-medium);
     background: var(--color-background);
     color: var(--color-text);
     font: inherit;
+  }
+
+  .search::placeholder {
+    color: var(--color-text-tertiary);
+  }
+
+  .search:focus {
+    border-color: var(--color-focus);
   }
 
   h3 {
@@ -144,8 +153,6 @@
     color: var(--color-text-secondary);
     font-size: var(--text-size-small);
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
   }
 
   .setting {
@@ -174,21 +181,31 @@
   .setting > button {
     justify-self: start;
     margin-top: var(--space-2);
-    padding: var(--space-1) var(--space-3);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-small);
-    background: var(--color-surface);
+    height: 32px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-medium);
+    background: var(--color-surface-raised);
     color: var(--color-text);
     font: inherit;
   }
 
   select {
-    padding: var(--space-1) var(--space-2);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-small);
-    background: var(--color-surface);
+    height: 32px;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-medium);
+    background: var(--color-surface-raised);
     color: var(--color-text);
     font: inherit;
+  }
+
+  :is(.setting > button, select):hover {
+    background: var(--color-surface-hover);
+  }
+
+  input[type='checkbox'] {
+    accent-color: var(--color-accent);
   }
 
   .no-matches {

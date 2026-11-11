@@ -39,6 +39,19 @@ describe('resizing the side panels', () => {
     expect(await secondRun.splitterValue('sidebar.resize')).toBe(DEFAULT_EXPLORER_WIDTH_PX + 100);
   });
 
+  it('keeps the breadcrumbs and the document toolbar apart when a wide Explorer leaves little room', async () => {
+    app = await DesktopApp.launch({ workspace, documentFileNames: ['getting-started.md'] });
+    const mainWindow = new MainWindowPage(app.browser);
+    await mainWindow.documentHeading();
+
+    await mainWindow.dragSplitter('sidebar.resize', 400);
+    await app.browser.waitUntil(
+      async () => (await mainWindow.splitterValue('sidebar.resize')) > DEFAULT_EXPLORER_WIDTH_PX + 300,
+    );
+
+    expect(await findAccessibilityViolations(app.browser)).toEqual([]);
+  });
+
   it('narrows the side bar showing the Outline with the arrow keys and restores it with a double-click', async () => {
     app = await DesktopApp.launch({ workspace, documentFileNames: ['getting-started.md'] });
     const mainWindow = new MainWindowPage(app.browser);
