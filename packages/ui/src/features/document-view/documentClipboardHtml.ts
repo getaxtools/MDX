@@ -38,7 +38,7 @@ function cloneDeep(node: Node): Node {
   return node.cloneNode(true);
 }
 
-const APP_CONTROLS_SELECTOR = 'button, .copy-code';
+const APP_CONTROLS_SELECTOR = 'button, .copy-code, .blocked-remote-image';
 
 function removeAppMarkup(container: HTMLElement): void {
   for (const control of container.querySelectorAll(APP_CONTROLS_SELECTOR)) control.remove();
