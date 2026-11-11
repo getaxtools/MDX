@@ -77,6 +77,7 @@
 
 <section aria-labelledby="recent-files-heading">
   <ExplorerSectionHeader
+    section="recentFiles"
     headingId="recent-files-heading"
     title={translator.translate('recentFiles.title')}
     {isExpanded}

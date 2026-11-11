@@ -319,6 +319,7 @@
 
 <section aria-labelledby="favourites-heading">
   <ExplorerSectionHeader
+    section="favourites"
     headingId="favourites-heading"
     title={translator.translate('favourites.sidebar.title')}
     {isExpanded}

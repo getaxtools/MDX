@@ -131,6 +131,7 @@
 
 <section aria-labelledby="explorer-folders-heading">
   <ExplorerSectionHeader
+    section="folders"
     headingId="explorer-folders-heading"
     title={translator.translate('explorer.folders.title')}
     {isExpanded}

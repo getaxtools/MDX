@@ -77,7 +77,7 @@
   }
 </script>
 
-{#snippet resizer(section: ExplorerSection)}
+{#snippet divider(section: ExplorerSection)}
   {#if isExpanded(section)}
     <SectionResizer
       label={translator.translate('explorer.resizeSection', {
@@ -87,6 +87,8 @@
       onPreview={(heightPx: number) => (previewHeights = { ...previewHeights, [section]: heightPx })}
       onResize={(heightPx: number) => resize(section, heightPx)}
     />
+  {:else}
+    <div class="section-divider" aria-hidden="true"></div>
   {/if}
 {/snippet}
 
@@ -109,7 +111,7 @@
     />
   </div>
   <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a snippet is not a value -->
-  {@render resizer('favourites')}
+  {@render divider('favourites')}
   <div class="section-slot" style:height={heightOf('folders')} bind:this={sectionSlots.folders}>
     <ExplorerFoldersSection
       folders={explorerFolders}
@@ -127,30 +129,39 @@
     />
   </div>
   <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a snippet is not a value -->
-  {@render resizer('folders')}
-  <RecentFilesSection
-    {recentFiles}
-    {pathStatuses}
-    {translator}
-    onOpen={onOpenRecentFile}
-    {onCommand}
-    isExpanded={isExpanded('recentFiles')}
-    onToggleExpanded={() => toggle('recentFiles')}
-  />
+  {@render divider('folders')}
+  <div class="section-slot">
+    <RecentFilesSection
+      {recentFiles}
+      {pathStatuses}
+      {translator}
+      onOpen={onOpenRecentFile}
+      {onCommand}
+      isExpanded={isExpanded('recentFiles')}
+      onToggleExpanded={() => toggle('recentFiles')}
+    />
+  </div>
 </nav>
 
 <style>
   .section-slot {
     flex: none;
     min-height: 0;
+    padding: 0 var(--space-2);
     overflow-y: auto;
+  }
+
+  .section-divider {
+    flex: none;
+    height: 1px;
+    margin-block: 4px;
+    background: var(--color-border);
   }
 
   .sidebar {
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
-    padding: var(--space-2);
+    padding: var(--space-1) 0;
     background: var(--color-surface);
     border-inline-end: 1px solid var(--color-border);
     overflow-y: auto;
@@ -158,9 +169,9 @@
 
   .sidebar :global(h2) {
     margin: 0 var(--space-2) var(--space-1);
-    font-size: var(--text-size-small);
-    font-weight: 600;
-    color: var(--color-text-secondary);
+    font-size: var(--text-size-body);
+    font-weight: 700;
+    color: var(--color-text);
   }
 
   .sidebar :global(ul) {
