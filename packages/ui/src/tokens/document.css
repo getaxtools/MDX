@@ -93,12 +93,12 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .rendered-document code.highlighted span {
+  :root:not([data-color-scheme]) .rendered-document code.highlighted span {
     color: var(--code-dark, inherit);
   }
 }
 
-:root[data-theme='dark'] .rendered-document code.highlighted span {
+:root[data-color-scheme='dark'] .rendered-document code.highlighted span {
   color: var(--code-dark, inherit);
 }
 

@@ -200,6 +200,12 @@
     font: inherit;
   }
 
+  option {
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+    font-family: var(--font-ui);
+  }
+
   :is(.setting > button, select):hover {
     background: var(--color-surface-hover);
   }
