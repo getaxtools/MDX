@@ -116,6 +116,9 @@
 
   button,
   .file {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
     padding: 2px var(--space-1);
     border: 0;
     border-radius: var(--radius-small);
