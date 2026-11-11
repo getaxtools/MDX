@@ -111,6 +111,7 @@
   option {
     background: var(--color-surface-raised);
     color: var(--color-text);
+    font-family: var(--font-ui);
   }
 
   .zoom-level {

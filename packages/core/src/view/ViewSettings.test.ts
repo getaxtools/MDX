@@ -80,6 +80,12 @@ describe('view settings', () => {
     expect(parseViewSettings(saved)).toEqual(saved);
   });
 
+  it('restores every named theme', () => {
+    const themes = ['sepia', 'solarizedLight', 'solarizedDark', 'nord', 'highContrast'];
+
+    expect(themes.map((theme) => parseViewSettings({ theme }).theme)).toEqual(themes);
+  });
+
   it('loads settings saved before the outline moved into the side bar', () => {
     const settings = parseViewSettings({
       isOutlineVisible: false,

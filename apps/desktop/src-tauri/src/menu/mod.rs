@@ -35,7 +35,16 @@ struct CheckChoices {
 const THEME_CHOICES: CheckChoices = CheckChoices {
     title_key: "menu.view.theme",
     id_prefix: THEME_ITEM_PREFIX,
-    choices: &["system", "light", "dark"],
+    choices: &[
+        "system",
+        "light",
+        "dark",
+        "sepia",
+        "solarizedLight",
+        "solarizedDark",
+        "nord",
+        "highContrast",
+    ],
 };
 
 const READING_WIDTH_CHOICES: CheckChoices = CheckChoices {

@@ -121,6 +121,23 @@ describe('ExplorerSidebar', () => {
     });
   });
 
+  it('offers no splitter below a collapsed section', () => {
+    renderSidebar(FavouritesList.empty(), RecentFilesList.empty(), { collapsedSections: ['favourites'] });
+
+    expect(screen.queryByRole('separator', { name: 'Resize Favourites' })).toBeNull();
+    expect(screen.getByRole('separator', { name: 'Resize Folders' })).toBeTruthy();
+  });
+
+  it('marks each section heading with an icon that is not read out', () => {
+    renderSidebar();
+
+    for (const title of ['Favourites', 'Folders', 'Recent Files']) {
+      const toggle = screen.getByRole('button', { name: title });
+      expect(toggle.querySelector('svg[aria-hidden="true"]')).toBeTruthy();
+      expect(toggle.textContent.trim()).toBe(title);
+    }
+  });
+
   it('shows each section as a tree that the arrow keys move through', async () => {
     const favourites = FavouritesList.empty()
       .add(location('C:\\Docs\\Guide.md'), 'file')

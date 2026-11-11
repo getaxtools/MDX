@@ -1,4 +1,6 @@
-export type ThemePreference = 'system' | 'light' | 'dark';
+export type ThemePreference =
+  'system' | 'light' | 'dark' | 'sepia' | 'solarizedLight' | 'solarizedDark' | 'nord' | 'highContrast';
+export type ColorScheme = 'light' | 'dark';
 export type ReadingWidth = 'narrow' | 'medium' | 'wide' | 'full';
 export type Typography = 'github' | 'book' | 'academic';
 /** A language tag such as `hi` or `pt-BR`, or `system` to follow the language of Windows. */
@@ -31,7 +33,26 @@ export interface ViewSettings {
   readonly editorSharePercent: number;
 }
 
-export const THEME_PREFERENCES: readonly ThemePreference[] = ['system', 'light', 'dark'];
+export const THEME_PREFERENCES: readonly ThemePreference[] = [
+  'system',
+  'light',
+  'dark',
+  'sepia',
+  'solarizedLight',
+  'solarizedDark',
+  'nord',
+  'highContrast',
+];
+/** Whether each named theme is built on light or dark colours, which decides code and form colours. */
+export const THEME_COLOR_SCHEMES: Readonly<Record<Exclude<ThemePreference, 'system'>, ColorScheme>> = {
+  light: 'light',
+  dark: 'dark',
+  sepia: 'light',
+  solarizedLight: 'light',
+  solarizedDark: 'dark',
+  nord: 'dark',
+  highContrast: 'dark',
+};
 export const READING_WIDTHS: readonly ReadingWidth[] = ['narrow', 'medium', 'wide', 'full'];
 export const TYPOGRAPHIES: readonly Typography[] = ['github', 'book', 'academic'];
 export const EXPLORER_SECTIONS: readonly ExplorerSection[] = ['favourites', 'folders', 'recentFiles'];
