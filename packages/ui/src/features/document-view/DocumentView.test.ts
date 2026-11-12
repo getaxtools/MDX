@@ -68,6 +68,12 @@ describe('DocumentView', () => {
     expect(screen.getByText(/Open a Markdown document to get started/)).toBeTruthy();
   });
 
+  it('says where a remote image was left out', () => {
+    renderDocument('<p><img alt="Poster" data-mdx-blocked-src="https://example.com/poster.jpg"></p>');
+
+    expect(screen.getByText('Remote image not loaded: https://example.com/poster.jpg')).toBeTruthy();
+  });
+
   it('shows the rendered document in a labelled article', () => {
     renderDocument('<h1 id="mdx-guide">Guide</h1>');
 

@@ -58,6 +58,15 @@ describe('documentClipboardHtml', () => {
 
     expect(documentClipboardHtml(article, null)).toBe('<pre><code class="language-js">let x;</code></pre>');
   });
+
+  it('leaves out the note about a remote image that was not loaded', () => {
+    const article = articleWith(
+      '<p><img alt="Poster" data-mdx-blocked-src="https://example.com/poster.jpg">' +
+        '<span class="blocked-remote-image">Remote image not loaded</span></p>',
+    );
+
+    expect(documentClipboardHtml(article, null)).toBe('<p><img alt="Poster"></p>');
+  });
 });
 
 describe('documentExportHtml', () => {

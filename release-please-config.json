@@ -8,6 +8,7 @@
       "package-name": "mdx",
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
+        "README.md",
         {
           "type": "toml",
           "path": "apps/desktop/src-tauri/Cargo.toml",

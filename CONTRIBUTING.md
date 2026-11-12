@@ -7,7 +7,7 @@ Thanks for helping. This guide covers everything you need: setup, workflow, the 
 - Everyone follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 - **Privacy is a feature.** MDX never collects or sends user data. PRs that add telemetry, analytics or unexpected network calls won't be accepted.
 - **Open an issue first** for features and larger changes, so we can agree on scope before you write code. Small fixes can go straight to a PR.
-- The current focus is the first Windows release. Work outside that scope may wait.
+- The current focus is the Windows app. Work for other platforms may wait.
 
 ## Setup
 
@@ -115,7 +115,7 @@ All text goes through the message catalog:
 2. Use ICU MessageFormat for plurals and variables: `"{count, plural, one {# file} other {# files}}"`.
 3. Never build sentences by joining strings in code.
 
-More languages are planned. When they arrive, translation PRs will follow the same flow.
+The other 15 languages live next to `en.json`, one file per language. To fix or add a translation, edit that language's file. It may only use keys that exist in `en.json` and must keep the same placeholders, and any key it leaves out falls back to English.
 
 ## Reporting bugs and asking for features
 

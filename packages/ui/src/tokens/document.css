@@ -169,6 +169,30 @@
   max-width: 100%;
 }
 
+.rendered-document img[data-mdx-blocked-src] {
+  display: none;
+}
+
+.rendered-document .blocked-remote-image {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-medium);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-family: var(--font-ui);
+  font-size: var(--text-size-small);
+  overflow-wrap: anywhere;
+}
+
+.rendered-document .blocked-remote-image-alt {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
 .rendered-document li.task-list-item {
   list-style: none;
 }
