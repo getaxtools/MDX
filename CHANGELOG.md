@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.1](https://github.com/getaxtools/MDX/compare/v0.8.0...v0.8.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* keep README download links valid and update rustix ([9a2a6bf](https://github.com/getaxtools/MDX/commit/9a2a6bfc4256198402c6125533277d550564775b))
+* keep README download links valid and update rustix ([9a61072](https://github.com/getaxtools/MDX/commit/9a61072e8dea88bd6b0f71523290911adaaf12f2))
+* note blocked remote images, group the About feature list and refresh the README ([7b773bf](https://github.com/getaxtools/MDX/commit/7b773bf0c56ebabb1d25f5a7d22e629cb86eb764))
+* **ui:** group and complete the About feature list ([98cb2f2](https://github.com/getaxtools/MDX/commit/98cb2f2a70ba023931b780e9cfee6c6fabc0b552))
+* **view:** say when a remote image was not loaded ([b45a1ae](https://github.com/getaxtools/MDX/commit/b45a1aec2a0229cd12f28f14cfd6c590e338cb68))
+
 ## [0.8.0](https://github.com/getaxtools/MDX/compare/v0.7.0...v0.8.0) (2026-11-11)
 
 
