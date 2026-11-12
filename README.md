@@ -8,13 +8,10 @@
   A free, open-source Markdown viewer for Windows 10 and 11. Open your <code>.md</code> files in tabs, fully offline, with no telemetry and no account.
 </p>
 
-<!-- x-release-please-start-version -->
 <p align="center">
-  <a href="https://github.com/getaxtools/MDX/releases/download/v0.8.0/MDX-0.8.0-windows-x64-setup.exe"><strong>Download MDX 0.8.0 for Windows (x64)</strong></a> ·
-  <a href="https://github.com/getaxtools/MDX/releases/download/v0.8.0/MDX-0.8.0-windows-arm64-setup.exe">Arm64</a> ·
-  <a href="https://github.com/getaxtools/MDX/releases/tag/v0.8.0">Release notes</a>
+  <a href="https://github.com/getaxtools/MDX/releases/latest"><strong>Download MDX for Windows</strong></a> ·
+  <a href="#download-and-install">How to install</a>
 </p>
-<!-- x-release-please-end -->
 
 <p align="center">
   <a href="https://github.com/getaxtools/MDX/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/getaxtools/MDX?label=download&color=2ea44f"></a>
@@ -120,14 +117,10 @@ MDX treats every document as untrusted. Scripts, event handlers, iframes, remote
 | winget                                                        | Planned       |
 | [Build from source](#build-from-source)                       | Available now |
 
-<!-- x-release-please-start-version -->
-
-1. Download the installer for your PC:
-   - [MDX 0.8.0 for Windows x64](https://github.com/getaxtools/MDX/releases/download/v0.8.0/MDX-0.8.0-windows-x64-setup.exe) (most PCs)
-   - [MDX 0.8.0 for Windows on Arm](https://github.com/getaxtools/MDX/releases/download/v0.8.0/MDX-0.8.0-windows-arm64-setup.exe) (Arm64 PCs, such as Snapdragon laptops)
+1. Open the [latest release](https://github.com/getaxtools/MDX/releases/latest) and download the installer for your PC:
+   - `MDX-<version>-windows-x64-setup.exe` (most PCs)
+   - `MDX-<version>-windows-arm64-setup.exe` (Arm64 PCs, such as Snapdragon laptops)
 2. Run it. It installs for your user account only, so you don't need admin rights.
-
-<!-- x-release-please-end -->
 
 Older versions and the checksum files are on the [releases page](https://github.com/getaxtools/MDX/releases).
 
