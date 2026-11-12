@@ -4,6 +4,7 @@ import { ExplorerFolders } from '../explorer/ExplorerFolders';
 import { FavouritesList, type Favourite, type FavouriteGroup } from '../favourites/FavouritesList';
 import { parseFavourites } from '../favourites/parseFavourites';
 import { RecentFilesList, type RecentFile } from '../recent-files/RecentFilesList';
+import { parseShortcutOverrides, type ShortcutOverrides } from '../shortcuts/parseShortcutOverrides';
 import { TabStrip, type Tab, type TabStripSnapshot } from '../tabs/TabStrip';
 import {
   DEFAULT_VIEW_SETTINGS,
@@ -11,8 +12,10 @@ import {
   type LanguagePreference,
   type ViewSettings,
 } from '../view/ViewSettings';
+import { WorkspaceKindsState, type SavedWorkspaceKinds } from '../workspace-kinds/WorkspaceKindsState';
 import { isRecord, parseLocation, validEntries } from './savedValues';
 
+/** Stays 1: an earlier version resets on any other value, so new data goes in optional fields. */
 export const APP_STATE_SCHEMA_VERSION = 1;
 
 export interface PersistedAppState {
@@ -23,6 +26,8 @@ export interface PersistedAppState {
   readonly favouriteGroups: readonly FavouriteGroup[];
   readonly explorerFolders: readonly DocumentLocation[];
   readonly view: ViewSettings;
+  readonly workspaceKinds: SavedWorkspaceKinds;
+  readonly shortcutOverrides: ShortcutOverrides;
 }
 
 export interface ViewerState {
@@ -31,6 +36,8 @@ export interface ViewerState {
   readonly favourites: FavouritesList;
   readonly explorerFolders: ExplorerFolders;
   readonly viewSettings: ViewSettings;
+  readonly workspaceKinds: WorkspaceKindsState;
+  readonly shortcutOverrides: ShortcutOverrides;
 }
 
 export interface RestoredAppState extends ViewerState {
@@ -43,6 +50,8 @@ export function toPersistedAppState({
   favourites,
   explorerFolders,
   viewSettings,
+  workspaceKinds,
+  shortcutOverrides,
 }: ViewerState): PersistedAppState {
   return {
     schemaVersion: APP_STATE_SCHEMA_VERSION,
@@ -52,6 +61,8 @@ export function toPersistedAppState({
     favouriteGroups: favourites.groups(),
     explorerFolders: explorerFolders.folders(),
     view: viewSettings,
+    workspaceKinds: workspaceKinds.toSaved(),
+    shortcutOverrides,
   };
 }
 
@@ -81,6 +92,8 @@ export function restoreAppState(saved: unknown): RestoredAppState {
     favourites: parseFavourites(saved.favourites, saved.favouriteGroups),
     explorerFolders: ExplorerFolders.fromFolders(validEntries(saved.explorerFolders, parseLocation)),
     viewSettings: parseViewSettings(saved.view),
+    workspaceKinds: WorkspaceKindsState.fromSaved(saved.workspaceKinds),
+    shortcutOverrides: parseShortcutOverrides(saved.shortcutOverrides),
     wasReset: false,
   };
 }
@@ -92,6 +105,8 @@ function emptyAppState({ wasReset }: { wasReset: boolean }): RestoredAppState {
     favourites: FavouritesList.empty(),
     explorerFolders: ExplorerFolders.empty(),
     viewSettings: DEFAULT_VIEW_SETTINGS,
+    workspaceKinds: WorkspaceKindsState.initial(),
+    shortcutOverrides: {},
     wasReset,
   };
 }

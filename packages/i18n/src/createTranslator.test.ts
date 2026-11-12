@@ -25,6 +25,8 @@ const SAMPLE_VALUES = {
   query: 'theme',
   matches: 3,
   documents: 2,
+  kind: 'Notes',
+  turnedOffKind: 'Spec viewer',
 };
 
 describe('createTranslator', () => {

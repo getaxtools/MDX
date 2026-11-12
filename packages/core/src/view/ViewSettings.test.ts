@@ -36,6 +36,10 @@ describe('view settings', () => {
       panelWidths: {},
       isPreviewBesideEditor: false,
       editorSharePercent: 50,
+      kindSwitcher: 'both',
+      wheelDock: 'bottomInlineEnd',
+      isWheelOpenedAtPointer: false,
+      isWheelButtonInStatusBar: false,
     });
   });
 
@@ -75,6 +79,10 @@ describe('view settings', () => {
       panelWidths: { explorer: 320 },
       isPreviewBesideEditor: true,
       editorSharePercent: 60,
+      kindSwitcher: 'bar',
+      wheelDock: 'bottomInlineStart',
+      isWheelOpenedAtPointer: true,
+      isWheelButtonInStatusBar: true,
     };
 
     expect(parseViewSettings(saved)).toEqual(saved);
@@ -201,5 +209,42 @@ describe('view settings', () => {
     expect(settings.panelWidths).toEqual({ explorer: 800 });
     expect(settings.isPreviewBesideEditor).toBe(false);
     expect(settings.editorSharePercent).toBe(50);
+  });
+
+  it('gives the control wheel settings their defaults when they are missing', () => {
+    const settings = parseViewSettings({ theme: 'dark' });
+
+    expect(settings.kindSwitcher).toBe('both');
+    expect(settings.wheelDock).toBe('bottomInlineEnd');
+    expect(settings.isWheelOpenedAtPointer).toBe(false);
+    expect(settings.isWheelButtonInStatusBar).toBe(false);
+  });
+
+  it('restores saved control wheel settings', () => {
+    const settings = parseViewSettings({
+      kindSwitcher: 'wheel',
+      wheelDock: 'bottomInlineStart',
+      isWheelOpenedAtPointer: true,
+      isWheelButtonInStatusBar: true,
+    });
+
+    expect(settings.kindSwitcher).toBe('wheel');
+    expect(settings.wheelDock).toBe('bottomInlineStart');
+    expect(settings.isWheelOpenedAtPointer).toBe(true);
+    expect(settings.isWheelButtonInStatusBar).toBe(true);
+  });
+
+  it('falls back to the default control wheel settings for invalid values', () => {
+    const settings = parseViewSettings({
+      kindSwitcher: 'ring',
+      wheelDock: 'topLeft',
+      isWheelOpenedAtPointer: 'yes',
+      isWheelButtonInStatusBar: 1,
+    });
+
+    expect(settings.kindSwitcher).toBe('both');
+    expect(settings.wheelDock).toBe('bottomInlineEnd');
+    expect(settings.isWheelOpenedAtPointer).toBe(false);
+    expect(settings.isWheelButtonInStatusBar).toBe(false);
   });
 });

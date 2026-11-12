@@ -35,6 +35,7 @@ import {
   type PathStatus,
 } from '@mdx/platform';
 import type { MarkdownRenderer, OutlineEntry } from '@mdx/renderer';
+import { applyWorkspaceKindCommand, type WorkspaceKindCommand } from '../control-wheel/workspaceKindCommands';
 import type { DocumentLink } from '../document-view/DocumentLink';
 import { DocumentEditing } from '../editing/DocumentEditing';
 import type { FindQuery } from '../find/findTextRanges';
@@ -454,6 +455,8 @@ export class ViewerController {
     copyPath: ({ path }) => this.copyPath(path),
     revealInFileManager: ({ path }) => this.revealInFileManager(path),
     toggleFullScreen: () => this.dependencies.desktopShell?.toggleFullScreen(),
+    switchWorkspaceKind: (command) => this.runWorkspaceKindCommand(command),
+    setWorkspaceKindEnabled: (command) => this.runWorkspaceKindCommand(command),
     runEditorCommand: ({ command }) => {
       this.editingActions.runEditorCommand(command);
     },
@@ -652,6 +655,14 @@ export class ViewerController {
     } catch {
       this.showNotice('errors.paths.copyFailed');
     }
+  }
+
+  private runWorkspaceKindCommand(command: WorkspaceKindCommand): void {
+    const { session, translator } = this.dependencies;
+    const current = session.currentState().workspaceKinds;
+    const { state, notice } = applyWorkspaceKindCommand(current, command, translator);
+    if (state !== current) session.updateWorkspaceKinds(() => state);
+    if (notice) this.showNotice(notice.key, notice.values);
   }
 
   /** The translator is made once at startup, so a new language shows after the next start. */

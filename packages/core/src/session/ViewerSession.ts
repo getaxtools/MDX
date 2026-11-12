@@ -12,8 +12,10 @@ import { withDocumentLineBreaks } from '../documents/lineEndings';
 import { ExplorerFolders } from '../explorer/ExplorerFolders';
 import { FavouritesList } from '../favourites/FavouritesList';
 import { RecentFilesList } from '../recent-files/RecentFilesList';
+import type { ShortcutOverrides } from '../shortcuts/parseShortcutOverrides';
 import { TabStrip } from '../tabs/TabStrip';
 import { DEFAULT_VIEW_SETTINGS, type ViewSettings } from '../view/ViewSettings';
+import { WorkspaceKindsState } from '../workspace-kinds/WorkspaceKindsState';
 import { restoreAppState, toPersistedAppState, type ViewerState } from './persistedAppState';
 
 export interface ViewerSessionDependencies {
@@ -32,6 +34,8 @@ const EMPTY_STATE: ViewerState = {
   favourites: FavouritesList.empty(),
   explorerFolders: ExplorerFolders.empty(),
   viewSettings: DEFAULT_VIEW_SETTINGS,
+  workspaceKinds: WorkspaceKindsState.initial(),
+  shortcutOverrides: {},
 };
 
 export class ViewerSession {
@@ -58,11 +62,13 @@ export class ViewerSession {
       favourites: restored.favourites,
       explorerFolders: restored.explorerFolders,
       viewSettings: restored.viewSettings,
+      workspaceKinds: restored.workspaceKinds,
+      shortcutOverrides: restored.shortcutOverrides,
     });
     return { wasReset: restored.wasReset };
   }
 
-  /** Forgets every tab, recent file, favourite, opened folder and view setting, as on a first start. */
+  /** Forgets every tab, recent file, favourite, opened folder, setting and kind choice, as on a first start. */
   clearAllData(): void {
     this.openedDocuments.clear();
     this.untitledDocuments.clear();
@@ -234,6 +240,14 @@ export class ViewerSession {
 
   updateViewSettings(change: (viewSettings: ViewSettings) => ViewSettings): void {
     this.replaceState({ ...this.state, viewSettings: change(this.state.viewSettings) });
+  }
+
+  updateWorkspaceKinds(change: (workspaceKinds: WorkspaceKindsState) => WorkspaceKindsState): void {
+    this.replaceState({ ...this.state, workspaceKinds: change(this.state.workspaceKinds) });
+  }
+
+  updateShortcutOverrides(change: (shortcutOverrides: ShortcutOverrides) => ShortcutOverrides): void {
+    this.replaceState({ ...this.state, shortcutOverrides: change(this.state.shortcutOverrides) });
   }
 
   subscribe(listener: ViewerStateListener): () => void {

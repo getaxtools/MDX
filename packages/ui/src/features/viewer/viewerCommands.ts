@@ -1,6 +1,7 @@
 import { READING_WIDTHS, THEME_PREFERENCES, TYPOGRAPHIES } from '@mdx/core';
 import { DETECT_ENCODING_ITEM, isReopenEncoding } from '../encodings/reopenEncodings';
 import type { ExportFormat, TextSearchOptions } from '@mdx/platform';
+import type { WorkspaceKindCommand } from '../control-wheel/workspaceKindCommands';
 import type { EditingCommand } from '../editing/editingCommands';
 import type { ExplorerActionCommand, RemoveExplorerFolderCommand } from '../explorer/explorerCommands';
 import type { FavouriteCommand, FavouritesFileCommand } from '../favourites/favouriteCommands';
@@ -24,6 +25,7 @@ export type ViewerCommand =
   | LocateRecentFileCommand
   | PathCommand
   | NavigationCommand
+  | WorkspaceKindCommand
   | { readonly kind: 'toggleFullScreen' }
   | { readonly kind: 'openDocuments' }
   | { readonly kind: 'openRecentFileAt'; readonly index: number }

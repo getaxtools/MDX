@@ -25,6 +25,10 @@ describe('view commands', () => {
       panelWidths: {},
       isPreviewBesideEditor: false,
       editorSharePercent: 50,
+      kindSwitcher: 'both',
+      wheelDock: 'bottomInlineEnd',
+      isWheelOpenedAtPointer: false,
+      isWheelButtonInStatusBar: false,
     });
     expect(applyViewCommand(withoutSidebar, { kind: 'resetZoom' }).zoomPercent).toBe(100);
     expect(applyViewCommand(withoutSidebar, { kind: 'zoomOut' }).zoomPercent).toBe(100);

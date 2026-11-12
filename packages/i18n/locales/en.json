@@ -436,5 +436,12 @@
   "encoding.menu.label": "Reopen with encoding",
   "statusBar.chooseEncoding": "Encoding: {encoding} - reopen with another encoding",
   "errors.document.reopenFailed": "{path} could not be reopened with that encoding.",
-  "about.feature.math": "Math typeset with KaTeX, loaded only when a document uses it"
+  "about.feature.math": "Math typeset with KaTeX, loaded only when a document uses it",
+  "workspaceKinds.kind.markdownViewer": "Markdown viewer",
+  "workspaceKinds.kind.notes": "Notes",
+  "workspaceKinds.kind.specViewer": "Spec viewer",
+  "workspaceKinds.availability.later": "Later",
+  "workspaceKinds.notice.shown": "Showing {kind}.",
+  "workspaceKinds.notice.turnedOffActive": "{turnedOffKind} is off. Showing {kind}.",
+  "workspaceKinds.notice.lastEnabled": "At least one kind stays on."
 }

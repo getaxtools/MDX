@@ -1,4 +1,11 @@
-import { FavouritesList, parseFavouritesFile, toFavouritesFile, ViewerSession } from '@mdx/core';
+import {
+  FavouritesList,
+  parseFavouritesFile,
+  toFavouritesFile,
+  ViewerSession,
+  WorkspaceKindsState,
+  type WorkspaceKind,
+} from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
 import {
   InMemoryAppMenu,
@@ -1537,6 +1544,87 @@ describe('ViewerController', () => {
       await second.controller.start();
 
       await vi.waitFor(() => expect([...second.snapshot().pathStatuses.values()]).toEqual(['missing']));
+    });
+  });
+
+  describe('workspace kinds', () => {
+    const ALL_KINDS_BUILT: readonly WorkspaceKind[] = [
+      { id: 'markdownViewer', availability: 'built' },
+      { id: 'notes', availability: 'built' },
+      { id: 'specViewer', availability: 'built' },
+    ];
+
+    async function viewerWithKinds(enabledKindIds: string[], activeKindId: string) {
+      const viewer = createViewer();
+      await viewer.controller.start();
+      viewer.session.updateWorkspaceKinds(() =>
+        WorkspaceKindsState.fromSaved({ enabledKindIds, activeKindId }, ALL_KINDS_BUILT),
+      );
+      return viewer;
+    }
+
+    it('announces the kind shown after switching kind', async () => {
+      const { controller, snapshot } = await viewerWithKinds(['markdownViewer', 'notes'], 'markdownViewer');
+
+      await controller.execute({ kind: 'switchWorkspaceKind', kindId: 'notes' });
+
+      expect(snapshot().viewer.workspaceKinds.activeKindId()).toBe('notes');
+      expect(snapshot().notice).toBe('Showing Notes.');
+    });
+
+    it('announces nothing when the active kind is chosen', async () => {
+      const { controller, snapshot } = await viewerWithKinds(['markdownViewer', 'notes'], 'markdownViewer');
+
+      await controller.execute({ kind: 'switchWorkspaceKind', kindId: 'markdownViewer' });
+
+      expect(snapshot().viewer.workspaceKinds.activeKindId()).toBe('markdownViewer');
+      expect(snapshot().notice).toBeUndefined();
+    });
+
+    it('announces both kinds when the active kind is turned off', async () => {
+      const { controller, snapshot } = await viewerWithKinds(
+        ['markdownViewer', 'notes', 'specViewer'],
+        'notes',
+      );
+
+      await controller.execute({ kind: 'setWorkspaceKindEnabled', kindId: 'notes', isEnabled: false });
+
+      expect(snapshot().viewer.workspaceKinds.activeKindId()).toBe('specViewer');
+      expect(snapshot().notice).toBe('Notes is off. Showing Spec viewer.');
+    });
+
+    it('announces why the last enabled kind stays on', async () => {
+      const { controller, snapshot } = createViewer();
+      await controller.start();
+
+      await controller.execute({
+        kind: 'setWorkspaceKindEnabled',
+        kindId: 'markdownViewer',
+        isEnabled: false,
+      });
+
+      expect(snapshot().viewer.workspaceKinds.enabledKindIds()).toEqual(['markdownViewer']);
+      expect(snapshot().notice).toBe('At least one kind stays on.');
+    });
+
+    it('turns a kind on without an announcement', async () => {
+      const { controller, snapshot } = await viewerWithKinds(['markdownViewer'], 'markdownViewer');
+
+      await controller.execute({ kind: 'setWorkspaceKindEnabled', kindId: 'specViewer', isEnabled: true });
+
+      expect(snapshot().viewer.workspaceKinds.enabledKindIds()).toEqual(['markdownViewer', 'specViewer']);
+      expect(snapshot().notice).toBeUndefined();
+    });
+
+    it('saves kind changes', async () => {
+      const { controller, appState } = await viewerWithKinds(['markdownViewer', 'notes'], 'markdownViewer');
+
+      await controller.execute({ kind: 'switchWorkspaceKind', kindId: 'notes' });
+      await vi.advanceTimersByTimeAsync(STATE_SAVE_DELAY_MS);
+
+      expect(await appState.load()).toMatchObject({
+        workspaceKinds: { enabledKindIds: ['markdownViewer', 'notes'], activeKindId: 'notes' },
+      });
     });
   });
 });

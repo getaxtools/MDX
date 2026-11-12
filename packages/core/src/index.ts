@@ -20,6 +20,26 @@ export {
 } from './session/persistedAppState';
 export { ViewerSession, type ViewerSessionDependencies } from './session/ViewerSession';
 export {
+  MAX_SHORTCUT_PART_LENGTH,
+  MAX_SHORTCUT_PARTS,
+  parseShortcutOverrides,
+  type ShortcutOverrides,
+} from './shortcuts/parseShortcutOverrides';
+export {
+  DEFAULT_WORKSPACE_KIND_ID,
+  isBuiltKind,
+  WORKSPACE_KINDS,
+  type WorkspaceKind,
+  type WorkspaceKindAvailability,
+  type WorkspaceKindId,
+} from './workspace-kinds/workspaceKinds';
+export {
+  WorkspaceKindsState,
+  type KindToggleOutcome,
+  type KindToggleResult,
+  type SavedWorkspaceKinds,
+} from './workspace-kinds/WorkspaceKindsState';
+export {
   LAST_TAB_NUMBER_KEY,
   MAX_REOPENABLE_TABS,
   TabStrip,
@@ -30,6 +50,7 @@ export {
   DEFAULT_EDITOR_SHARE_PERCENT,
   DEFAULT_VIEW_SETTINGS,
   EXPLORER_SECTIONS,
+  KIND_SWITCHERS,
   MAX_EDITOR_SHARE_PERCENT,
   MAX_PANEL_WIDTH_PX,
   MIN_EDITOR_SHARE_PERCENT,
@@ -40,6 +61,7 @@ export {
   THEME_PREFERENCES,
   TYPOGRAPHIES,
   ZOOM_LEVELS_PERCENT,
+  WHEEL_DOCKS,
   panelWidthOf,
   parseViewSettings,
   resetPanelWidth,
@@ -57,6 +79,7 @@ export {
   zoomOut,
   type ColorScheme,
   type ExplorerSection,
+  type KindSwitcher,
   type LanguagePreference,
   type ReadingWidth,
   type ResizablePanel,
@@ -64,6 +87,7 @@ export {
   type ThemePreference,
   type Typography,
   type ViewSettings,
+  type WheelDock,
 } from './view/ViewSettings';
 export {
   measureDocument,
