@@ -9,6 +9,7 @@ import type { PathCommand } from '../file-paths/pathCommands';
 import type { FolderTreeCommand } from '../folder-tree/folderTreeCommands';
 import type { NavigationCommand } from '../navigation/DocumentNavigation';
 import type { LocateRecentFileCommand, RecentFileCommand } from '../recent-files/recentFileCommands';
+import type { ShortcutOverrideCommand } from '../shortcuts/shortcutOverrideCommands';
 import type { TabCommand } from '../tabs/tabCommands';
 import type { ViewCommand } from '../view/viewCommands';
 
@@ -26,8 +27,10 @@ export type ViewerCommand =
   | PathCommand
   | NavigationCommand
   | WorkspaceKindCommand
+  | ShortcutOverrideCommand
   | { readonly kind: 'toggleFullScreen' }
   | { readonly kind: 'toggleControlWheel' }
+  | { readonly kind: 'showWorkspaceKindSettings' }
   | { readonly kind: 'openDocuments' }
   | { readonly kind: 'openRecentFileAt'; readonly index: number }
   | { readonly kind: 'saveDocument' }
@@ -101,6 +104,7 @@ const COMMANDS_BY_MENU_ITEM: Readonly<Record<string, ViewerCommand>> = {
   goBack: { kind: 'goBack' },
   goForward: { kind: 'goForward' },
   toggleFullScreen: { kind: 'toggleFullScreen' },
+  toggleControlWheel: { kind: 'toggleControlWheel' },
   revertDocument: { kind: 'revertDocument' },
   reloadActiveDocument: { kind: 'reloadActiveDocument' },
   undo: { kind: 'runEditorCommand', command: 'undo' },

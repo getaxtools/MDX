@@ -16,6 +16,10 @@ export class TauriAppMenu implements AppMenuPort {
     await tauriCommands.updateRecentMenu(displayPaths);
   }
 
+  async showShortcuts(shortcutTexts: Readonly<Record<string, string>>): Promise<void> {
+    await tauriCommands.updateMenuShortcuts(shortcutTexts);
+  }
+
   async showLabels(labels: Readonly<Record<string, string>>): Promise<void> {
     await tauriCommands.updateMenuLanguage(labels);
   }

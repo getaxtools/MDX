@@ -46,7 +46,7 @@ describe('Settings', () => {
     const dialog = app.browser.$('[role="dialog"]');
     await dialog.waitForDisplayed();
 
-    await dialog.$('input[type="search"]').setValue('status bar');
+    await dialog.$('input[type="search"]').setValue('status bar encoding');
 
     await app.browser.waitUntil(async () => (await dialog.$$('.setting').length) === 1);
     expect(await dialog.$('input#setting-statusBar').isExisting()).toBe(true);

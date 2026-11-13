@@ -1649,4 +1649,88 @@ describe('ViewerController', () => {
       });
     });
   });
+
+  describe('control wheel shortcut', () => {
+    const CTRL_SHIFT_J = ['ctrl', 'shift', 'J'];
+
+    it('a recorded shortcut takes effect at once and is saved', async () => {
+      const { controller, snapshot, appState } = createViewer();
+      await controller.start();
+
+      await controller.execute({
+        kind: 'setShortcut',
+        commandId: 'toggleControlWheel',
+        combination: CTRL_SHIFT_J,
+      });
+      await vi.advanceTimersByTimeAsync(STATE_SAVE_DELAY_MS);
+
+      expect(snapshot().viewer.shortcutOverrides).toEqual({ toggleControlWheel: CTRL_SHIFT_J });
+      expect(await appState.load()).toMatchObject({
+        shortcutOverrides: { toggleControlWheel: CTRL_SHIFT_J },
+      });
+    });
+
+    it('remove leaves no shortcut', async () => {
+      const { controller, snapshot } = createViewer();
+      await controller.start();
+
+      await controller.execute({ kind: 'removeShortcut', commandId: 'toggleControlWheel' });
+
+      expect(snapshot().viewer.shortcutOverrides).toEqual({ toggleControlWheel: [] });
+    });
+
+    it('reset returns to Ctrl+Shift+Space', async () => {
+      const { controller, snapshot, menu } = createViewer();
+      await controller.start();
+      await controller.execute({
+        kind: 'setShortcut',
+        commandId: 'toggleControlWheel',
+        combination: CTRL_SHIFT_J,
+      });
+
+      await controller.execute({ kind: 'resetShortcut', commandId: 'toggleControlWheel' });
+
+      expect(snapshot().viewer.shortcutOverrides).toEqual({});
+      expect(menu.shownShortcuts).toEqual({ toggleControlWheel: 'Ctrl+Shift+Space' });
+    });
+
+    it('sends the effective shortcut text to the menu at start and after a change', async () => {
+      const { controller, menu } = createViewer();
+      await controller.start();
+      const shownAtStart = menu.shownShortcuts;
+
+      await controller.execute({
+        kind: 'setShortcut',
+        commandId: 'toggleControlWheel',
+        combination: CTRL_SHIFT_J,
+      });
+      const shownAfterChange = menu.shownShortcuts;
+      await controller.execute({ kind: 'removeShortcut', commandId: 'toggleControlWheel' });
+
+      expect(shownAtStart).toEqual({ toggleControlWheel: 'Ctrl+Shift+Space' });
+      expect(shownAfterChange).toEqual({ toggleControlWheel: 'Ctrl+Shift+J' });
+      expect(menu.shownShortcuts).toEqual({ toggleControlWheel: '' });
+    });
+
+    it('the View menu item opens the wheel', async () => {
+      const { controller, menu, snapshot } = createViewer();
+      await controller.start();
+
+      menu.choose('toggleControlWheel');
+
+      await vi.waitFor(() => expect(snapshot().openDialog).toBe('controlWheel'));
+    });
+
+    it('Choose Workspace Kinds opens the wheel with the kind choices, and the wheel shortcut closes it', async () => {
+      const { controller, snapshot } = createViewer();
+      await controller.start();
+
+      await controller.execute({ kind: 'showWorkspaceKindSettings' });
+      const openedDialog = snapshot().openDialog;
+      await controller.execute({ kind: 'toggleControlWheel' });
+
+      expect(openedDialog).toBe('workspaceKindSettings');
+      expect(snapshot().openDialog).toBeUndefined();
+    });
+  });
 });

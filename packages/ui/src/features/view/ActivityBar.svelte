@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { SidebarView } from '@mdx/core';
   import type { MessageKey, Translator } from '@mdx/i18n';
-  import { tooltipWithShortcut } from '../shortcuts/commandShortcuts';
+  import { shortcutLabelFor, tooltipWithShortcut } from '../shortcuts/commandShortcuts';
   import type { ViewerCommand } from '../viewer/viewerCommands';
 
   interface Props {
@@ -17,7 +17,7 @@
   const searchCommand: ViewerCommand = { kind: 'showFolderSearch' };
 
   function labelOf(labelKey: MessageKey, command: ViewerCommand): string {
-    return tooltipWithShortcut(translator.translate(labelKey), command, translator);
+    return tooltipWithShortcut(translator.translate(labelKey), shortcutLabelFor(command, translator));
   }
 </script>
 

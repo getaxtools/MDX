@@ -128,11 +128,11 @@ describe('control wheel shortcut', () => {
 
 describe('tooltipWithShortcut', () => {
   it('adds the shortcut after the label', () => {
-    expect(tooltipWithShortcut('Open', { kind: 'openDocuments' }, createTranslator())).toBe('Open (Ctrl+O)');
+    expect(tooltipWithShortcut('Open', 'Ctrl+O')).toBe('Open (Ctrl+O)');
   });
 
   it('is only the label for a command without a shortcut', () => {
-    expect(tooltipWithShortcut('About', { kind: 'showAbout' }, createTranslator())).toBe('About');
+    expect(tooltipWithShortcut('About', undefined)).toBe('About');
   });
 });
 

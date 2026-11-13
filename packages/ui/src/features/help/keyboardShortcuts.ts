@@ -1,6 +1,6 @@
 import { EDITOR_SHORTCUTS } from '@mdx/editor/shortcuts';
 import type { MessageKey, Translator } from '@mdx/i18n';
-import { COMMAND_SHORTCUTS } from '../shortcuts/commandShortcuts';
+import { COMMAND_SHORTCUTS, type CommandShortcut } from '../shortcuts/commandShortcuts';
 import { describeCombination, type KeyCombination } from '../shortcuts/describeCombination';
 
 export interface KeyboardShortcut {
@@ -8,7 +8,7 @@ export interface KeyboardShortcut {
   readonly actionKey: MessageKey;
 }
 
-const SHORTCUTS_HANDLED_IN_PLACE: readonly KeyboardShortcut[] = [
+export const SHORTCUTS_HANDLED_IN_PLACE: readonly KeyboardShortcut[] = [
   { combinations: [['ctrl', 'C']], actionKey: 'menu.edit.copy' },
   { combinations: [['ctrl', 'A']], actionKey: 'menu.edit.selectAll' },
   { combinations: [['ctrl', '1–9']], actionKey: 'shortcuts.tabByNumber' },
@@ -17,8 +17,8 @@ const SHORTCUTS_HANDLED_IN_PLACE: readonly KeyboardShortcut[] = [
   { combinations: [['F2']], actionKey: 'shortcuts.renameFavourite' },
   {
     combinations: [
-      ['alt', '↑'],
-      ['alt', '↓'],
+      ['alt', 'ArrowUp'],
+      ['alt', 'ArrowDown'],
     ],
     actionKey: 'shortcuts.moveFavourite',
   },
@@ -31,21 +31,30 @@ const SHORTCUTS_HANDLED_IN_PLACE: readonly KeyboardShortcut[] = [
   { combinations: [['ctrl', 'G']], actionKey: 'menu.edit.goToLine' },
 ];
 
-const EDITOR_FORMATTING_SHORTCUTS: readonly KeyboardShortcut[] = EDITOR_SHORTCUTS.map(
+export const EDITOR_FORMATTING_SHORTCUTS: readonly KeyboardShortcut[] = EDITOR_SHORTCUTS.map(
   ({ action, combination }) => ({ combinations: [combination], actionKey: `editor.action.${action}` }),
 );
 
-export const KEYBOARD_SHORTCUTS: readonly KeyboardShortcut[] = [
-  ...COMMAND_SHORTCUTS.map(({ combinations, actionKey }) => ({ combinations, actionKey })),
-  ...SHORTCUTS_HANDLED_IN_PLACE,
-  ...EDITOR_FORMATTING_SHORTCUTS,
-];
+/** Every shortcut the Help list shows, with the keys each command has now. */
+export function keyboardShortcutsWith(
+  commandShortcuts: readonly CommandShortcut[] = COMMAND_SHORTCUTS,
+): readonly KeyboardShortcut[] {
+  return [
+    ...commandShortcuts.map(({ combinations, actionKey }) => ({ combinations, actionKey })),
+    ...SHORTCUTS_HANDLED_IN_PLACE,
+    ...EDITOR_FORMATTING_SHORTCUTS,
+  ];
+}
 
 /** The shortcuts whose action or keys contain the query, such as "save" or "ctrl+s". */
-export function matchingShortcuts(query: string, translator: Translator): readonly KeyboardShortcut[] {
+export function matchingShortcuts(
+  query: string,
+  translator: Translator,
+  shortcuts: readonly KeyboardShortcut[] = keyboardShortcutsWith(),
+): readonly KeyboardShortcut[] {
   const needle = query.trim().toLocaleLowerCase().replaceAll(' ', '');
-  if (needle.length === 0) return KEYBOARD_SHORTCUTS;
-  return KEYBOARD_SHORTCUTS.filter((shortcut) => {
+  if (needle.length === 0) return shortcuts;
+  return shortcuts.filter((shortcut) => {
     const action = translator.translate(shortcut.actionKey).toLocaleLowerCase().replaceAll(' ', '');
     const keys = shortcut.combinations.map((combination) =>
       describeCombination(combination, translator).toLocaleLowerCase(),

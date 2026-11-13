@@ -51,6 +51,49 @@ describe('setting definitions', () => {
     expect(outline.isOnIn(DEFAULT_VIEW_SETTINGS)).toBe(false);
     expect(outline.isOnIn(toggled)).toBe(true);
   });
+
+  it('dock corner labels read Bottom right and Bottom left in left-to-right and swap in right-to-left', () => {
+    const dock = settingWithId('wheelDock');
+    if (dock.kind !== 'choice') throw new Error('wheelDock');
+
+    const labelsIn = (locale: string) =>
+      dock.choices(createTranslator({ locale })).map(({ value, label }) => [value, label]);
+
+    expect(labelsIn('en')).toEqual([
+      ['bottomInlineEnd', 'Bottom right'],
+      ['bottomInlineStart', 'Bottom left'],
+    ]);
+    expect(labelsIn('ar')).toEqual([
+      ['bottomInlineEnd', 'Bottom left'],
+      ['bottomInlineStart', 'Bottom right'],
+    ]);
+  });
+
+  it('each workspace kind setting sends its command', () => {
+    const atPointer = settingWithId('wheelAtPointer');
+    const wheelButton = settingWithId('wheelButton');
+    const chooseKinds = settingWithId('chooseKinds');
+
+    expect(atPointer.kind === 'toggle' && atPointer.toggleCommand).toEqual({
+      kind: 'toggleWheelOpenedAtPointer',
+    });
+    expect(wheelButton.kind === 'toggle' && wheelButton.toggleCommand).toEqual({
+      kind: 'toggleWheelButtonInStatusBar',
+    });
+    expect(chooseKinds.kind === 'action' && chooseKinds.command).toEqual({
+      kind: 'showWorkspaceKindSettings',
+    });
+  });
+
+  it('lists the control wheel keys in the Keyboard section', () => {
+    const shortcut = settingWithId('controlWheelShortcut');
+
+    expect(shortcut).toMatchObject({
+      kind: 'shortcut',
+      section: 'keyboard',
+      commandId: 'toggleControlWheel',
+    });
+  });
 });
 
 describe('matchingSettings', () => {
@@ -81,6 +124,16 @@ describe('matchingSettings', () => {
   it('matches any text against every word of a query', () => {
     expect(matchesQuery('clear data', 'Privacy: Clear All Data')).toBe(true);
     expect(matchesQuery('clear cache', 'Privacy: Clear All Data')).toBe(false);
+  });
+
+  it('finds the workspace kind settings and the wheel keys by searching for control wheel', () => {
+    expect(idsFor('control wheel')).toEqual([
+      'kindSwitcher',
+      'wheelDock',
+      'wheelAtPointer',
+      'wheelButton',
+      'controlWheelShortcut',
+    ]);
   });
 
   it('ignores accents when searching', () => {

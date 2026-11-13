@@ -8,6 +8,7 @@
     type Favourite,
     type RecentFile,
     type ResizablePanel,
+    type RingPoint,
   } from '@mdx/core';
   import type { SourceEditor } from '@mdx/editor';
   import type { Translator } from '@mdx/i18n';
@@ -42,7 +43,9 @@
   import DocumentToolbar from '../view/DocumentToolbar.svelte';
   import NoticeBar from './NoticeBar.svelte';
   import { moveFocusBetweenRegions } from './focusRegions';
-  import { commandForShortcut } from '../shortcuts/commandShortcuts';
+  import { COMMAND_SHORTCUTS, commandForShortcut, shortcutLabelFor } from '../shortcuts/commandShortcuts';
+  import { effectiveCommandShortcuts } from '../shortcuts/effectiveCommandShortcuts';
+  import type { ControlWheelButton } from '../view/ControlWheelButton';
   import type { DesktopPlatform, ViewerCommand } from './viewerCommands';
   import type { NoticeAction, ViewerController, ViewerSnapshot } from './ViewerController';
 
@@ -73,6 +76,38 @@
 
   $effect(() => {
     if (snapshot) applyTheme(globalThis.document.documentElement, snapshot.viewer.viewSettings.theme);
+  });
+
+  const shortcuts = $derived(
+    snapshot ? effectiveCommandShortcuts(snapshot.viewer.shortcutOverrides) : COMMAND_SHORTCUTS,
+  );
+  const isWheelOpenedAtPointer = $derived(snapshot?.viewer.viewSettings.isWheelOpenedAtPointer ?? false);
+  const isControlWheelOpen = $derived(
+    snapshot?.openDialog === 'controlWheel' || snapshot?.openDialog === 'workspaceKindSettings',
+  );
+  const controlWheelButton: ControlWheelButton | undefined = $derived.by(() => {
+    if (!snapshot?.viewer.viewSettings.isWheelButtonInStatusBar) return undefined;
+    const shortcut = shortcutLabelFor({ kind: 'toggleControlWheel' }, translator, shortcuts);
+    return {
+      activeKindId: snapshot.viewer.workspaceKinds.activeKindId(),
+      ...(shortcut ? { shortcut } : {}),
+      onShowControlWheel: () => void controller.execute({ kind: 'toggleControlWheel' }),
+    };
+  });
+
+  /** Read once when the wheel opens, so it is not state: the wheel must not follow the pointer. */
+  const lastPointer: { position: RingPoint | undefined } = { position: undefined };
+
+  $effect(() => {
+    if (!isWheelOpenedAtPointer) return undefined;
+    function rememberPointer(event: PointerEvent) {
+      lastPointer.position = { x: event.clientX, y: event.clientY };
+    }
+    globalThis.addEventListener('pointermove', rememberPointer, { passive: true });
+    return () => {
+      globalThis.removeEventListener('pointermove', rememberPointer);
+      lastPointer.position = undefined;
+    };
   });
 
   const activeTab = $derived(snapshot?.viewer.tabStrip.activeTab());
@@ -181,7 +216,7 @@
         event.preventDefault();
       return;
     }
-    const command = commandForShortcut(event, platform);
+    const command = commandForShortcut(event, platform, shortcuts);
     if (!command) return;
     event.preventDefault();
     void controller.execute(command);
@@ -395,6 +430,7 @@
           ? snapshot.unsavedDocumentKeys.has(activeTab.location.canonicalKey)
           : false}
         {translator}
+        {controlWheelButton}
         onResetZoom={() => void controller.execute({ kind: 'resetZoom' })}
         onReopenWithEncoding={(encoding: string | undefined) =>
           void controller.execute(
@@ -418,7 +454,7 @@
   {#if snapshot.openDialog === 'about'}
     <AboutDialog {appInfo} {translator} {loadThirdPartyLicenses} onClose={() => controller.closeDialog()} />
   {:else if snapshot.openDialog === 'keyboardShortcuts'}
-    <KeyboardShortcutsDialog {translator} onClose={() => controller.closeDialog()} />
+    <KeyboardShortcutsDialog {translator} {shortcuts} onClose={() => controller.closeDialog()} />
   {:else if snapshot.openDialog === 'pasteTable'}
     <PasteTableDialog
       {translator}
@@ -430,6 +466,8 @@
     <SettingsDialog
       settings={snapshot.viewer.viewSettings}
       dataFolder={appInfo.dataFolder}
+      {shortcuts}
+      {platform}
       {translator}
       onCommand={(command: ViewerCommand) => void controller.execute(command)}
       onClose={() => controller.closeDialog()}
@@ -437,18 +475,20 @@
   {:else if snapshot.openDialog === 'commandPalette'}
     <CommandPalette
       {translator}
-      commands={paletteCommands(translator)}
+      commands={paletteCommands(translator, { shortcuts, workspaceKinds: snapshot.viewer.workspaceKinds })}
       loadDocuments={() => controller.quickOpenDocuments()}
       onRunCommand={(command: ViewerCommand) => void controller.execute(command)}
       onOpenDocument={(documentPath: string) => void controller.openDocuments([documentPath])}
       onClose={() => controller.closeDialog()}
     />
   {/if}
-  {#if snapshot.openDialog === 'controlWheel'}
+  {#if isControlWheelOpen}
     {#await loadControlWheel() then ControlWheel}
       <ControlWheel
         kinds={snapshot.viewer.workspaceKinds}
         dock={snapshot.viewer.viewSettings.wheelDock}
+        pointer={lastPointer.position}
+        shouldShowKindSettings={snapshot.openDialog === 'workspaceKindSettings'}
         {translator}
         onCommand={(command: ViewerCommand) => void controller.execute(command)}
         onClose={() => controller.closeDialog()}

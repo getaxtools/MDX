@@ -1,6 +1,9 @@
 <script lang="ts">
   import type { Translator } from '@mdx/i18n';
   import ContextMenu from '../../components/ContextMenu.svelte';
+  import KindIcon from '../control-wheel/KindIcon.svelte';
+  import { KIND_ICONS, kindNameOf } from '../control-wheel/kindPresentation';
+  import { tooltipWithShortcut } from '../shortcuts/commandShortcuts';
   import { contextMenuPosition, type ContextMenuRequest } from '../../components/ContextMenuItem';
   import {
     DETECT_ENCODING_ITEM,
@@ -8,6 +11,7 @@
     type EncodingMenuItemId,
   } from '../encodings/reopenEncodings';
   import type { RenderedActiveDocument } from '../viewer/ViewerController';
+  import type { ControlWheelButton } from './ControlWheelButton';
 
   interface Props {
     document: RenderedActiveDocument | undefined;
@@ -16,6 +20,7 @@
     isEditing?: boolean;
     hasUnsavedChanges?: boolean;
     translator: Translator;
+    controlWheelButton?: ControlWheelButton | undefined;
     onResetZoom: () => void;
     onReopenWithEncoding?: (encoding: string | undefined) => void;
   }
@@ -27,6 +32,7 @@
     isEditing = false,
     hasUnsavedChanges = false,
     translator,
+    controlWheelButton,
     onResetZoom,
     onReopenWithEncoding = () => undefined,
   }: Props = $props();
@@ -89,6 +95,19 @@
     >
       {translator.translate('statusBar.zoom', { percent: zoomPercent })}
     </button>
+    {#if controlWheelButton}
+      {@const kind = kindNameOf(controlWheelButton.activeKindId, translator)}
+      <button
+        class="control-wheel"
+        title={tooltipWithShortcut(translator.translate('controlWheel.show'), controlWheelButton.shortcut)}
+        aria-label={translator.translate('statusBar.controlWheel', { kind })}
+        aria-haspopup="dialog"
+        onclick={controlWheelButton.onShowControlWheel}
+      >
+        <KindIcon paths={KIND_ICONS[controlWheelButton.activeKindId]} />
+        {kind}
+      </button>
+    {/if}
   </div>
 </footer>
 {#if encodingMenuRequest}
@@ -137,6 +156,17 @@
     background: none;
     color: inherit;
     font: inherit;
+  }
+
+  .control-wheel {
+    display: inline-flex;
+    gap: var(--space-1);
+    align-items: center;
+  }
+
+  .control-wheel :global(svg) {
+    width: 1rem;
+    height: 1rem;
   }
 
   button:disabled {

@@ -129,7 +129,7 @@ export const COMMAND_SHORTCUTS: readonly CommandShortcut[] = [
   {
     command: { kind: 'toggleControlWheel' },
     combinations: [['ctrl', 'shift', 'Space']],
-    actionKey: 'menu.view.controlWheel',
+    actionKey: 'controlWheel.show',
   },
   {
     command: { kind: 'showKeyboardShortcuts' },
@@ -144,27 +144,37 @@ const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
 export function commandForShortcut(
   event: ShortcutKeyEvent,
   platform: DesktopPlatform,
+  shortcuts: readonly CommandShortcut[] = COMMAND_SHORTCUTS,
 ): ViewerCommand | undefined {
   if (event.isComposing) return undefined;
   if (isTabNumberShortcut(event, platform))
     return { kind: 'activateTabNumber', numberKey: Number(event.key) };
-  return COMMAND_SHORTCUTS.find((shortcut) =>
+  return shortcuts.find((shortcut) =>
     shortcut.combinations.some((combination) => matchesCombination(event, combination, platform)),
   )?.command;
 }
 
 /** The first key combination for a command, as shown next to menu items. */
-export function shortcutLabelFor(command: ViewerCommand, translator: Translator): string | undefined {
-  const commandKey = JSON.stringify(command);
-  const shortcut = COMMAND_SHORTCUTS.find((candidate) => JSON.stringify(candidate.command) === commandKey);
-  const combination = shortcut?.combinations[0];
+export function shortcutLabelFor(
+  command: ViewerCommand,
+  translator: Translator,
+  shortcuts: readonly CommandShortcut[] = COMMAND_SHORTCUTS,
+): string | undefined {
+  const combination = shortcutFor(command, shortcuts)?.combinations[0];
   return combination ? describeCombination(combination, translator) : undefined;
 }
 
+export function shortcutFor(
+  command: ViewerCommand,
+  shortcuts: readonly CommandShortcut[],
+): CommandShortcut | undefined {
+  const commandKey = JSON.stringify(command);
+  return shortcuts.find((candidate) => JSON.stringify(candidate.command) === commandKey);
+}
+
 /** A button tooltip that names the shortcut, such as "Search (Ctrl+Shift+F)". */
-export function tooltipWithShortcut(label: string, command: ViewerCommand, translator: Translator): string {
-  const shortcut = shortcutLabelFor(command, translator);
-  return shortcut ? `${label} (${shortcut})` : label;
+export function tooltipWithShortcut(label: string, shortcutLabel: string | undefined): string {
+  return shortcutLabel ? `${label} (${shortcutLabel})` : label;
 }
 
 function isTabNumberShortcut(event: ShortcutKeyEvent, platform: DesktopPlatform): boolean {
@@ -191,11 +201,11 @@ function matchesCombination(
 }
 
 /** `event.key` is a space character, while combinations name the key `Space`. */
-function pressedKeyName(key: string): string {
+export function pressedKeyName(key: string): string {
   return key === ' ' ? 'Space' : key;
 }
 
 /** Symbols such as `+` need Shift on some keyboards but not on others or on the numeric keypad. */
-function isShiftProducedSymbol(key: string): boolean {
+export function isShiftProducedSymbol(key: string): boolean {
   return key.length === 1 && !LETTER_OR_DIGIT.test(key);
 }

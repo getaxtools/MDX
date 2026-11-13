@@ -28,6 +28,7 @@ const SAMPLE_VALUES = {
   documents: 2,
   kind: 'Notes',
   turnedOffKind: 'Spec viewer',
+  keys: 'Ctrl+S',
 };
 
 describe('createTranslator', () => {

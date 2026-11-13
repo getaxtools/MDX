@@ -1,7 +1,12 @@
 import { createTranslator, englishCatalog } from '@mdx/i18n';
 import { describe, expect, it } from 'vitest';
 import { describeCombination } from '../shortcuts/describeCombination';
-import { KEYBOARD_SHORTCUTS, matchingShortcuts } from './keyboardShortcuts';
+import { effectiveCommandShortcuts } from '../shortcuts/effectiveCommandShortcuts';
+import { keyboardShortcutsWith, matchingShortcuts } from './keyboardShortcuts';
+
+function controlWheelRowIn(shortcuts: ReturnType<typeof keyboardShortcutsWith>) {
+  return shortcuts.find((shortcut) => shortcut.actionKey === 'controlWheel.show');
+}
 
 describe('keyboard shortcuts', () => {
   it('describes key combinations with translated modifier and mouse names', () => {
@@ -13,7 +18,7 @@ describe('keyboard shortcuts', () => {
   });
 
   it('lists every action once, named with a message from the catalog', () => {
-    const actionKeys = KEYBOARD_SHORTCUTS.map((shortcut) => shortcut.actionKey);
+    const actionKeys = keyboardShortcutsWith().map((shortcut) => shortcut.actionKey);
 
     expect(actionKeys.filter((key) => !Object.hasOwn(englishCatalog, key))).toEqual([]);
     expect(new Set(actionKeys).size).toBe(actionKeys.length);
@@ -26,6 +31,30 @@ describe('keyboard shortcuts', () => {
 
     expect(actionsFor('reopen closed')).toEqual(['tabs.reopenClosed']);
     expect(actionsFor('CTRL+,')).toEqual(['menu.file.settings']);
-    expect(actionsFor('')).toHaveLength(KEYBOARD_SHORTCUTS.length);
+    expect(actionsFor('')).toHaveLength(keyboardShortcutsWith().length);
+  });
+
+  it('lists the changed shortcut', () => {
+    const shortcuts = keyboardShortcutsWith(
+      effectiveCommandShortcuts({ toggleControlWheel: ['ctrl', 'shift', 'J'] }),
+    );
+
+    expect(controlWheelRowIn(shortcuts)?.combinations).toEqual([['ctrl', 'shift', 'J']]);
+  });
+
+  it('keeps a removed shortcut in the list with no keys', () => {
+    const shortcuts = keyboardShortcutsWith(effectiveCommandShortcuts({ toggleControlWheel: [] }));
+
+    expect(controlWheelRowIn(shortcuts)?.combinations).toEqual([]);
+  });
+
+  it('finds the changed shortcut by its new keys', () => {
+    const shortcuts = keyboardShortcutsWith(
+      effectiveCommandShortcuts({ toggleControlWheel: ['ctrl', 'shift', 'J'] }),
+    );
+
+    const found = matchingShortcuts('ctrl+shift+j', createTranslator(), shortcuts);
+
+    expect(found.map((shortcut) => shortcut.actionKey)).toEqual(['controlWheel.show']);
   });
 });

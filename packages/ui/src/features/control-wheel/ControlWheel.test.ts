@@ -154,6 +154,36 @@ describe('ControlWheel', () => {
     expect(segment('Spec viewer').getAttribute('aria-keyshortcuts')).toBe('3');
   });
 
+  it('opens at the pointer when it was asked to, moved to fit inside the window', () => {
+    render(ControlWheel, {
+      kinds: WorkspaceKindsState.fromSaved({ enabledKindIds: ['markdownViewer'] }, ALL_KINDS_BUILT),
+      dock: 'bottomInlineEnd',
+      pointer: { x: 500, y: 0 },
+      translator: createTranslator(),
+      onCommand: vi.fn(),
+      onClose: vi.fn(),
+    });
+
+    const wheel = screen.getByRole('dialog', { name: 'Control wheel' });
+
+    expect(wheel.style.left).toBe('400px');
+    expect(Number.parseFloat(wheel.style.top)).toBeGreaterThan(0);
+  });
+
+  it('opens with the kind choices shown and focused when asked to', () => {
+    render(ControlWheel, {
+      kinds: WorkspaceKindsState.fromSaved({ enabledKindIds: ['markdownViewer'] }, ALL_KINDS_BUILT),
+      dock: 'bottomInlineEnd',
+      shouldShowKindSettings: true,
+      translator: createTranslator(),
+      onCommand: vi.fn(),
+      onClose: vi.fn(),
+    });
+
+    expect(screen.getByRole('dialog', { name: 'Workspace kinds' })).toBeTruthy();
+    expect(document.activeElement?.getAttribute('role')).toBe('switch');
+  });
+
   describe('gear', () => {
     it('opens the kind choices and shows that it is expanded', async () => {
       const user = userEvent.setup();

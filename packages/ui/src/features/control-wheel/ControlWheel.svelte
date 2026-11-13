@@ -8,7 +8,7 @@
     type WorkspaceKindsState,
   } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { horizontalDirectionOf } from '../../components/textDirection';
   import type { ViewerCommand } from '../viewer/viewerCommands';
   import KindIcon from './KindIcon.svelte';
@@ -20,12 +20,24 @@
   interface Props {
     kinds: WorkspaceKindsState;
     dock: WheelDock;
+    /** Where the pointer was when the wheel was asked for, when it opens at the pointer. */
+    pointer?: RingPoint | undefined;
+    /** Opens with the kind choices shown, as Choose Workspace Kinds does. */
+    shouldShowKindSettings?: boolean;
     translator: Translator;
     onCommand: (command: ViewerCommand) => void;
     onClose: () => void;
   }
 
-  const { kinds, dock, translator, onCommand, onClose }: Props = $props();
+  const {
+    kinds,
+    dock,
+    pointer,
+    shouldShowKindSettings = false,
+    translator,
+    onCommand,
+    onClose,
+  }: Props = $props();
 
   const RING_RADII = { outer: 96, inner: 40 };
   const VIEW_BOX_SIZE = 200;
@@ -42,7 +54,8 @@
   let windowHeight = $state(globalThis.innerHeight);
   let focusedIndex = $state(activeIndex());
   let pointedIndex: number | undefined = $state();
-  let isKindSettingsOpen = $state(false);
+  let isKindSettingsOpen = $state(untrack(() => shouldShowKindSettings));
+  const openedAtPointer = untrack(() => pointer);
 
   const rootFontSizePx =
     Number.parseFloat(globalThis.getComputedStyle(globalThis.document.documentElement).fontSize) ||
@@ -60,6 +73,7 @@
       rootFontSizePx,
       bottomInsetPx: STATUS_BAR_ALLOWANCE_REM * rootFontSizePx,
       captionHeightPx: CAPTION_HEIGHT_REM * rootFontSizePx,
+      pointer: openedAtPointer,
     }),
   );
 
@@ -70,7 +84,7 @@
   onMount(() => {
     const previouslyFocused = globalThis.document.activeElement;
     if (wheel) direction = horizontalDirectionOf(wheel);
-    segmentElements[currentIndex]?.focus();
+    if (!isKindSettingsOpen) segmentElements[currentIndex]?.focus();
     function closeOnPressOutside(event: PointerEvent) {
       if (event.target instanceof Node && !wheel?.contains(event.target)) onClose();
     }

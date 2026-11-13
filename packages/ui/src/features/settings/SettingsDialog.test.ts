@@ -1,6 +1,6 @@
 import { DEFAULT_VIEW_SETTINGS, type ViewSettings } from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import SettingsDialog from './SettingsDialog.svelte';
@@ -103,6 +103,29 @@ describe('SettingsDialog', () => {
 
     expect(screen.getByRole('button', { name: 'Clear All Data…' })).toBeTruthy();
     expect(screen.queryByRole('region', { name: 'Appearance' })).toBeNull();
+  });
+
+  it('the Workspace kinds section lists the four settings and the kind choices', async () => {
+    const { onCommand } = renderSettings();
+    const section = within(screen.getByRole('region', { name: 'Workspace kinds' }));
+
+    await userEvent.click(section.getByRole('button', { name: 'Choose Workspace Kinds…' }));
+
+    expect(section.getByRole('combobox', { name: 'Switch kinds with' })).toBeTruthy();
+    expect(section.getByRole('combobox', { name: 'Control wheel corner' })).toBeTruthy();
+    expect(section.getByRole('checkbox', { name: 'Open the control wheel at the pointer' })).toBeTruthy();
+    expect(section.getByRole('checkbox', { name: 'Control wheel button in the status bar' })).toBeTruthy();
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'showWorkspaceKindSettings' });
+  });
+
+  it('shows the control wheel keys in the Keyboard section', () => {
+    renderSettings();
+
+    const keyboard = within(screen.getByRole('region', { name: 'Keyboard' }));
+
+    expect(keyboard.getByRole('group', { name: 'Show Control Wheel' }).textContent).toContain(
+      'Ctrl+Shift+Space',
+    );
   });
 
   it('closes with Escape', async () => {

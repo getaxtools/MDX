@@ -11,6 +11,7 @@ import {
   zoomIn,
   zoomOut,
   type ExplorerSection,
+  type KindSwitcher,
   type LanguagePreference,
   type ReadingWidth,
   type ResizablePanel,
@@ -18,6 +19,7 @@ import {
   type ThemePreference,
   type Typography,
   type ViewSettings,
+  type WheelDock,
 } from '@mdx/core';
 
 export type ViewCommand =
@@ -39,7 +41,11 @@ export type ViewCommand =
   | { readonly kind: 'resizeExplorerSection'; readonly section: ExplorerSection; readonly heightPx: number }
   | { readonly kind: 'resizePanel'; readonly panel: ResizablePanel; readonly widthPx: number }
   | { readonly kind: 'resetPanelWidth'; readonly panel: ResizablePanel }
-  | { readonly kind: 'setEditorShare'; readonly sharePercent: number };
+  | { readonly kind: 'setEditorShare'; readonly sharePercent: number }
+  | { readonly kind: 'setKindSwitcher'; readonly kindSwitcher: KindSwitcher }
+  | { readonly kind: 'setWheelDock'; readonly wheelDock: WheelDock }
+  | { readonly kind: 'toggleWheelOpenedAtPointer' }
+  | { readonly kind: 'toggleWheelButtonInStatusBar' };
 
 type ViewCommandHandlers = {
   readonly [Kind in ViewCommand['kind']]: (
@@ -69,6 +75,16 @@ const VIEW_COMMAND_HANDLERS: ViewCommandHandlers = {
   resizePanel: (settings, { panel, widthPx }) => resizePanel(settings, panel, widthPx),
   resetPanelWidth: (settings, { panel }) => resetPanelWidth(settings, panel),
   setEditorShare: (settings, { sharePercent }) => setEditorShare(settings, sharePercent),
+  setKindSwitcher: (settings, { kindSwitcher }) => ({ ...settings, kindSwitcher }),
+  setWheelDock: (settings, { wheelDock }) => ({ ...settings, wheelDock }),
+  toggleWheelOpenedAtPointer: (settings) => ({
+    ...settings,
+    isWheelOpenedAtPointer: !settings.isWheelOpenedAtPointer,
+  }),
+  toggleWheelButtonInStatusBar: (settings) => ({
+    ...settings,
+    isWheelButtonInStatusBar: !settings.isWheelButtonInStatusBar,
+  }),
 };
 
 export function isViewCommand(command: { readonly kind: string }): command is ViewCommand {

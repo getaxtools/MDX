@@ -99,6 +99,7 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::window::toggle_full_screen,
         menu::update_view_menu,
         menu::update_menu_language,
+        menu::update_menu_shortcuts,
         menu::recent_files_menu::update_recent_menu,
     ])
 }

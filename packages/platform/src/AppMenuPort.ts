@@ -16,6 +16,8 @@ export interface AppMenuPort {
   showViewState(state: ViewMenuState): Promise<void>;
   /** Lists recent documents, newest first, under File > Open Recent. */
   showRecentFiles(displayPaths: readonly string[]): Promise<void>;
+  /** Shows these keys next to menu items, by item id; an empty text shows no keys. */
+  showShortcuts(shortcutTexts: Readonly<Record<string, string>>): Promise<void>;
   /** Builds the menu again with these labels, keyed like the message catalog. */
   showLabels(labels: Readonly<Record<string, string>>): Promise<void>;
 }

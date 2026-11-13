@@ -28,6 +28,8 @@ export const tauriCommands = {
   updateRecentMenu: (displayPaths: readonly string[]) => invoke<null>('update_recent_menu', { displayPaths }),
   updateMenuLanguage: (labels: Readonly<Record<string, string>>) =>
     invoke<null>('update_menu_language', { labels }),
+  updateMenuShortcuts: (shortcuts: Readonly<Record<string, string>>) =>
+    invoke<null>('update_menu_shortcuts', { shortcuts }),
   watchDocuments: (paths: readonly string[]) => invoke<null>('watch_documents', { paths }),
   watchFolders: (paths: readonly string[]) => invoke<null>('watch_folders', { paths }),
   resolveDocumentLink: (document: string, href: string) =>

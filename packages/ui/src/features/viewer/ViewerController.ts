@@ -49,6 +49,9 @@ import {
   type UnsavedChangesChoice,
   type UnsavedChangesRequest,
 } from '../saving/DocumentSaving';
+import { shortcutLabelFor } from '../shortcuts/commandShortcuts';
+import { effectiveCommandShortcuts } from '../shortcuts/effectiveCommandShortcuts';
+import { REBINDABLE_COMMANDS } from '../shortcuts/rebindableCommands';
 import { isTabCommand } from '../tabs/tabCommands';
 import { applySessionCommand } from './applySessionCommand';
 import { LiveReload } from './LiveReload';
@@ -149,7 +152,8 @@ export type ViewerDialog =
   | 'commandPalette'
   | 'settings'
   | 'clearAllData'
-  | 'controlWheel';
+  | 'controlWheel'
+  | 'workspaceKindSettings';
 
 const DIALOGS_BY_COMMAND: Partial<Record<ViewerCommand['kind'], ViewerDialog>> = {
   showAbout: 'about',
@@ -188,6 +192,7 @@ export class ViewerController {
   private externalLinkRequest: string | undefined;
   private isSourceView = false;
   private shownMenuViewState = '';
+  private shownMenuShortcuts = '';
   private shownRecentFiles: ViewerState['recentFiles'] | undefined;
   private pathStatuses: ReadonlyMap<string, PathStatus> = new Map();
   private checkedLocationKeys = '';
@@ -462,6 +467,10 @@ export class ViewerController {
     revealInFileManager: ({ path }) => this.revealInFileManager(path),
     toggleFullScreen: () => this.dependencies.desktopShell?.toggleFullScreen(),
     toggleControlWheel: () => this.toggleControlWheel(),
+    showWorkspaceKindSettings: () => {
+      this.openDialog = 'workspaceKindSettings';
+      this.publish(this.composeSnapshot(this.snapshot.notice));
+    },
     switchWorkspaceKind: (command) => this.runWorkspaceKindCommand(command),
     setWorkspaceKindEnabled: (command) => this.runWorkspaceKindCommand(command),
     runEditorCommand: ({ command }) => {
@@ -521,6 +530,7 @@ export class ViewerController {
     );
     this.showViewStateInMenu();
     this.showRecentFilesInMenu();
+    this.showShortcutsInMenu();
   }
 
   private showViewStateInMenu(): void {
@@ -542,6 +552,23 @@ export class ViewerController {
     if (stateKey === this.shownMenuViewState) return;
     this.shownMenuViewState = stateKey;
     void menu.showViewState(state);
+  }
+
+  /** The menu shows the keys of commands the user can change; an empty text shows none. */
+  private showShortcutsInMenu(): void {
+    const { menu, session, translator } = this.dependencies;
+    if (!menu) return;
+    const shortcuts = effectiveCommandShortcuts(session.currentState().shortcutOverrides);
+    const shortcutTexts = Object.fromEntries(
+      REBINDABLE_COMMANDS.map(({ id, command }) => [
+        id,
+        shortcutLabelFor(command, translator, shortcuts) ?? '',
+      ]),
+    );
+    const shortcutsKey = JSON.stringify(shortcutTexts);
+    if (shortcutsKey === this.shownMenuShortcuts) return;
+    this.shownMenuShortcuts = shortcutsKey;
+    void menu.showShortcuts(shortcutTexts);
   }
 
   private showRecentFilesInMenu(): void {
@@ -665,7 +692,8 @@ export class ViewerController {
   }
 
   private toggleControlWheel(): void {
-    this.openDialog = this.openDialog === 'controlWheel' ? undefined : 'controlWheel';
+    const isWheelOpen = this.openDialog === 'controlWheel' || this.openDialog === 'workspaceKindSettings';
+    this.openDialog = isWheelOpen ? undefined : 'controlWheel';
     this.publish(this.composeSnapshot(this.snapshot.notice));
   }
 
@@ -820,6 +848,7 @@ export class ViewerController {
     this.publish(this.composeSnapshot(this.snapshot.notice));
     this.showViewStateInMenu();
     this.showRecentFilesInMenu();
+    this.showShortcutsInMenu();
     this.refreshPathStatuses();
     this.liveReload?.watchOpenTabs();
     this.editing.keepOnly(

@@ -5,6 +5,7 @@ export class InMemoryAppMenu implements AppMenuPort {
   shownViewState: ViewMenuState | undefined;
   shownRecentFiles: readonly string[] | undefined;
   shownLabels: Readonly<Record<string, string>> | undefined;
+  shownShortcuts: Readonly<Record<string, string>> | undefined;
 
   onMenuCommand(listener: MenuCommandListener): () => void {
     this.listeners.add(listener);
@@ -18,6 +19,11 @@ export class InMemoryAppMenu implements AppMenuPort {
 
   showRecentFiles(displayPaths: readonly string[]): Promise<void> {
     this.shownRecentFiles = displayPaths;
+    return Promise.resolve();
+  }
+
+  showShortcuts(shortcutTexts: Readonly<Record<string, string>>): Promise<void> {
+    this.shownShortcuts = shortcutTexts;
     return Promise.resolve();
   }
 

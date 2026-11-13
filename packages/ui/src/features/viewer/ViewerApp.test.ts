@@ -237,6 +237,69 @@ describe('ViewerApp', () => {
     expect(screen.queryByRole('menu', { name: 'Workspace kinds' })).toBeNull();
   });
 
+  it('a changed wheel shortcut works at once and the default keys stop working', async () => {
+    const { controller } = await renderViewer();
+    await controller.execute({
+      kind: 'setShortcut',
+      commandId: 'toggleControlWheel',
+      combination: ['ctrl', 'shift', 'J'],
+    });
+
+    await userEvent.keyboard('{Control>}{Shift>} {/Shift}{/Control}');
+    await tick();
+    expect(screen.queryByRole('dialog', { name: 'Control wheel' })).toBeNull();
+    await userEvent.keyboard('{Control>}{Shift>}J{/Shift}{/Control}');
+
+    expect(await screen.findByRole('dialog', { name: 'Control wheel' })).toBeTruthy();
+  });
+
+  it('shows the status bar wheel button only when the setting is on, and it opens the wheel', async () => {
+    const { controller } = await renderViewer();
+    expect(screen.queryByRole('button', { name: /show control wheel/ })).toBeNull();
+
+    await controller.execute({ kind: 'toggleWheelButtonInStatusBar' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Markdown viewer, show control wheel' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Control wheel' })).toBeTruthy();
+  });
+
+  it('opens the wheel with the kind choices for Choose Workspace Kinds', async () => {
+    const { controller } = await renderViewer();
+
+    await controller.execute({ kind: 'showWorkspaceKindSettings' });
+
+    expect(await screen.findByRole('dialog', { name: 'Control wheel' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'Workspace kinds' })).toBeTruthy();
+  });
+
+  it('the pointer listener exists only while the option is on', async () => {
+    const addListener = vi.spyOn(globalThis, 'addEventListener');
+    const removeListener = vi.spyOn(globalThis, 'removeEventListener');
+    const { controller } = await renderViewer();
+    const pointerListenersAdded = () => addListener.mock.calls.filter(([type]) => type === 'pointermove');
+    expect(pointerListenersAdded()).toHaveLength(0);
+
+    await controller.execute({ kind: 'toggleWheelOpenedAtPointer' });
+    await tick();
+    expect(pointerListenersAdded()).toHaveLength(1);
+    await controller.execute({ kind: 'toggleWheelOpenedAtPointer' });
+    await tick();
+
+    expect(removeListener.mock.calls.some(([type]) => type === 'pointermove')).toBe(true);
+  });
+
+  it('the wheel opens at the last pointer position', async () => {
+    const { controller } = await renderViewer();
+    await controller.execute({ kind: 'toggleWheelOpenedAtPointer' });
+    await tick();
+
+    await fireEvent.pointerMove(globalThis.document.body, { clientX: 500, clientY: 400 });
+    await controller.execute({ kind: 'toggleControlWheel' });
+
+    const wheel = await screen.findByRole('dialog', { name: 'Control wheel' });
+    expect(wheel.style.left).toBe('400px');
+  });
+
   it('stays at the end of the document after scrolling there', async () => {
     vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(1100);
     vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(100);

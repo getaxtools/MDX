@@ -1,22 +1,26 @@
 <script lang="ts">
   import type { Translator } from '@mdx/i18n';
   import Dialog from '../../components/Dialog.svelte';
+  import { COMMAND_SHORTCUTS, shortcutLabelFor, type CommandShortcut } from '../shortcuts/commandShortcuts';
   import { describeCombination } from '../shortcuts/describeCombination';
-  import { matchingShortcuts } from './keyboardShortcuts';
+  import { keyboardShortcutsWith, matchingShortcuts } from './keyboardShortcuts';
 
   interface Props {
     translator: Translator;
+    /** The keys each command has now, including the user's changes. */
+    shortcuts?: readonly CommandShortcut[];
     onClose: () => void;
   }
 
-  const { translator, onClose }: Props = $props();
+  const { translator, shortcuts = COMMAND_SHORTCUTS, onClose }: Props = $props();
 
   let query = $state('');
   let searchInput: HTMLInputElement | undefined = $state();
 
   $effect(() => searchInput?.focus());
 
-  const shownShortcuts = $derived(matchingShortcuts(query, translator));
+  const shownShortcuts = $derived(matchingShortcuts(query, translator, keyboardShortcutsWith(shortcuts)));
+  const wheelShortcut = $derived(shortcutLabelFor({ kind: 'toggleControlWheel' }, translator, shortcuts));
 </script>
 
 <Dialog
@@ -47,6 +51,8 @@
             {#each shortcut.combinations as combination, index (index)}
               {#if index > 0},
               {/if}<kbd>{describeCombination(combination, translator)}</kbd>
+            {:else}
+              {translator.translate('shortcuts.none')}
             {/each}
           </td>
         </tr>
@@ -56,6 +62,11 @@
   {#if shownShortcuts.length === 0}
     <p class="no-matches" role="status">{translator.translate('shortcuts.noMatches', { query })}</p>
   {/if}
+  <p class="mouse-button-help">
+    {wheelShortcut
+      ? translator.translate('help.controlWheel.mouseButton', { shortcut: wheelShortcut })
+      : translator.translate('help.controlWheel.mouseButtonWithoutShortcut')}
+  </p>
 </Dialog>
 
 <style>
@@ -80,8 +91,13 @@
     border-color: var(--color-focus);
   }
 
-  .no-matches {
+  :is(.no-matches, .mouse-button-help) {
     color: var(--color-text-secondary);
+  }
+
+  .mouse-button-help {
+    margin-bottom: 0;
+    font-size: var(--text-size-small);
   }
 
   .search:focus-visible {

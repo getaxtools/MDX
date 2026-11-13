@@ -1,6 +1,24 @@
+import { WorkspaceKindsState, type WorkspaceKind } from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
 import { describe, expect, it } from 'vitest';
+import { effectiveCommandShortcuts } from '../shortcuts/effectiveCommandShortcuts';
 import { paletteCommands } from './paletteCommands';
+
+const NOTES_BUILT_SPEC_VIEWER_PLANNED: readonly WorkspaceKind[] = [
+  { id: 'markdownViewer', availability: 'built' },
+  { id: 'notes', availability: 'built' },
+  { id: 'specViewer', availability: 'planned' },
+];
+
+function kindSwitchesIn(enabledKindIds: string[], activeKindId: string): string[] {
+  const workspaceKinds = WorkspaceKindsState.fromSaved(
+    { enabledKindIds, activeKindId },
+    NOTES_BUILT_SPEC_VIEWER_PLANNED,
+  );
+  return paletteCommands(createTranslator(), { shortcuts: effectiveCommandShortcuts({}), workspaceKinds })
+    .filter(({ command }) => command.kind === 'switchWorkspaceKind')
+    .map(({ label }) => label);
+}
 
 const commands = paletteCommands(createTranslator());
 const labels = commands.map((command) => command.label);
@@ -36,5 +54,40 @@ describe('paletteCommands', () => {
     const commandKeys = commands.map(({ command }) => JSON.stringify(command));
 
     expect(new Set(commandKeys).size).toBe(commandKeys.length);
+  });
+
+  it('offers Show Control Wheel with the effective shortcut', () => {
+    const changed = paletteCommands(createTranslator(), {
+      shortcuts: effectiveCommandShortcuts({ toggleControlWheel: ['ctrl', 'shift', 'J'] }),
+      workspaceKinds: WorkspaceKindsState.initial(NOTES_BUILT_SPEC_VIEWER_PLANNED),
+    });
+
+    expect(commands).toContainEqual({
+      command: { kind: 'toggleControlWheel' },
+      label: 'Show Control Wheel',
+      shortcut: 'Ctrl+Shift+Space',
+    });
+    expect(changed).toContainEqual({
+      command: { kind: 'toggleControlWheel' },
+      label: 'Show Control Wheel',
+      shortcut: 'Ctrl+Shift+J',
+    });
+  });
+
+  it('offers Choose Workspace Kinds', () => {
+    expect(commands).toContainEqual({
+      command: { kind: 'showWorkspaceKindSettings' },
+      label: 'Choose Workspace Kinds…',
+    });
+  });
+
+  it('offers a switch for each enabled kind except the active one', () => {
+    expect(kindSwitchesIn(['markdownViewer', 'notes'], 'markdownViewer')).toEqual(['Workspace Kind: Notes']);
+    expect(kindSwitchesIn(['markdownViewer', 'notes'], 'notes')).toEqual(['Workspace Kind: Markdown viewer']);
+  });
+
+  it('never offers a planned or disabled kind', () => {
+    expect(kindSwitchesIn(['markdownViewer', 'specViewer'], 'markdownViewer')).toEqual([]);
+    expect(kindSwitchesIn(['markdownViewer'], 'markdownViewer')).toEqual([]);
   });
 });
