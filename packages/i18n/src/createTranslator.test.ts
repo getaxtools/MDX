@@ -15,6 +15,7 @@ const SAMPLE_VALUES = {
   encoding: 'UTF-8',
   lineEnding: 'LF',
   version: '1.0.0',
+  shortcut: 'Ctrl+Shift+P',
   group: 'Theme',
   action: 'Dark',
   section: 'Favourites',
