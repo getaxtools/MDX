@@ -127,6 +127,11 @@ export const COMMAND_SHORTCUTS: readonly CommandShortcut[] = [
   { command: { kind: 'goForward' }, combinations: [['alt', 'ArrowRight']], actionKey: 'menu.view.goForward' },
   { command: { kind: 'toggleFullScreen' }, combinations: [['F11']], actionKey: 'menu.view.fullScreen' },
   {
+    command: { kind: 'toggleControlWheel' },
+    combinations: [['ctrl', 'shift', 'Space']],
+    actionKey: 'menu.view.controlWheel',
+  },
+  {
     command: { kind: 'showKeyboardShortcuts' },
     combinations: [['F1']],
     actionKey: 'menu.help.keyboardShortcuts',
@@ -182,7 +187,12 @@ function matchesCombination(
   if (isCtrlPressed !== modifiers.includes('ctrl') || event.altKey !== modifiers.includes('alt'))
     return false;
   if (!isShiftProducedSymbol(key) && event.shiftKey !== modifiers.includes('shift')) return false;
-  return event.key.toLowerCase() === key.toLowerCase();
+  return pressedKeyName(event.key).toLowerCase() === key.toLowerCase();
+}
+
+/** `event.key` is a space character, while combinations name the key `Space`. */
+function pressedKeyName(key: string): string {
+  return key === ' ' ? 'Space' : key;
 }
 
 /** Symbols such as `+` need Shift on some keyboards but not on others or on the numeric keypad. */

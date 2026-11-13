@@ -143,7 +143,13 @@ export interface ExportRequest {
 }
 
 export type ViewerDialog =
-  'about' | 'keyboardShortcuts' | 'pasteTable' | 'commandPalette' | 'settings' | 'clearAllData';
+  | 'about'
+  | 'keyboardShortcuts'
+  | 'pasteTable'
+  | 'commandPalette'
+  | 'settings'
+  | 'clearAllData'
+  | 'controlWheel';
 
 const DIALOGS_BY_COMMAND: Partial<Record<ViewerCommand['kind'], ViewerDialog>> = {
   showAbout: 'about',
@@ -455,6 +461,7 @@ export class ViewerController {
     copyPath: ({ path }) => this.copyPath(path),
     revealInFileManager: ({ path }) => this.revealInFileManager(path),
     toggleFullScreen: () => this.dependencies.desktopShell?.toggleFullScreen(),
+    toggleControlWheel: () => this.toggleControlWheel(),
     switchWorkspaceKind: (command) => this.runWorkspaceKindCommand(command),
     setWorkspaceKindEnabled: (command) => this.runWorkspaceKindCommand(command),
     runEditorCommand: ({ command }) => {
@@ -655,6 +662,11 @@ export class ViewerController {
     } catch {
       this.showNotice('errors.paths.copyFailed');
     }
+  }
+
+  private toggleControlWheel(): void {
+    this.openDialog = this.openDialog === 'controlWheel' ? undefined : 'controlWheel';
+    this.publish(this.composeSnapshot(this.snapshot.notice));
   }
 
   private runWorkspaceKindCommand(command: WorkspaceKindCommand): void {

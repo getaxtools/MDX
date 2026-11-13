@@ -147,6 +147,14 @@
     event.preventDefault();
   }
 
+  type ControlWheelComponent = typeof import('../control-wheel/ControlWheel.svelte').default;
+  let controlWheelComponent: Promise<ControlWheelComponent> | undefined;
+
+  function loadControlWheel(): Promise<ControlWheelComponent> {
+    controlWheelComponent ??= import('../control-wheel/ControlWheel.svelte').then((module) => module.default);
+    return controlWheelComponent;
+  }
+
   const MOUSE_BACK_BUTTON = 3;
   const MOUSE_FORWARD_BUTTON = 4;
 
@@ -435,6 +443,17 @@
       onOpenDocument={(documentPath: string) => void controller.openDocuments([documentPath])}
       onClose={() => controller.closeDialog()}
     />
+  {/if}
+  {#if snapshot.openDialog === 'controlWheel'}
+    {#await loadControlWheel() then ControlWheel}
+      <ControlWheel
+        kinds={snapshot.viewer.workspaceKinds}
+        dock={snapshot.viewer.viewSettings.wheelDock}
+        {translator}
+        onCommand={(command: ViewerCommand) => void controller.execute(command)}
+        onClose={() => controller.closeDialog()}
+      />
+    {/await}
   {/if}
   {#if snapshot.openDialog === 'clearAllData'}
     <ConfirmDialog

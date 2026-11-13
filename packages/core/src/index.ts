@@ -40,6 +40,17 @@ export {
   type SavedWorkspaceKinds,
 } from './workspace-kinds/WorkspaceKindsState';
 export {
+  hitTestRing,
+  ringLayout,
+  sectorPath,
+  type RingDirection,
+  type RingHit,
+  type RingLayout,
+  type RingPoint,
+  type RingRadii,
+  type RingSector,
+} from './workspace-kinds/ringGeometry';
+export {
   LAST_TAB_NUMBER_KEY,
   MAX_REOPENABLE_TABS,
   TabStrip,

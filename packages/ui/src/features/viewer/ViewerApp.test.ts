@@ -225,6 +225,18 @@ describe('ViewerApp', () => {
     expect(screen.queryByRole('dialog', { name: 'About MDX' })).toBeNull();
   });
 
+  it('shows the control wheel only after it is first opened, and removes it when it closes', async () => {
+    const { controller } = await renderViewer();
+    expect(screen.queryByRole('dialog', { name: 'Control wheel' })).toBeNull();
+
+    await controller.execute({ kind: 'toggleControlWheel' });
+    expect(await screen.findByRole('dialog', { name: 'Control wheel' })).toBeTruthy();
+    await userEvent.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog', { name: 'Control wheel' })).toBeNull();
+    expect(screen.queryByRole('menu', { name: 'Workspace kinds' })).toBeNull();
+  });
+
   it('stays at the end of the document after scrolling there', async () => {
     vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(1100);
     vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(100);

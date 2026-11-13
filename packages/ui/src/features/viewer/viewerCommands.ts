@@ -27,6 +27,7 @@ export type ViewerCommand =
   | NavigationCommand
   | WorkspaceKindCommand
   | { readonly kind: 'toggleFullScreen' }
+  | { readonly kind: 'toggleControlWheel' }
   | { readonly kind: 'openDocuments' }
   | { readonly kind: 'openRecentFileAt'; readonly index: number }
   | { readonly kind: 'saveDocument' }

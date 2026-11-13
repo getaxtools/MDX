@@ -1616,6 +1616,28 @@ describe('ViewerController', () => {
       expect(snapshot().notice).toBeUndefined();
     });
 
+    it('opens the control wheel and closes it when asked again', async () => {
+      const { controller, snapshot } = createViewer();
+      await controller.start();
+
+      await controller.execute({ kind: 'toggleControlWheel' });
+      const openedDialog = snapshot().openDialog;
+      await controller.execute({ kind: 'toggleControlWheel' });
+
+      expect(openedDialog).toBe('controlWheel');
+      expect(snapshot().openDialog).toBeUndefined();
+    });
+
+    it('closes the control wheel when another dialog opens', async () => {
+      const { controller, snapshot } = createViewer();
+      await controller.start();
+
+      await controller.execute({ kind: 'toggleControlWheel' });
+      await controller.execute({ kind: 'showSettings' });
+
+      expect(snapshot().openDialog).toBe('settings');
+    });
+
     it('saves kind changes', async () => {
       const { controller, appState } = await viewerWithKinds(['markdownViewer', 'notes'], 'markdownViewer');
 
