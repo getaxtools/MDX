@@ -221,7 +221,7 @@
   }
 
   .sidebar :global(li > [role='treeitem'].unavailable) {
-    color: var(--color-text-tertiary);
+    color: var(--color-text-secondary);
     font-style: italic;
   }
 

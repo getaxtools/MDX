@@ -13,6 +13,7 @@ import type { ShortcutOverrideCommand } from '../shortcuts/shortcutOverrideComma
 import type { SnippetCommand } from '../snippets/snippetCommands';
 import type { TabCommand } from '../tabs/tabCommands';
 import type { WorkspaceCommand } from '../workspaces/workspaceCommands';
+import type { NotesLocationCommand } from '../notes-location/NotesLocationActions';
 import type { ViewCommand } from '../view/viewCommands';
 
 export type ViewerCommand =
@@ -32,6 +33,7 @@ export type ViewerCommand =
   | ShortcutOverrideCommand
   | SnippetCommand
   | WorkspaceCommand
+  | NotesLocationCommand
   | { readonly kind: 'toggleFullScreen' }
   | { readonly kind: 'toggleControlWheel' }
   | { readonly kind: 'showWorkspaceKindSettings' }

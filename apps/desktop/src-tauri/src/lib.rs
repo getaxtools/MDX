@@ -113,6 +113,8 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::workspace_file::take_startup_workspace_file,
         commands::notes_location::known_folders,
         commands::notes_location::prepare_notes_location,
+        commands::notes_location::check_notes_location,
+        commands::notes_location::locate_notes_location,
         commands::workspaces::load_workspace_registry,
         commands::workspaces::load_workspace,
         commands::workspaces::save_workspace,

@@ -10,7 +10,9 @@ use crate::commands::documents::validated_path;
 use crate::documents::{
     DocumentAccessList, DocumentError, DocumentLocation, canonical_key_of, locate_document,
 };
-use crate::notes_location::{DEFAULT_NOTES_FOLDER_NAME, mark_location, one_drive_folders};
+use crate::notes_location::{
+    DEFAULT_NOTES_FOLDER_NAME, mark_location, one_drive_folders, read_marker,
+};
 use crate::storage::WorkspaceId;
 
 /// UI tests point Documents at a temporary folder, so they never write to the real one.
@@ -87,6 +89,49 @@ pub fn may_claim(path: &Path, documents: Option<&Path>, is_picked: impl Fn(&Path
     is_default_place(path, documents) || (path.is_dir() && is_picked(path))
 }
 
+/// Whether a Notes workspace's folder is there and is still the same location.
+#[derive(Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LocationCheck {
+    Available,
+    NotAvailable,
+}
+
+/// Looks for the folder and its marker; a missing folder is reported, never created.
+#[tauri::command]
+pub fn check_notes_location(
+    path: String,
+    location_id: String,
+) -> Result<LocationCheck, DocumentError> {
+    Ok(location_check(&validated_path(&path)?, &location_id))
+}
+
+pub fn location_check(path: &Path, location_id: &str) -> LocationCheck {
+    let is_same_location = path.is_dir()
+        && read_marker(path)
+            .is_ok_and(|marker| marker.is_some_and(|marker| marker.location_id == location_id));
+    if is_same_location {
+        LocationCheck::Available
+    } else {
+        LocationCheck::NotAvailable
+    }
+}
+
+/// A folder the user picked to find a moved Notes folder; refused unless its marker has the same id.
+#[tauri::command]
+pub fn locate_notes_location(
+    path: String,
+    location_id: String,
+    access: State<'_, Arc<DocumentAccessList>>,
+) -> Result<Option<DocumentLocation>, DocumentError> {
+    let path = validated_path(&path)?;
+    let location = locate_document(&path)?;
+    if !access.is_folder_allowed(&location) {
+        return Err(DocumentError::AccessDenied);
+    }
+    Ok((location_check(&path, &location_id) == LocationCheck::Available).then_some(location))
+}
+
 fn is_default_place(path: &Path, documents: Option<&Path>) -> bool {
     let (Some(parent), Some(documents), Some(name)) = (path.parent(), documents, path.file_name())
     else {
@@ -111,6 +156,43 @@ mod tests {
     use super::*;
 
     const DOCUMENTS: &str = r"C:\Users\Ana\Documents";
+
+    #[test]
+    fn a_missing_path_reports_not_available_without_creating_it() {
+        let folder = tempfile::tempdir().unwrap();
+        let missing = folder.path().join("MDX Notes");
+
+        assert_eq!(
+            location_check(&missing, "location-1"),
+            LocationCheck::NotAvailable
+        );
+        assert!(!missing.exists());
+    }
+
+    #[test]
+    fn the_same_location_is_available_and_another_id_is_not() {
+        let folder = tempfile::tempdir().unwrap();
+        mark_location(folder.path(), "location-1", 1).unwrap();
+
+        assert_eq!(
+            location_check(folder.path(), "location-1"),
+            LocationCheck::Available
+        );
+        assert_eq!(
+            location_check(folder.path(), "location-2"),
+            LocationCheck::NotAvailable
+        );
+    }
+
+    #[test]
+    fn a_folder_without_its_marker_is_not_available() {
+        let folder = tempfile::tempdir().unwrap();
+
+        assert_eq!(
+            location_check(folder.path(), "location-1"),
+            LocationCheck::NotAvailable
+        );
+    }
 
     #[test]
     fn may_make_the_default_folder_in_documents() {

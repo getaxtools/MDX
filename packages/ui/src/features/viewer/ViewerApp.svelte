@@ -40,6 +40,7 @@
   import WorkspaceDialogs from '../workspaces/WorkspaceDialogs.svelte';
   import { isWorkspaceDialog } from '../workspaces/WorkspaceActions';
   import WorkspaceButton from '../workspaces/WorkspaceButton.svelte';
+  import NotesLocationMissing from '../notes-location/NotesLocationMissing.svelte';
   import { workspaceNameOf } from '../workspaces/workspaceCommands';
   import { recentWorkspaceLinks } from '../workspaces/recentWorkspaceLinks';
   import { SessionWordCounts } from '../word-goals/SessionWordCounts';
@@ -389,7 +390,13 @@
           onDismiss={() => controller.dismissNotice()}
         />
         <div class="reading-area" data-focus-region>
-          {#if !activeTab || !isMarkdownViewerActive}
+          {#if snapshot.missingNotesLocation !== undefined}
+            <NotesLocationMissing
+              path={snapshot.missingNotesLocation}
+              {translator}
+              onCommand={(command: ViewerCommand) => void controller.execute(command)}
+            />
+          {:else if !activeTab || !isMarkdownViewerActive}
             <StartPage
               recentFiles={snapshot.viewer.recentFiles.entries()}
               activeKindId={snapshot.viewer.workspaceKinds.activeKindId()}

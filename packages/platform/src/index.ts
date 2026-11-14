@@ -62,5 +62,10 @@ export {
 export { InMemoryWorkspaceStore } from './fakes/InMemoryWorkspaceStore';
 export type { WorkspaceFileContents, WorkspaceFileListener, WorkspaceFilePort } from './WorkspaceFilePort';
 export { InMemoryWorkspaceFiles } from './fakes/InMemoryWorkspaceFiles';
-export type { KnownFolders, NotesLocationPort, PreparedNotesLocation } from './NotesLocationPort';
+export type {
+  KnownFolders,
+  LocationAvailability,
+  NotesLocationPort,
+  PreparedNotesLocation,
+} from './NotesLocationPort';
 export { InMemoryNotesLocations } from './fakes/InMemoryNotesLocations';

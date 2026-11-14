@@ -734,5 +734,12 @@
   "settings.section.notes": "Notes",
   "settings.notes.folder": "Notes folder",
   "settings.notes.openInFileExplorer": "Open in File Explorer",
-  "settings.notes.description": "Your notes are ordinary files in this folder, so you can back it up or open them in other apps."
+  "settings.notes.description": "Your notes are ordinary files in this folder, so you can back it up or open them in other apps.",
+  "notes.missing.title": "Your notes folder is not available",
+  "notes.missing.message": "MDX cannot find {path}. It may be on a drive that is not connected, or it was moved or renamed. MDX did not create a new folder there.",
+  "notes.missing.tryAgain": "Try Again",
+  "notes.missing.locate": "Locate Folder…",
+  "notes.missing.chooseAnother": "Choose Another Folder…",
+  "notes.missing.otherFolder": "That folder is not this workspace's notes folder. Choose the folder it was moved to.",
+  "notes.missing.stillMissing": "The notes folder is still not available."
 }

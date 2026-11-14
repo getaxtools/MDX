@@ -1,4 +1,10 @@
-import type { KnownFolders, NotesLocationPort, PreparedNotesLocation } from '@mdx/platform';
+import type {
+  DocumentLocation,
+  KnownFolders,
+  LocationAvailability,
+  NotesLocationPort,
+  PreparedNotesLocation,
+} from '@mdx/platform';
 import { tauriCommands } from './tauriCommands';
 
 export class TauriNotesLocations implements NotesLocationPort {
@@ -9,5 +15,13 @@ export class TauriNotesLocations implements NotesLocationPort {
 
   prepareLocation(path: string, locationId: string): Promise<PreparedNotesLocation> {
     return tauriCommands.prepareNotesLocation(path, locationId);
+  }
+
+  checkLocation(path: string, locationId: string): Promise<LocationAvailability> {
+    return tauriCommands.checkNotesLocation(path, locationId);
+  }
+
+  async locateLocation(path: string, locationId: string): Promise<DocumentLocation | undefined> {
+    return (await tauriCommands.locateNotesLocation(path, locationId)) ?? undefined;
   }
 }

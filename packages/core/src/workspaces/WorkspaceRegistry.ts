@@ -139,6 +139,12 @@ export class WorkspaceRegistry {
     return this.replaced({ ...existing, name: name.trim() });
   }
 
+  /** Replaces what a workspace's kind keeps for it, such as a Notes workspace's new location. */
+  setKindData(workspaceId: string, kindData: unknown): WorkspaceChange | undefined {
+    const existing = this.find(workspaceId);
+    return existing ? this.replaced({ ...existing, kindData }) : undefined;
+  }
+
   markShown(workspaceId: string, nowMs: number): WorkspaceChange | undefined {
     const existing = this.find(workspaceId);
     return existing ? this.replaced({ ...existing, lastShownAtMs: nowMs }) : undefined;

@@ -73,6 +73,7 @@ import {
   type WorkspaceFileCommand,
 } from '../workspaces/workspaceCommands';
 import { WorkspaceFileActions, type PendingWorkspaceFile } from '../workspaces/WorkspaceFileActions';
+import { NotesLocationActions, isNotesLocationCommand } from '../notes-location/NotesLocationActions';
 import { windowTitleFor } from '../workspaces/windowTitle';
 import { recentWorkspaceLinks } from '../workspaces/recentWorkspaceLinks';
 import { applySessionCommand } from './applySessionCommand';
@@ -159,6 +160,8 @@ export interface ViewerSnapshot {
   readonly editorRequest?: EditorRequest;
   /** Absent while the earlier state file stands in for the workspace store. */
   readonly workspaces?: WorkspacesView;
+  /** The folder of the shown Notes workspace while it cannot be found. */
+  readonly missingNotesLocation?: string;
 }
 
 export interface WorkspacesView {
@@ -226,6 +229,7 @@ export class ViewerController {
   private openDialog: ViewerDialog | undefined;
   private readonly workspaceActions: WorkspaceActions;
   private readonly workspaceFileActions: WorkspaceFileActions | undefined;
+  private readonly notesLocationActions: NotesLocationActions | undefined;
   private pendingWorkspaceFile: PendingWorkspaceFile | undefined;
   private noticeActions: readonly NoticeAction[] = [];
   private findRequest = 0;
@@ -280,6 +284,19 @@ export class ViewerController {
     this.documentAttachments = this.createDocumentAttachments();
     this.workspaceActions = this.createWorkspaceActions();
     this.workspaceFileActions = this.createWorkspaceFileActions();
+    this.notesLocationActions = this.createNotesLocationActions();
+  }
+
+  private createNotesLocationActions(): NotesLocationActions | undefined {
+    const { session, notesLocations } = this.dependencies;
+    if (!notesLocations) return undefined;
+    return new NotesLocationActions({
+      session,
+      notesLocations,
+      pickFolder: () => this.pickNotesFolder(),
+      showNotice: (key, values) => this.showNotice(key, values),
+      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+    });
   }
 
   private createDocumentSaving(): DocumentSaving {
@@ -358,6 +375,7 @@ export class ViewerController {
     this.navigation.recordActiveDocument();
     this.refreshPathStatuses();
     await this.refreshActiveDocument();
+    await this.notesLocationActions?.check();
   }
 
   private createDocumentAttachments(): DocumentAttachments | undefined {
@@ -394,6 +412,7 @@ export class ViewerController {
     if (this.documentAttachments) this.stopActions.push(this.documentAttachments.start());
     await this.openDocuments(await requests.takeStartupDocuments());
     await this.refreshActiveDocument();
+    await this.notesLocationActions?.check();
     await this.offerWorkspaceFiles();
   }
 
@@ -580,6 +599,10 @@ export class ViewerController {
     }
     if (command.kind === 'setLanguage') {
       this.changeLanguage(command.language);
+      return;
+    }
+    if (isNotesLocationCommand(command)) {
+      await this.notesLocationActions?.run(command);
       return;
     }
     if (isWorkspaceFileCommand(command)) {
@@ -1186,7 +1209,13 @@ export class ViewerController {
       ...(this.isSourceView ? { isSourceView: true } : {}),
       ...this.unsavedChangesPart(),
       ...this.workspacesPart(),
+      ...this.missingNotesLocationPart(),
     };
+  }
+
+  private missingNotesLocationPart(): Pick<ViewerSnapshot, 'missingNotesLocation'> {
+    const missingNotesLocation = this.notesLocationActions?.missingLocation();
+    return missingNotesLocation === undefined ? {} : { missingNotesLocation };
   }
 
   private notesSetupPart(): Pick<WorkspacesView, 'notesSetup'> {

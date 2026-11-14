@@ -226,6 +226,13 @@ export class ViewerSession {
     return change;
   }
 
+  async updateWorkspaceKindData(workspaceId: string, kindData: unknown): Promise<void> {
+    const change = this.workspaces()?.setKindData(workspaceId, kindData);
+    if (!this.workspaceStorage || change?.outcome !== 'changed') return;
+    await this.workspaceStorage.saveWorkspace(change.registry, change.workspace);
+    this.replaceState(this.state);
+  }
+
   /** A shown workspace is first replaced by the Markdown viewer workspace shown most recently. */
   async deleteWorkspace(workspaceId: string): Promise<WorkspaceRemoval | undefined> {
     const registry = this.workspaces();

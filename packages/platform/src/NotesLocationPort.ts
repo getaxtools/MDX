@@ -22,4 +22,10 @@ export interface NotesLocationPort {
    * default place in Documents; any other folder must have been picked by the user.
    */
   prepareLocation(path: string, locationId: string): Promise<PreparedNotesLocation>;
+  /** Whether the folder is there and still marked with this location id; a missing folder is never made. */
+  checkLocation(path: string, locationId: string): Promise<LocationAvailability>;
+  /** A picked folder that is the same location moved; undefined when its marker has another id. */
+  locateLocation(path: string, locationId: string): Promise<DocumentLocation | undefined>;
 }
+
+export type LocationAvailability = 'available' | 'notAvailable';

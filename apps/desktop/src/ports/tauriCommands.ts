@@ -6,6 +6,7 @@ import type {
   FolderListing,
   FolderSearchResults,
   KnownFolders,
+  LocationAvailability,
   PreparedNotesLocation,
   OpenedDocument,
   PathStatus,
@@ -74,6 +75,10 @@ export const tauriCommands = {
   knownFolders: () => invoke<KnownFolders>('known_folders'),
   prepareNotesLocation: (path: string, locationId: string) =>
     invoke<PreparedNotesLocation>('prepare_notes_location', { path, locationId }),
+  checkNotesLocation: (path: string, locationId: string) =>
+    invoke<LocationAvailability>('check_notes_location', { path, locationId }),
+  locateNotesLocation: (path: string, locationId: string) =>
+    invoke<DocumentLocation | null>('locate_notes_location', { path, locationId }),
   deleteWorkspace: (workspaceId: string) => invoke<null>('delete_workspace', { workspaceId }),
   saveWorkspaceList: (workspaceId: string, listName: string, valueJson: string) =>
     invoke<null>('save_workspace_list', { workspaceId, listName, valueJson }),
