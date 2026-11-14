@@ -3,7 +3,11 @@ use rusqlite::Connection;
 use super::DatabaseError;
 
 /// Each step moves the schema up by one version and never changes once released; add new steps at the end.
-pub const SCHEMA_STEPS: &[&str] = &[CREATE_WORKSPACE_TABLES, ADD_WORKSPACE_SOURCE_FILE];
+pub const SCHEMA_STEPS: &[&str] = &[
+    CREATE_WORKSPACE_TABLES,
+    ADD_WORKSPACE_SOURCE_FILE,
+    ADD_WORKSPACE_KIND_DATA,
+];
 
 const CREATE_WORKSPACE_TABLES: &str = "
 CREATE TABLE app_values (
@@ -40,6 +44,10 @@ CREATE INDEX window_sessions_by_workspace ON window_sessions (workspace_id);
 
 /// The workspace file a workspace was opened from, so opening that file again switches to it.
 const ADD_WORKSPACE_SOURCE_FILE: &str = "ALTER TABLE workspaces ADD COLUMN source_file TEXT;";
+
+/// What a kind keeps for its workspace, such as a Notes workspace's location; read with the registry.
+const ADD_WORKSPACE_KIND_DATA: &str = "ALTER TABLE workspaces ADD COLUMN kind_data_json TEXT
+    CHECK (kind_data_json IS NULL OR (json_valid(kind_data_json) AND length(kind_data_json) <= 65536));";
 
 pub fn schema_version(connection: &Connection) -> Result<usize, DatabaseError> {
     let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;

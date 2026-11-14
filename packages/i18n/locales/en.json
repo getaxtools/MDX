@@ -721,5 +721,18 @@
   "workspaces.fileDialog.nothingReadable": "This workspace lists no folders or files.",
   "workspaces.fileDialog.open": "Open",
   "workspaces.fileDialog.enableAndOpen": "Turn On {kind} and Open",
-  "workspaces.fileDialog.cancel": "Cancel"
+  "workspaces.fileDialog.cancel": "Cancel",
+  "workspaces.notes.locationLabel": "Notes folder",
+  "workspaces.notes.choose": "Choose Another Folder…",
+  "workspaces.notes.useDefault": "Use the Default Folder",
+  "workspaces.notes.syncedNotice": "OneDrive backs up this folder. Notes that are only online are found by name until you open them.",
+  "workspaces.notes.claim.claimed": "Another Notes workspace already uses this folder.",
+  "workspaces.notes.claim.insideLocation": "This folder is inside another Notes workspace's folder.",
+  "workspaces.notes.claim.containsLocation": "This folder contains another Notes workspace's folder.",
+  "workspaces.notes.noDocuments": "MDX could not find your Documents folder. Choose a folder for your notes.",
+  "workspaces.notes.locationFailed": "MDX could not use {path} for notes.",
+  "settings.section.notes": "Notes",
+  "settings.notes.folder": "Notes folder",
+  "settings.notes.openInFileExplorer": "Open in File Explorer",
+  "settings.notes.description": "Your notes are ordinary files in this folder, so you can back it up or open them in other apps."
 }

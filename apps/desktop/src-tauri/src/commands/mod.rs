@@ -11,6 +11,7 @@ pub mod folder_text_search;
 pub mod folders;
 pub mod links;
 pub mod live_reload;
+pub mod notes_location;
 pub mod window;
 pub mod workspace_file;
 pub mod workspaces;

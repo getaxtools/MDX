@@ -30,8 +30,12 @@ export class TauriWorkspaceStore implements WorkspaceStorePort {
     await tauriCommands.clearWorkspaces();
   }
 
-  loadRegistry(): Promise<StoredWorkspace[]> {
-    return tauriCommands.loadWorkspaceRegistry();
+  async loadRegistry(): Promise<StoredWorkspace[]> {
+    const rows = await tauriCommands.loadWorkspaceRegistry();
+    return rows.map(({ kindData, ...workspace }) => ({
+      ...workspace,
+      ...(kindData === null || kindData === undefined ? {} : { kindData: parsedOrNull(kindData) }),
+    }));
   }
 
   async loadWorkspace(workspaceId: string, windowId: string): Promise<StoredWorkspaceContents | undefined> {
@@ -39,8 +43,11 @@ export class TauriWorkspaceStore implements WorkspaceStorePort {
     return reply === null ? undefined : contentsOf(reply);
   }
 
-  async saveWorkspace(workspace: StoredWorkspace): Promise<void> {
-    await tauriCommands.saveWorkspace(workspace);
+  async saveWorkspace({ kindData, ...workspace }: StoredWorkspace): Promise<void> {
+    await tauriCommands.saveWorkspace({
+      ...workspace,
+      kindData: kindData === undefined || kindData === null ? null : JSON.stringify(kindData),
+    });
   }
 
   async deleteWorkspace(workspaceId: string): Promise<void> {
@@ -72,6 +79,15 @@ export class TauriWorkspaceStore implements WorkspaceStorePort {
 
   async saveAppValue(key: string, value: unknown): Promise<void> {
     await tauriCommands.saveAppValue(key, JSON.stringify(value));
+  }
+}
+
+/** A damaged value reads as none, so one bad row never hides a workspace. */
+function parsedOrNull(json: string): unknown {
+  try {
+    return JSON.parse(json);
+  } catch {
+    return null;
   }
 }
 

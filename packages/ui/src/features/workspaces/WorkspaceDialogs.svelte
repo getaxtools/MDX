@@ -22,9 +22,10 @@
     translator: Translator;
     onCommand: (command: ViewerCommand) => void;
     onClose: () => void;
+    onPickFolder?: () => Promise<string | undefined>;
   }
 
-  const { dialog, workspaces, kinds, translator, onCommand, onClose }: Props = $props();
+  const { dialog, workspaces, kinds, translator, onCommand, onClose, onPickFolder }: Props = $props();
 
   const shown = $derived(workspaces.registry.find(workspaces.shownWorkspaceId));
   const choosableKindIds = $derived(
@@ -60,6 +61,8 @@
     checkName={(name: string, kindId: WorkspaceKindId) => workspaces.registry.checkName(name, kindId)}
     {translator}
     hasAppearanceChoices
+    notesSetup={workspaces.notesSetup}
+    {onPickFolder}
     onConfirm={(details: WorkspaceDetails) => onCommand({ kind: 'createWorkspace', ...details })}
     {onClose}
   />

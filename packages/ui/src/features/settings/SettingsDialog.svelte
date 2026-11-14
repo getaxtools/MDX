@@ -30,6 +30,8 @@
     snippetLibrary?: SnippetLibrary;
     /** The shown workspace and the settings it overrides; absent without workspaces. */
     workspace?: { readonly name: string; readonly overrides: WorkspaceOverrides } | undefined;
+    /** The folder of the shown Notes workspace; absent for other kinds. */
+    notesFolder?: string | undefined;
     translator: Translator;
     onCommand: (command: ViewerCommand) => void;
     onClose: () => void;
@@ -42,6 +44,7 @@
     platform = 'windows',
     snippetLibrary = EMPTY_SNIPPET_LIBRARY,
     workspace,
+    notesFolder,
     translator,
     onCommand,
     onClose,
@@ -67,6 +70,17 @@
         ' ',
       ),
     ),
+  );
+  const isNotesShown = $derived(
+    notesFolder !== undefined &&
+      matchesQuery(
+        query,
+        [
+          translator.translate('settings.section.notes'),
+          translator.translate('settings.notes.description'),
+          notesFolder,
+        ].join(' '),
+      ),
   );
   const privacyDescription = $derived(
     translator.translate('settings.privacy.description', { path: dataFolder }),
@@ -189,6 +203,25 @@
   {/each}
   {#if isSnippetsShown}
     <SnippetsSection library={snippetLibrary} {translator} {onCommand} />
+  {/if}
+  {#if isNotesShown && notesFolder !== undefined}
+    <section aria-labelledby="settings-section-notes">
+      <h3 id="settings-section-notes">{translator.translate('settings.section.notes')}</h3>
+      <div class="setting">
+        <span class="label" id="settings-notes-folder-label"
+          >{translator.translate('settings.notes.folder')}</span
+        >
+        <button
+          class="beside-label"
+          aria-describedby="settings-notes-folder-label settings-notes-folder"
+          onclick={() => onCommand({ kind: 'revealInFileManager', path: notesFolder })}
+        >
+          {translator.translate('settings.notes.openInFileExplorer')}
+        </button>
+        <p id="settings-notes-folder" class="description"><code>{notesFolder}</code></p>
+        <p class="description">{translator.translate('settings.notes.description')}</p>
+      </div>
+    </section>
   {/if}
   {#if isPrivacyShown}
     <section aria-labelledby="settings-section-privacy">

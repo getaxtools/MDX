@@ -210,6 +210,7 @@ mod tests {
             position: 0,
             last_shown_at_ms: None,
             source_file: None,
+            kind_data: None,
         }
     }
 

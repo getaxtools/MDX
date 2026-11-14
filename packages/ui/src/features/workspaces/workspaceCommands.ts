@@ -17,6 +17,8 @@ export interface WorkspaceDetails {
   readonly colour?: WorkspaceColour | undefined;
   /** Opens the folder picker after a Markdown viewer workspace is created. */
   readonly isFolderStepChosen?: boolean;
+  /** The folder a Notes workspace keeps its notes in. */
+  readonly notesLocationPath?: string | undefined;
 }
 
 export type WorkspaceCommand =

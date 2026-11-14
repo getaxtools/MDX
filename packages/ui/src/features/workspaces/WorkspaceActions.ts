@@ -1,4 +1,13 @@
-import type { InitialWorkspaceLists, ViewerSession, WorkspaceKindId, WorkspaceRequest } from '@mdx/core';
+import {
+  NOTES_KIND_ID,
+  claimedNotesLocations,
+  notesKindData,
+  type InitialWorkspaceLists,
+  type ViewerSession,
+  type WorkspaceKindId,
+  type WorkspaceRequest,
+} from '@mdx/core';
+import type { NotesLocationPort } from '@mdx/platform';
 import type { MessageKey, Translator } from '@mdx/i18n';
 import { workspaceNameOf, type WorkspaceCommand, type WorkspaceDetails } from './workspaceCommands';
 
@@ -16,6 +25,14 @@ export function isWorkspaceDialog(dialog: string | undefined): dialog is Workspa
   return WORKSPACE_DIALOGS.some((workspaceDialog) => workspaceDialog === dialog);
 }
 
+/** What the New Workspace dialog needs to suggest and check a Notes folder. */
+export interface NotesSetup {
+  readonly documents: string | undefined;
+  readonly syncedFolders: readonly string[];
+  /** Folders other Notes workspaces use, which a new one may not overlap. */
+  readonly claimedPaths: readonly string[];
+}
+
 export interface WorkspaceActionsDependencies {
   readonly session: ViewerSession;
   readonly translator: Translator;
@@ -27,12 +44,17 @@ export interface WorkspaceActionsDependencies {
   readonly showSwitchedWorkspace: () => Promise<void>;
   /** The folder picker that adds a folder to the Explorer of the shown workspace. */
   readonly addFolder: () => Promise<void>;
+  /** Absent where Notes workspaces cannot be made, such as outside the desktop app. */
+  readonly notesLocations?: NotesLocationPort | undefined;
+  /** Ids for new Notes locations; random UUIDs unless a test needs fixed ones. */
+  readonly createLocationId?: () => string;
 }
 
 /** New, Rename, Delete and Switch Workspace; switching away asks about unsaved edits first. */
 export class WorkspaceActions {
   /** The kind the New Workspace dialog starts on, such as the kind chosen on the control wheel. */
   private newWorkspaceKindId: WorkspaceKindId | undefined;
+  private shownNotesSetup: NotesSetup | undefined;
 
   constructor(private readonly dependencies: WorkspaceActionsDependencies) {}
 
@@ -40,10 +62,15 @@ export class WorkspaceActions {
     return this.newWorkspaceKindId;
   }
 
+  notesSetup(): NotesSetup | undefined {
+    return this.shownNotesSetup;
+  }
+
   async run(command: WorkspaceCommand): Promise<void> {
     switch (command.kind) {
       case 'showNewWorkspace':
         this.newWorkspaceKindId = command.kindId;
+        this.shownNotesSetup = await this.loadNotesSetup();
         this.dependencies.showDialog('newWorkspace');
         return;
       case 'createWorkspace':
@@ -69,9 +96,43 @@ export class WorkspaceActions {
     }
   }
 
-  private async create({ name, kindId, icon, colour, isFolderStepChosen }: WorkspaceDetails): Promise<void> {
-    const isCreated = await this.createAndShow({ name, kindId, icon, colour });
+  private async create(details: WorkspaceDetails): Promise<void> {
+    const { name, kindId, icon, colour, isFolderStepChosen } = details;
+    const notesStart = kindId === NOTES_KIND_ID ? await this.prepareNotesLocation(details) : undefined;
+    if (kindId === NOTES_KIND_ID && !notesStart) return;
+    const isCreated = await this.createAndShow(
+      { name, kindId, icon, colour, ...(notesStart ? { kindData: notesStart.kindData } : {}) },
+      notesStart?.lists,
+    );
     if (isCreated && isFolderStepChosen === true) await this.dependencies.addFolder();
+  }
+
+  private async loadNotesSetup(): Promise<NotesSetup | undefined> {
+    const { notesLocations, session } = this.dependencies;
+    if (!notesLocations) return undefined;
+    const folders = await notesLocations.knownFolders();
+    const claimedPaths = claimedNotesLocations(session.workspaces()?.workspaces() ?? []);
+    return { documents: folders.documents, syncedFolders: folders.syncedFolders, claimedPaths };
+  }
+
+  /** Marks the chosen folder as a Notes location; nothing is created when it cannot be used. */
+  private async prepareNotesLocation({
+    notesLocationPath,
+  }: WorkspaceDetails): Promise<{ kindData: unknown; lists: InitialWorkspaceLists } | undefined> {
+    const { notesLocations, showNotice } = this.dependencies;
+    if (!notesLocations || notesLocationPath === undefined) return undefined;
+    const locationId = this.dependencies.createLocationId?.() ?? crypto.randomUUID();
+    try {
+      const prepared = await notesLocations.prepareLocation(notesLocationPath, locationId);
+      const { displayPath, canonicalKey } = prepared.location;
+      return {
+        kindData: notesKindData({ path: displayPath, canonicalKey, locationId: prepared.locationId }),
+        lists: { explorerFolders: [prepared.location] },
+      };
+    } catch {
+      showNotice('workspaces.notes.locationFailed', { path: notesLocationPath });
+      return undefined;
+    }
   }
 
   /** Creates a workspace with its first lists and shows it, after asking about unsaved edits. */

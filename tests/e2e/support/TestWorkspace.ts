@@ -13,6 +13,7 @@ import { basename, join } from 'node:path';
 
 const FIXTURE_DOCUMENTS_FOLDER = join(import.meta.dirname, '..', '..', 'fixtures', 'documents');
 const SAVED_STATE_FILE_NAME = 'app-state.json';
+const HOME_DOCUMENTS_FOLDER_NAME = 'home-documents';
 const NEWER_VERSION_BACKUP_FILE_NAME = 'app-state.newer-version.json';
 const WORKSPACE_DATABASE_FILE_NAME = 'mdx.db';
 const SAVED_STATE_SCHEMA_VERSION = 1;
@@ -58,11 +59,17 @@ export class TestWorkspace {
     readonly documentsFolder: string,
   ) {}
 
+  /** Stands in for the user's Documents folder, where Notes folders are made by default. */
+  get homeDocumentsFolder(): string {
+    return join(this.rootFolder, HOME_DOCUMENTS_FOLDER_NAME);
+  }
+
   static create(): TestWorkspace {
     const rootFolder = mkdtempSync(join(tmpdir(), 'mdx-ui-test-'));
     const profileFolder = join(rootFolder, 'profile');
     const documentsFolder = join(rootFolder, 'documents');
     mkdirSync(profileFolder);
+    mkdirSync(join(rootFolder, HOME_DOCUMENTS_FOLDER_NAME));
     cpSync(FIXTURE_DOCUMENTS_FOLDER, documentsFolder, { recursive: true });
     return new TestWorkspace(rootFolder, profileFolder, documentsFolder);
   }

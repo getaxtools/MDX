@@ -13,6 +13,8 @@ const MAX_ICON_LENGTH: usize = 40;
 const MAX_COLOUR_LENGTH: usize = 20;
 /// The longest path Windows accepts with long paths turned on.
 const MAX_SOURCE_FILE_CHARACTERS: usize = 32_767;
+/// Kind data is read with every registry load, so it stays small.
+const MAX_KIND_DATA_BYTES: usize = 64 * 1024;
 
 /// `default` or a generated id: lowercase letters, digits and hyphens.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -177,6 +179,8 @@ pub struct WorkspaceRecord {
     pub last_shown_at_ms: Option<i64>,
     /// The workspace file it was opened from, if any.
     pub source_file: Option<String>,
+    /// What its kind keeps for it, as JSON text, such as a Notes workspace's location.
+    pub kind_data: Option<String>,
 }
 
 /// A workspace as the webview sends it, validated into a `WorkspaceRecord`.
@@ -192,6 +196,8 @@ pub struct WorkspaceRecordInput {
     pub last_shown_at_ms: Option<i64>,
     #[serde(default)]
     pub source_file: Option<String>,
+    #[serde(default)]
+    pub kind_data: Option<String>,
 }
 
 impl TryFrom<WorkspaceRecordInput> for WorkspaceRecord {
@@ -207,6 +213,7 @@ impl TryFrom<WorkspaceRecordInput> for WorkspaceRecord {
             position: input.position,
             last_shown_at_ms: input.last_shown_at_ms,
             source_file: input.source_file.map(validated_source_file).transpose()?,
+            kind_data: input.kind_data.map(validated_kind_data).transpose()?,
         })
     }
 }
@@ -232,6 +239,16 @@ fn validated_source_file(path: String) -> Result<String, DatabaseError> {
     } else {
         Err(DatabaseError::InvalidArgument("sourceFile"))
     }
+}
+
+fn validated_kind_data(json: String) -> Result<String, DatabaseError> {
+    if json.len() > MAX_KIND_DATA_BYTES {
+        return Err(DatabaseError::TooLarge);
+    }
+    if serde_json::from_str::<serde_json::Value>(&json).is_err() {
+        return Err(DatabaseError::InvalidJson);
+    }
+    Ok(json)
 }
 
 fn validated_label(
@@ -280,6 +297,7 @@ mod tests {
             position: 0,
             last_shown_at_ms: None,
             source_file: None,
+            kind_data: None,
         }
     }
 
@@ -329,6 +347,25 @@ mod tests {
             Err(DatabaseError::InvalidJson)
         );
         assert!(JsonText::try_from("[]".to_owned()).is_ok());
+    }
+
+    #[test]
+    fn keeps_small_valid_kind_data_and_refuses_the_rest() {
+        let with_kind_data = |kind_data: &str| WorkspaceRecordInput {
+            kind_data: Some(kind_data.to_owned()),
+            ..workspace_input("Journal")
+        };
+
+        assert!(WorkspaceRecord::try_from(with_kind_data(r#"{"locationId":"a"}"#)).is_ok());
+        assert_eq!(
+            WorkspaceRecord::try_from(with_kind_data("{ broken")),
+            Err(DatabaseError::InvalidJson)
+        );
+        let oversized = format!("\"{}\"", "a".repeat(MAX_KIND_DATA_BYTES));
+        assert_eq!(
+            WorkspaceRecord::try_from(with_kind_data(&oversized)),
+            Err(DatabaseError::TooLarge)
+        );
     }
 
     #[test]

@@ -21,6 +21,37 @@ function renderSettings(settings: ViewSettings = DEFAULT_VIEW_SETTINGS) {
 }
 
 describe('SettingsDialog', () => {
+  describe('Notes', () => {
+    it('path and actions have accessible names', async () => {
+      const onCommand = vi.fn();
+      render(SettingsDialog, {
+        settings: DEFAULT_VIEW_SETTINGS,
+        dataFolder: DATA_FOLDER,
+        notesFolder: 'C:\\Users\\Ana\\Documents\\MDX Notes',
+        translator: createTranslator(),
+        onCommand,
+        onClose: vi.fn(),
+      });
+
+      const section = screen.getByRole('region', { name: 'Notes' });
+      const open = within(section).getByRole('button', { name: 'Open in File Explorer' });
+      await userEvent.click(open);
+
+      expect(open.getAttribute('aria-describedby')).toContain('settings-notes-folder');
+      expect(section.textContent).toContain('C:\\Users\\Ana\\Documents\\MDX Notes');
+      expect(onCommand).toHaveBeenCalledWith({
+        kind: 'revealInFileManager',
+        path: 'C:\\Users\\Ana\\Documents\\MDX Notes',
+      });
+    });
+
+    it('has no Notes section outside a Notes workspace', () => {
+      renderSettings();
+
+      expect(screen.queryByRole('region', { name: 'Notes' })).toBeNull();
+    });
+  });
+
   describe('per-workspace scope', () => {
     function renderWithWorkspace(overrides: Record<string, string>) {
       const onCommand = vi.fn();

@@ -43,6 +43,7 @@ import {
   type PathStatus,
   type RecentWorkspaceMenuEntry,
   type WorkspaceFilePort,
+  type NotesLocationPort,
 } from '@mdx/platform';
 import type { MarkdownRenderer, OutlineEntry } from '@mdx/renderer';
 import { applyWorkspaceKindCommand, type WorkspaceKindCommand } from '../control-wheel/workspaceKindCommands';
@@ -64,7 +65,7 @@ import { shortcutLabelFor } from '../shortcuts/commandShortcuts';
 import { effectiveCommandShortcuts } from '../shortcuts/effectiveCommandShortcuts';
 import { REBINDABLE_COMMANDS } from '../shortcuts/rebindableCommands';
 import { isTabCommand } from '../tabs/tabCommands';
-import { WorkspaceActions, type WorkspaceDialog } from '../workspaces/WorkspaceActions';
+import { WorkspaceActions, type NotesSetup, type WorkspaceDialog } from '../workspaces/WorkspaceActions';
 import {
   isWorkspaceCommand,
   isWorkspaceFileCommand,
@@ -112,6 +113,7 @@ export interface ViewerControllerDependencies {
   readonly documentExport?: DocumentExportPort;
   readonly attachments?: AttachmentPort;
   readonly workspaceFiles?: WorkspaceFilePort;
+  readonly notesLocations?: NotesLocationPort;
 }
 
 export interface RenderedActiveDocument {
@@ -166,6 +168,8 @@ export interface WorkspacesView {
   readonly kindForNewWorkspace?: WorkspaceKindId;
   /** A workspace file waiting for the user to confirm it. */
   readonly pendingFile?: PendingWorkspaceFile;
+  /** Loaded when New Workspace opens, to suggest and check a Notes folder. */
+  readonly notesSetup?: NotesSetup;
 }
 
 /** A button in the notice bar that runs a command, such as Locate for a file that has moved. */
@@ -324,6 +328,7 @@ export class ViewerController {
       showNotice: (key, values) => this.showNotice(key, values),
       showSwitchedWorkspace: () => this.showSwitchedWorkspace(),
       addFolder: () => this.explorerFolderActions.openFolder(),
+      notesLocations: this.dependencies.notesLocations,
     });
   }
 
@@ -1184,6 +1189,17 @@ export class ViewerController {
     };
   }
 
+  private notesSetupPart(): Pick<WorkspacesView, 'notesSetup'> {
+    const notesSetup = this.workspaceActions.notesSetup();
+    return notesSetup ? { notesSetup } : {};
+  }
+
+  /** The folder picker for a Notes folder; the picked folder becomes readable, as any opened folder. */
+  async pickNotesFolder(): Promise<string | undefined> {
+    const picked = await this.dependencies.folders?.pickFolder();
+    return picked?.displayPath;
+  }
+
   private workspacesPart(): Pick<ViewerSnapshot, 'workspaces'> {
     const { session } = this.dependencies;
     const registry = session.workspaces();
@@ -1196,6 +1212,7 @@ export class ViewerController {
         shownWorkspaceId,
         ...(kindForNewWorkspace ? { kindForNewWorkspace } : {}),
         ...(this.pendingWorkspaceFile ? { pendingFile: this.pendingWorkspaceFile } : {}),
+        ...this.notesSetupPart(),
       },
     };
   }

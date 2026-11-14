@@ -6,6 +6,7 @@ mod documents;
 mod live_reload;
 mod main_window;
 mod menu;
+mod notes_location;
 mod open_requests;
 mod platform;
 #[cfg(dev)]
@@ -110,6 +111,8 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::workspace_file::write_workspace_export,
         commands::workspace_file::open_workspace_file,
         commands::workspace_file::take_startup_workspace_file,
+        commands::notes_location::known_folders,
+        commands::notes_location::prepare_notes_location,
         commands::workspaces::load_workspace_registry,
         commands::workspaces::load_workspace,
         commands::workspaces::save_workspace,

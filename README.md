@@ -107,7 +107,7 @@ MDX treats every document as untrusted. Scripts, event handlers, iframes, remote
 - **No telemetry, analytics or crash uploads.** MDX doesn't collect anything about you or your documents.
 - **No network connections.** The app never connects to the internet. Its [Content Security Policy](apps/desktop/src-tauri/tauri.conf.json) only allows local communication, and the window has [three narrow permissions](apps/desktop/src-tauri/capabilities/main-window.json).
 - **No account.** There's nothing to sign up for.
-- **Local storage only.** Tabs, favourites, recent files and settings are saved in `%APPDATA%\getaxtools\MDX` on your PC. If MDX finds saved settings it can't read, or settings from a newer version, it keeps a copy in the same folder. Clear All Data removes those copies too.
+- **Local storage only.** Tabs, favourites, recent files and settings are saved in `%APPDATA%\getaxtools\MDX` on your PC. If MDX finds saved settings it can't read, or settings from a newer version, it keeps a copy in the same folder. Clear All Data removes those copies too. Notes workspaces keep your notes as ordinary files in a folder you choose, `Documents\MDX Notes` by default, and Clear All Data never touches that folder.
 
 ## Download and install
 

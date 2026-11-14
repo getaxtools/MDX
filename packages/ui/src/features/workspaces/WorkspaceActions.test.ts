@@ -4,6 +4,7 @@ import {
   InMemoryAppState,
   InMemoryDocumentFiles,
   InMemoryDocumentRequests,
+  InMemoryNotesLocations,
   InMemoryWorkspaceStore,
 } from '@mdx/platform';
 import { createMarkdownRenderer } from '@mdx/renderer';
@@ -32,6 +33,7 @@ async function startViewer(startupPaths: readonly string[] = [GUIDE]) {
     requests: new InMemoryDocumentRequests([...startupPaths]),
     renderer: createMarkdownRenderer({ window }),
     translator: createTranslator(),
+    notesLocations: new InMemoryNotesLocations(),
   });
   let latest: ViewerSnapshot | undefined;
   controller.subscribe((snapshot) => (latest = snapshot));
@@ -135,7 +137,12 @@ describe('workspace actions', () => {
         ALL_KINDS_BUILT,
       ),
     );
-    await controller.execute({ kind: 'createWorkspace', name: 'Journal', kindId: 'notes' });
+    await controller.execute({
+      kind: 'createWorkspace',
+      name: 'Journal',
+      kindId: 'notes',
+      notesLocationPath: 'C:\\Users\\Ana\\Documents\\MDX Notes',
+    });
     await controller.execute({ kind: 'switchWorkspaceKind', kindId: 'markdownViewer' });
 
     expect(snapshot().workspaces?.shownWorkspaceId).toBe('default');

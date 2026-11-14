@@ -198,3 +198,15 @@ export {
   type WorkspaceFileReading,
   type WorkspaceFileRefusal,
 } from './workspaces/workspaceFile';
+export {
+  DEFAULT_NOTES_FOLDER_NAME,
+  NOTES_KIND_ID,
+  claimedNotesLocations,
+  defaultNotesLocationPath,
+  isSyncedFolder,
+  locationClaimProblem,
+  notesKindData,
+  notesLocationOf,
+  type LocationClaimProblem,
+  type NotesLocation,
+} from './notes-location/notesLocation';

@@ -22,6 +22,8 @@ export interface StoredWorkspace {
   readonly lastShownAtMs: number | null;
   /** The workspace file it was opened from, so opening that file again switches to it. */
   readonly sourceFile?: string | null;
+  /** What its kind keeps for it, such as a Notes workspace's location. */
+  readonly kindData?: unknown;
 }
 
 /** A workspace's lists, and the session the asking window last had in it. */

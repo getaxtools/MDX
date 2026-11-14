@@ -13,6 +13,7 @@
     type ResizablePanel,
     type RingPoint,
     type WorkspaceKindId,
+    notesLocationOf,
   } from '@mdx/core';
   import type { SectionAction, SourceEditor } from '@mdx/editor';
   import type { Translator } from '@mdx/i18n';
@@ -541,6 +542,7 @@
       {translator}
       onCommand={(command: ViewerCommand) => void controller.execute(command)}
       onClose={() => controller.closeDialog()}
+      onPickFolder={() => controller.pickNotesFolder()}
     />
   {:else if snapshot.openDialog === 'keyboardShortcuts'}
     <KeyboardShortcutsDialog {translator} {shortcuts} onClose={() => controller.closeDialog()} />
@@ -561,6 +563,7 @@
       {translator}
       onCommand={(command: ViewerCommand) => void controller.execute(command)}
       onClose={() => controller.closeDialog()}
+      notesFolder={shownWorkspace ? notesLocationOf(shownWorkspace)?.path : undefined}
       workspace={shownWorkspace
         ? {
             name: workspaceNameOf(shownWorkspace, translator),

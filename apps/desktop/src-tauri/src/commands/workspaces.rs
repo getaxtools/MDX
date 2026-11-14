@@ -206,6 +206,7 @@ mod tests {
             position: 0,
             last_shown_at_ms: Some(5),
             source_file: None,
+            kind_data: None,
         };
 
         let record = WorkspaceRecord::try_from(input).unwrap();
@@ -220,7 +221,8 @@ mod tests {
                 "colour": "#3366cc",
                 "position": 0,
                 "lastShownAtMs": 5,
-                "sourceFile": null
+                "sourceFile": null,
+                "kindData": null
             })
         );
     }

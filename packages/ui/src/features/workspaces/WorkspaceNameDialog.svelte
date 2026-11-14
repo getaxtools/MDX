@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     DEFAULT_WORKSPACE_KIND_ID,
+    NOTES_KIND_ID,
     WORKSPACE_COLOURS,
     WORKSPACE_ICONS,
     type WorkspaceColour,
@@ -13,6 +14,8 @@
   import Dialog from '../../components/Dialog.svelte';
   import { kindNameOf } from '../control-wheel/kindPresentation';
   import KindIcon from '../control-wheel/KindIcon.svelte';
+  import NotesLocationStep from './NotesLocationStep.svelte';
+  import type { NotesSetup } from './WorkspaceActions';
   import { nameProblemMessage, type WorkspaceDetails } from './workspaceCommands';
   import {
     WORKSPACE_COLOUR_NAME_KEYS,
@@ -31,6 +34,9 @@
     checkName: (name: string, kindId: WorkspaceKindId) => WorkspaceNameProblem | undefined;
     /** A new workspace also gets an icon, a colour and, for the Markdown viewer, a first folder. */
     hasAppearanceChoices?: boolean;
+    /** Suggests and checks the folder of a new Notes workspace. */
+    notesSetup?: NotesSetup | undefined;
+    onPickFolder?: (() => Promise<string | undefined>) | undefined;
     translator: Translator;
     onConfirm: (details: WorkspaceDetails) => void;
     onClose: () => void;
@@ -44,6 +50,8 @@
     initialKindId,
     checkName,
     hasAppearanceChoices = false,
+    notesSetup,
+    onPickFolder = () => Promise.resolve(undefined),
     translator,
     onConfirm,
     onClose,
@@ -54,10 +62,14 @@
   let icon: WorkspaceIcon | undefined = $state();
   let colour: WorkspaceColour | undefined = $state();
   let isFolderStepChosen = $state(true);
+  let notesLocationPath: string | undefined = $state();
   let hasTriedToConfirm = $state(false);
   let input: HTMLInputElement | undefined = $state();
 
   const problem = $derived(checkName(name, kindId));
+  const isNotesStepShown = $derived(
+    hasAppearanceChoices && kindId === NOTES_KIND_ID && notesSetup !== undefined,
+  );
   const shownProblem = $derived(
     problem && (hasTriedToConfirm || name.length > 0) ? nameProblemMessage(problem, kindId, translator) : '',
   );
@@ -74,9 +86,16 @@
   function confirm(event: SubmitEvent) {
     event.preventDefault();
     hasTriedToConfirm = true;
-    if (problem) return;
+    if (problem || (isNotesStepShown && notesLocationPath === undefined)) return;
     const hasFolderStep = hasAppearanceChoices && kindId === DEFAULT_WORKSPACE_KIND_ID && isFolderStepChosen;
-    onConfirm({ name: name.trim(), kindId, icon, colour, isFolderStepChosen: hasFolderStep });
+    onConfirm({
+      name: name.trim(),
+      kindId,
+      icon,
+      colour,
+      isFolderStepChosen: hasFolderStep,
+      ...(isNotesStepShown ? { notesLocationPath } : {}),
+    });
   }
 </script>
 
@@ -133,6 +152,15 @@
           </label>
         {/each}
       </fieldset>
+      {#if isNotesStepShown && notesSetup}
+        <NotesLocationStep
+          setup={notesSetup}
+          workspaceName={name}
+          {translator}
+          {onPickFolder}
+          bind:locationPath={notesLocationPath}
+        />
+      {/if}
       {#if kindId === DEFAULT_WORKSPACE_KIND_ID}
         <label class="folder-step">
           <input type="checkbox" bind:checked={isFolderStepChosen} />

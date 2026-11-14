@@ -5,6 +5,8 @@ import type {
   ExportFormat,
   FolderListing,
   FolderSearchResults,
+  KnownFolders,
+  PreparedNotesLocation,
   OpenedDocument,
   PathStatus,
   RecentWorkspaceMenuEntry,
@@ -24,6 +26,9 @@ export interface LegacyStateImportRequest {
   readonly windowSession: string;
   readonly appValues: Readonly<Record<string, string>>;
 }
+
+/** A workspace row as the database keeps it: kind data is JSON text. */
+export type StoredWorkspaceRow = Omit<StoredWorkspace, 'kindData'> & { readonly kindData?: string | null };
 
 /** Lists and the window session arrive as JSON text, which the desktop port parses. */
 export interface StoredWorkspaceReply {
@@ -62,10 +67,13 @@ export const tauriCommands = {
   takeStartupWorkspaceFile: () => invoke<WorkspaceFileContents | null>('take_startup_workspace_file'),
   grantWorkspaceAccess: (workspaceId: string, windowId: string) =>
     invoke<null>('grant_workspace_access', { workspaceId, windowId }),
-  loadWorkspaceRegistry: () => invoke<StoredWorkspace[]>('load_workspace_registry'),
+  loadWorkspaceRegistry: () => invoke<StoredWorkspaceRow[]>('load_workspace_registry'),
   loadWorkspace: (workspaceId: string, windowId: string) =>
     invoke<StoredWorkspaceReply | null>('load_workspace', { workspaceId, windowId }),
-  saveWorkspace: (workspace: StoredWorkspace) => invoke<null>('save_workspace', { workspace }),
+  saveWorkspace: (workspace: StoredWorkspaceRow) => invoke<null>('save_workspace', { workspace }),
+  knownFolders: () => invoke<KnownFolders>('known_folders'),
+  prepareNotesLocation: (path: string, locationId: string) =>
+    invoke<PreparedNotesLocation>('prepare_notes_location', { path, locationId }),
   deleteWorkspace: (workspaceId: string) => invoke<null>('delete_workspace', { workspaceId }),
   saveWorkspaceList: (workspaceId: string, listName: string, valueJson: string) =>
     invoke<null>('save_workspace_list', { workspaceId, listName, valueJson }),

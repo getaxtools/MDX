@@ -24,6 +24,8 @@ export interface NewWorkspace {
   readonly colour?: WorkspaceColour | undefined;
   /** The workspace file it is created from, so opening that file again switches to it. */
   readonly sourceFile?: string | undefined;
+  /** What its kind keeps for it, such as a Notes workspace's location. */
+  readonly kindData?: unknown;
   readonly nowMs: number;
 }
 
@@ -124,6 +126,7 @@ export class WorkspaceRegistry {
       position: this.nextPosition(),
       lastShownAtMs: newWorkspace.nowMs,
       ...(newWorkspace.sourceFile === undefined ? {} : { sourceFile: newWorkspace.sourceFile }),
+      ...(newWorkspace.kindData === undefined ? {} : { kindData: newWorkspace.kindData }),
     };
     return { outcome: 'changed', registry: new WorkspaceRegistry([...this.ordered, workspace]), workspace };
   }
