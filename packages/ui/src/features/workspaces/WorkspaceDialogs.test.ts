@@ -1,7 +1,7 @@
 import { WorkspaceKindsState, WorkspaceRegistry, workspaceKindsFor } from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
 import type { StoredWorkspace } from '@mdx/platform';
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { WorkspaceDialog } from './WorkspaceActions';
@@ -41,7 +41,73 @@ describe('workspace dialogs', () => {
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Kind' }), 'notes');
     await userEvent.click(screen.getByRole('button', { name: 'Create' }));
 
-    expect(onCommand).toHaveBeenCalledWith({ kind: 'createWorkspace', name: 'Journal', kindId: 'notes' });
+    expect(onCommand).toHaveBeenCalledWith({
+      kind: 'createWorkspace',
+      name: 'Journal',
+      kindId: 'notes',
+      icon: undefined,
+      colour: undefined,
+      isFolderStepChosen: false,
+    });
+  });
+
+  it('creates a workspace with the chosen icon and colour, then the folder step', async () => {
+    const { onCommand } = renderDialog('newWorkspace');
+
+    await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Reading');
+    await userEvent.click(screen.getByRole('radio', { name: 'Book' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Teal' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    expect(onCommand).toHaveBeenCalledWith(
+      expect.objectContaining({ icon: 'book', colour: 'teal', isFolderStepChosen: true }),
+    );
+  });
+
+  it('the colour always comes with the name', () => {
+    renderDialog('newWorkspace');
+
+    const colours = screen.getByRole('group', { name: 'Colour' });
+    const labels = within(colours)
+      .getAllByRole('radio')
+      .map((radio) => radio.closest('label')?.textContent.trim());
+
+    expect(labels).toEqual(['None', 'Blue', 'Teal', 'Green', 'Amber', 'Red', 'Purple', 'Grey']);
+  });
+
+  it('every icon choice has a name for screen readers', () => {
+    renderDialog('newWorkspace');
+
+    const icons = within(screen.getByRole('group', { name: 'Icon' })).getAllByRole('radio');
+
+    expect(icons.map((radio) => radio.closest('label')?.textContent.trim())).toEqual([
+      'None',
+      'Book',
+      'Notebook',
+      'Folder',
+      'Briefcase',
+      'Flask',
+      'Star',
+    ]);
+  });
+
+  it('offers the folder step only for a Markdown viewer workspace', async () => {
+    renderDialog('newWorkspace', ['markdownViewer', 'notes']);
+    const folderStep = () =>
+      screen.queryByRole('checkbox', { name: 'Choose a folder to show in this workspace' });
+
+    const isOfferedForMarkdownViewer = folderStep() !== null;
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Kind' }), 'notes');
+
+    expect(isOfferedForMarkdownViewer).toBe(true);
+    expect(folderStep()).toBeNull();
+  });
+
+  it('rename offers no icon, colour or folder step', () => {
+    renderDialog('renameWorkspace');
+
+    expect(screen.queryByRole('group', { name: 'Colour' })).toBeNull();
+    expect(screen.queryByRole('checkbox')).toBeNull();
   });
 
   it('only enabled available kinds are choosable', () => {

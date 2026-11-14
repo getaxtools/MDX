@@ -33,6 +33,7 @@ describe('switching workspaces', () => {
     await name.waitForDisplayed();
     expect(await findAccessibilityViolations(app.browser)).toEqual([]);
     await name.setValue('Handbook');
+    await app.browser.$('[role="dialog"]').$('label*=Choose a folder').click();
     await app.browser.$('[role="dialog"]').$('button=Create').click();
 
     await mainWindow.waitForTabs([]);
@@ -49,6 +50,7 @@ describe('switching workspaces', () => {
     const name = app.browser.$('[role="dialog"] input#workspace-name');
     await name.waitForDisplayed();
     await name.setValue('Handbook');
+    await app.browser.$('[role="dialog"]').$('label*=Choose a folder').click();
     await app.browser.$('[role="dialog"]').$('button=Create').click();
     await mainWindow.waitForTabs([]);
     await app.quit();

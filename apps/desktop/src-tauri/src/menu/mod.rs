@@ -16,7 +16,7 @@ pub use view_menu_state::ViewMenuState;
 
 use crate::documents::DocumentError;
 use crate::open_requests::MAIN_WINDOW_LABEL;
-use recent_files_menu::fill_recent_menu;
+use recent_files_menu::{RecentMenuContents, fill_recent_menu};
 use view_menu_state::{
     READING_WIDTH_ITEM_PREFIX, THEME_ITEM_PREFIX, TOGGLE_OUTLINE_ITEM_ID,
     TOGGLE_PREVIEW_BESIDE_EDITOR_ITEM_ID, TOGGLE_SIDEBAR_ITEM_ID, TOGGLE_SOURCE_VIEW_ITEM_ID,
@@ -68,7 +68,12 @@ const FILE_OPEN_ITEMS: [CommandItem; 3] = [
     ("openFolder", "menu.file.openFolder", None),
 ];
 
-const WORKSPACE_ITEMS: [CommandItem; 3] = [
+const WORKSPACE_ITEMS: [CommandItem; 4] = [
+    (
+        "showWorkspaceSwitcher",
+        "workspaces.switch",
+        Some("Ctrl+Alt+W"),
+    ),
     ("showNewWorkspace", "workspaces.new", None),
     ("showRenameWorkspace", "workspaces.rename", None),
     ("confirmDeleteWorkspace", "workspaces.delete", None),
@@ -287,7 +292,12 @@ fn build_main_menu(
     };
     let recent_files =
         SubmenuBuilder::new(app, builder.labels.label("menu.file.openRecent")).build()?;
-    fill_recent_menu(app, &recent_files, &[], &builder.labels)?;
+    fill_recent_menu(
+        app,
+        &recent_files,
+        &RecentMenuContents::default(),
+        &builder.labels,
+    )?;
     let menu = Menu::with_items(
         app,
         &[

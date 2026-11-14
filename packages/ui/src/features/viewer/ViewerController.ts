@@ -41,6 +41,7 @@ import {
   type LineEnding,
   type OpenedDocument,
   type PathStatus,
+  type RecentWorkspaceMenuEntry,
 } from '@mdx/platform';
 import type { MarkdownRenderer, OutlineEntry } from '@mdx/renderer';
 import { applyWorkspaceKindCommand, type WorkspaceKindCommand } from '../control-wheel/workspaceKindCommands';
@@ -63,7 +64,9 @@ import { effectiveCommandShortcuts } from '../shortcuts/effectiveCommandShortcut
 import { REBINDABLE_COMMANDS } from '../shortcuts/rebindableCommands';
 import { isTabCommand } from '../tabs/tabCommands';
 import { WorkspaceActions, type WorkspaceDialog } from '../workspaces/WorkspaceActions';
-import { isWorkspaceCommand } from '../workspaces/workspaceCommands';
+import { isWorkspaceCommand, workspaceNameOf } from '../workspaces/workspaceCommands';
+import { windowTitleFor } from '../workspaces/windowTitle';
+import { recentWorkspaceLinks } from '../workspaces/recentWorkspaceLinks';
 import { applySessionCommand } from './applySessionCommand';
 import { LiveReload } from './LiveReload';
 import { commandForMenuItem, type ViewerCommand } from './viewerCommands';
@@ -217,8 +220,10 @@ export class ViewerController {
   private externalLinkRequest: string | undefined;
   private isSourceView = false;
   private shownMenuViewState = '';
+  private shownWindowTitle = '';
   private shownMenuShortcuts = '';
   private shownRecentFiles: ViewerState['recentFiles'] | undefined;
+  private shownRecentWorkspaces = '';
   private pathStatuses: ReadonlyMap<string, PathStatus> = new Map();
   private checkedLocationKeys = '';
   private readonly liveReload: LiveReload | undefined;
@@ -283,6 +288,7 @@ export class ViewerController {
       },
       showNotice: (key, values) => this.showNotice(key, values),
       showSwitchedWorkspace: () => this.showSwitchedWorkspace(),
+      addFolder: () => this.explorerFolderActions.openFolder(),
     });
   }
 
@@ -674,10 +680,24 @@ export class ViewerController {
   private showRecentFilesInMenu(): void {
     const { menu, session } = this.dependencies;
     const { recentFiles } = session.currentState();
-    if (!menu || recentFiles === this.shownRecentFiles) return;
+    const workspaces = this.recentWorkspacesForMenu();
+    const workspacesKey = JSON.stringify(workspaces);
+    if (!menu || (recentFiles === this.shownRecentFiles && workspacesKey === this.shownRecentWorkspaces))
+      return;
     this.shownRecentFiles = recentFiles;
+    this.shownRecentWorkspaces = workspacesKey;
     const displayPaths = recentFiles.entries().map((recentFile) => recentFile.location.displayPath);
-    void menu.showRecentFiles(displayPaths.slice(0, MAX_RECENT_MENU_ENTRIES));
+    void menu.showRecentFiles(displayPaths.slice(0, MAX_RECENT_MENU_ENTRIES), workspaces);
+  }
+
+  /** The other workspaces of enabled kinds, most recently used first. */
+  private recentWorkspacesForMenu(): RecentWorkspaceMenuEntry[] {
+    const { session, translator } = this.dependencies;
+    const view = this.workspacesPart().workspaces;
+    if (!view) return [];
+    return recentWorkspaceLinks(view, session.currentState().workspaceKinds, translator)
+      .slice(0, MAX_RECENT_MENU_ENTRIES)
+      .map(({ id, name }) => ({ id, name }));
   }
 
   private refreshPathStatuses({ isForced = false } = {}): void {
@@ -1148,5 +1168,21 @@ export class ViewerController {
   private publish(snapshot: ViewerSnapshot): void {
     this.snapshot = snapshot;
     for (const listener of this.listeners) listener(snapshot);
+    this.showWindowTitle(snapshot);
+  }
+
+  private showWindowTitle({ activeDocument }: ViewerSnapshot): void {
+    const { session, translator, desktopShell } = this.dependencies;
+    const shown = session.shownWorkspace();
+    const title = windowTitleFor(
+      {
+        documentName: activeDocument?.fileName,
+        workspaceName: shown ? workspaceNameOf(shown, translator) : undefined,
+      },
+      translator,
+    );
+    if (title === this.shownWindowTitle) return;
+    this.shownWindowTitle = title;
+    void desktopShell?.setWindowTitle(title);
   }
 }

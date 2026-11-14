@@ -18,7 +18,12 @@ export type { DocumentRequestListener, DocumentRequestsPort } from './DocumentRe
 export { InMemoryAppState } from './fakes/InMemoryAppState';
 export { InMemoryDocumentFiles } from './fakes/InMemoryDocumentFiles';
 export { InMemoryDocumentRequests } from './fakes/InMemoryDocumentRequests';
-export type { AppMenuPort, MenuCommandListener, ViewMenuState } from './AppMenuPort';
+export type {
+  AppMenuPort,
+  MenuCommandListener,
+  RecentWorkspaceMenuEntry,
+  ViewMenuState,
+} from './AppMenuPort';
 export { InMemoryAppMenu } from './fakes/InMemoryAppMenu';
 export { InMemoryDocumentExport, type ExportedDocument } from './fakes/InMemoryDocumentExport';
 export type { DocumentExportPort, ExportFormat } from './DocumentExportPort';

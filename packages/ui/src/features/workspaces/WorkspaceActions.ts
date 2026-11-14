@@ -1,8 +1,13 @@
 import type { ViewerSession, WorkspaceKindId } from '@mdx/core';
 import type { MessageKey, Translator } from '@mdx/i18n';
-import { workspaceNameOf, type WorkspaceCommand } from './workspaceCommands';
+import { workspaceNameOf, type WorkspaceCommand, type WorkspaceDetails } from './workspaceCommands';
 
-const WORKSPACE_DIALOGS = ['newWorkspace', 'renameWorkspace', 'deleteWorkspace'] as const;
+const WORKSPACE_DIALOGS = [
+  'newWorkspace',
+  'renameWorkspace',
+  'deleteWorkspace',
+  'workspaceSwitcher',
+] as const;
 
 export type WorkspaceDialog = (typeof WORKSPACE_DIALOGS)[number];
 
@@ -19,6 +24,8 @@ export interface WorkspaceActionsDependencies {
   readonly showNotice: (key: MessageKey, values?: Readonly<Record<string, string>>) => void;
   /** Shows the documents of the workspace the window switched to. */
   readonly showSwitchedWorkspace: () => Promise<void>;
+  /** The folder picker that adds a folder to the Explorer of the shown workspace. */
+  readonly addFolder: () => Promise<void>;
 }
 
 /** New, Rename, Delete and Switch Workspace; switching away asks about unsaved edits first. */
@@ -39,7 +46,7 @@ export class WorkspaceActions {
         this.dependencies.showDialog('newWorkspace');
         return;
       case 'createWorkspace':
-        return this.create(command.name, command.kindId);
+        return this.create(command);
       case 'showRenameWorkspace':
         this.dependencies.showDialog('renameWorkspace');
         return;
@@ -52,15 +59,19 @@ export class WorkspaceActions {
         return this.delete();
       case 'switchWorkspace':
         return this.switchTo(command.workspaceId);
+      case 'showWorkspaceSwitcher':
+        this.dependencies.showDialog('workspaceSwitcher');
+        return;
     }
   }
 
-  private async create(name: string, kindId: WorkspaceKindId): Promise<void> {
+  private async create({ name, kindId, icon, colour, isFolderStepChosen }: WorkspaceDetails): Promise<void> {
     if (!(await this.dependencies.confirmLeavingDocuments())) return;
-    const change = await this.dependencies.session.createWorkspace({ name, kindId });
+    const change = await this.dependencies.session.createWorkspace({ name, kindId, icon, colour });
     if (change?.outcome !== 'changed') return;
     this.dependencies.showDialog(undefined);
     await this.dependencies.showSwitchedWorkspace();
+    if (isFolderStepChosen === true) await this.dependencies.addFolder();
   }
 
   private async rename(name: string): Promise<void> {

@@ -12,6 +12,7 @@
     type RecentFile,
     type ResizablePanel,
     type RingPoint,
+    type WorkspaceKindId,
   } from '@mdx/core';
   import type { SectionAction, SourceEditor } from '@mdx/editor';
   import type { Translator } from '@mdx/i18n';
@@ -37,6 +38,9 @@
   import WordGoalDialog from '../word-goals/WordGoalDialog.svelte';
   import WorkspaceDialogs from '../workspaces/WorkspaceDialogs.svelte';
   import { isWorkspaceDialog } from '../workspaces/WorkspaceActions';
+  import WorkspaceButton from '../workspaces/WorkspaceButton.svelte';
+  import { workspaceNameOf } from '../workspaces/workspaceCommands';
+  import { recentWorkspaceLinks } from '../workspaces/recentWorkspaceLinks';
   import { SessionWordCounts } from '../word-goals/SessionWordCounts';
   import PasteTableDialog from '../table-paste/PasteTableDialog.svelte';
   import OutlinePanel from '../outline/OutlinePanel.svelte';
@@ -122,6 +126,10 @@
       DEFAULT_WORKSPACE_KIND_ID,
   );
   const activeTab = $derived(snapshot?.viewer.tabStrip.activeTab());
+  const shownWorkspace = $derived(snapshot?.workspaces?.registry.find(snapshot.workspaces.shownWorkspaceId));
+  const shownWorkspaceKindId = $derived(
+    (shownWorkspace?.kindId ?? DEFAULT_WORKSPACE_KIND_ID) as WorkspaceKindId,
+  );
   const activeKey = $derived(activeTab?.location.canonicalKey);
   let headingRequest: HeadingRequest | undefined = $state();
   let cursorCount = $state(1);
@@ -272,43 +280,59 @@
         {translator}
         onCommand={(command: ViewerCommand) => void controller.execute(command)}
       />
-      {#if viewSettings.isSidebarVisible && viewSettings.sidebarView === 'search'}
-        <FolderSearchPanel
-          {translator}
-          focusRequest={snapshot.folderSearchFocusRequest}
-          hasFolders={controller.hasSearchableFolders()}
-          onSearch={(query: string, options: TextSearchOptions) => controller.searchFolders(query, options)}
-          onOpenMatch={(path: string, query: string, options: TextSearchOptions) =>
-            void controller.execute({ kind: 'openSearchMatch', path, query, options })}
-        />
-      {:else if viewSettings.isSidebarVisible && viewSettings.sidebarView === 'outline'}
-        <OutlinePanel
-          outline={activeTab ? snapshot.activeDocument?.outline : undefined}
-          {currentHeadingId}
-          {translator}
-          onSelectHeading={goToHeading}
-          onChangeSection={(entry: OutlineEntry, action: SectionAction) =>
-            void controller.execute({ kind: 'changeOutlineSection', line: entry.line, action })}
-        />
-      {:else if viewSettings.isSidebarVisible}
-        <ExplorerSidebar
-          favourites={snapshot.viewer.favourites.favourites()}
-          favouriteGroups={snapshot.viewer.favourites.groups()}
-          explorerFolders={snapshot.viewer.explorerFolders.folders()}
-          collapsedSections={viewSettings.collapsedExplorerSections}
-          sectionHeights={viewSettings.explorerSectionHeights}
-          activeDocumentKey={activeTab?.location.canonicalKey}
-          recentFiles={snapshot.viewer.recentFiles.entries()}
-          pathStatuses={snapshot.pathStatuses}
-          onCommand={(command: ViewerCommand) => void controller.execute(command)}
-          onListFolder={(folderPath: string) => controller.listFolderContents(folderPath)}
-          folderRevisions={snapshot.folderRevisions}
-          onShowFolder={(folderPath: string) => controller.showFolder(folderPath)}
-          onOpenDocument={(documentPath: string) => void controller.openDocuments([documentPath])}
-          {translator}
-          onOpenFavourite={(favourite: Favourite) => void controller.openFavourite(favourite)}
-          onOpenRecentFile={(recentFile: RecentFile) => void controller.openRecentFile(recentFile)}
-        />
+      {#if viewSettings.isSidebarVisible}
+        <div class="sidebar-column">
+          {#if shownWorkspace}
+            <WorkspaceButton
+              name={workspaceNameOf(shownWorkspace, translator)}
+              kindId={shownWorkspaceKindId}
+              icon={shownWorkspace.icon}
+              colour={shownWorkspace.colour}
+              shortcutLabel={shortcutLabelFor({ kind: 'showWorkspaceSwitcher' }, translator, shortcuts)}
+              {translator}
+              onSwitch={() => void controller.execute({ kind: 'showWorkspaceSwitcher' })}
+            />
+          {/if}
+          {#if viewSettings.sidebarView === 'search'}
+            <FolderSearchPanel
+              {translator}
+              focusRequest={snapshot.folderSearchFocusRequest}
+              hasFolders={controller.hasSearchableFolders()}
+              onSearch={(query: string, options: TextSearchOptions) =>
+                controller.searchFolders(query, options)}
+              onOpenMatch={(path: string, query: string, options: TextSearchOptions) =>
+                void controller.execute({ kind: 'openSearchMatch', path, query, options })}
+            />
+          {:else if viewSettings.sidebarView === 'outline'}
+            <OutlinePanel
+              outline={activeTab ? snapshot.activeDocument?.outline : undefined}
+              {currentHeadingId}
+              {translator}
+              onSelectHeading={goToHeading}
+              onChangeSection={(entry: OutlineEntry, action: SectionAction) =>
+                void controller.execute({ kind: 'changeOutlineSection', line: entry.line, action })}
+            />
+          {:else}
+            <ExplorerSidebar
+              favourites={snapshot.viewer.favourites.favourites()}
+              favouriteGroups={snapshot.viewer.favourites.groups()}
+              explorerFolders={snapshot.viewer.explorerFolders.folders()}
+              collapsedSections={viewSettings.collapsedExplorerSections}
+              sectionHeights={viewSettings.explorerSectionHeights}
+              activeDocumentKey={activeTab?.location.canonicalKey}
+              recentFiles={snapshot.viewer.recentFiles.entries()}
+              pathStatuses={snapshot.pathStatuses}
+              onCommand={(command: ViewerCommand) => void controller.execute(command)}
+              onListFolder={(folderPath: string) => controller.listFolderContents(folderPath)}
+              folderRevisions={snapshot.folderRevisions}
+              onShowFolder={(folderPath: string) => controller.showFolder(folderPath)}
+              onOpenDocument={(documentPath: string) => void controller.openDocuments([documentPath])}
+              {translator}
+              onOpenFavourite={(favourite: Favourite) => void controller.openFavourite(favourite)}
+              onOpenRecentFile={(recentFile: RecentFile) => void controller.openRecentFile(recentFile)}
+            />
+          {/if}
+        </div>
       {/if}
       {#if viewSettings.isSidebarVisible}
         <PanelResizer
@@ -368,6 +392,9 @@
             <StartPage
               recentFiles={snapshot.viewer.recentFiles.entries()}
               activeKindId={snapshot.viewer.workspaceKinds.activeKindId()}
+              recentWorkspaces={snapshot.workspaces
+                ? recentWorkspaceLinks(snapshot.workspaces, snapshot.viewer.workspaceKinds, translator)
+                : []}
               canCreateWorkspace={snapshot.workspaces?.registry.lastShownOfKind(
                 snapshot.viewer.workspaceKinds.activeKindId(),
               ) === undefined && snapshot.workspaces !== undefined}
@@ -606,6 +633,18 @@
   .viewer {
     display: grid;
     grid-template-columns: auto var(--explorer-width) auto 1fr;
+    min-height: 0;
+  }
+
+  .sidebar-column {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .sidebar-column > :global(:last-child) {
+    flex: 1;
     min-height: 0;
   }
 

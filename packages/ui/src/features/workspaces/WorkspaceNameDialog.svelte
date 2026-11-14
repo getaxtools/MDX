@@ -1,10 +1,25 @@
 <script lang="ts">
-  import type { WorkspaceKindId, WorkspaceNameProblem } from '@mdx/core';
+  import {
+    DEFAULT_WORKSPACE_KIND_ID,
+    WORKSPACE_COLOURS,
+    WORKSPACE_ICONS,
+    type WorkspaceColour,
+    type WorkspaceIcon,
+    type WorkspaceKindId,
+    type WorkspaceNameProblem,
+  } from '@mdx/core';
   import type { MessageKey, Translator } from '@mdx/i18n';
   import { untrack } from 'svelte';
   import Dialog from '../../components/Dialog.svelte';
   import { kindNameOf } from '../control-wheel/kindPresentation';
-  import { nameProblemMessage } from './workspaceCommands';
+  import KindIcon from '../control-wheel/KindIcon.svelte';
+  import { nameProblemMessage, type WorkspaceDetails } from './workspaceCommands';
+  import {
+    WORKSPACE_COLOUR_NAME_KEYS,
+    WORKSPACE_COLOUR_VALUES,
+    WORKSPACE_ICON_NAME_KEYS,
+    WORKSPACE_ICON_PATHS,
+  } from './workspacePresentation';
 
   interface Props {
     titleKey: MessageKey;
@@ -14,8 +29,10 @@
     kindIds: readonly WorkspaceKindId[];
     initialKindId: WorkspaceKindId;
     checkName: (name: string, kindId: WorkspaceKindId) => WorkspaceNameProblem | undefined;
+    /** A new workspace also gets an icon, a colour and, for the Markdown viewer, a first folder. */
+    hasAppearanceChoices?: boolean;
     translator: Translator;
-    onConfirm: (name: string, kindId: WorkspaceKindId) => void;
+    onConfirm: (details: WorkspaceDetails) => void;
     onClose: () => void;
   }
 
@@ -26,6 +43,7 @@
     kindIds,
     initialKindId,
     checkName,
+    hasAppearanceChoices = false,
     translator,
     onConfirm,
     onClose,
@@ -33,6 +51,9 @@
 
   let name = $state(untrack(() => initialName));
   let kindId = $state(untrack(() => initialKindId));
+  let icon: WorkspaceIcon | undefined = $state();
+  let colour: WorkspaceColour | undefined = $state();
+  let isFolderStepChosen = $state(true);
   let hasTriedToConfirm = $state(false);
   let input: HTMLInputElement | undefined = $state();
 
@@ -53,7 +74,9 @@
   function confirm(event: SubmitEvent) {
     event.preventDefault();
     hasTriedToConfirm = true;
-    if (!problem) onConfirm(name.trim(), kindId);
+    if (problem) return;
+    const hasFolderStep = hasAppearanceChoices && kindId === DEFAULT_WORKSPACE_KIND_ID && isFolderStepChosen;
+    onConfirm({ name: name.trim(), kindId, icon, colour, isFolderStepChosen: hasFolderStep });
   }
 </script>
 
@@ -81,6 +104,42 @@
         {/each}
       </select>
     {/if}
+    {#if hasAppearanceChoices}
+      <fieldset class="choices">
+        <legend>{translator.translate('workspaces.dialog.icon')}</legend>
+        <label class="choice">
+          <input type="radio" name="workspace-icon" value={undefined} bind:group={icon} />
+          {translator.translate('workspaces.dialog.none')}
+        </label>
+        {#each WORKSPACE_ICONS as iconOption (iconOption)}
+          <label class="choice" title={translator.translate(WORKSPACE_ICON_NAME_KEYS[iconOption])}>
+            <input type="radio" name="workspace-icon" value={iconOption} bind:group={icon} />
+            <KindIcon paths={WORKSPACE_ICON_PATHS[iconOption]} />
+            <span class="visually-hidden">{translator.translate(WORKSPACE_ICON_NAME_KEYS[iconOption])}</span>
+          </label>
+        {/each}
+      </fieldset>
+      <fieldset class="choices">
+        <legend>{translator.translate('workspaces.dialog.colour')}</legend>
+        <label class="choice">
+          <input type="radio" name="workspace-colour" value={undefined} bind:group={colour} />
+          {translator.translate('workspaces.dialog.none')}
+        </label>
+        {#each WORKSPACE_COLOURS as colourOption (colourOption)}
+          <label class="choice">
+            <input type="radio" name="workspace-colour" value={colourOption} bind:group={colour} />
+            <span class="swatch" style:background={WORKSPACE_COLOUR_VALUES[colourOption]}></span>
+            {translator.translate(WORKSPACE_COLOUR_NAME_KEYS[colourOption])}
+          </label>
+        {/each}
+      </fieldset>
+      {#if kindId === DEFAULT_WORKSPACE_KIND_ID}
+        <label class="folder-step">
+          <input type="checkbox" bind:checked={isFolderStepChosen} />
+          {translator.translate('workspaces.dialog.addFolder')}
+        </label>
+      {/if}
+    {/if}
     <div class="actions">
       <button type="submit">{translator.translate(confirmKey)}</button>
       <button type="button" onclick={onClose}>{translator.translate('workspaces.dialog.cancel')}</button>
@@ -104,6 +163,49 @@
     background: var(--color-background);
     color: var(--color-text);
     font: inherit;
+  }
+
+  fieldset {
+    margin: 0;
+    padding: 0;
+    border: none;
+  }
+
+  legend {
+    margin-block-end: var(--space-1);
+  }
+
+  .choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
+  }
+
+  .choice,
+  .folder-step {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  .choice input,
+  .folder-step input {
+    height: auto;
+  }
+
+  .swatch {
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 50%;
+  }
+
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   input[aria-invalid='true'] {

@@ -265,12 +265,17 @@ describe('TauriAppMenu', () => {
     expect(calls).toEqual([{ command: 'update_menu_language', args: { labels: { 'menu.file': 'फ़ाइल' } } }]);
   });
 
-  it('lists recent documents in the native menu through the update_recent_menu command', async () => {
+  it('lists recent documents and workspaces in the native menu through the update_recent_menu command', async () => {
     const calls = mockCommands({ update_recent_menu: () => null });
 
-    await new TauriAppMenu().showRecentFiles(['C:\\Docs\\a.md']);
+    await new TauriAppMenu().showRecentFiles(['C:\\Docs\\a.md'], [{ id: 'reading', name: 'Reading' }]);
 
-    expect(calls).toEqual([{ command: 'update_recent_menu', args: { displayPaths: ['C:\\Docs\\a.md'] } }]);
+    expect(calls).toEqual([
+      {
+        command: 'update_recent_menu',
+        args: { displayPaths: ['C:\\Docs\\a.md'], workspaces: [{ id: 'reading', name: 'Reading' }] },
+      },
+    ]);
   });
 });
 

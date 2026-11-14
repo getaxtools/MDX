@@ -1,9 +1,15 @@
-import type { AppMenuPort, MenuCommandListener, ViewMenuState } from '../AppMenuPort';
+import type {
+  AppMenuPort,
+  MenuCommandListener,
+  RecentWorkspaceMenuEntry,
+  ViewMenuState,
+} from '../AppMenuPort';
 
 export class InMemoryAppMenu implements AppMenuPort {
   private readonly listeners = new Set<MenuCommandListener>();
   shownViewState: ViewMenuState | undefined;
   shownRecentFiles: readonly string[] | undefined;
+  shownRecentWorkspaces: readonly RecentWorkspaceMenuEntry[] = [];
   shownLabels: Readonly<Record<string, string>> | undefined;
   shownShortcuts: Readonly<Record<string, string>> | undefined;
 
@@ -17,8 +23,12 @@ export class InMemoryAppMenu implements AppMenuPort {
     return Promise.resolve();
   }
 
-  showRecentFiles(displayPaths: readonly string[]): Promise<void> {
+  showRecentFiles(
+    displayPaths: readonly string[],
+    workspaces: readonly RecentWorkspaceMenuEntry[] = [],
+  ): Promise<void> {
     this.shownRecentFiles = displayPaths;
+    this.shownRecentWorkspaces = workspaces;
     return Promise.resolve();
   }
 

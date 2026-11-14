@@ -10,8 +10,9 @@
   import type { ViewerCommand } from '../viewer/viewerCommands';
   import type { WorkspacesView } from '../viewer/ViewerController';
   import type { WorkspaceDialog } from './WorkspaceActions';
-  import { workspaceNameOf } from './workspaceCommands';
+  import { workspaceNameOf, type WorkspaceDetails } from './workspaceCommands';
   import WorkspaceNameDialog from './WorkspaceNameDialog.svelte';
+  import WorkspaceSwitcher from './WorkspaceSwitcher.svelte';
 
   interface Props {
     dialog: WorkspaceDialog;
@@ -34,7 +35,14 @@
   const shownKindId = $derived((shown?.kindId ?? DEFAULT_WORKSPACE_KIND_ID) as WorkspaceKindId);
 </script>
 
-{#if dialog === 'newWorkspace'}
+{#if dialog === 'workspaceSwitcher'}
+  <WorkspaceSwitcher
+    source={{ registry: workspaces.registry, shownWorkspaceId: workspaces.shownWorkspaceId, kinds }}
+    {translator}
+    onSwitch={(workspaceId: string) => onCommand({ kind: 'switchWorkspace', workspaceId })}
+    {onClose}
+  />
+{:else if dialog === 'newWorkspace'}
   <WorkspaceNameDialog
     titleKey="workspaces.newDialog.title"
     confirmKey="workspaces.newDialog.create"
@@ -43,8 +51,8 @@
     initialKindId={newWorkspaceKindId}
     checkName={(name: string, kindId: WorkspaceKindId) => workspaces.registry.checkName(name, kindId)}
     {translator}
-    onConfirm={(name: string, kindId: WorkspaceKindId) =>
-      onCommand({ kind: 'createWorkspace', name, kindId })}
+    hasAppearanceChoices
+    onConfirm={(details: WorkspaceDetails) => onCommand({ kind: 'createWorkspace', ...details })}
     {onClose}
   />
 {:else if dialog === 'renameWorkspace' && shown}
@@ -57,7 +65,7 @@
     checkName={(name: string, kindId: WorkspaceKindId) =>
       workspaces.registry.checkName(name, kindId, shown.id)}
     {translator}
-    onConfirm={(name: string) => onCommand({ kind: 'renameWorkspace', name })}
+    onConfirm={({ name }: WorkspaceDetails) => onCommand({ kind: 'renameWorkspace', name })}
     {onClose}
   />
 {:else if dialog === 'deleteWorkspace' && shown}

@@ -7,6 +7,7 @@ import type {
   FolderSearchResults,
   OpenedDocument,
   PathStatus,
+  RecentWorkspaceMenuEntry,
   SaveSource,
   StoredWorkspace,
   TextSearchOptions,
@@ -68,7 +69,8 @@ export const tauriCommands = {
   saveAppValue: (key: string, valueJson: string) => invoke<null>('save_app_value', { key, valueJson }),
   getAppInfo: () => invoke<AppInfo>('get_app_info'),
   updateViewMenu: (state: ViewMenuState) => invoke<null>('update_view_menu', { state }),
-  updateRecentMenu: (displayPaths: readonly string[]) => invoke<null>('update_recent_menu', { displayPaths }),
+  updateRecentMenu: (displayPaths: readonly string[], workspaces: readonly RecentWorkspaceMenuEntry[]) =>
+    invoke<null>('update_recent_menu', { displayPaths, workspaces }),
   updateMenuLanguage: (labels: Readonly<Record<string, string>>) =>
     invoke<null>('update_menu_language', { labels }),
   updateMenuShortcuts: (shortcuts: Readonly<Record<string, string>>) =>
@@ -82,6 +84,7 @@ export const tauriCommands = {
   openExternalLink: (url: string) => invoke<null>('open_external_link', { url }),
   revealInFileManager: (path: string) => invoke<null>('reveal_in_file_manager', { path }),
   toggleFullScreen: () => invoke<null>('toggle_full_screen'),
+  setWindowTitle: (title: string) => invoke<null>('set_window_title', { title }),
   pickFolder: () => invoke<DocumentLocation | null>('pick_folder'),
   listFolderContents: (folder: string) => invoke<FolderListing>('list_folder_contents', { folder }),
   findFolderDocuments: (folders: readonly string[]) =>

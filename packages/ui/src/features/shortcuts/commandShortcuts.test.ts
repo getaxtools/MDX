@@ -77,6 +77,21 @@ describe('commandForShortcut on Windows', () => {
   it('ignores shortcuts while an input method is composing text', () => {
     expect(commandForShortcut(keys('o', { ctrlKey: true, isComposing: true }), 'windows')).toBeUndefined();
   });
+
+  it('opens the workspace switcher with Ctrl+Alt+W, but not while composing', () => {
+    const ctrlAltW = keys('w', { ctrlKey: true, altKey: true });
+
+    expect(commandForShortcut(ctrlAltW, 'windows')).toEqual({ kind: 'showWorkspaceSwitcher' });
+    expect(commandForShortcut({ ...ctrlAltW, isComposing: true }, 'windows')).toBeUndefined();
+  });
+
+  it('the shortcut table has no duplicate combination', () => {
+    const combinations = COMMAND_SHORTCUTS.flatMap((shortcut) =>
+      shortcut.combinations.map((combination) => combination.join('+').toLowerCase()),
+    );
+
+    expect(new Set(combinations).size).toBe(combinations.length);
+  });
 });
 
 describe('commandForShortcut on macOS', () => {

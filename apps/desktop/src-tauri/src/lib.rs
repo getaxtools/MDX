@@ -125,6 +125,7 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::folder_text_search::search_folder_documents,
         commands::file_manager::reveal_in_file_manager,
         commands::window::toggle_full_screen,
+        commands::window::set_window_title,
         menu::update_view_menu,
         menu::update_menu_language,
         menu::update_menu_shortcuts,
