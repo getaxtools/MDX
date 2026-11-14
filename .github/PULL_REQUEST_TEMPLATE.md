@@ -15,7 +15,7 @@
 - [ ] Code follows CODING-STANDARDS.md (self-explanatory names, minimal comments)
 - [ ] No new network calls, permissions or capabilities (or agreed in the issue)
 - [ ] `just check` passes locally
-- [ ] PR title is a Conventional Commit; commits are signed off (`git commit -s`)
+- [ ] PR title is a Conventional Commit
 
 ## AI assistance
 

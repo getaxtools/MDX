@@ -57,22 +57,18 @@ Start with the feature folder that matches your change: domain logic in `package
 2. Make a small, focused change. Aim for under ~400 changed lines, excluding tests and fixtures.
 3. Write tests alongside the code (see the Definition of Done).
 4. Run `just check` locally.
-5. Commit with a [Conventional Commit](https://www.conventionalcommits.org) message and a DCO sign-off (`git commit -s`).
+5. Commit with a [Conventional Commit](https://www.conventionalcommits.org) message.
 6. Open a PR and fill in the template.
 
 ### Commit messages
 
 ```
 feat(favourites): show unreachable state for offline network shares
-
-Signed-off-by: Your Name <you@example.com>
 ```
 
 Types: `feat`, `fix`, `perf`, `refactor`, `test`, `docs`, `build`, `ci`, `chore`. The PR title must follow the same format, because it becomes the changelog entry when we squash-merge.
 
-### Developer Certificate of Origin
-
-Every commit must be signed off (`git commit -s`). That certifies you wrote the change or have the right to submit it under the project's licenses, as described at [developercertificate.org](https://developercertificate.org). There is no separate CLA.
+By opening a PR you agree that your contribution is licensed under the project's licenses. There is no CLA.
 
 ## Definition of Done
 
@@ -85,7 +81,7 @@ A PR is ready for review when all of these are true:
 - [ ] **Readable code** that follows [CODING-STANDARDS.md](CODING-STANDARDS.md): self-explanatory names, minimal comments.
 - [ ] **No new network calls, permissions or capabilities** unless agreed in the issue.
 - [ ] **`just check` passes.**
-- [ ] Conventional Commit title and signed-off commits.
+- [ ] Conventional Commit title.
 
 ## Review process
 
