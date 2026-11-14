@@ -9,7 +9,7 @@ import { BUILT_IN_SLASH_ITEMS, type SlashMenuItem } from './slashMenuItems';
 function stateWithCaret(textWithCaret: string): EditorState {
   const caret = textWithCaret.indexOf('|');
   return EditorState.create({
-    doc: textWithCaret.replace('|', ''),
+    doc: textWithCaret.slice(0, caret) + textWithCaret.slice(caret + 1),
     selection: EditorSelection.cursor(caret),
     extensions: [markdown({ base: markdownLanguage })],
   });
