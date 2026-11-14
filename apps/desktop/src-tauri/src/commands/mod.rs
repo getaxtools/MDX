@@ -12,3 +12,4 @@ pub mod folders;
 pub mod links;
 pub mod live_reload;
 pub mod window;
+pub mod workspaces;

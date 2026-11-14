@@ -34,6 +34,13 @@ pub fn save_app_state(
     Ok(store.save(&state_json)?)
 }
 
+#[tauri::command]
+pub fn remove_app_state_backups(
+    store: State<'_, AppStateStore>,
+) -> Result<(), AppStateCommandError> {
+    Ok(store.remove_backups()?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

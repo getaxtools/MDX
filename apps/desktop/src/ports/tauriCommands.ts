@@ -8,10 +8,26 @@ import type {
   OpenedDocument,
   PathStatus,
   SaveSource,
+  StoredWorkspace,
   TextSearchOptions,
   ViewMenuState,
 } from '@mdx/platform';
 import type { AppInfo } from '@mdx/ui';
+
+/** The import with every list, session and value already turned into JSON text. */
+export interface LegacyStateImportRequest {
+  readonly workspace: StoredWorkspace;
+  readonly lists: Readonly<Record<string, string>>;
+  readonly windowId: string;
+  readonly windowSession: string;
+  readonly appValues: Readonly<Record<string, string>>;
+}
+
+/** Lists and the window session arrive as JSON text, which the desktop port parses. */
+export interface StoredWorkspaceReply {
+  readonly lists: Readonly<Record<string, string>>;
+  readonly windowSession: string | null;
+}
 
 interface AttachmentRequest {
   readonly documentPath: string;
@@ -32,6 +48,21 @@ export const tauriCommands = {
   takeStartupDocuments: () => invoke<string[]>('take_startup_documents'),
   loadAppState: () => invoke<string | null>('load_app_state'),
   saveAppState: (stateJson: string) => invoke<null>('save_app_state', { stateJson }),
+  removeAppStateBackups: () => invoke<null>('remove_app_state_backups'),
+  importLegacyState: (legacyState: LegacyStateImportRequest) =>
+    invoke<null>('import_legacy_state', { legacyState }),
+  clearWorkspaces: () => invoke<null>('clear_workspaces'),
+  loadWorkspaceRegistry: () => invoke<StoredWorkspace[]>('load_workspace_registry'),
+  loadWorkspace: (workspaceId: string, windowId: string) =>
+    invoke<StoredWorkspaceReply | null>('load_workspace', { workspaceId, windowId }),
+  saveWorkspace: (workspace: StoredWorkspace) => invoke<null>('save_workspace', { workspace }),
+  deleteWorkspace: (workspaceId: string) => invoke<null>('delete_workspace', { workspaceId }),
+  saveWorkspaceList: (workspaceId: string, listName: string, valueJson: string) =>
+    invoke<null>('save_workspace_list', { workspaceId, listName, valueJson }),
+  saveWindowSession: (windowId: string, workspaceId: string, sessionJson: string) =>
+    invoke<null>('save_window_session', { windowId, workspaceId, sessionJson }),
+  loadAppValues: () => invoke<Record<string, string>>('load_app_values'),
+  saveAppValue: (key: string, valueJson: string) => invoke<null>('save_app_value', { key, valueJson }),
   getAppInfo: () => invoke<AppInfo>('get_app_info'),
   updateViewMenu: (state: ViewMenuState) => invoke<null>('update_view_menu', { state }),
   updateRecentMenu: (displayPaths: readonly string[]) => invoke<null>('update_recent_menu', { displayPaths }),

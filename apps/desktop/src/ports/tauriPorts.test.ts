@@ -155,6 +155,14 @@ describe('TauriAppState', () => {
 
     expect(calls).toEqual([{ command: 'save_app_state', args: { stateJson: '{"schemaVersion":1}' } }]);
   });
+
+  it('removes the kept backups through the remove_app_state_backups command', async () => {
+    const calls = mockCommands({ remove_app_state_backups: () => null });
+
+    await new TauriAppState().removeBackups();
+
+    expect(calls.map((call) => call.command)).toEqual(['remove_app_state_backups']);
+  });
 });
 
 describe('TauriDocumentRequests', () => {

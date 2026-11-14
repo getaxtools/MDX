@@ -135,6 +135,33 @@ describe('persisted app state', () => {
     expect(restored.favourites.favourites()).toEqual([]);
   });
 
+  it('an unknown newer version starts empty and reports the version that saved it', () => {
+    const restored = restoreAppState({ schemaVersion: 2, savedByAppVersion: '2.1.0', recentFiles: [] });
+
+    expect(restored.wasReset).toBe(true);
+    expect(restored.newerSavedState).toEqual({ appVersion: '2.1.0' });
+    expect(restored.tabStrip.tabs()).toEqual([]);
+  });
+
+  it('reports a newer version without a name when it did not record one', () => {
+    expect(restoreAppState({ schemaVersion: 2 }).newerSavedState).toEqual({ appVersion: undefined });
+  });
+
+  it.each([
+    ['corrupt text', 'garbage'],
+    ['an older schema version', { schemaVersion: 0 }],
+    ['a readable state', { schemaVersion: 1 }],
+  ])('does not call %s newer', (_description, saved) => {
+    expect(restoreAppState(saved).newerSavedState).toBeUndefined();
+  });
+
+  it('records the app version that saved the state', () => {
+    const state = restoreAppState(undefined);
+
+    expect(toPersistedAppState(state, '0.9.0').savedByAppVersion).toBe('0.9.0');
+    expect(toPersistedAppState(state)).not.toHaveProperty('savedByAppVersion');
+  });
+
   it('drops individual invalid entries and keeps the valid ones', () => {
     const valid = { location: location('a.md'), isPinned: false, scrollRatio: 0 };
     const saved = {

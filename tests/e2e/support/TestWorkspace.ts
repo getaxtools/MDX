@@ -13,6 +13,8 @@ import { basename, join } from 'node:path';
 
 const FIXTURE_DOCUMENTS_FOLDER = join(import.meta.dirname, '..', '..', 'fixtures', 'documents');
 const SAVED_STATE_FILE_NAME = 'app-state.json';
+const NEWER_VERSION_BACKUP_FILE_NAME = 'app-state.newer-version.json';
+const WORKSPACE_DATABASE_FILE_NAME = 'mdx.db';
 const SAVED_STATE_SCHEMA_VERSION = 1;
 
 interface SavedLocation {
@@ -23,6 +25,12 @@ interface SavedLocation {
 interface SavedFolderPlaces {
   readonly asFavourite?: boolean;
   readonly inExplorer?: boolean;
+}
+
+interface EarlierVersionState {
+  readonly tabFileNames: readonly string[];
+  readonly favouriteFileNames: readonly string[];
+  readonly recentFileNames: readonly string[];
 }
 
 export interface SavedWorkspaceKinds {
@@ -107,6 +115,64 @@ export class TestWorkspace {
       explorerFolders: [],
     };
     writeFileSync(join(this.profileFolder, SAVED_STATE_FILE_NAME), JSON.stringify(state));
+  }
+
+  /** Starts the next launch on the single state file of a version before workspaces. */
+  saveEarlierVersionState({ tabFileNames, favouriteFileNames, recentFileNames }: EarlierVersionState): void {
+    const locationOf = (fileName: string) => this.savedLocationOf(this.documentPath(fileName), fileName);
+    const tabs = tabFileNames.map((fileName) => ({
+      location: locationOf(fileName),
+      isPinned: false,
+      scrollRatio: 0,
+    }));
+    const folder = this.savedLocationOf(this.documentsFolder, basename(this.documentsFolder));
+    const state = {
+      schemaVersion: SAVED_STATE_SCHEMA_VERSION,
+      tabs: { tabs, activeKey: tabs[0]?.location.canonicalKey },
+      recentFiles: recentFileNames.map((fileName) => ({
+        location: locationOf(fileName),
+        isPinned: true,
+        lastOpenedAtMs: 1,
+      })),
+      favourites: favouriteFileNames.map((fileName) => ({ location: locationOf(fileName), kind: 'file' })),
+      favouriteGroups: [],
+      explorerFolders: [folder],
+    };
+    writeFileSync(join(this.profileFolder, SAVED_STATE_FILE_NAME), JSON.stringify(state));
+  }
+
+  /** Adds a favourite to the copy kept for earlier versions, as an earlier version would. */
+  addFavouriteInEarlierVersionCopy(fileName: string): void {
+    const stateFile = join(this.profileFolder, SAVED_STATE_FILE_NAME);
+    const state = JSON.parse(readFileSync(stateFile, 'utf8')) as { favourites: unknown[] };
+    const location = this.savedLocationOf(this.documentPath(fileName), fileName);
+    state.favourites.push({ location, kind: 'file' });
+    writeFileSync(stateFile, JSON.stringify(state));
+  }
+
+  hasWorkspaceDatabase(): boolean {
+    return existsSync(join(this.profileFolder, WORKSPACE_DATABASE_FILE_NAME));
+  }
+
+  private savedLocationOf(path: string, fileName: string) {
+    const displayPath = realpathSync.native(path);
+    const canonicalKey = process.platform === 'win32' ? displayPath.toLowerCase() : displayPath;
+    return { canonicalKey, displayPath, fileName };
+  }
+
+  /** Starts the next launch on state written by a newer MDX, and returns the exact text written. */
+  saveStateFromNewerVersion(appVersion: string): string {
+    const state = JSON.stringify({
+      schemaVersion: SAVED_STATE_SCHEMA_VERSION + 1,
+      savedByAppVersion: appVersion,
+    });
+    writeFileSync(join(this.profileFolder, SAVED_STATE_FILE_NAME), state);
+    return state;
+  }
+
+  newerVersionBackup(): string | undefined {
+    const backupFile = join(this.profileFolder, NEWER_VERSION_BACKUP_FILE_NAME);
+    return existsSync(backupFile) ? readFileSync(backupFile, 'utf8') : undefined;
   }
 
   savedWorkspaceKinds(): SavedWorkspaceKinds | undefined {

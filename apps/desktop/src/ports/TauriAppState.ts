@@ -15,4 +15,8 @@ export class TauriAppState implements AppStatePort {
   async save(state: unknown): Promise<void> {
     await tauriCommands.saveAppState(JSON.stringify(state));
   }
+
+  async removeBackups(): Promise<void> {
+    await tauriCommands.removeAppStateBackups();
+  }
 }

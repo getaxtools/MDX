@@ -45,3 +45,13 @@ export type { DesktopShellPort } from './DesktopShellPort';
 export { InMemoryDesktopShell } from './fakes/InMemoryDesktopShell';
 export type { AttachmentPort, AttachmentTarget, ImagesDrop, ImagesDropListener } from './AttachmentPort';
 export { InMemoryAttachments, type SavedAttachmentRecord } from './fakes/InMemoryAttachments';
+export {
+  UnknownWorkspaceError,
+  WORKSPACE_LIST_NAMES,
+  type LegacyStateImport,
+  type StoredWorkspace,
+  type StoredWorkspaceContents,
+  type WorkspaceListName,
+  type WorkspaceStorePort,
+} from './WorkspaceStorePort';
+export { InMemoryWorkspaceStore } from './fakes/InMemoryWorkspaceStore';

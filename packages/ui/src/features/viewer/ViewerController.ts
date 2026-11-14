@@ -9,6 +9,7 @@ import {
   type DocumentStatistics,
   type Favourite,
   type RecentFile,
+  type RestoreOutcome,
   type ViewerSession,
   type ViewerState,
   parseFavouritesFile,
@@ -275,10 +276,10 @@ export class ViewerController {
 
   async start(): Promise<void> {
     const { session, requests } = this.dependencies;
-    const { wasReset } = await session.restore();
+    const restoreOutcome = await session.restore();
     this.navigation.recordActiveDocument();
     this.publish(this.composeSnapshot(undefined));
-    if (wasReset) this.showNotice('errors.appState.reset');
+    this.reportRestoreOutcome(restoreOutcome);
     this.stopActions.push(session.subscribe(() => this.handleSessionChange()));
     this.stopActions.push(requests.onDocumentsRequested((paths) => void this.openDocuments(paths)));
     this.listenToMenu();
@@ -288,6 +289,18 @@ export class ViewerController {
     if (this.documentAttachments) this.stopActions.push(this.documentAttachments.start());
     await this.openDocuments(await requests.takeStartupDocuments());
     await this.refreshActiveDocument();
+  }
+
+  private reportRestoreOutcome({
+    wasReset,
+    newerSavedState,
+    hasEarlierVersionChanges,
+  }: RestoreOutcome): void {
+    if (newerSavedState?.appVersion !== undefined)
+      this.showNotice('errors.appState.newerVersion', { version: newerSavedState.appVersion });
+    else if (newerSavedState) this.showNotice('errors.appState.newerVersionUnnamed');
+    else if (wasReset) this.showNotice('errors.appState.reset');
+    else if (hasEarlierVersionChanges) this.showNotice('workspaces.earlierVersionChanges');
   }
 
   stop(): void {
@@ -787,6 +800,7 @@ export class ViewerController {
     this.dependencies.session.clearAllData();
     this.navigation.forgetHistory();
     this.navigation.recordActiveDocument();
+    await this.dependencies.session.clearStoredData();
     await this.saveNow();
     this.showNotice('privacy.clearAllData.done');
   }

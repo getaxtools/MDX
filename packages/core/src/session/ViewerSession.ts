@@ -7,6 +7,7 @@ import {
   type OpenedDocument,
   type PathStatus,
   type SaveSource,
+  type WorkspaceStorePort,
 } from '@mdx/platform';
 import { withDocumentLineBreaks } from '../documents/lineEndings';
 import { ExplorerFolders } from '../explorer/ExplorerFolders';
@@ -19,7 +20,10 @@ import { TabStrip } from '../tabs/TabStrip';
 import { DEFAULT_VIEW_SETTINGS, type ViewSettings } from '../view/ViewSettings';
 import { WORKSPACE_KINDS, type WorkspaceKind } from '../workspace-kinds/workspaceKinds';
 import { WorkspaceKindsState } from '../workspace-kinds/WorkspaceKindsState';
-import { restoreAppState, toPersistedAppState, type ViewerState } from './persistedAppState';
+import type { NewerSavedState, ViewerState } from './persistedAppState';
+import { MAIN_WINDOW_ID } from '../workspaces/storedViewerState';
+import { LegacyStateStorage, type ViewerStateStorage } from '../workspaces/ViewerStateStorage';
+import { WorkspaceStateStorage } from '../workspaces/WorkspaceStateStorage';
 
 export interface ViewerSessionDependencies {
   readonly documentFiles: DocumentFilePort;
@@ -27,6 +31,16 @@ export interface ViewerSessionDependencies {
   readonly now: () => number;
   /** The workspace kinds this build offers; the UI test build also offers planned ones. */
   readonly kindRegistry?: readonly WorkspaceKind[];
+  /** Written with the saved state, so an older version can name the one that saved it. */
+  readonly appVersion?: string;
+  /** Keeps the state in workspaces; without it the earlier single state file is used. */
+  readonly workspaceStore?: WorkspaceStorePort;
+}
+
+export interface RestoreOutcome {
+  readonly wasReset: boolean;
+  readonly newerSavedState: NewerSavedState | undefined;
+  readonly hasEarlierVersionChanges: boolean;
 }
 
 export type { ViewerState } from './persistedAppState';
@@ -47,6 +61,21 @@ function emptyState(kindRegistry: readonly WorkspaceKind[]): ViewerState {
   };
 }
 
+function storageFor(
+  { appState, workspaceStore, now, appVersion }: ViewerSessionDependencies,
+  kindRegistry: readonly WorkspaceKind[],
+): ViewerStateStorage {
+  if (!workspaceStore) return new LegacyStateStorage({ appState, kindRegistry, appVersion });
+  return new WorkspaceStateStorage({
+    workspaceStore,
+    appState,
+    kindRegistry,
+    windowId: MAIN_WINDOW_ID,
+    now,
+    appVersion,
+  });
+}
+
 export class ViewerSession {
   private state: ViewerState;
   private readonly openedDocuments = new Map<string, OpenedDocument>();
@@ -57,18 +86,20 @@ export class ViewerSession {
   private readonly listeners = new Set<ViewerStateListener>();
 
   private readonly kindRegistry: readonly WorkspaceKind[];
+  private readonly storage: ViewerStateStorage;
 
   constructor(private readonly dependencies: ViewerSessionDependencies) {
     this.kindRegistry = dependencies.kindRegistry ?? WORKSPACE_KINDS;
     this.state = emptyState(this.kindRegistry);
+    this.storage = storageFor(dependencies, this.kindRegistry);
   }
 
   currentState(): ViewerState {
     return this.state;
   }
 
-  async restore(): Promise<{ wasReset: boolean }> {
-    const restored = restoreAppState(await this.dependencies.appState.load(), this.kindRegistry);
+  async restore(): Promise<RestoreOutcome> {
+    const restored = await this.storage.restore();
     this.openedDocuments.clear();
     this.replaceState({
       tabStrip: restored.tabStrip,
@@ -81,7 +112,8 @@ export class ViewerSession {
       wordGoals: restored.wordGoals,
       snippetLibrary: restored.snippetLibrary,
     });
-    return { wasReset: restored.wasReset };
+    const { wasReset, newerSavedState, hasEarlierVersionChanges } = restored;
+    return { wasReset, newerSavedState, hasEarlierVersionChanges };
   }
 
   /** Forgets every tab, recent file, favourite, opened folder, setting and kind choice, as on a first start. */
@@ -94,7 +126,12 @@ export class ViewerSession {
   }
 
   async save(): Promise<void> {
-    await this.dependencies.appState.save(toPersistedAppState(this.state));
+    await this.storage.save(this.state);
+  }
+
+  /** Removes stored workspaces, values and backup copies; the next save writes the current state again. */
+  async clearStoredData(): Promise<void> {
+    await this.storage.clearAll();
   }
 
   /**

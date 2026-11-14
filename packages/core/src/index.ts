@@ -14,11 +14,12 @@ export {
   restoreAppState,
   savedLanguagePreference,
   toPersistedAppState,
+  type NewerSavedState,
   type PersistedAppState,
   type RestoredAppState,
   type ViewerState,
 } from './session/persistedAppState';
-export { ViewerSession, type ViewerSessionDependencies } from './session/ViewerSession';
+export { ViewerSession, type RestoreOutcome, type ViewerSessionDependencies } from './session/ViewerSession';
 export {
   MAX_SHORTCUT_PART_LENGTH,
   MAX_SHORTCUT_PARTS,
