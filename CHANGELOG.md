@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.0](https://github.com/getaxtools/MDX/compare/v0.8.1...v0.9.0) (2026-11-14)
+
+
+### Features
+
+* add the control wheel for workspace kinds ([6d2e24c](https://github.com/getaxtools/MDX/commit/6d2e24cbe26a80b141bd0a77a149dafb3303a481))
+* add the kind bar, block editing, writing tools and notes groundwork ([2abe277](https://github.com/getaxtools/MDX/commit/2abe2777ec046a5726ca74bfdbd7f2107e385e47))
+* add workspace kinds and saved shortcut choices ([69f287d](https://github.com/getaxtools/MDX/commit/69f287d47b3010cd4207451b2a74adb261baa3e5))
+* add workspace kinds, the control wheel and editor writing tools ([639d754](https://github.com/getaxtools/MDX/commit/639d7543c694fbab7f6f07f6773dc4c8d1910861))
+* **desktop:** show a start-up screen while the app loads ([f7e6f4f](https://github.com/getaxtools/MDX/commit/f7e6f4fa6dabb2f02626cb0a96281603455fcbed))
+* let users change the control wheel shortcut and open it from more places ([22b703f](https://github.com/getaxtools/MDX/commit/22b703f69102187206146cda55348e62e93194ca))
+
 ## [0.8.1](https://github.com/getaxtools/MDX/compare/v0.8.0...v0.8.1) (2026-11-12)
 
 
