@@ -12,6 +12,8 @@ import { kindNameOf } from '../control-wheel/kindPresentation';
 import { COMMAND_SHORTCUTS, type CommandShortcut } from '../shortcuts/commandShortcuts';
 import { describeCombination } from '../shortcuts/describeCombination';
 import type { ViewerCommand } from '../viewer/viewerCommands';
+import type { WorkspacesView } from '../viewer/ViewerController';
+import { workspaceNameOf } from '../workspaces/workspaceCommands';
 
 export interface PaletteCommand {
   readonly command: ViewerCommand;
@@ -24,6 +26,8 @@ export interface PaletteContext {
   readonly shortcuts: readonly CommandShortcut[];
   readonly workspaceKinds: WorkspaceKindsState;
   readonly snippets?: readonly Snippet[];
+  /** Absent while the earlier state file stands in for the workspace store. */
+  readonly workspaces?: WorkspacesView;
 }
 
 const DEFAULT_PALETTE_CONTEXT: PaletteContext = {
@@ -72,7 +76,7 @@ const COMMANDS_WITHOUT_SHORTCUTS: readonly CommandWithoutShortcut[] = [
 /** Every command the palette offers, labelled as in the menus, with its shortcut where it has one. */
 export function paletteCommands(
   translator: Translator,
-  { shortcuts, workspaceKinds, snippets = [] }: PaletteContext = DEFAULT_PALETTE_CONTEXT,
+  { shortcuts, workspaceKinds, snippets = [], workspaces }: PaletteContext = DEFAULT_PALETTE_CONTEXT,
 ): PaletteCommand[] {
   const withShortcuts = shortcuts
     .filter(({ command }) => command.kind !== 'showCommandPalette')
@@ -92,10 +96,36 @@ export function paletteCommands(
     ...withShortcuts,
     ...withoutShortcuts,
     ...workspaceKindCommands(workspaceKinds, translator),
+    ...(workspaces ? workspaceCommands(workspaces, workspaceKinds, translator) : []),
     ...snippetCommands(snippets, translator),
     ...themeCommands(translator),
     ...readingWidthCommands(translator),
     ...typographyCommands(translator),
+  ];
+}
+
+/** New, Rename and Delete Workspace, and a switch to each other workspace of an enabled kind. */
+function workspaceCommands(
+  workspaces: WorkspacesView,
+  workspaceKinds: WorkspaceKindsState,
+  translator: Translator,
+): PaletteCommand[] {
+  const group = translator.translate('workspaces.palette.group');
+  const switches = workspaces.registry
+    .recentlyShown(workspaceKinds)
+    .filter((workspace) => workspace.id !== workspaces.shownWorkspaceId)
+    .map((workspace) => ({
+      command: { kind: 'switchWorkspace', workspaceId: workspace.id } as const,
+      label: translator.translate('palette.groupedAction', {
+        group,
+        action: workspaceNameOf(workspace, translator),
+      }),
+    }));
+  return [
+    { command: { kind: 'showNewWorkspace' }, label: translator.translate('workspaces.new') },
+    { command: { kind: 'showRenameWorkspace' }, label: translator.translate('workspaces.rename') },
+    { command: { kind: 'confirmDeleteWorkspace' }, label: translator.translate('workspaces.delete') },
+    ...switches,
   ];
 }
 

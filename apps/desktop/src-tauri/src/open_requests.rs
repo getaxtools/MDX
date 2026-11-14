@@ -49,6 +49,15 @@ pub fn markdown_paths_from_arguments(arguments: &[String], working_folder: &Path
         .collect()
 }
 
+/// Grants the documents and folders saved in state shaped like the earlier state file.
+pub fn grant_saved_paths(saved_json: &str, access: &DocumentAccessList) {
+    let paths = crate::storage::saved_document_paths(saved_json);
+    grant_documents(&paths.documents, access);
+    for folder in &paths.folders {
+        let _ = access.grant_folder(folder);
+    }
+}
+
 pub fn grant_documents(paths: &[PathBuf], access: &DocumentAccessList) -> Vec<String> {
     paths
         .iter()

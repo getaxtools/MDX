@@ -68,6 +68,12 @@ const FILE_OPEN_ITEMS: [CommandItem; 3] = [
     ("openFolder", "menu.file.openFolder", None),
 ];
 
+const WORKSPACE_ITEMS: [CommandItem; 3] = [
+    ("showNewWorkspace", "workspaces.new", None),
+    ("showRenameWorkspace", "workspaces.rename", None),
+    ("confirmDeleteWorkspace", "workspaces.delete", None),
+];
+
 const FILE_SAVE_ITEMS: [CommandItem; 5] = [
     ("saveDocument", "menu.file.save", Some("Ctrl+S")),
     ("saveDocumentAs", "menu.file.saveAs", Some("Ctrl+Shift+S")),
@@ -418,6 +424,7 @@ impl MainMenuBuilder<'_> {
             .item(&reopen_closed?)
             .item(&self.reopen_with_encoding_menu()?)
             .separator();
+        let builder = self.with_items(builder, &WORKSPACE_ITEMS)?.separator();
         let builder = self.with_items(builder, &FILE_SAVE_ITEMS)?.separator();
         let builder = self
             .with_items(builder, &EXPORT_ITEMS)?
@@ -633,6 +640,7 @@ mod tests {
             .chain(&FILE_SAVE_ITEMS)
             .chain(&FILE_OTHER_ITEMS)
             .chain(&FAVOURITES_FILE_ITEMS)
+            .chain(&WORKSPACE_ITEMS)
             .chain(&EDIT_HISTORY_ITEMS)
             .chain(&EDIT_SEARCH_ITEMS)
             .chain(&[

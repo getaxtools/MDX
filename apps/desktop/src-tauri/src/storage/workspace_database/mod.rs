@@ -91,6 +91,16 @@ impl WorkspaceDatabase {
         })
     }
 
+    pub fn saved_paths_json(
+        &self,
+        workspace_id: &WorkspaceId,
+        window_id: &WindowId,
+    ) -> Result<Option<String>, DatabaseError> {
+        self.with_connection(|connection| {
+            workspace_tables::saved_paths_json(connection, workspace_id, window_id)
+        })
+    }
+
     pub fn save_workspace(&self, record: &WorkspaceRecord) -> Result<(), DatabaseError> {
         self.with_connection(|connection| workspace_tables::save_workspace(connection, record))
     }

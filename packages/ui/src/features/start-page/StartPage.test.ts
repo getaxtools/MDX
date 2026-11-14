@@ -19,6 +19,23 @@ function renderStartPage(recentFiles = [recentFile]) {
 }
 
 describe('StartPage', () => {
+  it('a kind with no workspace offers to create one, and creates nothing by itself', async () => {
+    const onCommand = vi.fn();
+    render(StartPage, {
+      recentFiles: [],
+      activeKindId: 'notes',
+      canCreateWorkspace: true,
+      translator: createTranslator(),
+      onCommand,
+      onOpenRecentFile: vi.fn(),
+    });
+
+    expect(onCommand).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'New Notes Workspace…' }));
+
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'showNewWorkspace', kindId: 'notes' });
+  });
+
   it('shows the not-built-yet text for a previewed kind', () => {
     render(StartPage, {
       recentFiles: [],

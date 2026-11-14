@@ -12,6 +12,8 @@ import {
   type RestoreOutcome,
   type ViewerSession,
   type ViewerState,
+  type WorkspaceKindId,
+  type WorkspaceRegistry,
   parseFavouritesFile,
   toFavouritesFile,
 } from '@mdx/core';
@@ -60,6 +62,8 @@ import { shortcutLabelFor } from '../shortcuts/commandShortcuts';
 import { effectiveCommandShortcuts } from '../shortcuts/effectiveCommandShortcuts';
 import { REBINDABLE_COMMANDS } from '../shortcuts/rebindableCommands';
 import { isTabCommand } from '../tabs/tabCommands';
+import { WorkspaceActions, type WorkspaceDialog } from '../workspaces/WorkspaceActions';
+import { isWorkspaceCommand } from '../workspaces/workspaceCommands';
 import { applySessionCommand } from './applySessionCommand';
 import { LiveReload } from './LiveReload';
 import { commandForMenuItem, type ViewerCommand } from './viewerCommands';
@@ -140,6 +144,15 @@ export interface ViewerSnapshot {
   /** Open documents whose edited text is not saved yet. */
   readonly unsavedDocumentKeys: ReadonlySet<string>;
   readonly editorRequest?: EditorRequest;
+  /** Absent while the earlier state file stands in for the workspace store. */
+  readonly workspaces?: WorkspacesView;
+}
+
+export interface WorkspacesView {
+  readonly registry: WorkspaceRegistry;
+  readonly shownWorkspaceId: string;
+  /** The kind the New Workspace dialog starts on. */
+  readonly kindForNewWorkspace?: WorkspaceKindId;
 }
 
 /** A button in the notice bar that runs a command, such as Locate for a file that has moved. */
@@ -162,7 +175,8 @@ export type ViewerDialog =
   | 'clearAllData'
   | 'controlWheel'
   | 'workspaceKindSettings'
-  | 'wordGoal';
+  | 'wordGoal'
+  | WorkspaceDialog;
 
 const DIALOGS_BY_COMMAND: Partial<Record<ViewerCommand['kind'], ViewerDialog>> = {
   showAbout: 'about',
@@ -193,6 +207,7 @@ export class ViewerController {
   private pendingOutlineRefresh: ReturnType<typeof setTimeout> | undefined;
   private activeDocument: RenderedActiveDocument | undefined;
   private openDialog: ViewerDialog | undefined;
+  private readonly workspaceActions: WorkspaceActions;
   private noticeActions: readonly NoticeAction[] = [];
   private findRequest = 0;
   private findQuery: FindQuery | undefined;
@@ -253,6 +268,31 @@ export class ViewerController {
       this.publish(this.composeSnapshot(this.snapshot.notice)),
     );
     this.documentAttachments = this.createDocumentAttachments();
+    this.workspaceActions = this.createWorkspaceActions();
+  }
+
+  private createWorkspaceActions(): WorkspaceActions {
+    const { session, translator } = this.dependencies;
+    return new WorkspaceActions({
+      session,
+      translator,
+      confirmLeavingDocuments: () => this.saving.confirmClosingWindow(),
+      showDialog: (dialog) => {
+        this.openDialog = dialog;
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+      },
+      showNotice: (key, values) => this.showNotice(key, values),
+      showSwitchedWorkspace: () => this.showSwitchedWorkspace(),
+    });
+  }
+
+  /** Edits were saved or discarded before the switch, so the new workspace starts with none. */
+  private async showSwitchedWorkspace(): Promise<void> {
+    this.editing.keepOnly(new Set());
+    this.navigation.forgetHistory();
+    this.navigation.recordActiveDocument();
+    this.refreshPathStatuses();
+    await this.refreshActiveDocument();
   }
 
   private createDocumentAttachments(): DocumentAttachments | undefined {
@@ -474,6 +514,10 @@ export class ViewerController {
     }
     if (command.kind === 'setLanguage') {
       this.changeLanguage(command.language);
+      return;
+    }
+    if (isWorkspaceCommand(command)) {
+      await this.workspaceActions.run(command);
       return;
     }
     if (applySessionCommand(this.dependencies.session, command)) return;
@@ -767,8 +811,16 @@ export class ViewerController {
     this.publish(this.composeSnapshot(this.snapshot.notice));
   }
 
-  private runWorkspaceKindCommand(command: WorkspaceKindCommand): void {
+  private async runWorkspaceKindCommand(command: WorkspaceKindCommand): Promise<void> {
     const { session, translator } = this.dependencies;
+    const kindWorkspace =
+      command.kind === 'switchWorkspaceKind'
+        ? session.workspaces()?.lastShownOfKind(command.kindId)
+        : undefined;
+    if (kindWorkspace && kindWorkspace.id !== session.shownWorkspace()?.id) {
+      await this.workspaceActions.run({ kind: 'switchWorkspace', workspaceId: kindWorkspace.id });
+      return;
+    }
     const current = session.currentState().workspaceKinds;
     const { state, notice } = applyWorkspaceKindCommand(current, command, translator);
     if (state !== current) session.updateWorkspaceKinds(() => state);
@@ -1049,6 +1101,22 @@ export class ViewerController {
       ...(this.externalLinkRequest === undefined ? {} : { externalLinkRequest: this.externalLinkRequest }),
       ...(this.isSourceView ? { isSourceView: true } : {}),
       ...this.unsavedChangesPart(),
+      ...this.workspacesPart(),
+    };
+  }
+
+  private workspacesPart(): Pick<ViewerSnapshot, 'workspaces'> {
+    const { session } = this.dependencies;
+    const registry = session.workspaces();
+    const shownWorkspaceId = session.shownWorkspace()?.id;
+    if (!registry || shownWorkspaceId === undefined) return {};
+    const kindForNewWorkspace = this.workspaceActions.kindForNewWorkspace();
+    return {
+      workspaces: {
+        registry,
+        shownWorkspaceId,
+        ...(kindForNewWorkspace ? { kindForNewWorkspace } : {}),
+      },
     };
   }
 

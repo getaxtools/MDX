@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use tauri::{App, AppHandle, Emitter, Manager};
@@ -11,7 +11,7 @@ use crate::live_reload::{
 use crate::open_requests::{
     MAIN_WINDOW_LABEL, StartupDocuments, grant_documents, markdown_paths_from_arguments,
 };
-use crate::storage::{AppStateStore, WorkspaceDatabase, saved_document_paths};
+use crate::storage::{AppStateStore, WorkspaceDatabase};
 
 const DATA_FOLDER_OVERRIDE_VARIABLE: &str = "MDX_DATA_DIR";
 
@@ -19,7 +19,6 @@ pub fn initialize(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     let data_folder = data_folder(app)?;
     let store = AppStateStore::new(&data_folder);
     let access = Arc::new(DocumentAccessList::default());
-    grant_saved_documents(&store, &access);
 
     let arguments: Vec<String> = std::env::args().collect();
     let working_folder = std::env::current_dir().unwrap_or_default();
@@ -59,15 +58,4 @@ fn data_folder(app: &App) -> Result<PathBuf, tauri::Error> {
         return Ok(PathBuf::from(override_folder));
     }
     Ok(app.path().data_dir()?.join("getaxtools").join("MDX"))
-}
-
-fn grant_saved_documents(store: &AppStateStore, access: &DocumentAccessList) {
-    let Ok(Some(saved)) = store.load() else {
-        return;
-    };
-    let paths = saved_document_paths(&saved);
-    grant_documents(&paths.documents, access);
-    for folder in &paths.folders {
-        let _ = access.grant_folder(Path::new(folder));
-    }
 }

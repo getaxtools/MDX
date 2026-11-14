@@ -66,6 +66,26 @@ describe('WorkspaceStateStorage', () => {
     expect(await appState.load()).toEqual(earlier);
   });
 
+  it('grants access to the Default workspace it migrated, not to the earlier file', async () => {
+    const { storage, workspaceStore, appState } = createStorage();
+
+    await storage.restore();
+
+    expect(workspaceStore.grantedWorkspaceIds).toEqual(['default']);
+    expect(appState.savedAccessGrantCount).toBe(0);
+  });
+
+  it('grants access to the earlier file when it stands in for the store', async () => {
+    const workspaceStore = new RecordingWorkspaceStore();
+    workspaceStore.failsNextImport = true;
+    const { storage, appState } = createStorage(workspaceStore);
+
+    await storage.restore();
+
+    expect(appState.savedAccessGrantCount).toBe(1);
+    expect(workspaceStore.grantedWorkspaceIds).toEqual([]);
+  });
+
   it('save after a change writes only the touched list', async () => {
     const { storage, workspaceStore } = createStorage();
     const restored = await storage.restore();

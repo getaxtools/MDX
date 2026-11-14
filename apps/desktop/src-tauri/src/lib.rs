@@ -83,6 +83,10 @@ fn with_startup_page_protocol(builder: Builder<Wry>) -> Builder<Wry> {
     builder
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "one line per command, and Tauri takes them all in one list"
+)]
 fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
     builder.invoke_handler(tauri::generate_handler![
         commands::attachments::save_attachment,
@@ -98,8 +102,10 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::app_state::load_app_state,
         commands::app_state::save_app_state,
         commands::app_state::remove_app_state_backups,
+        commands::app_state::grant_app_state_access,
         commands::workspaces::import_legacy_state,
         commands::workspaces::clear_workspaces,
+        commands::workspaces::grant_workspace_access,
         commands::workspaces::load_workspace_registry,
         commands::workspaces::load_workspace,
         commands::workspaces::save_workspace,

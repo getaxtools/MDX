@@ -54,6 +54,8 @@ export interface WorkspaceStorePort {
   saveList(workspaceId: string, listName: WorkspaceListName, value: unknown): Promise<void>;
   saveWindowSession(windowId: string, workspaceId: string, session: unknown): Promise<void>;
   loadAppValues(): Promise<Readonly<Record<string, unknown>>>;
+  /** Lets the window read the folders and documents of the workspace it now shows. */
+  grantAccess(workspaceId: string, windowId: string): Promise<void>;
   saveAppValue(key: string, value: unknown): Promise<void>;
 }
 

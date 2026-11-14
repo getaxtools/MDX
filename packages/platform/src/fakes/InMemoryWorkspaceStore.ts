@@ -18,6 +18,7 @@ export class InMemoryWorkspaceStore implements WorkspaceStorePort {
   private readonly rows = new Map<string, StoredWorkspaceRows>();
   private readonly appValues = new Map<string, unknown>();
   saveCount = 0;
+  readonly grantedWorkspaceIds: string[] = [];
   /** Set to make the next import fail, as a failed transaction in the desktop app would. */
   failsNextImport = false;
 
@@ -98,6 +99,11 @@ export class InMemoryWorkspaceStore implements WorkspaceStorePort {
 
   loadAppValues(): Promise<Readonly<Record<string, unknown>>> {
     return Promise.resolve(structuredClone(Object.fromEntries(this.appValues)));
+  }
+
+  grantAccess(workspaceId: string): Promise<void> {
+    this.grantedWorkspaceIds.push(workspaceId);
+    return Promise.resolve();
   }
 
   saveAppValue(key: string, value: unknown): Promise<void> {

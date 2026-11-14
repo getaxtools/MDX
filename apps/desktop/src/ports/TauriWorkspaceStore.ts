@@ -66,6 +66,10 @@ export class TauriWorkspaceStore implements WorkspaceStorePort {
     );
   }
 
+  async grantAccess(workspaceId: string, windowId: string): Promise<void> {
+    await tauriCommands.grantWorkspaceAccess(workspaceId, windowId);
+  }
+
   async saveAppValue(key: string, value: unknown): Promise<void> {
     await tauriCommands.saveAppValue(key, JSON.stringify(value));
   }

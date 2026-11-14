@@ -31,7 +31,9 @@ export class LegacyStateStorage implements ViewerStateStorage {
   constructor(private readonly options: LegacyStateStorageOptions) {}
 
   async restore(): Promise<RestoredViewerState> {
-    const restored = restoreAppState(await this.options.appState.load(), this.options.kindRegistry);
+    const { appState, kindRegistry } = this.options;
+    const [saved] = await Promise.all([appState.load(), appState.grantSavedAccess()]);
+    const restored = restoreAppState(saved, kindRegistry);
     return { ...restored, hasEarlierVersionChanges: false };
   }
 

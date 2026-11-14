@@ -1,6 +1,10 @@
+use std::sync::Arc;
+
 use serde::Serialize;
 use tauri::State;
 
+use crate::documents::DocumentAccessList;
+use crate::open_requests::grant_saved_paths;
 use crate::storage::{AppStateError, AppStateStore};
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
@@ -32,6 +36,18 @@ pub fn save_app_state(
     store: State<'_, AppStateStore>,
 ) -> Result<(), AppStateCommandError> {
     Ok(store.save(&state_json)?)
+}
+
+/// Used only while the earlier state file stands in for the workspace database.
+#[tauri::command]
+pub fn grant_app_state_access(
+    store: State<'_, AppStateStore>,
+    access: State<'_, Arc<DocumentAccessList>>,
+) -> Result<(), AppStateCommandError> {
+    if let Some(saved) = store.load()? {
+        grant_saved_paths(&saved, &access);
+    }
+    Ok(())
 }
 
 #[tauri::command]

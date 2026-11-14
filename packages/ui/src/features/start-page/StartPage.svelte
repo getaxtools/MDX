@@ -9,6 +9,8 @@
     recentFiles: readonly RecentFile[];
     /** A kind other than the Markdown viewer shows a placeholder until its own start page is built. */
     activeKindId?: WorkspaceKindId;
+    /** The active kind has no workspace yet, so the page offers to create one; none is made without asking. */
+    canCreateWorkspace?: boolean;
     translator: Translator;
     onCommand: (command: ViewerCommand) => void;
     onOpenRecentFile: (recentFile: RecentFile) => void;
@@ -17,6 +19,7 @@
   const {
     recentFiles,
     activeKindId = DEFAULT_WORKSPACE_KIND_ID,
+    canCreateWorkspace = false,
     translator,
     onCommand,
     onOpenRecentFile,
@@ -43,6 +46,14 @@
   <main class="start-page" aria-labelledby="start-page-heading">
     <h1 id="start-page-heading">{kind}</h1>
     <p class="introduction">{translator.translate('workspaceKinds.notBuiltYet', { kind })}</p>
+    {#if canCreateWorkspace}
+      <button
+        class="link-button"
+        onclick={() => onCommand({ kind: 'showNewWorkspace', kindId: activeKindId })}
+      >
+        {translator.translate('workspaces.createForKind', { kind })}
+      </button>
+    {/if}
   </main>
 {:else}
   <main class="start-page" aria-labelledby="start-page-heading">

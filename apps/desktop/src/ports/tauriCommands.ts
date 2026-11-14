@@ -49,9 +49,12 @@ export const tauriCommands = {
   loadAppState: () => invoke<string | null>('load_app_state'),
   saveAppState: (stateJson: string) => invoke<null>('save_app_state', { stateJson }),
   removeAppStateBackups: () => invoke<null>('remove_app_state_backups'),
+  grantAppStateAccess: () => invoke<null>('grant_app_state_access'),
   importLegacyState: (legacyState: LegacyStateImportRequest) =>
     invoke<null>('import_legacy_state', { legacyState }),
   clearWorkspaces: () => invoke<null>('clear_workspaces'),
+  grantWorkspaceAccess: (workspaceId: string, windowId: string) =>
+    invoke<null>('grant_workspace_access', { workspaceId, windowId }),
   loadWorkspaceRegistry: () => invoke<StoredWorkspace[]>('load_workspace_registry'),
   loadWorkspace: (workspaceId: string, windowId: string) =>
     invoke<StoredWorkspaceReply | null>('load_workspace', { workspaceId, windowId }),

@@ -1,7 +1,11 @@
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use serde::Serialize;
 use tauri::State;
+
+use crate::documents::DocumentAccessList;
+use crate::open_requests::grant_saved_paths;
 
 use crate::storage::{
     AppStateStore, AppValueKey, DatabaseError, JsonText, LegacyStateImport, LegacyStateImportInput,
@@ -49,6 +53,22 @@ pub fn import_legacy_state(
         .keep_copy_before_workspaces()
         .map_err(|_| WorkspaceCommandError::StorageUnavailable)?;
     Ok(database.import_legacy_state(&import)?)
+}
+
+/// Grants the folders and documents of a workspace when a window shows it, not every saved path at start-up.
+#[tauri::command]
+pub fn grant_workspace_access(
+    workspace_id: String,
+    window_id: String,
+    database: State<'_, WorkspaceDatabase>,
+    access: State<'_, Arc<DocumentAccessList>>,
+) -> CommandResult<()> {
+    let workspace_id = WorkspaceId::try_from(workspace_id)?;
+    let window_id = WindowId::try_from(window_id)?;
+    if let Some(saved_json) = database.saved_paths_json(&workspace_id, &window_id)? {
+        grant_saved_paths(&saved_json, &access);
+    }
+    Ok(())
 }
 
 #[tauri::command]

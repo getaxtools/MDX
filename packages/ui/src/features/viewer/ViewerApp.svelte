@@ -35,6 +35,8 @@
   import { isUntitledLocation, type TextSearchOptions } from '@mdx/platform';
   import KeyboardShortcutsDialog from '../help/KeyboardShortcutsDialog.svelte';
   import WordGoalDialog from '../word-goals/WordGoalDialog.svelte';
+  import WorkspaceDialogs from '../workspaces/WorkspaceDialogs.svelte';
+  import { isWorkspaceDialog } from '../workspaces/WorkspaceActions';
   import { SessionWordCounts } from '../word-goals/SessionWordCounts';
   import PasteTableDialog from '../table-paste/PasteTableDialog.svelte';
   import OutlinePanel from '../outline/OutlinePanel.svelte';
@@ -366,6 +368,9 @@
             <StartPage
               recentFiles={snapshot.viewer.recentFiles.entries()}
               activeKindId={snapshot.viewer.workspaceKinds.activeKindId()}
+              canCreateWorkspace={snapshot.workspaces?.registry.lastShownOfKind(
+                snapshot.viewer.workspaceKinds.activeKindId(),
+              ) === undefined && snapshot.workspaces !== undefined}
               {translator}
               onCommand={(command: ViewerCommand) => void controller.execute(command)}
               onOpenRecentFile={(recentFile: RecentFile) => void controller.openRecentFile(recentFile)}
@@ -501,6 +506,15 @@
       onCommand={(command: ViewerCommand) => void controller.execute(command)}
       onClose={() => controller.closeDialog()}
     />
+  {:else if isWorkspaceDialog(snapshot.openDialog) && snapshot.workspaces}
+    <WorkspaceDialogs
+      dialog={snapshot.openDialog}
+      workspaces={snapshot.workspaces}
+      kinds={snapshot.viewer.workspaceKinds}
+      {translator}
+      onCommand={(command: ViewerCommand) => void controller.execute(command)}
+      onClose={() => controller.closeDialog()}
+    />
   {:else if snapshot.openDialog === 'keyboardShortcuts'}
     <KeyboardShortcutsDialog {translator} {shortcuts} onClose={() => controller.closeDialog()} />
   {:else if snapshot.openDialog === 'pasteTable'}
@@ -528,6 +542,7 @@
         shortcuts,
         workspaceKinds: snapshot.viewer.workspaceKinds,
         snippets: availableSnippets(snapshot.viewer.snippetLibrary),
+        ...(snapshot.workspaces ? { workspaces: snapshot.workspaces } : {}),
       })}
       loadDocuments={() => controller.quickOpenDocuments()}
       onRunCommand={(command: ViewerCommand) => void controller.execute(command)}

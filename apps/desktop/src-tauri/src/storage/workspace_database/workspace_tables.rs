@@ -70,6 +70,31 @@ pub fn load_workspace(
     }))
 }
 
+/// A workspace's tabs and lists in the shape of the earlier state file, for collecting the paths to grant.
+pub fn saved_paths_json(
+    connection: &Connection,
+    workspace_id: &WorkspaceId,
+    window_id: &WindowId,
+) -> Result<Option<String>, DatabaseError> {
+    let Some(contents) = load_workspace(connection, workspace_id, window_id)? else {
+        return Ok(None);
+    };
+    let mut state = serde_json::Map::new();
+    for (list_name, value_json) in contents.lists {
+        let value = serde_json::from_str(&value_json).unwrap_or(serde_json::Value::Null);
+        state.insert(list_name.to_owned(), value);
+    }
+    let session = contents
+        .window_session
+        .and_then(|session_json| serde_json::from_str::<serde_json::Value>(&session_json).ok());
+    if let Some(tabs) =
+        session.and_then(|mut session| session.get_mut("tabs").map(serde_json::Value::take))
+    {
+        state.insert("tabs".to_owned(), tabs);
+    }
+    Ok(Some(serde_json::Value::Object(state).to_string()))
+}
+
 fn load_lists(
     connection: &Connection,
     workspace_id: &WorkspaceId,
@@ -338,6 +363,53 @@ mod tests {
             .unwrap();
         assert_eq!(remaining_rows, 0);
         assert_eq!(load_registry(&connection).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn composes_the_tabs_and_lists_whose_paths_are_granted() {
+        let connection = database();
+        save_workspace(&connection, &workspace("default", "Default", 0)).unwrap();
+        let favourite = r#"[{"location":{"displayPath":"C:\\Docs"},"kind":"folder"}]"#;
+        save_list(
+            &connection,
+            &id("default"),
+            ListName::Favourites,
+            &json(favourite),
+        )
+        .unwrap();
+        let session = r#"{"tabs":{"tabs":[{"location":{"displayPath":"C:\\a.md"}}]},"layout":{}}"#;
+        save_window_session(&connection, &window("main"), &id("default"), &json(session)).unwrap();
+
+        let composed = saved_paths_json(&connection, &id("default"), &window("main"))
+            .unwrap()
+            .unwrap();
+        let paths = crate::storage::saved_document_paths(&composed);
+
+        assert_eq!(paths.documents, [std::path::PathBuf::from("C:\\a.md")]);
+        assert_eq!(paths.folders, [std::path::PathBuf::from("C:\\Docs")]);
+    }
+
+    #[test]
+    fn paths_of_a_workspace_not_shown_are_not_granted() {
+        let connection = database();
+        save_workspace(&connection, &workspace("default", "Default", 0)).unwrap();
+        save_workspace(&connection, &workspace("other", "Other", 1)).unwrap();
+        let other_favourite = r#"[{"location":{"displayPath":"C:\\Private\\b.md"},"kind":"file"}]"#;
+        save_list(
+            &connection,
+            &id("other"),
+            ListName::Favourites,
+            &json(other_favourite),
+        )
+        .unwrap();
+
+        let composed = saved_paths_json(&connection, &id("default"), &window("main"))
+            .unwrap()
+            .unwrap();
+
+        let paths = crate::storage::saved_document_paths(&composed);
+        assert!(paths.documents.is_empty());
+        assert!(paths.folders.is_empty());
     }
 
     #[test]

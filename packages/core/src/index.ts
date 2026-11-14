@@ -19,7 +19,12 @@ export {
   type RestoredAppState,
   type ViewerState,
 } from './session/persistedAppState';
-export { ViewerSession, type RestoreOutcome, type ViewerSessionDependencies } from './session/ViewerSession';
+export {
+  ViewerSession,
+  type RestoreOutcome,
+  type ViewerSessionDependencies,
+  type WorkspaceRequest,
+} from './session/ViewerSession';
 export {
   MAX_SHORTCUT_PART_LENGTH,
   MAX_SHORTCUT_PARTS,
@@ -164,3 +169,17 @@ export {
   type FrontMatterEdit,
   type FrontMatterEditResult,
 } from './front-matter/editFrontMatter';
+export {
+  MAX_WORKSPACE_NAME_LENGTH,
+  WORKSPACE_COLOURS,
+  WORKSPACE_ICONS,
+  WorkspaceRegistry,
+  type NewWorkspace,
+  type WorkspaceChange,
+  type WorkspaceColour,
+  type WorkspaceIcon,
+  type WorkspaceNameProblem,
+  type WorkspaceRemoval,
+  type WorkspaceVisibility,
+} from './workspaces/WorkspaceRegistry';
+export { DEFAULT_WORKSPACE_ID } from './workspaces/storedViewerState';

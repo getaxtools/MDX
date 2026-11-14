@@ -5,7 +5,11 @@ import {
   type WorkspaceStorePort,
 } from '@mdx/platform';
 import { restoreAppState, toPersistedAppState, type ViewerState } from '../session/persistedAppState';
-import { DEFAULT_WORKSPACE_KIND_ID, type WorkspaceKind } from '../workspace-kinds/workspaceKinds';
+import {
+  DEFAULT_WORKSPACE_KIND_ID,
+  isBuiltKind,
+  type WorkspaceKind,
+} from '../workspace-kinds/workspaceKinds';
 import { migrateLegacyAppState } from './migrateLegacyAppState';
 import {
   APP_VALUE_KEYS,
@@ -16,6 +20,7 @@ import {
   type StoredViewerState,
 } from './storedViewerState';
 import type { RestoredViewerState, ViewerStateStorage } from './ViewerStateStorage';
+import { WorkspaceRegistry } from './WorkspaceRegistry';
 
 /** The hash of the earlier-version copy last written, to notice when an earlier version changed it. */
 export const EARLIER_VERSION_COPY_HASH_KEY = 'earlierVersionCopyHash';
@@ -33,7 +38,8 @@ export interface WorkspaceStateStorageOptions {
 /** Keeps the viewer state in the workspace store, writing only the lists, session and values that changed. */
 export class WorkspaceStateStorage implements ViewerStateStorage {
   private readonly savedJson = new Map<string, string>();
-  private readonly shownWorkspaceId: string = DEFAULT_WORKSPACE_ID;
+  private registry = WorkspaceRegistry.fromStored([]);
+  private shownWorkspaceId: string = DEFAULT_WORKSPACE_ID;
   /** Set when the store cannot be used; the earlier state file is then read and written as before. */
   private isOnEarlierState = false;
 
@@ -41,10 +47,13 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
 
   async restore(): Promise<RestoredViewerState> {
     try {
-      const registry = await this.options.workspaceStore.loadRegistry();
-      return registry.length === 0 ? await this.migrate() : await this.restoreShownWorkspace();
+      const workspaces = await this.options.workspaceStore.loadRegistry();
+      if (workspaces.length === 0) return await this.migrate();
+      this.registry = WorkspaceRegistry.fromStored(workspaces);
+      this.shownWorkspaceId = this.workspaceToRestore();
+      return await this.restoreShownWorkspace();
     } catch {
-      return this.startOnEarlierState(await this.options.appState.load());
+      return await this.startOnEarlierState(await this.options.appState.load());
     }
   }
 
@@ -64,7 +73,59 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
     await appState.removeBackups();
     if (this.isOnEarlierState) return;
     await workspaceStore.clearAll();
-    await workspaceStore.saveWorkspace(this.defaultWorkspace());
+    const defaultWorkspace = this.defaultWorkspace();
+    await workspaceStore.saveWorkspace(defaultWorkspace);
+    this.registry = WorkspaceRegistry.fromStored([defaultWorkspace]);
+    this.shownWorkspaceId = DEFAULT_WORKSPACE_ID;
+  }
+
+  /** False while the store cannot be used and the earlier state file stands in for it. */
+  hasWorkspaces(): boolean {
+    return !this.isOnEarlierState;
+  }
+
+  workspaces(): WorkspaceRegistry {
+    return this.registry;
+  }
+
+  shownWorkspace(): StoredWorkspace | undefined {
+    return this.registry.find(this.shownWorkspaceId);
+  }
+
+  /** Stores a created or renamed workspace together with the registry that contains it. */
+  async saveWorkspace(registry: WorkspaceRegistry, workspace: StoredWorkspace): Promise<void> {
+    await this.options.workspaceStore.saveWorkspace(workspace);
+    this.registry = registry;
+  }
+
+  async deleteWorkspace(registry: WorkspaceRegistry, workspaceId: string): Promise<void> {
+    await this.options.workspaceStore.deleteWorkspace(workspaceId);
+    this.registry = registry;
+  }
+
+  /**
+   * Saves the current workspace, then gives the target's tabs, layout and lists with the current app-wide
+   * values: settings, kinds, shortcuts, word goals and snippets stay as they are.
+   */
+  async switchTo(workspaceId: string, current: ViewerState): Promise<RestoredViewerState> {
+    const { workspaceStore, kindRegistry, windowId, now } = this.options;
+    await this.save(current);
+    const shown = this.registry.markShown(workspaceId, now());
+    if (shown?.outcome === 'changed') await this.saveWorkspace(shown.registry, shown.workspace);
+    this.shownWorkspaceId = workspaceId;
+    this.forgetSavedWorkspaceParts();
+    const contents = await workspaceStore.loadWorkspace(workspaceId, windowId);
+    await workspaceStore.grantAccess(workspaceId, windowId);
+    const restored = viewerStateFrom(
+      {
+        lists: contents?.lists ?? {},
+        windowSession: contents?.windowSession ?? null,
+        appValues: storedViewerStateOf(current).appValues,
+      },
+      kindRegistry,
+    );
+    this.rememberSaved(storedViewerStateOf(restored));
+    return { ...restored, hasEarlierVersionChanges: false };
   }
 
   private async migrate(): Promise<RestoredViewerState> {
@@ -73,9 +134,11 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
     const migration = migrateLegacyAppState(earlierState, { kindRegistry, nowMs: now() });
     try {
       await workspaceStore.importLegacyState({ ...migration, windowId });
+      await workspaceStore.grantAccess(migration.workspace.id, windowId);
     } catch {
       return this.startOnEarlierState(earlierState);
     }
+    this.registry = WorkspaceRegistry.fromStored([migration.workspace]);
     const restored = viewerStateFrom(migration, kindRegistry);
     this.rememberSaved(storedViewerStateOf(restored));
     return {
@@ -92,6 +155,7 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
       workspaceStore.loadWorkspace(this.shownWorkspaceId, windowId),
       workspaceStore.loadAppValues(),
       appState.load(),
+      workspaceStore.grantAccess(this.shownWorkspaceId, windowId),
     ]);
     const stored = {
       lists: contents?.lists ?? {},
@@ -122,8 +186,29 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
     return JSON.stringify(earlierLists) === JSON.stringify(storedLists) ? undefined : earlierLists;
   }
 
-  private startOnEarlierState(earlierState: unknown): RestoredViewerState {
+  /** The workspace shown last, among those whose kind this version has built. */
+  private workspaceToRestore(): string {
+    const openable = this.registry
+      .workspaces()
+      .filter((workspace) => isBuiltKind(this.options.kindRegistry, workspace.kindId));
+    const lastShown = openable.reduce<StoredWorkspace | undefined>(
+      (latest, workspace) =>
+        latest === undefined || (workspace.lastShownAtMs ?? 0) > (latest.lastShownAtMs ?? 0)
+          ? workspace
+          : latest,
+      undefined,
+    );
+    return lastShown?.id ?? DEFAULT_WORKSPACE_ID;
+  }
+
+  /** Lists and the window session belong to one workspace; app-wide values carry over a switch. */
+  private forgetSavedWorkspaceParts(): void {
+    for (const part of [...this.savedJson.keys()]) if (!part.startsWith('app.')) this.savedJson.delete(part);
+  }
+
+  private async startOnEarlierState(earlierState: unknown): Promise<RestoredViewerState> {
     this.isOnEarlierState = true;
+    await this.options.appState.grantSavedAccess();
     return { ...restoreAppState(earlierState, this.options.kindRegistry), hasEarlierVersionChanges: false };
   }
 
