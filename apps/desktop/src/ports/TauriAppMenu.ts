@@ -1,5 +1,10 @@
 import { listen } from '@tauri-apps/api/event';
-import type { AppMenuPort, MenuCommandListener, ViewMenuState } from '@mdx/platform';
+import type {
+  AppMenuPort,
+  MenuCommandListener,
+  RecentWorkspaceMenuEntry,
+  ViewMenuState,
+} from '@mdx/platform';
 import { MENU_COMMAND_EVENT, tauriCommands } from './tauriCommands';
 
 export class TauriAppMenu implements AppMenuPort {
@@ -12,8 +17,11 @@ export class TauriAppMenu implements AppMenuPort {
     await tauriCommands.updateViewMenu(state);
   }
 
-  async showRecentFiles(displayPaths: readonly string[]): Promise<void> {
-    await tauriCommands.updateRecentMenu(displayPaths);
+  async showRecentFiles(
+    displayPaths: readonly string[],
+    workspaces: readonly RecentWorkspaceMenuEntry[] = [],
+  ): Promise<void> {
+    await tauriCommands.updateRecentMenu(displayPaths, workspaces);
   }
 
   async showShortcuts(shortcutTexts: Readonly<Record<string, string>>): Promise<void> {

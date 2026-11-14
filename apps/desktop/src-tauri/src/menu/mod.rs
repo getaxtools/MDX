@@ -16,7 +16,7 @@ pub use view_menu_state::ViewMenuState;
 
 use crate::documents::DocumentError;
 use crate::open_requests::MAIN_WINDOW_LABEL;
-use recent_files_menu::fill_recent_menu;
+use recent_files_menu::{RecentMenuContents, fill_recent_menu};
 use view_menu_state::{
     READING_WIDTH_ITEM_PREFIX, THEME_ITEM_PREFIX, TOGGLE_OUTLINE_ITEM_ID,
     TOGGLE_PREVIEW_BESIDE_EDITOR_ITEM_ID, TOGGLE_SIDEBAR_ITEM_ID, TOGGLE_SOURCE_VIEW_ITEM_ID,
@@ -66,6 +66,19 @@ const FILE_OPEN_ITEMS: [CommandItem; 3] = [
     ("newDocument", "menu.file.newDocument", Some("Ctrl+N")),
     ("openDocuments", "menu.file.open", Some("Ctrl+O")),
     ("openFolder", "menu.file.openFolder", None),
+];
+
+const WORKSPACE_ITEMS: [CommandItem; 6] = [
+    (
+        "showWorkspaceSwitcher",
+        "workspaces.switch",
+        Some("Ctrl+Alt+W"),
+    ),
+    ("showNewWorkspace", "workspaces.new", None),
+    ("showRenameWorkspace", "workspaces.rename", None),
+    ("confirmDeleteWorkspace", "workspaces.delete", None),
+    ("openWorkspaceFile", "workspaces.openFile", None),
+    ("exportWorkspace", "workspaces.export", None),
 ];
 
 const FILE_SAVE_ITEMS: [CommandItem; 5] = [
@@ -281,7 +294,12 @@ fn build_main_menu(
     };
     let recent_files =
         SubmenuBuilder::new(app, builder.labels.label("menu.file.openRecent")).build()?;
-    fill_recent_menu(app, &recent_files, &[], &builder.labels)?;
+    fill_recent_menu(
+        app,
+        &recent_files,
+        &RecentMenuContents::default(),
+        &builder.labels,
+    )?;
     let menu = Menu::with_items(
         app,
         &[
@@ -418,6 +436,7 @@ impl MainMenuBuilder<'_> {
             .item(&reopen_closed?)
             .item(&self.reopen_with_encoding_menu()?)
             .separator();
+        let builder = self.with_items(builder, &WORKSPACE_ITEMS)?.separator();
         let builder = self.with_items(builder, &FILE_SAVE_ITEMS)?.separator();
         let builder = self
             .with_items(builder, &EXPORT_ITEMS)?
@@ -633,6 +652,7 @@ mod tests {
             .chain(&FILE_SAVE_ITEMS)
             .chain(&FILE_OTHER_ITEMS)
             .chain(&FAVOURITES_FILE_ITEMS)
+            .chain(&WORKSPACE_ITEMS)
             .chain(&EDIT_HISTORY_ITEMS)
             .chain(&EDIT_SEARCH_ITEMS)
             .chain(&[

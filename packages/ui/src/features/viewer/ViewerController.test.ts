@@ -154,6 +154,24 @@ describe('ViewerController', () => {
     expect(snapshot().notice).toBe('Your saved tabs and favourites could not be read, so MDX started fresh.');
   });
 
+  it('names the newer version that saved state this version cannot read', async () => {
+    const { controller, snapshot } = createViewer({
+      appState: new InMemoryAppState({ schemaVersion: 2, savedByAppVersion: '2.0.0' }),
+    });
+
+    await controller.start();
+
+    expect(snapshot().notice).toContain('came from MDX 2.0.0, which is newer than this version');
+  });
+
+  it('says a newer version saved the state even when it is not named', async () => {
+    const { controller, snapshot } = createViewer({ appState: new InMemoryAppState({ schemaVersion: 2 }) });
+
+    await controller.start();
+
+    expect(snapshot().notice).toContain('came from a newer version of MDX');
+  });
+
   it('saves state shortly after a change, not on every change', async () => {
     const { controller, appState } = createViewer();
     await controller.start();
@@ -1347,7 +1365,7 @@ describe('ViewerController', () => {
     });
 
     it('asks before clearing all data, then forgets the session and says so', async () => {
-      const { controller, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      const { controller, snapshot, appState } = createViewer({ startupPaths: [GUIDE] });
       await controller.start();
       await controller.execute({ kind: 'toggleFavourite' });
 
@@ -1359,6 +1377,7 @@ describe('ViewerController', () => {
       expect(snapshot().viewer.tabStrip.tabs()).toEqual([]);
       expect(snapshot().viewer.favourites.favourites()).toEqual([]);
       expect(snapshot().viewer.recentFiles.entries()).toEqual([]);
+      expect(appState.backupRemovalCount).toBe(1);
       expect(snapshot().notice).toBe('All MDX data on this PC was cleared.');
     });
 

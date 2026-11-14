@@ -14,6 +14,7 @@ import {
   type LanguagePreference,
   type ViewSettings,
 } from '../view/ViewSettings';
+import type { WorkspaceOverrides } from '../view/viewSettingsScopes';
 import { WORKSPACE_KINDS, type WorkspaceKind } from '../workspace-kinds/workspaceKinds';
 import { WorkspaceKindsState, type SavedWorkspaceKinds } from '../workspace-kinds/WorkspaceKindsState';
 import { isRecord, parseLocation, validEntries } from './savedValues';
@@ -33,6 +34,8 @@ export interface PersistedAppState {
   readonly shortcutOverrides: ShortcutOverrides;
   readonly wordGoals: WordGoals;
   readonly snippetLibrary: SnippetLibrary;
+  /** Lets an older MDX name the version that wrote state it cannot read. */
+  readonly savedByAppVersion?: string;
 }
 
 export interface ViewerState {
@@ -45,24 +48,36 @@ export interface ViewerState {
   readonly shortcutOverrides: ShortcutOverrides;
   readonly wordGoals: WordGoals;
   readonly snippetLibrary: SnippetLibrary;
+  /** The shown workspace's own theme, reading width or typography; absent without workspaces. */
+  readonly workspaceOverrides?: WorkspaceOverrides;
+}
+
+/** Saved state written by a newer MDX; the desktop app keeps a copy of it before anything is saved. */
+export interface NewerSavedState {
+  readonly appVersion: string | undefined;
 }
 
 export interface RestoredAppState extends ViewerState {
   readonly wasReset: boolean;
+  readonly newerSavedState: NewerSavedState | undefined;
 }
 
-export function toPersistedAppState({
-  tabStrip,
-  recentFiles,
-  favourites,
-  explorerFolders,
-  viewSettings,
-  workspaceKinds,
-  shortcutOverrides,
-  wordGoals,
-  snippetLibrary,
-}: ViewerState): PersistedAppState {
+export function toPersistedAppState(
+  {
+    tabStrip,
+    recentFiles,
+    favourites,
+    explorerFolders,
+    viewSettings,
+    workspaceKinds,
+    shortcutOverrides,
+    wordGoals,
+    snippetLibrary,
+  }: ViewerState,
+  appVersion?: string,
+): PersistedAppState {
   return {
+    ...(appVersion === undefined ? {} : { savedByAppVersion: appVersion }),
     schemaVersion: APP_STATE_SCHEMA_VERSION,
     tabs: withoutUntitledTabs(tabStrip.toSnapshot()),
     recentFiles: recentFiles.entries(),
@@ -97,7 +112,7 @@ export function restoreAppState(
 ): RestoredAppState {
   if (saved === undefined || saved === null) return emptyAppState({ wasReset: false, kindRegistry });
   if (!isRecord(saved) || saved.schemaVersion !== APP_STATE_SCHEMA_VERSION)
-    return emptyAppState({ wasReset: true, kindRegistry });
+    return emptyAppState({ wasReset: true, kindRegistry, newerSavedState: newerSavedStateOf(saved) });
   const savedTabs = isRecord(saved.tabs) ? saved.tabs : {};
   const activeKey = typeof savedTabs.activeKey === 'string' ? { activeKey: savedTabs.activeKey } : {};
   return {
@@ -111,15 +126,25 @@ export function restoreAppState(
     wordGoals: parseWordGoals(saved.wordGoals),
     snippetLibrary: parseSnippetLibrary(saved.snippetLibrary),
     wasReset: false,
+    newerSavedState: undefined,
   };
+}
+
+function newerSavedStateOf(saved: unknown): NewerSavedState | undefined {
+  if (!isRecord(saved) || typeof saved.schemaVersion !== 'number') return undefined;
+  if (saved.schemaVersion <= APP_STATE_SCHEMA_VERSION) return undefined;
+  const appVersion = typeof saved.savedByAppVersion === 'string' ? saved.savedByAppVersion : undefined;
+  return { appVersion };
 }
 
 function emptyAppState({
   wasReset,
   kindRegistry,
+  newerSavedState,
 }: {
   wasReset: boolean;
   kindRegistry: readonly WorkspaceKind[];
+  newerSavedState?: NewerSavedState | undefined;
 }): RestoredAppState {
   return {
     tabStrip: TabStrip.empty(),
@@ -132,6 +157,7 @@ function emptyAppState({
     wordGoals: {},
     snippetLibrary: EMPTY_SNIPPET_LIBRARY,
     wasReset,
+    newerSavedState,
   };
 }
 

@@ -1,5 +1,10 @@
 <script lang="ts">
-  import type { ViewSettings } from '@mdx/core';
+  import {
+    WORKSPACE_OVERRIDE_FIELDS,
+    type ViewSettings,
+    type WorkspaceOverrideField,
+    type WorkspaceOverrides,
+  } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
   import Dialog from '../../components/Dialog.svelte';
   import { COMMAND_SHORTCUTS, type CommandShortcut } from '../shortcuts/commandShortcuts';
@@ -23,6 +28,10 @@
     shortcuts?: readonly CommandShortcut[];
     platform?: DesktopPlatform;
     snippetLibrary?: SnippetLibrary;
+    /** The shown workspace and the settings it overrides; absent without workspaces. */
+    workspace?: { readonly name: string; readonly overrides: WorkspaceOverrides } | undefined;
+    /** The folder of the shown Notes workspace; absent for other kinds. */
+    notesFolder?: string | undefined;
     translator: Translator;
     onCommand: (command: ViewerCommand) => void;
     onClose: () => void;
@@ -34,6 +43,8 @@
     shortcuts = COMMAND_SHORTCUTS,
     platform = 'windows',
     snippetLibrary = EMPTY_SNIPPET_LIBRARY,
+    workspace,
+    notesFolder,
     translator,
     onCommand,
     onClose,
@@ -60,6 +71,17 @@
       ),
     ),
   );
+  const isNotesShown = $derived(
+    notesFolder !== undefined &&
+      matchesQuery(
+        query,
+        [
+          translator.translate('settings.section.notes'),
+          translator.translate('settings.notes.description'),
+          notesFolder,
+        ].join(' '),
+      ),
+  );
   const privacyDescription = $derived(
     translator.translate('settings.privacy.description', { path: dataFolder }),
   );
@@ -77,6 +99,18 @@
   function choose(setting: ChoiceSetting, event: Event & { currentTarget: HTMLSelectElement }) {
     const command = setting.commandFor(event.currentTarget.value);
     if (command) onCommand(command);
+  }
+
+  function overrideFieldOf(setting: SettingDefinition): WorkspaceOverrideField | undefined {
+    return WORKSPACE_OVERRIDE_FIELDS.find((field) => field === setting.id);
+  }
+
+  function chooseScope(field: WorkspaceOverrideField, event: Event & { currentTarget: HTMLSelectElement }) {
+    onCommand({
+      kind: 'setWorkspaceOverride',
+      field,
+      isOverridden: event.currentTarget.value === 'workspace',
+    });
   }
 
   function controlId(setting: SettingDefinition): string {
@@ -118,6 +152,23 @@
                   <option value={choice.value}>{choice.label}</option>
                 {/each}
               </select>
+              {@const overrideField = overrideFieldOf(setting)}
+              {#if workspace && overrideField}
+                <label class="scope-label" for="{controlId(setting)}-scope"
+                  >{translator.translate('settings.scope.label')}</label
+                >
+                <select
+                  id="{controlId(setting)}-scope"
+                  class="scope"
+                  value={overrideField in workspace.overrides ? 'workspace' : 'app'}
+                  onchange={(event) => chooseScope(overrideField, event)}
+                >
+                  <option value="app">{translator.translate('settings.scope.allWorkspaces')}</option>
+                  <option value="workspace"
+                    >{translator.translate('settings.scope.thisWorkspace', { name: workspace.name })}</option
+                  >
+                </select>
+              {/if}
             {:else if setting.kind === 'action'}
               <span class="label" id="{controlId(setting)}-label"
                 >{translator.translate(setting.labelKey)}</span
@@ -152,6 +203,25 @@
   {/each}
   {#if isSnippetsShown}
     <SnippetsSection library={snippetLibrary} {translator} {onCommand} />
+  {/if}
+  {#if isNotesShown && notesFolder !== undefined}
+    <section aria-labelledby="settings-section-notes">
+      <h3 id="settings-section-notes">{translator.translate('settings.section.notes')}</h3>
+      <div class="setting">
+        <span class="label" id="settings-notes-folder-label"
+          >{translator.translate('settings.notes.folder')}</span
+        >
+        <button
+          class="beside-label"
+          aria-describedby="settings-notes-folder-label settings-notes-folder"
+          onclick={() => onCommand({ kind: 'revealInFileManager', path: notesFolder })}
+        >
+          {translator.translate('settings.notes.openInFileExplorer')}
+        </button>
+        <p id="settings-notes-folder" class="description"><code>{notesFolder}</code></p>
+        <p class="description">{translator.translate('settings.notes.description')}</p>
+      </div>
+    </section>
   {/if}
   {#if isPrivacyShown}
     <section aria-labelledby="settings-section-privacy">

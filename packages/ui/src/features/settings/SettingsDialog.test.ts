@@ -21,6 +21,89 @@ function renderSettings(settings: ViewSettings = DEFAULT_VIEW_SETTINGS) {
 }
 
 describe('SettingsDialog', () => {
+  describe('Notes', () => {
+    it('path and actions have accessible names', async () => {
+      const onCommand = vi.fn();
+      render(SettingsDialog, {
+        settings: DEFAULT_VIEW_SETTINGS,
+        dataFolder: DATA_FOLDER,
+        notesFolder: 'C:\\Users\\Ana\\Documents\\MDX Notes',
+        translator: createTranslator(),
+        onCommand,
+        onClose: vi.fn(),
+      });
+
+      const section = screen.getByRole('region', { name: 'Notes' });
+      const open = within(section).getByRole('button', { name: 'Open in File Explorer' });
+      await userEvent.click(open);
+
+      expect(open.getAttribute('aria-describedby')).toContain('settings-notes-folder');
+      expect(section.textContent).toContain('C:\\Users\\Ana\\Documents\\MDX Notes');
+      expect(onCommand).toHaveBeenCalledWith({
+        kind: 'revealInFileManager',
+        path: 'C:\\Users\\Ana\\Documents\\MDX Notes',
+      });
+    });
+
+    it('has no Notes section outside a Notes workspace', () => {
+      renderSettings();
+
+      expect(screen.queryByRole('region', { name: 'Notes' })).toBeNull();
+    });
+  });
+
+  describe('per-workspace scope', () => {
+    function renderWithWorkspace(overrides: Record<string, string>) {
+      const onCommand = vi.fn();
+      render(SettingsDialog, {
+        settings: DEFAULT_VIEW_SETTINGS,
+        dataFolder: DATA_FOLDER,
+        workspace: { name: 'Reading', overrides },
+        translator: createTranslator(),
+        onCommand,
+        onClose: vi.fn(),
+      });
+      return { onCommand };
+    }
+
+    it('offers a scope for theme, reading width and typography only', () => {
+      renderWithWorkspace({});
+
+      const scopes = screen.getAllByRole('combobox', { name: 'Applies to' });
+
+      expect(scopes).toHaveLength(3);
+      expect(screen.getAllByRole('option', { name: 'Only Reading' })).toHaveLength(3);
+    });
+
+    it('shows which settings the workspace overrides', () => {
+      renderWithWorkspace({ theme: 'dark' });
+
+      const [themeScope, ...others] = screen.getAllByRole('combobox', { name: 'Applies to' });
+
+      expect((themeScope as HTMLSelectElement).value).toBe('workspace');
+      expect(others.map((scope) => (scope as HTMLSelectElement).value)).toEqual(['app', 'app']);
+    });
+
+    it('choosing This workspace starts an override, and All workspaces clears it', async () => {
+      const { onCommand } = renderWithWorkspace({ theme: 'dark' });
+      const [themeScope] = screen.getAllByRole('combobox', { name: 'Applies to' });
+
+      await userEvent.selectOptions(themeScope as HTMLSelectElement, 'app');
+
+      expect(onCommand).toHaveBeenCalledWith({
+        kind: 'setWorkspaceOverride',
+        field: 'theme',
+        isOverridden: false,
+      });
+    });
+
+    it('offers no scope without workspaces', () => {
+      renderSettings();
+
+      expect(screen.queryByRole('combobox', { name: 'Applies to' })).toBeNull();
+    });
+  });
+
   it('opens with the search box focused', () => {
     renderSettings();
 

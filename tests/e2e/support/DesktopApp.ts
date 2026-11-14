@@ -34,6 +34,7 @@ export class DesktopApp {
       env: {
         ...process.env,
         MDX_DATA_DIR: workspace.profileFolder,
+        MDX_DOCUMENTS_DIR: workspace.homeDocumentsFolder,
         TAURI_WEBDRIVER_PORT: String(driverPort),
       },
       stdio: 'ignore',

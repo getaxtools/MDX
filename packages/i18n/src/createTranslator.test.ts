@@ -31,6 +31,8 @@ const SAMPLE_VALUES = {
   keys: 'Ctrl+S',
   words: 120,
   goal: 500,
+  names: 'guide.md - Handbook',
+  app: 'MDX',
 };
 
 describe('createTranslator', () => {

@@ -1,6 +1,6 @@
 import { createTranslator } from '@mdx/i18n';
 import { InMemoryDocumentFiles } from '@mdx/platform';
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import StartPage from './StartPage.svelte';
@@ -19,6 +19,45 @@ function renderStartPage(recentFiles = [recentFile]) {
 }
 
 describe('StartPage', () => {
+  it('a kind with no workspace offers to create one, and creates nothing by itself', async () => {
+    const onCommand = vi.fn();
+    render(StartPage, {
+      recentFiles: [],
+      activeKindId: 'notes',
+      canCreateWorkspace: true,
+      translator: createTranslator(),
+      onCommand,
+      onOpenRecentFile: vi.fn(),
+    });
+
+    expect(onCommand).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'New Notes Workspace…' }));
+
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'showNewWorkspace', kindId: 'notes' });
+  });
+
+  it('the start page opens a recent workspace', async () => {
+    const onCommand = vi.fn();
+    render(StartPage, {
+      recentFiles: [],
+      recentWorkspaces: [{ id: 'reading', name: 'Reading', kindName: 'Markdown viewer' }],
+      translator: createTranslator(),
+      onCommand,
+      onOpenRecentFile: vi.fn(),
+    });
+
+    const workspaces = screen.getByRole('region', { name: 'Workspaces' });
+    await userEvent.click(within(workspaces).getByRole('button', { name: 'Reading' }));
+
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'switchWorkspace', workspaceId: 'reading' });
+  });
+
+  it('has no Workspaces section without other workspaces', () => {
+    renderStartPage();
+
+    expect(screen.queryByRole('region', { name: 'Workspaces' })).toBeNull();
+  });
+
   it('shows the not-built-yet text for a previewed kind', () => {
     render(StartPage, {
       recentFiles: [],

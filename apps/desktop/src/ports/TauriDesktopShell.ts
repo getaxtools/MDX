@@ -18,6 +18,11 @@ export class TauriDesktopShell implements DesktopShellPort {
     await tauriCommands.revealInFileManager(path);
   }
 
+  async setWindowTitle(title: string): Promise<void> {
+    document.title = title;
+    await tauriCommands.setWindowTitle(title);
+  }
+
   async toggleFullScreen(): Promise<void> {
     await tauriCommands.toggleFullScreen();
   }

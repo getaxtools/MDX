@@ -9,8 +9,11 @@ import {
   type DocumentStatistics,
   type Favourite,
   type RecentFile,
+  type RestoreOutcome,
   type ViewerSession,
   type ViewerState,
+  type WorkspaceKindId,
+  type WorkspaceRegistry,
   parseFavouritesFile,
   toFavouritesFile,
 } from '@mdx/core';
@@ -38,6 +41,9 @@ import {
   type LineEnding,
   type OpenedDocument,
   type PathStatus,
+  type RecentWorkspaceMenuEntry,
+  type WorkspaceFilePort,
+  type NotesLocationPort,
 } from '@mdx/platform';
 import type { MarkdownRenderer, OutlineEntry } from '@mdx/renderer';
 import { applyWorkspaceKindCommand, type WorkspaceKindCommand } from '../control-wheel/workspaceKindCommands';
@@ -59,6 +65,16 @@ import { shortcutLabelFor } from '../shortcuts/commandShortcuts';
 import { effectiveCommandShortcuts } from '../shortcuts/effectiveCommandShortcuts';
 import { REBINDABLE_COMMANDS } from '../shortcuts/rebindableCommands';
 import { isTabCommand } from '../tabs/tabCommands';
+import { WorkspaceActions, type NotesSetup, type WorkspaceDialog } from '../workspaces/WorkspaceActions';
+import {
+  isWorkspaceCommand,
+  isWorkspaceFileCommand,
+  workspaceNameOf,
+  type WorkspaceFileCommand,
+} from '../workspaces/workspaceCommands';
+import { WorkspaceFileActions, type PendingWorkspaceFile } from '../workspaces/WorkspaceFileActions';
+import { windowTitleFor } from '../workspaces/windowTitle';
+import { recentWorkspaceLinks } from '../workspaces/recentWorkspaceLinks';
 import { applySessionCommand } from './applySessionCommand';
 import { LiveReload } from './LiveReload';
 import { commandForMenuItem, type ViewerCommand } from './viewerCommands';
@@ -96,6 +112,8 @@ export interface ViewerControllerDependencies {
   readonly desktopShell?: DesktopShellPort;
   readonly documentExport?: DocumentExportPort;
   readonly attachments?: AttachmentPort;
+  readonly workspaceFiles?: WorkspaceFilePort;
+  readonly notesLocations?: NotesLocationPort;
 }
 
 export interface RenderedActiveDocument {
@@ -139,6 +157,19 @@ export interface ViewerSnapshot {
   /** Open documents whose edited text is not saved yet. */
   readonly unsavedDocumentKeys: ReadonlySet<string>;
   readonly editorRequest?: EditorRequest;
+  /** Absent while the earlier state file stands in for the workspace store. */
+  readonly workspaces?: WorkspacesView;
+}
+
+export interface WorkspacesView {
+  readonly registry: WorkspaceRegistry;
+  readonly shownWorkspaceId: string;
+  /** The kind the New Workspace dialog starts on. */
+  readonly kindForNewWorkspace?: WorkspaceKindId;
+  /** A workspace file waiting for the user to confirm it. */
+  readonly pendingFile?: PendingWorkspaceFile;
+  /** Loaded when New Workspace opens, to suggest and check a Notes folder. */
+  readonly notesSetup?: NotesSetup;
 }
 
 /** A button in the notice bar that runs a command, such as Locate for a file that has moved. */
@@ -161,7 +192,8 @@ export type ViewerDialog =
   | 'clearAllData'
   | 'controlWheel'
   | 'workspaceKindSettings'
-  | 'wordGoal';
+  | 'wordGoal'
+  | WorkspaceDialog;
 
 const DIALOGS_BY_COMMAND: Partial<Record<ViewerCommand['kind'], ViewerDialog>> = {
   showAbout: 'about',
@@ -192,6 +224,9 @@ export class ViewerController {
   private pendingOutlineRefresh: ReturnType<typeof setTimeout> | undefined;
   private activeDocument: RenderedActiveDocument | undefined;
   private openDialog: ViewerDialog | undefined;
+  private readonly workspaceActions: WorkspaceActions;
+  private readonly workspaceFileActions: WorkspaceFileActions | undefined;
+  private pendingWorkspaceFile: PendingWorkspaceFile | undefined;
   private noticeActions: readonly NoticeAction[] = [];
   private findRequest = 0;
   private findQuery: FindQuery | undefined;
@@ -201,8 +236,10 @@ export class ViewerController {
   private externalLinkRequest: string | undefined;
   private isSourceView = false;
   private shownMenuViewState = '';
+  private shownWindowTitle = '';
   private shownMenuShortcuts = '';
   private shownRecentFiles: ViewerState['recentFiles'] | undefined;
+  private shownRecentWorkspaces = '';
   private pathStatuses: ReadonlyMap<string, PathStatus> = new Map();
   private checkedLocationKeys = '';
   private readonly liveReload: LiveReload | undefined;
@@ -221,18 +258,7 @@ export class ViewerController {
       folderRevisions: new Map(),
       unsavedDocumentKeys: new Set(),
     };
-    this.saving = new DocumentSaving(dependencies.session, this.editing, {
-      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
-      onSaveFailed: (fileName) => this.showNotice('errors.document.saveFailed', { path: fileName }),
-      onChangedOnDisk: (location) => this.showChangedOnDiskNotice(location, 'errors.document.changedOnDisk'),
-      onCannotSaveInPlace: (location, failure) =>
-        this.showNotice(`errors.document.${failure}`, { path: location.fileName }, [
-          {
-            label: dependencies.translator.translate('menu.file.saveAs'),
-            command: { kind: 'saveDocumentAs' },
-          },
-        ]),
-    });
+    this.saving = this.createDocumentSaving();
     this.editingActions = new EditingActions(dependencies.session, this.editing, {
       onChange: () => {
         this.publish(this.composeSnapshot(this.snapshot.notice));
@@ -252,6 +278,86 @@ export class ViewerController {
       this.publish(this.composeSnapshot(this.snapshot.notice)),
     );
     this.documentAttachments = this.createDocumentAttachments();
+    this.workspaceActions = this.createWorkspaceActions();
+    this.workspaceFileActions = this.createWorkspaceFileActions();
+  }
+
+  private createDocumentSaving(): DocumentSaving {
+    const { session, translator } = this.dependencies;
+    return new DocumentSaving(session, this.editing, {
+      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+      onSaveFailed: (fileName) => this.showNotice('errors.document.saveFailed', { path: fileName }),
+      onChangedOnDisk: (location) => this.showChangedOnDiskNotice(location, 'errors.document.changedOnDisk'),
+      onCannotSaveInPlace: (location, failure) =>
+        this.showNotice(`errors.document.${failure}`, { path: location.fileName }, [
+          { label: translator.translate('menu.file.saveAs'), command: { kind: 'saveDocumentAs' } },
+        ]),
+    });
+  }
+
+  private createWorkspaceFileActions(): WorkspaceFileActions | undefined {
+    const { session, translator, workspaceFiles } = this.dependencies;
+    if (!workspaceFiles) return undefined;
+    return new WorkspaceFileActions({
+      session,
+      translator,
+      workspaceFiles,
+      showConfirmation: (pending) => {
+        this.pendingWorkspaceFile = pending;
+        this.openDialog = pending ? 'openWorkspaceFile' : undefined;
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+      },
+      showNotice: (key, values) => this.showNotice(key, values),
+      switchTo: (workspaceId) => this.workspaceActions.switchTo(workspaceId),
+      createAndShow: async (request, lists) => {
+        await this.workspaceActions.createAndShow(request, lists);
+      },
+    });
+  }
+
+  private createWorkspaceActions(): WorkspaceActions {
+    const { session, translator } = this.dependencies;
+    return new WorkspaceActions({
+      session,
+      translator,
+      confirmLeavingDocuments: () => this.saving.confirmClosingWindow(),
+      showDialog: (dialog) => {
+        this.openDialog = dialog;
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+      },
+      showNotice: (key, values) => this.showNotice(key, values),
+      showSwitchedWorkspace: () => this.showSwitchedWorkspace(),
+      addFolder: () => this.explorerFolderActions.openFolder(),
+      notesLocations: this.dependencies.notesLocations,
+    });
+  }
+
+  /** Edits were saved or discarded before the switch, so the new workspace starts with none. */
+  private async runWorkspaceFileCommand(command: WorkspaceFileCommand): Promise<void> {
+    const actions = this.workspaceFileActions;
+    if (!actions) return;
+    if (command.kind === 'exportWorkspace') await actions.export();
+    else if (command.kind === 'openWorkspaceFile') await actions.open();
+    else if (command.kind === 'confirmOpenWorkspaceFile') await actions.confirm();
+    else actions.cancel();
+  }
+
+  /** Workspace files opened from Windows while the app runs, and the one it was started with. */
+  private async offerWorkspaceFiles(): Promise<void> {
+    const { workspaceFiles } = this.dependencies;
+    const actions = this.workspaceFileActions;
+    if (!workspaceFiles || !actions) return;
+    this.stopActions.push(workspaceFiles.onWorkspaceFileOpened((contents) => void actions.offer(contents)));
+    const startupFile = await workspaceFiles.takeStartupWorkspaceFile();
+    if (startupFile) await actions.offer(startupFile);
+  }
+
+  private async showSwitchedWorkspace(): Promise<void> {
+    this.editing.keepOnly(new Set());
+    this.navigation.forgetHistory();
+    this.navigation.recordActiveDocument();
+    this.refreshPathStatuses();
+    await this.refreshActiveDocument();
   }
 
   private createDocumentAttachments(): DocumentAttachments | undefined {
@@ -275,10 +381,10 @@ export class ViewerController {
 
   async start(): Promise<void> {
     const { session, requests } = this.dependencies;
-    const { wasReset } = await session.restore();
+    const restoreOutcome = await session.restore();
     this.navigation.recordActiveDocument();
     this.publish(this.composeSnapshot(undefined));
-    if (wasReset) this.showNotice('errors.appState.reset');
+    this.reportRestoreOutcome(restoreOutcome);
     this.stopActions.push(session.subscribe(() => this.handleSessionChange()));
     this.stopActions.push(requests.onDocumentsRequested((paths) => void this.openDocuments(paths)));
     this.listenToMenu();
@@ -288,6 +394,19 @@ export class ViewerController {
     if (this.documentAttachments) this.stopActions.push(this.documentAttachments.start());
     await this.openDocuments(await requests.takeStartupDocuments());
     await this.refreshActiveDocument();
+    await this.offerWorkspaceFiles();
+  }
+
+  private reportRestoreOutcome({
+    wasReset,
+    newerSavedState,
+    hasEarlierVersionChanges,
+  }: RestoreOutcome): void {
+    if (newerSavedState?.appVersion !== undefined)
+      this.showNotice('errors.appState.newerVersion', { version: newerSavedState.appVersion });
+    else if (newerSavedState) this.showNotice('errors.appState.newerVersionUnnamed');
+    else if (wasReset) this.showNotice('errors.appState.reset');
+    else if (hasEarlierVersionChanges) this.showNotice('workspaces.earlierVersionChanges');
   }
 
   stop(): void {
@@ -463,6 +582,14 @@ export class ViewerController {
       this.changeLanguage(command.language);
       return;
     }
+    if (isWorkspaceFileCommand(command)) {
+      await this.runWorkspaceFileCommand(command);
+      return;
+    }
+    if (isWorkspaceCommand(command)) {
+      await this.workspaceActions.run(command);
+      return;
+    }
     if (applySessionCommand(this.dependencies.session, command)) return;
     const dialog = DIALOGS_BY_COMMAND[command.kind];
     if (dialog) {
@@ -617,10 +744,24 @@ export class ViewerController {
   private showRecentFilesInMenu(): void {
     const { menu, session } = this.dependencies;
     const { recentFiles } = session.currentState();
-    if (!menu || recentFiles === this.shownRecentFiles) return;
+    const workspaces = this.recentWorkspacesForMenu();
+    const workspacesKey = JSON.stringify(workspaces);
+    if (!menu || (recentFiles === this.shownRecentFiles && workspacesKey === this.shownRecentWorkspaces))
+      return;
     this.shownRecentFiles = recentFiles;
+    this.shownRecentWorkspaces = workspacesKey;
     const displayPaths = recentFiles.entries().map((recentFile) => recentFile.location.displayPath);
-    void menu.showRecentFiles(displayPaths.slice(0, MAX_RECENT_MENU_ENTRIES));
+    void menu.showRecentFiles(displayPaths.slice(0, MAX_RECENT_MENU_ENTRIES), workspaces);
+  }
+
+  /** The other workspaces of enabled kinds, most recently used first. */
+  private recentWorkspacesForMenu(): RecentWorkspaceMenuEntry[] {
+    const { session, translator } = this.dependencies;
+    const view = this.workspacesPart().workspaces;
+    if (!view) return [];
+    return recentWorkspaceLinks(view, session.currentState().workspaceKinds, translator)
+      .slice(0, MAX_RECENT_MENU_ENTRIES)
+      .map(({ id, name }) => ({ id, name }));
   }
 
   private refreshPathStatuses({ isForced = false } = {}): void {
@@ -754,8 +895,16 @@ export class ViewerController {
     this.publish(this.composeSnapshot(this.snapshot.notice));
   }
 
-  private runWorkspaceKindCommand(command: WorkspaceKindCommand): void {
+  private async runWorkspaceKindCommand(command: WorkspaceKindCommand): Promise<void> {
     const { session, translator } = this.dependencies;
+    const kindWorkspace =
+      command.kind === 'switchWorkspaceKind'
+        ? session.workspaces()?.lastShownOfKind(command.kindId)
+        : undefined;
+    if (kindWorkspace && kindWorkspace.id !== session.shownWorkspace()?.id) {
+      await this.workspaceActions.run({ kind: 'switchWorkspace', workspaceId: kindWorkspace.id });
+      return;
+    }
     const current = session.currentState().workspaceKinds;
     const { state, notice } = applyWorkspaceKindCommand(current, command, translator);
     if (state !== current) session.updateWorkspaceKinds(() => state);
@@ -787,6 +936,7 @@ export class ViewerController {
     this.dependencies.session.clearAllData();
     this.navigation.forgetHistory();
     this.navigation.recordActiveDocument();
+    await this.dependencies.session.clearStoredData();
     await this.saveNow();
     this.showNotice('privacy.clearAllData.done');
   }
@@ -1035,6 +1185,35 @@ export class ViewerController {
       ...(this.externalLinkRequest === undefined ? {} : { externalLinkRequest: this.externalLinkRequest }),
       ...(this.isSourceView ? { isSourceView: true } : {}),
       ...this.unsavedChangesPart(),
+      ...this.workspacesPart(),
+    };
+  }
+
+  private notesSetupPart(): Pick<WorkspacesView, 'notesSetup'> {
+    const notesSetup = this.workspaceActions.notesSetup();
+    return notesSetup ? { notesSetup } : {};
+  }
+
+  /** The folder picker for a Notes folder; the picked folder becomes readable, as any opened folder. */
+  async pickNotesFolder(): Promise<string | undefined> {
+    const picked = await this.dependencies.folders?.pickFolder();
+    return picked?.displayPath;
+  }
+
+  private workspacesPart(): Pick<ViewerSnapshot, 'workspaces'> {
+    const { session } = this.dependencies;
+    const registry = session.workspaces();
+    const shownWorkspaceId = session.shownWorkspace()?.id;
+    if (!registry || shownWorkspaceId === undefined) return {};
+    const kindForNewWorkspace = this.workspaceActions.kindForNewWorkspace();
+    return {
+      workspaces: {
+        registry,
+        shownWorkspaceId,
+        ...(kindForNewWorkspace ? { kindForNewWorkspace } : {}),
+        ...(this.pendingWorkspaceFile ? { pendingFile: this.pendingWorkspaceFile } : {}),
+        ...this.notesSetupPart(),
+      },
     };
   }
 
@@ -1066,5 +1245,21 @@ export class ViewerController {
   private publish(snapshot: ViewerSnapshot): void {
     this.snapshot = snapshot;
     for (const listener of this.listeners) listener(snapshot);
+    this.showWindowTitle(snapshot);
+  }
+
+  private showWindowTitle({ activeDocument }: ViewerSnapshot): void {
+    const { session, translator, desktopShell } = this.dependencies;
+    const shown = session.shownWorkspace();
+    const title = windowTitleFor(
+      {
+        documentName: activeDocument?.fileName,
+        workspaceName: shown ? workspaceNameOf(shown, translator) : undefined,
+      },
+      translator,
+    );
+    if (title === this.shownWindowTitle) return;
+    this.shownWindowTitle = title;
+    void desktopShell?.setWindowTitle(title);
   }
 }

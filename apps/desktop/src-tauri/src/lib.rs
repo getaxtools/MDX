@@ -6,6 +6,7 @@ mod documents;
 mod live_reload;
 mod main_window;
 mod menu;
+mod notes_location;
 mod open_requests;
 mod platform;
 #[cfg(dev)]
@@ -15,7 +16,8 @@ mod storage;
 use std::sync::Arc;
 
 use documents::DocumentAccessList;
-use tauri::{Builder, Manager, Wry};
+use storage::WorkspaceDatabase;
+use tauri::{Builder, Manager, RunEvent, Wry};
 
 pub fn run() {
     let builder = with_plugins(Builder::default())
@@ -29,11 +31,19 @@ pub fn run() {
         .on_window_event(open_requests::handle_window_event);
 
     let result = with_commands(with_startup_page_protocol(with_image_protocol(builder)))
-        .run(tauri::generate_context!());
+        .build(tauri::generate_context!());
 
-    if let Err(error) = result {
-        eprintln!("MDX could not start: {error}");
-        std::process::exit(1);
+    match result {
+        Ok(app) => app.run(|app, event| {
+            if let (RunEvent::Exit, Some(database)) = (event, app.try_state::<WorkspaceDatabase>())
+            {
+                let _ = database.close();
+            }
+        }),
+        Err(error) => {
+            eprintln!("MDX could not start: {error}");
+            std::process::exit(1);
+        }
     }
 }
 
@@ -74,6 +84,10 @@ fn with_startup_page_protocol(builder: Builder<Wry>) -> Builder<Wry> {
     builder
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "one line per command, and Tauri takes them all in one list"
+)]
 fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
     builder.invoke_handler(tauri::generate_handler![
         commands::attachments::save_attachment,
@@ -88,6 +102,25 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::favourites_file::import_favourites,
         commands::app_state::load_app_state,
         commands::app_state::save_app_state,
+        commands::app_state::remove_app_state_backups,
+        commands::app_state::grant_app_state_access,
+        commands::workspaces::import_legacy_state,
+        commands::workspaces::clear_workspaces,
+        commands::workspaces::grant_workspace_access,
+        commands::workspace_file::pick_workspace_export_place,
+        commands::workspace_file::write_workspace_export,
+        commands::workspace_file::open_workspace_file,
+        commands::workspace_file::take_startup_workspace_file,
+        commands::notes_location::known_folders,
+        commands::notes_location::prepare_notes_location,
+        commands::workspaces::load_workspace_registry,
+        commands::workspaces::load_workspace,
+        commands::workspaces::save_workspace,
+        commands::workspaces::delete_workspace,
+        commands::workspaces::save_workspace_list,
+        commands::workspaces::save_window_session,
+        commands::workspaces::load_app_values,
+        commands::workspaces::save_app_value,
         commands::app_info::get_app_info,
         commands::live_reload::watch_documents,
         commands::live_reload::watch_folders,
@@ -99,6 +132,7 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::folder_text_search::search_folder_documents,
         commands::file_manager::reveal_in_file_manager,
         commands::window::toggle_full_screen,
+        commands::window::set_window_title,
         menu::update_view_menu,
         menu::update_menu_language,
         menu::update_menu_shortcuts,

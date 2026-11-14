@@ -41,8 +41,8 @@ describe('checkShortcutChange', () => {
 
   it.each([
     [['ctrl', 'shift', 'M'], 'shortcuts.planned.displayMath'],
-    [['ctrl', 'alt', 'W'], 'shortcuts.planned.switchWorkspace'],
-  ])('refuses keys kept for planned features such as %j', (combination, actionKey) => {
+    [['ctrl', 'alt', 'W'], 'workspaces.switch'],
+  ])('refuses keys kept for planned features or used by a command, such as %j', (combination, actionKey) => {
     expect(check(combination)).toEqual({ isAccepted: false, refusal: { reason: 'usedBy', actionKey } });
   });
 

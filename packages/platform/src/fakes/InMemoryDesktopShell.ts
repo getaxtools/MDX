@@ -6,6 +6,7 @@ export class InMemoryDesktopShell implements DesktopShellPort {
   isClipboardBlocked = false;
   readonly revealedPaths: string[] = [];
   isFullScreen = false;
+  windowTitle = '';
   /** Paths that cannot be shown, such as ones the app was never allowed to open. */
   readonly unrevealablePaths = new Set<string>();
 
@@ -25,6 +26,11 @@ export class InMemoryDesktopShell implements DesktopShellPort {
   revealInFileManager(path: string): Promise<void> {
     if (this.unrevealablePaths.has(path)) return Promise.reject(new Error(`Cannot reveal ${path}`));
     this.revealedPaths.push(path);
+    return Promise.resolve();
+  }
+
+  setWindowTitle(title: string): Promise<void> {
+    this.windowTitle = title;
     return Promise.resolve();
   }
 

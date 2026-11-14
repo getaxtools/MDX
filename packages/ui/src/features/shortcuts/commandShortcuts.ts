@@ -132,6 +132,11 @@ export const COMMAND_SHORTCUTS: readonly CommandShortcut[] = [
     actionKey: 'controlWheel.show',
   },
   {
+    command: { kind: 'showWorkspaceSwitcher' },
+    combinations: [['ctrl', 'alt', 'W']],
+    actionKey: 'workspaces.switch',
+  },
+  {
     command: { kind: 'showKeyboardShortcuts' },
     combinations: [['F1']],
     actionKey: 'menu.help.keyboardShortcuts',

@@ -6,4 +6,6 @@ export interface DesktopShellPort {
   /** Shows a file or folder in the system file manager, such as File Explorer, with it selected. */
   revealInFileManager(path: string): Promise<void>;
   toggleFullScreen(): Promise<void>;
+  /** The title bar and taskbar text, such as the document and workspace names. */
+  setWindowTitle(title: string): Promise<void>;
 }

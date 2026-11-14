@@ -12,6 +12,7 @@ import type { LocateRecentFileCommand, RecentFileCommand } from '../recent-files
 import type { ShortcutOverrideCommand } from '../shortcuts/shortcutOverrideCommands';
 import type { SnippetCommand } from '../snippets/snippetCommands';
 import type { TabCommand } from '../tabs/tabCommands';
+import type { WorkspaceCommand } from '../workspaces/workspaceCommands';
 import type { ViewCommand } from '../view/viewCommands';
 
 export type ViewerCommand =
@@ -30,6 +31,7 @@ export type ViewerCommand =
   | WorkspaceKindCommand
   | ShortcutOverrideCommand
   | SnippetCommand
+  | WorkspaceCommand
   | { readonly kind: 'toggleFullScreen' }
   | { readonly kind: 'toggleControlWheel' }
   | { readonly kind: 'showWorkspaceKindSettings' }
@@ -118,10 +120,17 @@ const COMMANDS_BY_MENU_ITEM: Readonly<Record<string, ViewerCommand>> = {
   goToLine: { kind: 'runEditorCommand', command: 'goToLine' },
   showAbout: { kind: 'showAbout' },
   showSettings: { kind: 'showSettings' },
+  showNewWorkspace: { kind: 'showNewWorkspace' },
+  showWorkspaceSwitcher: { kind: 'showWorkspaceSwitcher' },
+  openWorkspaceFile: { kind: 'openWorkspaceFile' },
+  exportWorkspace: { kind: 'exportWorkspace' },
+  showRenameWorkspace: { kind: 'showRenameWorkspace' },
+  confirmDeleteWorkspace: { kind: 'confirmDeleteWorkspace' },
 };
 
 const RECENT_FILE_MENU_ITEM = /^openRecent\.(\d{1,2})$/;
 const REOPEN_WITH_ENCODING_PREFIX = 'reopenWithEncoding.';
+const OPEN_RECENT_WORKSPACE_PREFIX = 'openRecentWorkspace.';
 
 export function commandForMenuItem(menuItemId: string): ViewerCommand | undefined {
   const theme = THEME_PREFERENCES.find((preference) => menuItemId === `theme.${preference}`);
@@ -133,6 +142,8 @@ export function commandForMenuItem(menuItemId: string): ViewerCommand | undefine
   if (menuItemId.startsWith(REOPEN_WITH_ENCODING_PREFIX)) {
     return reopenCommandFor(menuItemId.slice(REOPEN_WITH_ENCODING_PREFIX.length));
   }
+  if (menuItemId.startsWith(OPEN_RECENT_WORKSPACE_PREFIX))
+    return { kind: 'switchWorkspace', workspaceId: menuItemId.slice(OPEN_RECENT_WORKSPACE_PREFIX.length) };
   const recentFileIndex = RECENT_FILE_MENU_ITEM.exec(menuItemId)?.[1];
   if (recentFileIndex !== undefined) return { kind: 'openRecentFileAt', index: Number(recentFileIndex) };
   return Object.hasOwn(COMMANDS_BY_MENU_ITEM, menuItemId) ? COMMANDS_BY_MENU_ITEM[menuItemId] : undefined;

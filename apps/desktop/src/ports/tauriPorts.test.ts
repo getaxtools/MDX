@@ -155,6 +155,14 @@ describe('TauriAppState', () => {
 
     expect(calls).toEqual([{ command: 'save_app_state', args: { stateJson: '{"schemaVersion":1}' } }]);
   });
+
+  it('removes the kept backups through the remove_app_state_backups command', async () => {
+    const calls = mockCommands({ remove_app_state_backups: () => null });
+
+    await new TauriAppState().removeBackups();
+
+    expect(calls.map((call) => call.command)).toEqual(['remove_app_state_backups']);
+  });
 });
 
 describe('TauriDocumentRequests', () => {
@@ -257,12 +265,17 @@ describe('TauriAppMenu', () => {
     expect(calls).toEqual([{ command: 'update_menu_language', args: { labels: { 'menu.file': 'फ़ाइल' } } }]);
   });
 
-  it('lists recent documents in the native menu through the update_recent_menu command', async () => {
+  it('lists recent documents and workspaces in the native menu through the update_recent_menu command', async () => {
     const calls = mockCommands({ update_recent_menu: () => null });
 
-    await new TauriAppMenu().showRecentFiles(['C:\\Docs\\a.md']);
+    await new TauriAppMenu().showRecentFiles(['C:\\Docs\\a.md'], [{ id: 'reading', name: 'Reading' }]);
 
-    expect(calls).toEqual([{ command: 'update_recent_menu', args: { displayPaths: ['C:\\Docs\\a.md'] } }]);
+    expect(calls).toEqual([
+      {
+        command: 'update_recent_menu',
+        args: { displayPaths: ['C:\\Docs\\a.md'], workspaces: [{ id: 'reading', name: 'Reading' }] },
+      },
+    ]);
   });
 });
 

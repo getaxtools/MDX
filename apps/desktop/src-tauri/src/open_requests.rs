@@ -6,8 +6,10 @@ use tauri::{AppHandle, DragDropEvent, Emitter, Manager, PhysicalPosition, Window
 
 use crate::attachments::{DroppedImages, is_image_path};
 use crate::documents::{DocumentAccessList, is_markdown_path};
+use crate::storage::{is_workspace_file_path, read_workspace_file};
 
 pub const OPEN_DOCUMENTS_EVENT: &str = "open-documents";
+pub const OPEN_WORKSPACE_FILE_EVENT: &str = "open-workspace-file";
 pub const IMAGES_DROPPED_EVENT: &str = "images-dropped";
 
 /// Pictures dropped on the window and where, in CSS pixels, so the editor can place their links.
@@ -39,14 +41,52 @@ pub fn markdown_paths_from_arguments(arguments: &[String], working_folder: &Path
         .skip(1)
         .map(PathBuf::from)
         .filter(|path| is_markdown_path(path))
-        .map(|path| {
-            if path.is_absolute() {
-                path
-            } else {
-                working_folder.join(path)
-            }
-        })
+        .map(|path| absolute_from(path, working_folder))
         .collect()
+}
+
+/// The first workspace file among the arguments; Markdown files in the same launch still open as tabs.
+pub fn workspace_file_from_arguments(
+    arguments: &[String],
+    working_folder: &Path,
+) -> Option<PathBuf> {
+    arguments
+        .iter()
+        .skip(1)
+        .map(PathBuf::from)
+        .find(|path| is_workspace_file_path(path))
+        .map(|path| absolute_from(path, working_folder))
+}
+
+fn absolute_from(path: PathBuf, working_folder: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path
+    } else {
+        working_folder.join(path)
+    }
+}
+
+/// A workspace file the app was started with, kept until the webview is ready to ask about it.
+#[derive(Debug, Default)]
+pub struct StartupWorkspaceFile(Mutex<Option<PathBuf>>);
+
+impl StartupWorkspaceFile {
+    pub fn new(path: Option<PathBuf>) -> Self {
+        Self(Mutex::new(path))
+    }
+
+    pub fn take(&self) -> Option<PathBuf> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner).take()
+    }
+}
+
+/// Grants the documents and folders saved in state shaped like the earlier state file.
+pub fn grant_saved_paths(saved_json: &str, access: &DocumentAccessList) {
+    let paths = crate::storage::saved_document_paths(saved_json);
+    grant_documents(&paths.documents, access);
+    for folder in &paths.folders {
+        let _ = access.grant_folder(folder);
+    }
 }
 
 pub fn grant_documents(paths: &[PathBuf], access: &DocumentAccessList) -> Vec<String> {
@@ -60,10 +100,15 @@ pub fn grant_documents(paths: &[PathBuf], access: &DocumentAccessList) -> Vec<St
 pub fn forward_second_instance(app: &AppHandle, arguments: &[String], working_folder: &str) {
     let paths = markdown_paths_from_arguments(arguments, Path::new(working_folder));
     let display_paths = grant_documents(&paths, &app.state::<Arc<DocumentAccessList>>());
+    let workspace_file = workspace_file_from_arguments(arguments, Path::new(working_folder))
+        .and_then(|path| read_workspace_file(&path).ok());
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         let _ = window.unminimize();
         let _ = window.set_focus();
         let _ = window.emit(OPEN_DOCUMENTS_EVENT, display_paths);
+        if let Some(contents) = workspace_file {
+            let _ = window.emit(OPEN_WORKSPACE_FILE_EVENT, contents);
+        }
     }
 }
 
@@ -125,6 +170,38 @@ mod tests {
     use std::fs;
 
     use super::*;
+
+    #[test]
+    fn workspace_file_arguments_are_kept_with_markdown_arguments() {
+        let arguments = [
+            "mdx.exe".to_owned(),
+            "guide.md".to_owned(),
+            r"D:\team\handbook.mdxworkspace".to_owned(),
+        ];
+
+        let markdown = markdown_paths_from_arguments(&arguments, Path::new(r"C:\work"));
+        let workspace_file = workspace_file_from_arguments(&arguments, Path::new(r"C:\work"));
+
+        assert_eq!(markdown, [PathBuf::from(r"C:\work\guide.md")]);
+        assert_eq!(
+            workspace_file,
+            Some(PathBuf::from(r"D:\team\handbook.mdxworkspace"))
+        );
+    }
+
+    #[test]
+    fn a_second_launch_forwards_a_relative_workspace_file_from_its_folder() {
+        let arguments = ["mdx.exe".to_owned(), "handbook.MDXWORKSPACE".to_owned()];
+
+        assert_eq!(
+            workspace_file_from_arguments(&arguments, Path::new(r"D:\team")),
+            Some(PathBuf::from(r"D:\team\handbook.MDXWORKSPACE"))
+        );
+        assert_eq!(
+            workspace_file_from_arguments(&arguments[..1], Path::new(r"D:\team")),
+            None
+        );
+    }
 
     #[test]
     fn image_paths_go_to_the_attachment_event_and_markdown_paths_still_open() {

@@ -111,6 +111,40 @@ describe('ViewerSession', () => {
     expect(session.currentState().tabStrip.tabs()).toEqual([]);
   });
 
+  it('reports saved state from a newer version', async () => {
+    const { session } = createSession(new InMemoryAppState({ schemaVersion: 2, savedByAppVersion: '2.0.0' }));
+
+    const outcome = await session.restore();
+
+    expect(outcome).toEqual({
+      wasReset: true,
+      newerSavedState: { appVersion: '2.0.0' },
+      hasEarlierVersionChanges: false,
+    });
+  });
+
+  it('saves the app version it was given with the state', async () => {
+    const appState = new InMemoryAppState();
+    const session = new ViewerSession({
+      documentFiles: new InMemoryDocumentFiles(),
+      appState,
+      now: () => 0,
+      appVersion: '0.9.0',
+    });
+
+    await session.save();
+
+    expect(await appState.load()).toMatchObject({ schemaVersion: 1, savedByAppVersion: '0.9.0' });
+  });
+
+  it('removes the kept backups of saved state when stored data is cleared', async () => {
+    const { session, appState } = createSession();
+
+    await session.clearStoredData();
+
+    expect(appState.backupRemovalCount).toBe(1);
+  });
+
   it('loads nothing when no tab is open', async () => {
     const { session } = createSession();
 

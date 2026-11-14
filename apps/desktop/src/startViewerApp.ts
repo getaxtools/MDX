@@ -1,8 +1,8 @@
-import { ViewerSession, workspaceKindsFor, type WorkspaceKind } from '@mdx/core';
+import { ViewerSession, workspaceKindsFor } from '@mdx/core';
 import { DEFAULT_LOCALE, type Translator } from '@mdx/i18n';
 import { createCodeHighlighter, createMarkdownRenderer, createRichBlockRenderer } from '@mdx/renderer';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { ViewerApp, ViewerController, translatedAlertTitles } from '@mdx/ui';
+import { ViewerApp, ViewerController, translatedAlertTitles, type AppInfo } from '@mdx/ui';
 import type { DisplayLanguage, StartupProgress } from '@mdx/ui/startup';
 import { mount } from 'svelte';
 import { TauriAppMenu } from './ports/TauriAppMenu';
@@ -18,6 +18,9 @@ import { TauriDocumentWatcher } from './ports/TauriDocumentWatcher';
 import { TauriFavouritesFile } from './ports/TauriFavouritesFile';
 import { TauriFolderWatcher } from './ports/TauriFolderWatcher';
 import { TauriFolders } from './ports/TauriFolders';
+import { TauriNotesLocations } from './ports/TauriNotesLocations';
+import { TauriWorkspaceFiles } from './ports/TauriWorkspaceFiles';
+import { TauriWorkspaceStore } from './ports/TauriWorkspaceStore';
 import { WebViewPrinter } from './ports/WebViewPrinter';
 import { tauriCommands } from './ports/tauriCommands';
 import { loadThirdPartyLicenses } from './loadThirdPartyLicenses';
@@ -41,10 +44,7 @@ export async function startViewerApp({
   const menu = new TauriAppMenu();
   if (locale !== DEFAULT_LOCALE) await menu.showLabels(messages);
   const appInfo = await tauriCommands.getAppInfo();
-  const kindRegistry = workspaceKindsFor({
-    allowsPlannedKindPreview: appInfo.allowsPlannedKindPreview ?? false,
-  });
-  const controller = createViewerController({ appState, menu, translator, kindRegistry });
+  const controller = createViewerController({ appState, menu, translator, appInfo });
   mount(ViewerApp, {
     target: appElement,
     props: {
@@ -71,21 +71,25 @@ interface ViewerControllerSources {
   readonly appState: TauriAppState;
   readonly menu: TauriAppMenu;
   readonly translator: Translator;
-  readonly kindRegistry: readonly WorkspaceKind[];
+  readonly appInfo: AppInfo;
 }
 
 function createViewerController({
   appState,
   menu,
   translator,
-  kindRegistry,
+  appInfo,
 }: ViewerControllerSources): ViewerController {
   return new ViewerController({
     session: new ViewerSession({
       documentFiles: new TauriDocumentFiles(),
       appState,
       now: () => Date.now(),
-      kindRegistry,
+      kindRegistry: workspaceKindsFor({
+        allowsPlannedKindPreview: appInfo.allowsPlannedKindPreview ?? false,
+      }),
+      appVersion: appInfo.version,
+      workspaceStore: new TauriWorkspaceStore(),
     }),
     requests: new TauriDocumentRequests(),
     renderer: createMarkdownRenderer({ window, alertTitles: translatedAlertTitles(translator) }),
@@ -101,6 +105,8 @@ function createViewerController({
     desktopShell: new TauriDesktopShell(),
     documentExport: new TauriDocumentExport(),
     attachments: new TauriAttachments(),
+    workspaceFiles: new TauriWorkspaceFiles(),
+    notesLocations: new TauriNotesLocations(),
   });
 }
 

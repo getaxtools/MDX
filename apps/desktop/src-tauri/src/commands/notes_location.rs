@@ -1,0 +1,156 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use serde::Serialize;
+use tauri::{AppHandle, Manager, State};
+
+use crate::commands::documents::validated_path;
+use crate::documents::{
+    DocumentAccessList, DocumentError, DocumentLocation, canonical_key_of, locate_document,
+};
+use crate::notes_location::{DEFAULT_NOTES_FOLDER_NAME, mark_location, one_drive_folders};
+use crate::storage::WorkspaceId;
+
+/// UI tests point Documents at a temporary folder, so they never write to the real one.
+const DOCUMENTS_FOLDER_OVERRIDE_VARIABLE: &str = "MDX_DOCUMENTS_DIR";
+
+fn documents_folder(app: &AppHandle) -> Option<PathBuf> {
+    if cfg!(debug_assertions)
+        && let Some(override_folder) = std::env::var_os(DOCUMENTS_FOLDER_OVERRIDE_VARIABLE)
+    {
+        return Some(PathBuf::from(override_folder));
+    }
+    app.path().document_dir().ok()
+}
+
+/// Documents follows a redirected or OneDrive-backed folder; the sync roots only decide a notice.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KnownFolders {
+    documents: Option<String>,
+    synced_folders: Vec<String>,
+}
+
+#[tauri::command]
+pub fn known_folders(app: AppHandle) -> KnownFolders {
+    KnownFolders {
+        documents: documents_folder(&app).map(|folder| folder.to_string_lossy().into_owned()),
+        synced_folders: one_drive_folders(|name| std::env::var_os(name)),
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreparedNotesLocation {
+    location: DocumentLocation,
+    location_id: String,
+    /// The folder already was a Notes location, so its own id is kept.
+    is_existing: bool,
+}
+
+/// Makes a folder a Notes location and lets the window read it. A new folder is made only at the
+/// default place in Documents; any other folder must be one the user picked.
+#[tauri::command]
+pub fn prepare_notes_location(
+    path: String,
+    location_id: String,
+    app: AppHandle,
+    access: State<'_, Arc<DocumentAccessList>>,
+) -> Result<PreparedNotesLocation, DocumentError> {
+    let path = validated_path(&path)?;
+    let location_id =
+        WorkspaceId::try_from(location_id).map_err(|_| DocumentError::InvalidRequest)?;
+    let documents = documents_folder(&app);
+    let is_picked = |folder: &Path| {
+        locate_document(folder).is_ok_and(|location| access.is_folder_allowed(&location))
+    };
+    if !may_claim(&path, documents.as_deref(), is_picked) {
+        return Err(DocumentError::AccessDenied);
+    }
+    fs::create_dir_all(&path)?;
+    let marker = mark_location(&path, location_id.as_str(), now_ms())?;
+    access.grant_folder(&path)?;
+    Ok(PreparedNotesLocation {
+        location: locate_document(&path)?,
+        is_existing: marker.location_id != location_id.as_str(),
+        location_id: marker.location_id,
+    })
+}
+
+/// A folder the user picked, or the default place for Notes folders, which may not exist yet.
+pub fn may_claim(path: &Path, documents: Option<&Path>, is_picked: impl Fn(&Path) -> bool) -> bool {
+    if !path.is_absolute() {
+        return false;
+    }
+    is_default_place(path, documents) || (path.is_dir() && is_picked(path))
+}
+
+fn is_default_place(path: &Path, documents: Option<&Path>) -> bool {
+    let (Some(parent), Some(documents), Some(name)) = (path.parent(), documents, path.file_name())
+    else {
+        return false;
+    };
+    canonical_key_of(&parent.to_string_lossy()) == canonical_key_of(&documents.to_string_lossy())
+        && name
+            .to_string_lossy()
+            .starts_with(DEFAULT_NOTES_FOLDER_NAME)
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|elapsed| u64::try_from(elapsed.as_millis()).ok())
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const DOCUMENTS: &str = r"C:\Users\Ana\Documents";
+
+    #[test]
+    fn may_make_the_default_folder_in_documents() {
+        let documents = Some(Path::new(DOCUMENTS));
+
+        assert!(may_claim(
+            Path::new(r"C:\Users\Ana\Documents\MDX Notes"),
+            documents,
+            |_| false
+        ));
+        assert!(may_claim(
+            Path::new(r"c:\users\ana\documents\MDX Notes - Work"),
+            documents,
+            |_| false
+        ));
+    }
+
+    #[test]
+    fn refuses_other_places_the_user_did_not_pick() {
+        let documents = Some(Path::new(DOCUMENTS));
+
+        assert!(!may_claim(
+            Path::new(r"C:\Windows\MDX Notes"),
+            documents,
+            |_| false
+        ));
+        assert!(!may_claim(
+            Path::new(r"C:\Users\Ana\Documents\Other"),
+            documents,
+            |_| false
+        ));
+        assert!(!may_claim(Path::new(r"MDX Notes"), documents, |_| true));
+    }
+
+    #[test]
+    fn accepts_an_existing_folder_the_user_picked() {
+        let folder = tempfile::tempdir().unwrap();
+
+        assert!(may_claim(folder.path(), None, |_| true));
+        assert!(!may_claim(folder.path(), None, |_| false));
+        assert!(!may_claim(&folder.path().join("missing"), None, |_| true));
+    }
+}

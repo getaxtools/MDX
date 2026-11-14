@@ -7,6 +7,9 @@ import {
   type OpenedDocument,
   type PathStatus,
   type SaveSource,
+  type StoredWorkspace,
+  type WorkspaceListName,
+  type WorkspaceStorePort,
 } from '@mdx/platform';
 import { withDocumentLineBreaks } from '../documents/lineEndings';
 import { ExplorerFolders } from '../explorer/ExplorerFolders';
@@ -17,9 +20,28 @@ import type { WordGoals } from '../word-goals/wordGoals';
 import { EMPTY_SNIPPET_LIBRARY, type SnippetLibrary } from '../snippets/snippetLibrary';
 import { TabStrip } from '../tabs/TabStrip';
 import { DEFAULT_VIEW_SETTINGS, type ViewSettings } from '../view/ViewSettings';
-import { WORKSPACE_KINDS, type WorkspaceKind } from '../workspace-kinds/workspaceKinds';
+import {
+  changeShownSettings,
+  setOverride,
+  withOverrides,
+  type WorkspaceOverrideField,
+} from '../view/viewSettingsScopes';
+import {
+  DEFAULT_WORKSPACE_KIND_ID,
+  WORKSPACE_KINDS,
+  type WorkspaceKind,
+} from '../workspace-kinds/workspaceKinds';
 import { WorkspaceKindsState } from '../workspace-kinds/WorkspaceKindsState';
-import { restoreAppState, toPersistedAppState, type ViewerState } from './persistedAppState';
+import type { NewerSavedState, ViewerState } from './persistedAppState';
+import { MAIN_WINDOW_ID } from '../workspaces/storedViewerState';
+import { LegacyStateStorage, type ViewerStateStorage } from '../workspaces/ViewerStateStorage';
+import type {
+  NewWorkspace,
+  WorkspaceChange,
+  WorkspaceRegistry,
+  WorkspaceRemoval,
+} from '../workspaces/WorkspaceRegistry';
+import { WorkspaceStateStorage } from '../workspaces/WorkspaceStateStorage';
 
 export interface ViewerSessionDependencies {
   readonly documentFiles: DocumentFilePort;
@@ -27,6 +49,24 @@ export interface ViewerSessionDependencies {
   readonly now: () => number;
   /** The workspace kinds this build offers; the UI test build also offers planned ones. */
   readonly kindRegistry?: readonly WorkspaceKind[];
+  /** Written with the saved state, so an older version can name the one that saved it. */
+  readonly appVersion?: string;
+  /** Keeps the state in workspaces; without it the earlier single state file is used. */
+  readonly workspaceStore?: WorkspaceStorePort;
+  /** Ids for new workspaces; random UUIDs unless a test needs fixed ones. */
+  readonly createId?: () => string;
+}
+
+/** What the user enters for a new workspace; the session adds the id and the time. */
+export type WorkspaceRequest = Omit<NewWorkspace, 'id' | 'nowMs'>;
+
+/** Lists a new workspace starts with, such as the folders and favourites of a workspace file. */
+export type InitialWorkspaceLists = Partial<Readonly<Record<WorkspaceListName, unknown>>>;
+
+export interface RestoreOutcome {
+  readonly wasReset: boolean;
+  readonly newerSavedState: NewerSavedState | undefined;
+  readonly hasEarlierVersionChanges: boolean;
 }
 
 export type { ViewerState } from './persistedAppState';
@@ -47,6 +87,43 @@ function emptyState(kindRegistry: readonly WorkspaceKind[]): ViewerState {
   };
 }
 
+function workspaceStorageFor(
+  { appState, workspaceStore, now, appVersion }: ViewerSessionDependencies,
+  kindRegistry: readonly WorkspaceKind[],
+): WorkspaceStateStorage | undefined {
+  if (!workspaceStore) return undefined;
+  return new WorkspaceStateStorage({
+    workspaceStore,
+    appState,
+    kindRegistry,
+    windowId: MAIN_WINDOW_ID,
+    now,
+    appVersion,
+  });
+}
+
+function viewerStateOf(restored: ViewerState): ViewerState {
+  return {
+    tabStrip: restored.tabStrip,
+    recentFiles: restored.recentFiles,
+    favourites: restored.favourites,
+    explorerFolders: restored.explorerFolders,
+    viewSettings: restored.viewSettings,
+    workspaceKinds: restored.workspaceKinds,
+    shortcutOverrides: restored.shortcutOverrides,
+    wordGoals: restored.wordGoals,
+    snippetLibrary: restored.snippetLibrary,
+    ...(restored.workspaceOverrides ? { workspaceOverrides: restored.workspaceOverrides } : {}),
+  };
+}
+
+/** The state as the window shows it: the shown workspace's overrides on top of the app settings. */
+function shownStateOf(state: ViewerState): ViewerState {
+  const overrides = state.workspaceOverrides;
+  if (!overrides || Object.keys(overrides).length === 0) return state;
+  return { ...state, viewSettings: withOverrides(state.viewSettings, overrides) };
+}
+
 export class ViewerSession {
   private state: ViewerState;
   private readonly openedDocuments = new Map<string, OpenedDocument>();
@@ -57,31 +134,38 @@ export class ViewerSession {
   private readonly listeners = new Set<ViewerStateListener>();
 
   private readonly kindRegistry: readonly WorkspaceKind[];
+  private readonly storage: ViewerStateStorage;
+  private readonly workspaceStorage: WorkspaceStateStorage | undefined;
+  /** The shown state of the last state asked for, so it keeps its identity between changes. */
+  private shownState: { readonly source: ViewerState; readonly shown: ViewerState } | undefined;
 
   constructor(private readonly dependencies: ViewerSessionDependencies) {
     this.kindRegistry = dependencies.kindRegistry ?? WORKSPACE_KINDS;
     this.state = emptyState(this.kindRegistry);
+    this.workspaceStorage = workspaceStorageFor(dependencies, this.kindRegistry);
+    this.storage =
+      this.workspaceStorage ??
+      new LegacyStateStorage({
+        appState: dependencies.appState,
+        kindRegistry: this.kindRegistry,
+        appVersion: dependencies.appVersion,
+      });
   }
 
+  /** What the window shows; view settings already include the shown workspace's overrides. */
   currentState(): ViewerState {
-    return this.state;
+    if (this.shownState?.source !== this.state) {
+      this.shownState = { source: this.state, shown: shownStateOf(this.state) };
+    }
+    return this.shownState.shown;
   }
 
-  async restore(): Promise<{ wasReset: boolean }> {
-    const restored = restoreAppState(await this.dependencies.appState.load(), this.kindRegistry);
+  async restore(): Promise<RestoreOutcome> {
+    const restored = await this.storage.restore();
     this.openedDocuments.clear();
-    this.replaceState({
-      tabStrip: restored.tabStrip,
-      recentFiles: restored.recentFiles,
-      favourites: restored.favourites,
-      explorerFolders: restored.explorerFolders,
-      viewSettings: restored.viewSettings,
-      workspaceKinds: restored.workspaceKinds,
-      shortcutOverrides: restored.shortcutOverrides,
-      wordGoals: restored.wordGoals,
-      snippetLibrary: restored.snippetLibrary,
-    });
-    return { wasReset: restored.wasReset };
+    this.replaceState(viewerStateOf(restored));
+    const { wasReset, newerSavedState, hasEarlierVersionChanges } = restored;
+    return { wasReset, newerSavedState, hasEarlierVersionChanges };
   }
 
   /** Forgets every tab, recent file, favourite, opened folder, setting and kind choice, as on a first start. */
@@ -94,7 +178,81 @@ export class ViewerSession {
   }
 
   async save(): Promise<void> {
-    await this.dependencies.appState.save(toPersistedAppState(this.state));
+    await this.storage.save(this.state);
+  }
+
+  /** Removes stored workspaces, values and backup copies; the next save writes the current state again. */
+  async clearStoredData(): Promise<void> {
+    await this.storage.clearAll();
+    this.replaceState(this.state);
+  }
+
+  /** The workspace registry, or undefined while the earlier state file stands in for the store. */
+  workspaces(): WorkspaceRegistry | undefined {
+    return this.workspaceStorage?.hasWorkspaces() ? this.workspaceStorage.workspaces() : undefined;
+  }
+
+  shownWorkspace(): StoredWorkspace | undefined {
+    return this.workspaces() ? this.workspaceStorage?.shownWorkspace() : undefined;
+  }
+
+  /** Creates a workspace of an enabled kind and shows it in this window. */
+  async createWorkspace(
+    request: WorkspaceRequest,
+    initialLists: InitialWorkspaceLists = {},
+  ): Promise<WorkspaceChange | undefined> {
+    const storage = this.workspaceStorage;
+    const registry = this.workspaces();
+    if (!storage || !registry) return undefined;
+    const id = this.dependencies.createId?.() ?? crypto.randomUUID();
+    const change = registry.create(
+      { ...request, id, nowMs: this.dependencies.now() },
+      this.state.workspaceKinds,
+    );
+    if (change.outcome !== 'changed') return change;
+    await storage.saveWorkspace(change.registry, change.workspace);
+    await storage.saveInitialLists(change.workspace.id, initialLists);
+    await this.switchWorkspace(change.workspace.id);
+    return change;
+  }
+
+  async renameWorkspace(workspaceId: string, name: string): Promise<WorkspaceChange | undefined> {
+    const registry = this.workspaces();
+    if (!this.workspaceStorage || !registry) return undefined;
+    const change = registry.rename(workspaceId, name);
+    if (change.outcome === 'changed')
+      await this.workspaceStorage.saveWorkspace(change.registry, change.workspace);
+    this.replaceState(this.state);
+    return change;
+  }
+
+  /** A shown workspace is first replaced by the Markdown viewer workspace shown most recently. */
+  async deleteWorkspace(workspaceId: string): Promise<WorkspaceRemoval | undefined> {
+    const registry = this.workspaces();
+    if (!this.workspaceStorage || !registry) return undefined;
+    const removal = registry.remove(workspaceId);
+    if (removal.outcome !== 'removed') return removal;
+    if (this.shownWorkspace()?.id === workspaceId) {
+      const fallback = removal.registry.lastShownOfKind(DEFAULT_WORKSPACE_KIND_ID);
+      if (fallback) await this.switchWorkspace(fallback.id);
+    }
+    await this.workspaceStorage.deleteWorkspace(removal.registry, workspaceId);
+    this.replaceState(this.state);
+    return removal;
+  }
+
+  /** Shows another workspace's tabs, lists and layout; the caller has dealt with unsaved edits. */
+  async switchWorkspace(workspaceId: string): Promise<void> {
+    if (!this.workspaceStorage || !this.workspaces()?.find(workspaceId)) return;
+    const restored = await this.workspaceStorage.switchTo(workspaceId, this.state);
+    this.openedDocuments.clear();
+    this.untitledDocuments.clear();
+    this.untitledCount = 0;
+    const kindId = this.shownWorkspace()?.kindId ?? DEFAULT_WORKSPACE_KIND_ID;
+    const workspaceKinds = restored.workspaceKinds.isEnabled(kindId)
+      ? restored.workspaceKinds.switchKind(kindId)
+      : restored.workspaceKinds;
+    this.replaceState({ ...viewerStateOf(restored), workspaceKinds });
   }
 
   /**
@@ -254,8 +412,24 @@ export class ViewerSession {
     return this.dependencies.documentFiles.checkPathStatuses(locations);
   }
 
+  /** Changes the settings the window shows; a field the workspace overrides changes its override. */
   updateViewSettings(change: (viewSettings: ViewSettings) => ViewSettings): void {
-    this.replaceState({ ...this.state, viewSettings: change(this.state.viewSettings) });
+    const { appSettings, overrides } = changeShownSettings(
+      this.state.viewSettings,
+      this.state.workspaceOverrides ?? {},
+      change,
+    );
+    this.replaceState({ ...this.state, viewSettings: appSettings, workspaceOverrides: overrides });
+  }
+
+  /** Gives the shown workspace its own value for a field, or lets it follow the app setting again. */
+  setWorkspaceOverride(field: WorkspaceOverrideField, isOverridden: boolean): void {
+    if (!this.workspaces()) return;
+    const overrides = setOverride(this.state.viewSettings, this.state.workspaceOverrides ?? {}, {
+      field,
+      isOverridden,
+    });
+    this.replaceState({ ...this.state, workspaceOverrides: overrides });
   }
 
   updateWorkspaceKinds(change: (workspaceKinds: WorkspaceKindsState) => WorkspaceKindsState): void {
@@ -303,6 +477,7 @@ export class ViewerSession {
 
   private replaceState(state: ViewerState): void {
     this.state = state;
-    for (const listener of this.listeners) listener(state);
+    const shown = this.currentState();
+    for (const listener of this.listeners) listener(shown);
   }
 }

@@ -4,11 +4,16 @@
   import { kindNameOf } from '../control-wheel/kindPresentation';
   import { shortcutLabelFor } from '../shortcuts/commandShortcuts';
   import type { ViewerCommand } from '../viewer/viewerCommands';
+  import type { RecentWorkspaceLink } from '../workspaces/recentWorkspaceLinks';
 
   interface Props {
     recentFiles: readonly RecentFile[];
     /** A kind other than the Markdown viewer shows a placeholder until its own start page is built. */
     activeKindId?: WorkspaceKindId;
+    /** The active kind has no workspace yet, so the page offers to create one; none is made without asking. */
+    canCreateWorkspace?: boolean;
+    /** Other workspaces of enabled kinds, most recently used first. */
+    recentWorkspaces?: readonly RecentWorkspaceLink[];
     translator: Translator;
     onCommand: (command: ViewerCommand) => void;
     onOpenRecentFile: (recentFile: RecentFile) => void;
@@ -17,12 +22,15 @@
   const {
     recentFiles,
     activeKindId = DEFAULT_WORKSPACE_KIND_ID,
+    canCreateWorkspace = false,
+    recentWorkspaces = [],
     translator,
     onCommand,
     onOpenRecentFile,
   }: Props = $props();
 
   const MAX_START_PAGE_RECENT_FILES = 10;
+  const MAX_START_PAGE_RECENT_WORKSPACES = 5;
 
   const STARTING_ACTIONS: readonly { readonly labelKey: MessageKey; readonly command: ViewerCommand }[] = [
     { labelKey: 'menu.file.newDocument', command: { kind: 'newDocument' } },
@@ -32,6 +40,7 @@
   ];
 
   const shownRecentFiles = $derived(recentFiles.slice(0, MAX_START_PAGE_RECENT_FILES));
+  const shownRecentWorkspaces = $derived(recentWorkspaces.slice(0, MAX_START_PAGE_RECENT_WORKSPACES));
 
   function folderOf(displayPath: string, fileName: string): string {
     return displayPath.endsWith(fileName) ? displayPath.slice(0, -fileName.length) : displayPath;
@@ -43,6 +52,14 @@
   <main class="start-page" aria-labelledby="start-page-heading">
     <h1 id="start-page-heading">{kind}</h1>
     <p class="introduction">{translator.translate('workspaceKinds.notBuiltYet', { kind })}</p>
+    {#if canCreateWorkspace}
+      <button
+        class="link-button"
+        onclick={() => onCommand({ kind: 'showNewWorkspace', kindId: activeKindId })}
+      >
+        {translator.translate('workspaces.createForKind', { kind })}
+      </button>
+    {/if}
   </main>
 {:else}
   <main class="start-page" aria-labelledby="start-page-heading">
@@ -81,6 +98,24 @@
           </ul>
         {/if}
       </section>
+      {#if shownRecentWorkspaces.length > 0}
+        <section aria-labelledby="start-page-workspaces">
+          <h2 id="start-page-workspaces">{translator.translate('startPage.recentWorkspaces')}</h2>
+          <ul>
+            {#each shownRecentWorkspaces as workspace (workspace.id)}
+              <li>
+                <button
+                  class="link-button"
+                  onclick={() => onCommand({ kind: 'switchWorkspace', workspaceId: workspace.id })}
+                >
+                  {workspace.name}
+                </button>
+                <span class="folder">{workspace.kindName}</span>
+              </li>
+            {/each}
+          </ul>
+        </section>
+      {/if}
     </div>
   </main>
 {/if}
