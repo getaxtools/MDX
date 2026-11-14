@@ -101,6 +101,7 @@ describe('migrateLegacyAppState', () => {
       favourites: [],
       favouriteGroups: [],
       explorerFolders: [],
+      settingsOverrides: {},
     });
     expect(migration.windowSession.tabs).toEqual({ tabs: [] });
     expect(migration.wasReset).toBe(false);

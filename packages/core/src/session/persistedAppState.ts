@@ -14,6 +14,7 @@ import {
   type LanguagePreference,
   type ViewSettings,
 } from '../view/ViewSettings';
+import type { WorkspaceOverrides } from '../view/viewSettingsScopes';
 import { WORKSPACE_KINDS, type WorkspaceKind } from '../workspace-kinds/workspaceKinds';
 import { WorkspaceKindsState, type SavedWorkspaceKinds } from '../workspace-kinds/WorkspaceKindsState';
 import { isRecord, parseLocation, validEntries } from './savedValues';
@@ -47,6 +48,8 @@ export interface ViewerState {
   readonly shortcutOverrides: ShortcutOverrides;
   readonly wordGoals: WordGoals;
   readonly snippetLibrary: SnippetLibrary;
+  /** The shown workspace's own theme, reading width or typography; absent without workspaces. */
+  readonly workspaceOverrides?: WorkspaceOverrides;
 }
 
 /** Saved state written by a newer MDX; the desktop app keeps a copy of it before anything is saved. */

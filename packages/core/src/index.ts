@@ -183,3 +183,8 @@ export {
   type WorkspaceVisibility,
 } from './workspaces/WorkspaceRegistry';
 export { DEFAULT_WORKSPACE_ID } from './workspaces/storedViewerState';
+export {
+  WORKSPACE_OVERRIDE_FIELDS,
+  type WorkspaceOverrideField,
+  type WorkspaceOverrides,
+} from './view/viewSettingsScopes';

@@ -21,6 +21,58 @@ function renderSettings(settings: ViewSettings = DEFAULT_VIEW_SETTINGS) {
 }
 
 describe('SettingsDialog', () => {
+  describe('per-workspace scope', () => {
+    function renderWithWorkspace(overrides: Record<string, string>) {
+      const onCommand = vi.fn();
+      render(SettingsDialog, {
+        settings: DEFAULT_VIEW_SETTINGS,
+        dataFolder: DATA_FOLDER,
+        workspace: { name: 'Reading', overrides },
+        translator: createTranslator(),
+        onCommand,
+        onClose: vi.fn(),
+      });
+      return { onCommand };
+    }
+
+    it('offers a scope for theme, reading width and typography only', () => {
+      renderWithWorkspace({});
+
+      const scopes = screen.getAllByRole('combobox', { name: 'Applies to' });
+
+      expect(scopes).toHaveLength(3);
+      expect(screen.getAllByRole('option', { name: 'Only Reading' })).toHaveLength(3);
+    });
+
+    it('shows which settings the workspace overrides', () => {
+      renderWithWorkspace({ theme: 'dark' });
+
+      const [themeScope, ...others] = screen.getAllByRole('combobox', { name: 'Applies to' });
+
+      expect((themeScope as HTMLSelectElement).value).toBe('workspace');
+      expect(others.map((scope) => (scope as HTMLSelectElement).value)).toEqual(['app', 'app']);
+    });
+
+    it('choosing This workspace starts an override, and All workspaces clears it', async () => {
+      const { onCommand } = renderWithWorkspace({ theme: 'dark' });
+      const [themeScope] = screen.getAllByRole('combobox', { name: 'Applies to' });
+
+      await userEvent.selectOptions(themeScope as HTMLSelectElement, 'app');
+
+      expect(onCommand).toHaveBeenCalledWith({
+        kind: 'setWorkspaceOverride',
+        field: 'theme',
+        isOverridden: false,
+      });
+    });
+
+    it('offers no scope without workspaces', () => {
+      renderSettings();
+
+      expect(screen.queryByRole('combobox', { name: 'Applies to' })).toBeNull();
+    });
+  });
+
   it('opens with the search box focused', () => {
     renderSettings();
 

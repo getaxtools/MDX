@@ -1,4 +1,10 @@
-import type { WorkspaceColour, WorkspaceIcon, WorkspaceKindId, WorkspaceNameProblem } from '@mdx/core';
+import type {
+  WorkspaceColour,
+  WorkspaceIcon,
+  WorkspaceKindId,
+  WorkspaceNameProblem,
+  WorkspaceOverrideField,
+} from '@mdx/core';
 import type { StoredWorkspace } from '@mdx/platform';
 import type { Translator } from '@mdx/i18n';
 import { kindNameOf } from '../control-wheel/kindPresentation';
@@ -21,7 +27,12 @@ export type WorkspaceCommand =
   | { readonly kind: 'confirmDeleteWorkspace' }
   | { readonly kind: 'deleteWorkspace' }
   | { readonly kind: 'switchWorkspace'; readonly workspaceId: string }
-  | { readonly kind: 'showWorkspaceSwitcher' };
+  | { readonly kind: 'showWorkspaceSwitcher' }
+  | {
+      readonly kind: 'setWorkspaceOverride';
+      readonly field: WorkspaceOverrideField;
+      readonly isOverridden: boolean;
+    };
 
 const WORKSPACE_COMMAND_KINDS: ReadonlySet<string> = new Set([
   'showNewWorkspace',
@@ -32,6 +43,7 @@ const WORKSPACE_COMMAND_KINDS: ReadonlySet<string> = new Set([
   'deleteWorkspace',
   'switchWorkspace',
   'showWorkspaceSwitcher',
+  'setWorkspaceOverride',
 ]);
 
 export function isWorkspaceCommand(command: { readonly kind: string }): command is WorkspaceCommand {

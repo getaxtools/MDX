@@ -107,14 +107,16 @@ pub enum ListName {
     Favourites,
     FavouriteGroups,
     ExplorerFolders,
+    SettingsOverrides,
 }
 
 impl ListName {
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 5] = [
         Self::RecentFiles,
         Self::Favourites,
         Self::FavouriteGroups,
         Self::ExplorerFolders,
+        Self::SettingsOverrides,
     ];
 
     pub const fn as_str(self) -> &'static str {
@@ -123,6 +125,7 @@ impl ListName {
             Self::Favourites => "favourites",
             Self::FavouriteGroups => "favouriteGroups",
             Self::ExplorerFolders => "explorerFolders",
+            Self::SettingsOverrides => "settingsOverrides",
         }
     }
 

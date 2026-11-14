@@ -701,5 +701,8 @@
   "workspaces.colour.purple": "Purple",
   "workspaces.colour.grey": "Grey",
   "workspaces.switcher.option": "{name}, {kind}",
-  "workspaces.switcher.optionShown": "{name}, {kind}, shown now"
+  "workspaces.switcher.optionShown": "{name}, {kind}, shown now",
+  "settings.scope.label": "Applies to",
+  "settings.scope.allWorkspaces": "All workspaces",
+  "settings.scope.thisWorkspace": "Only {name}"
 }

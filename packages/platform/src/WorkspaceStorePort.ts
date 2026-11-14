@@ -4,6 +4,8 @@ export const WORKSPACE_LIST_NAMES = [
   'favourites',
   'favouriteGroups',
   'explorerFolders',
+  /** The workspace's own theme, reading width and typography. */
+  'settingsOverrides',
 ] as const;
 
 export type WorkspaceListName = (typeof WORKSPACE_LIST_NAMES)[number];

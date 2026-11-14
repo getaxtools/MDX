@@ -1,5 +1,10 @@
 <script lang="ts">
-  import type { ViewSettings } from '@mdx/core';
+  import {
+    WORKSPACE_OVERRIDE_FIELDS,
+    type ViewSettings,
+    type WorkspaceOverrideField,
+    type WorkspaceOverrides,
+  } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
   import Dialog from '../../components/Dialog.svelte';
   import { COMMAND_SHORTCUTS, type CommandShortcut } from '../shortcuts/commandShortcuts';
@@ -23,6 +28,8 @@
     shortcuts?: readonly CommandShortcut[];
     platform?: DesktopPlatform;
     snippetLibrary?: SnippetLibrary;
+    /** The shown workspace and the settings it overrides; absent without workspaces. */
+    workspace?: { readonly name: string; readonly overrides: WorkspaceOverrides } | undefined;
     translator: Translator;
     onCommand: (command: ViewerCommand) => void;
     onClose: () => void;
@@ -34,6 +41,7 @@
     shortcuts = COMMAND_SHORTCUTS,
     platform = 'windows',
     snippetLibrary = EMPTY_SNIPPET_LIBRARY,
+    workspace,
     translator,
     onCommand,
     onClose,
@@ -79,6 +87,18 @@
     if (command) onCommand(command);
   }
 
+  function overrideFieldOf(setting: SettingDefinition): WorkspaceOverrideField | undefined {
+    return WORKSPACE_OVERRIDE_FIELDS.find((field) => field === setting.id);
+  }
+
+  function chooseScope(field: WorkspaceOverrideField, event: Event & { currentTarget: HTMLSelectElement }) {
+    onCommand({
+      kind: 'setWorkspaceOverride',
+      field,
+      isOverridden: event.currentTarget.value === 'workspace',
+    });
+  }
+
   function controlId(setting: SettingDefinition): string {
     return `setting-${setting.id}`;
   }
@@ -118,6 +138,23 @@
                   <option value={choice.value}>{choice.label}</option>
                 {/each}
               </select>
+              {@const overrideField = overrideFieldOf(setting)}
+              {#if workspace && overrideField}
+                <label class="scope-label" for="{controlId(setting)}-scope"
+                  >{translator.translate('settings.scope.label')}</label
+                >
+                <select
+                  id="{controlId(setting)}-scope"
+                  class="scope"
+                  value={overrideField in workspace.overrides ? 'workspace' : 'app'}
+                  onchange={(event) => chooseScope(overrideField, event)}
+                >
+                  <option value="app">{translator.translate('settings.scope.allWorkspaces')}</option>
+                  <option value="workspace"
+                    >{translator.translate('settings.scope.thisWorkspace', { name: workspace.name })}</option
+                  >
+                </select>
+              {/if}
             {:else if setting.kind === 'action'}
               <span class="label" id="{controlId(setting)}-label"
                 >{translator.translate(setting.labelKey)}</span

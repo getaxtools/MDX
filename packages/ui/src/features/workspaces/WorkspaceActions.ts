@@ -62,6 +62,9 @@ export class WorkspaceActions {
       case 'showWorkspaceSwitcher':
         this.dependencies.showDialog('workspaceSwitcher');
         return;
+      case 'setWorkspaceOverride':
+        this.dependencies.session.setWorkspaceOverride(command.field, command.isOverridden);
+        return;
     }
   }
 

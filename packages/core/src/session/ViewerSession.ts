@@ -20,6 +20,12 @@ import { EMPTY_SNIPPET_LIBRARY, type SnippetLibrary } from '../snippets/snippetL
 import { TabStrip } from '../tabs/TabStrip';
 import { DEFAULT_VIEW_SETTINGS, type ViewSettings } from '../view/ViewSettings';
 import {
+  changeShownSettings,
+  setOverride,
+  withOverrides,
+  type WorkspaceOverrideField,
+} from '../view/viewSettingsScopes';
+import {
   DEFAULT_WORKSPACE_KIND_ID,
   WORKSPACE_KINDS,
   type WorkspaceKind,
@@ -103,7 +109,15 @@ function viewerStateOf(restored: ViewerState): ViewerState {
     shortcutOverrides: restored.shortcutOverrides,
     wordGoals: restored.wordGoals,
     snippetLibrary: restored.snippetLibrary,
+    ...(restored.workspaceOverrides ? { workspaceOverrides: restored.workspaceOverrides } : {}),
   };
+}
+
+/** The state as the window shows it: the shown workspace's overrides on top of the app settings. */
+function shownStateOf(state: ViewerState): ViewerState {
+  const overrides = state.workspaceOverrides;
+  if (!overrides || Object.keys(overrides).length === 0) return state;
+  return { ...state, viewSettings: withOverrides(state.viewSettings, overrides) };
 }
 
 export class ViewerSession {
@@ -118,6 +132,8 @@ export class ViewerSession {
   private readonly kindRegistry: readonly WorkspaceKind[];
   private readonly storage: ViewerStateStorage;
   private readonly workspaceStorage: WorkspaceStateStorage | undefined;
+  /** The shown state of the last state asked for, so it keeps its identity between changes. */
+  private shownState: { readonly source: ViewerState; readonly shown: ViewerState } | undefined;
 
   constructor(private readonly dependencies: ViewerSessionDependencies) {
     this.kindRegistry = dependencies.kindRegistry ?? WORKSPACE_KINDS;
@@ -132,8 +148,12 @@ export class ViewerSession {
       });
   }
 
+  /** What the window shows; view settings already include the shown workspace's overrides. */
   currentState(): ViewerState {
-    return this.state;
+    if (this.shownState?.source !== this.state) {
+      this.shownState = { source: this.state, shown: shownStateOf(this.state) };
+    }
+    return this.shownState.shown;
   }
 
   async restore(): Promise<RestoreOutcome> {
@@ -384,8 +404,24 @@ export class ViewerSession {
     return this.dependencies.documentFiles.checkPathStatuses(locations);
   }
 
+  /** Changes the settings the window shows; a field the workspace overrides changes its override. */
   updateViewSettings(change: (viewSettings: ViewSettings) => ViewSettings): void {
-    this.replaceState({ ...this.state, viewSettings: change(this.state.viewSettings) });
+    const { appSettings, overrides } = changeShownSettings(
+      this.state.viewSettings,
+      this.state.workspaceOverrides ?? {},
+      change,
+    );
+    this.replaceState({ ...this.state, viewSettings: appSettings, workspaceOverrides: overrides });
+  }
+
+  /** Gives the shown workspace its own value for a field, or lets it follow the app setting again. */
+  setWorkspaceOverride(field: WorkspaceOverrideField, isOverridden: boolean): void {
+    if (!this.workspaces()) return;
+    const overrides = setOverride(this.state.viewSettings, this.state.workspaceOverrides ?? {}, {
+      field,
+      isOverridden,
+    });
+    this.replaceState({ ...this.state, workspaceOverrides: overrides });
   }
 
   updateWorkspaceKinds(change: (workspaceKinds: WorkspaceKindsState) => WorkspaceKindsState): void {
@@ -433,6 +469,7 @@ export class ViewerSession {
 
   private replaceState(state: ViewerState): void {
     this.state = state;
-    for (const listener of this.listeners) listener(state);
+    const shown = this.currentState();
+    for (const listener of this.listeners) listener(shown);
   }
 }

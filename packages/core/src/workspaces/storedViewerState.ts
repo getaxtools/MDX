@@ -11,6 +11,7 @@ import type { TabStripSnapshot } from '../tabs/TabStrip';
 import {
   effectiveViewSettings,
   parseScopedViewSettings,
+  parseWorkspaceOverrides,
   splitViewSettings,
   type AppSettings,
   type WorkspaceLayout,
@@ -53,6 +54,7 @@ export function storedViewerStateOf(state: ViewerState): StoredViewerState {
       favourites: persisted.favourites,
       favouriteGroups: persisted.favouriteGroups,
       explorerFolders: persisted.explorerFolders,
+      settingsOverrides: state.workspaceOverrides ?? {},
     },
     windowSession: { tabs: persisted.tabs, layout },
     appValues: {
@@ -78,7 +80,7 @@ export function viewerStateFrom(
 ): RestoredAppState {
   const session = isRecord(windowSession) ? windowSession : {};
   const view = effectiveViewSettings(parseScopedViewSettings(appValues.viewSettings, session.layout));
-  return restoreAppState(
+  const restored = restoreAppState(
     {
       schemaVersion: APP_STATE_SCHEMA_VERSION,
       tabs: session.tabs,
@@ -94,4 +96,5 @@ export function viewerStateFrom(
     },
     kindRegistry,
   );
+  return { ...restored, workspaceOverrides: parseWorkspaceOverrides(lists.settingsOverrides) };
 }

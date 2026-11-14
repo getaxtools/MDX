@@ -91,7 +91,13 @@ describe('TauriWorkspaceStore', () => {
 
     await new TauriWorkspaceStore().importLegacyState({
       workspace: DEFAULT_WORKSPACE,
-      lists: { recentFiles: [], favourites: [1], favouriteGroups: [], explorerFolders: [] },
+      lists: {
+        recentFiles: [],
+        favourites: [1],
+        favouriteGroups: [],
+        explorerFolders: [],
+        settingsOverrides: {},
+      },
       windowId: 'main',
       windowSession: { tabs: { tabs: [] } },
       appValues: { viewSettings: { zoomPercent: 125 } },
@@ -103,7 +109,13 @@ describe('TauriWorkspaceStore', () => {
         args: {
           legacyState: {
             workspace: DEFAULT_WORKSPACE,
-            lists: { recentFiles: '[]', favourites: '[1]', favouriteGroups: '[]', explorerFolders: '[]' },
+            lists: {
+              recentFiles: '[]',
+              favourites: '[1]',
+              favouriteGroups: '[]',
+              explorerFolders: '[]',
+              settingsOverrides: '{}',
+            },
             windowId: 'main',
             windowSession: '{"tabs":{"tabs":[]}}',
             appValues: { viewSettings: '{"zoomPercent":125}' },

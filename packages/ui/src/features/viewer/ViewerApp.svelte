@@ -561,6 +561,12 @@
       {translator}
       onCommand={(command: ViewerCommand) => void controller.execute(command)}
       onClose={() => controller.closeDialog()}
+      workspace={shownWorkspace
+        ? {
+            name: workspaceNameOf(shownWorkspace, translator),
+            overrides: snapshot.viewer.workspaceOverrides ?? {},
+          }
+        : undefined}
     />
   {:else if snapshot.openDialog === 'commandPalette'}
     <CommandPalette
