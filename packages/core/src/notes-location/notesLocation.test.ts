@@ -46,6 +46,24 @@ describe('Notes location', () => {
     ).toBe('C:\\Users\\Ana\\Documents\\MDX Notes - R&D  plans');
   });
 
+  it('drops any run of trailing separators from the Documents path, quickly', () => {
+    const documents = `D:\\Documents${'/\\'.repeat(50_000)}`;
+
+    const startedAt = performance.now();
+    const path = defaultNotesLocationPath(documents, { workspaceName: 'Notes', isFirstNotesWorkspace: true });
+
+    expect(path).toBe('D:\\Documents\\MDX Notes');
+    expect(performance.now() - startedAt).toBeLessThan(100);
+  });
+
+  it('drops trailing dots and spaces from the workspace name and falls back when nothing is left', () => {
+    const named = (workspaceName: string) =>
+      defaultNotesLocationPath(DOCUMENTS, { workspaceName, isFirstNotesWorkspace: false });
+
+    expect(named('Plans. . ')).toBe('C:\\Users\\Ana\\Documents\\MDX Notes - Plans');
+    expect(named('...')).toBe('C:\\Users\\Ana\\Documents\\MDX Notes - MDX Notes');
+  });
+
   it('a path under the OneDrive folder is reported as synced', () => {
     const synced = ['C:\\Users\\Ana\\OneDrive'];
 

@@ -24,13 +24,20 @@ export function defaultNotesLocationPath(
   const folderName = isFirstNotesWorkspace
     ? DEFAULT_NOTES_FOLDER_NAME
     : `${DEFAULT_NOTES_FOLDER_NAME} - ${safeFolderName(workspaceName)}`;
-  return `${documentsFolder.replace(/[\\/]+$/, '')}\\${folderName}`;
+  return `${withoutTrailing(documentsFolder, '\\/')}\\${folderName}`;
 }
 
 /** Characters Windows does not allow in a folder name become spaces; trailing dots and spaces go. */
 function safeFolderName(name: string): string {
   const allowed = name.replaceAll(/[<>:"/\\|?*]|\p{Cc}/gu, ' ');
-  return allowed.replace(/[. ]+$/, '').trim() || DEFAULT_NOTES_FOLDER_NAME;
+  return withoutTrailing(allowed, '. ').trim() || DEFAULT_NOTES_FOLDER_NAME;
+}
+
+// A loop instead of a `[…]+$` pattern, which backtracks on long runs of those characters.
+function withoutTrailing(text: string, characters: string): string {
+  let end = text.length;
+  while (end > 0 && characters.includes(text.charAt(end - 1))) end -= 1;
+  return text.slice(0, end);
 }
 
 /** Whether a path is the folder or inside it, comparing as Windows compares paths. */

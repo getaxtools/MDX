@@ -65,7 +65,8 @@ export class TestWorkspace {
   }
 
   static create(): TestWorkspace {
-    const rootFolder = mkdtempSync(join(tmpdir(), 'mdx-ui-test-'));
+    // The long form: CI's temp folder has a short name (RUNNER~1), and the app shows paths in full.
+    const rootFolder = realpathSync.native(mkdtempSync(join(tmpdir(), 'mdx-ui-test-')));
     const profileFolder = join(rootFolder, 'profile');
     const documentsFolder = join(rootFolder, 'documents');
     mkdirSync(profileFolder);
