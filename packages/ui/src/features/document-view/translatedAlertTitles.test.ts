@@ -10,6 +10,17 @@ describe('translatedAlertTitles', () => {
       important: 'Important',
       warning: 'Warning',
       caution: 'Caution',
+      info: 'Info',
+      todo: 'To do',
+      abstract: 'Abstract',
+      summary: 'Summary',
+      success: 'Success',
+      question: 'Question',
+      failure: 'Failure',
+      danger: 'Danger',
+      bug: 'Bug',
+      example: 'Example',
+      quote: 'Quote',
     });
   });
 });

@@ -1,5 +1,6 @@
 import {
   isSidebarViewShown,
+  KIND_SWITCHERS,
   READING_WIDTHS,
   THEME_PREFERENCES,
   TYPOGRAPHIES,
@@ -8,13 +9,21 @@ import {
   type ThemePreference,
   type Typography,
   type ViewSettings,
+  type WheelDock,
 } from '@mdx/core';
-import { SUPPORTED_LOCALES, isKnownLocale, type MessageKey, type Translator } from '@mdx/i18n';
+import { SUPPORTED_LOCALES, directionOf, isKnownLocale, type MessageKey, type Translator } from '@mdx/i18n';
 import type { ViewerCommand } from '../viewer/viewerCommands';
 
-export type SettingSection = 'appearance' | 'language' | 'layout';
+export type SettingSection = 'appearance' | 'language' | 'layout' | 'editing' | 'workspaceKinds' | 'keyboard';
 
-export const SETTING_SECTIONS: readonly SettingSection[] = ['appearance', 'language', 'layout'];
+export const SETTING_SECTIONS: readonly SettingSection[] = [
+  'appearance',
+  'language',
+  'layout',
+  'editing',
+  'workspaceKinds',
+  'keyboard',
+];
 
 export interface SettingChoice {
   readonly value: string;
@@ -41,7 +50,23 @@ export interface ToggleSetting extends SettingBase {
   readonly toggleCommand: ViewerCommand;
 }
 
-export type SettingDefinition = ChoiceSetting | ToggleSetting;
+/** A button that runs a command, such as opening the kind choices. */
+export interface ActionSetting extends SettingBase {
+  readonly kind: 'action';
+  readonly buttonLabelKey: MessageKey;
+  readonly command: ViewerCommand;
+}
+
+/** The keys of a command the user can change. */
+export interface ShortcutKeysSetting extends SettingBase {
+  readonly kind: 'shortcut';
+  readonly commandId: string;
+  readonly command: ViewerCommand;
+  /** Explains how to give the keys to a mouse button. */
+  readonly hasMouseButtonHelp: boolean;
+}
+
+export type SettingDefinition = ChoiceSetting | ToggleSetting | ActionSetting | ShortcutKeysSetting;
 
 const themeSetting: ChoiceSetting = {
   id: 'theme',
@@ -131,6 +156,117 @@ const languageSetting: ChoiceSetting = {
     value === SYSTEM_LANGUAGE || isKnownLocale(value) ? { kind: 'setLanguage', language: value } : undefined,
 };
 
+const kindSwitcherSetting: ChoiceSetting = {
+  id: 'kindSwitcher',
+  kind: 'choice',
+  section: 'workspaceKinds',
+  labelKey: 'settings.kindSwitcher.label',
+  descriptionKey: 'settings.kindSwitcher.description',
+  choices: (translator) =>
+    KIND_SWITCHERS.map((kindSwitcher) => ({
+      value: kindSwitcher,
+      label: translator.translate(`settings.kindSwitcher.${kindSwitcher}`),
+    })),
+  valueIn: (settings) => settings.kindSwitcher,
+  commandFor: (value) => {
+    const kindSwitcher = KIND_SWITCHERS.find((switcher) => switcher === value);
+    return kindSwitcher ? { kind: 'setKindSwitcher', kindSwitcher } : undefined;
+  },
+};
+
+const WHEEL_DOCKS_IN_SCREEN_ORDER: readonly WheelDock[] = ['bottomInlineEnd', 'bottomInlineStart'];
+
+/** The dock is stored by reading direction, so its label names the corner it is in on screen. */
+function wheelDockLabelKey(wheelDock: WheelDock, translator: Translator): MessageKey {
+  const isAtEndOfLine = wheelDock === 'bottomInlineEnd';
+  const isOnTheRight = directionOf(translator.locale) === 'rtl' ? !isAtEndOfLine : isAtEndOfLine;
+  return isOnTheRight ? 'settings.wheelDock.bottomRight' : 'settings.wheelDock.bottomLeft';
+}
+
+const wheelDockSetting: ChoiceSetting = {
+  id: 'wheelDock',
+  kind: 'choice',
+  section: 'workspaceKinds',
+  labelKey: 'settings.wheelDock.label',
+  descriptionKey: 'settings.wheelDock.description',
+  choices: (translator) =>
+    WHEEL_DOCKS_IN_SCREEN_ORDER.map((wheelDock) => ({
+      value: wheelDock,
+      label: translator.translate(wheelDockLabelKey(wheelDock, translator)),
+    })),
+  valueIn: (settings) => settings.wheelDock,
+  commandFor: (value) => {
+    const wheelDock = WHEEL_DOCKS_IN_SCREEN_ORDER.find((dock) => dock === value);
+    return wheelDock ? { kind: 'setWheelDock', wheelDock } : undefined;
+  },
+};
+
+const WORKSPACE_KIND_SETTINGS: readonly SettingDefinition[] = [
+  kindSwitcherSetting,
+  wheelDockSetting,
+  {
+    id: 'wheelAtPointer',
+    kind: 'toggle',
+    section: 'workspaceKinds',
+    labelKey: 'settings.wheelAtPointer.label',
+    descriptionKey: 'settings.wheelAtPointer.description',
+    isOnIn: (settings) => settings.isWheelOpenedAtPointer,
+    toggleCommand: { kind: 'toggleWheelOpenedAtPointer' },
+  },
+  {
+    id: 'wheelButton',
+    kind: 'toggle',
+    section: 'workspaceKinds',
+    labelKey: 'settings.wheelButton.label',
+    descriptionKey: 'settings.wheelButton.description',
+    isOnIn: (settings) => settings.isWheelButtonInStatusBar,
+    toggleCommand: { kind: 'toggleWheelButtonInStatusBar' },
+  },
+  {
+    id: 'chooseKinds',
+    kind: 'action',
+    section: 'workspaceKinds',
+    labelKey: 'settings.chooseKinds.label',
+    descriptionKey: 'settings.chooseKinds.description',
+    buttonLabelKey: 'workspaceKinds.choose',
+    command: { kind: 'showWorkspaceKindSettings' },
+  },
+];
+
+const EDITING_SETTINGS: readonly SettingDefinition[] = [
+  {
+    id: 'slashMenuInRichText',
+    kind: 'toggle',
+    section: 'editing',
+    labelKey: 'settings.slashMenuInRichText.label',
+    descriptionKey: 'settings.slashMenuInRichText.description',
+    isOnIn: (settings) => settings.isSlashMenuInRichText,
+    toggleCommand: { kind: 'toggleSlashMenuInRichText' },
+  },
+  {
+    id: 'slashMenuInSource',
+    kind: 'toggle',
+    section: 'editing',
+    labelKey: 'settings.slashMenuInSource.label',
+    descriptionKey: 'settings.slashMenuInSource.description',
+    isOnIn: (settings) => settings.isSlashMenuInSource,
+    toggleCommand: { kind: 'toggleSlashMenuInSource' },
+  },
+];
+
+const KEYBOARD_SETTINGS: readonly SettingDefinition[] = [
+  {
+    id: 'controlWheelShortcut',
+    kind: 'shortcut',
+    section: 'keyboard',
+    labelKey: 'controlWheel.show',
+    descriptionKey: 'settings.shortcut.controlWheel.description',
+    commandId: 'toggleControlWheel',
+    command: { kind: 'toggleControlWheel' },
+    hasMouseButtonHelp: true,
+  },
+];
+
 function layoutToggle(
   setting: Pick<ToggleSetting, 'id' | 'labelKey' | 'descriptionKey' | 'toggleCommand'>,
   isOnIn: (settings: ViewSettings) => boolean,
@@ -189,6 +325,9 @@ export const SETTING_DEFINITIONS: readonly SettingDefinition[] = [
     },
     (settings) => settings.isPreviewBesideEditor,
   ),
+  ...EDITING_SETTINGS,
+  ...WORKSPACE_KIND_SETTINGS,
+  ...KEYBOARD_SETTINGS,
 ];
 
 /** The settings whose section, name, description or choices contain every word of the query. */
@@ -204,13 +343,18 @@ export function matchesQuery(query: string, text: string): boolean {
 }
 
 function searchableTextOf(setting: SettingDefinition, translator: Translator): string {
-  const choices = setting.kind === 'choice' ? setting.choices(translator).map((choice) => choice.label) : [];
   return [
     translator.translate(`settings.section.${setting.section}`),
     translator.translate(setting.labelKey),
     translator.translate(setting.descriptionKey),
-    ...choices,
+    ...extraSearchableTextOf(setting, translator),
   ].join(' ');
+}
+
+function extraSearchableTextOf(setting: SettingDefinition, translator: Translator): string[] {
+  if (setting.kind === 'choice') return setting.choices(translator).map((choice) => choice.label);
+  if (setting.kind === 'action') return [translator.translate(setting.buttonLabelKey)];
+  return [];
 }
 
 const COMBINING_MARKS = /\p{M}/gu;

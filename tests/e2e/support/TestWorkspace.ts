@@ -25,6 +25,11 @@ interface SavedFolderPlaces {
   readonly inExplorer?: boolean;
 }
 
+export interface SavedWorkspaceKinds {
+  readonly enabledKindIds: readonly string[];
+  readonly activeKindId: string;
+}
+
 interface SavedAppState {
   readonly tabs: { readonly tabs: readonly SavedLocation[]; readonly activeKey?: string };
   readonly favourites: readonly SavedLocation[];
@@ -32,7 +37,10 @@ interface SavedAppState {
     readonly collapsedExplorerSections?: readonly string[];
     readonly explorerSectionHeights?: Readonly<Record<string, number>>;
     readonly panelWidths?: Readonly<Record<string, number>>;
+    readonly wheelDock?: string;
   };
+  readonly workspaceKinds?: SavedWorkspaceKinds;
+  readonly shortcutOverrides?: Readonly<Record<string, readonly string[]>>;
 }
 
 export class TestWorkspace {
@@ -83,6 +91,34 @@ export class TestWorkspace {
       view: { language },
     };
     writeFileSync(join(this.profileFolder, SAVED_STATE_FILE_NAME), JSON.stringify(state));
+  }
+
+  /** Starts the next launch with a tab and a favourite saved by a version that had no workspace kinds. */
+  saveStateWithoutKinds(fileName: string): void {
+    const displayPath = realpathSync.native(this.documentPath(fileName));
+    const canonicalKey = process.platform === 'win32' ? displayPath.toLowerCase() : displayPath;
+    const location = { canonicalKey, displayPath, fileName };
+    const state = {
+      schemaVersion: SAVED_STATE_SCHEMA_VERSION,
+      tabs: { tabs: [{ location, isPinned: false, scrollRatio: 0 }], activeKey: canonicalKey },
+      recentFiles: [],
+      favourites: [{ location, kind: 'file' }],
+      favouriteGroups: [],
+      explorerFolders: [],
+    };
+    writeFileSync(join(this.profileFolder, SAVED_STATE_FILE_NAME), JSON.stringify(state));
+  }
+
+  savedWorkspaceKinds(): SavedWorkspaceKinds | undefined {
+    return this.readSavedState()?.workspaceKinds;
+  }
+
+  savedWheelDock(): string | undefined {
+    return this.readSavedState()?.view?.wheelDock;
+  }
+
+  savedShortcutOverrides(): Readonly<Record<string, readonly string[]>> | undefined {
+    return this.readSavedState()?.shortcutOverrides;
   }
 
   savedCollapsedExplorerSections(): readonly string[] | undefined {

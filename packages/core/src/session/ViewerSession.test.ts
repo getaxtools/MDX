@@ -1,5 +1,7 @@
 import { InMemoryAppState, InMemoryDocumentFiles } from '@mdx/platform';
 import { describe, expect, it } from 'vitest';
+import { workspaceKindsFor } from '../workspace-kinds/workspaceKinds';
+import { WorkspaceKindsState } from '../workspace-kinds/WorkspaceKindsState';
 import { ViewerSession, type ViewerState } from './ViewerSession';
 
 const GUIDE_PATH = 'C:\\Docs\\Guide.md';
@@ -140,6 +142,45 @@ describe('ViewerSession', () => {
     session.updateRecentFiles((recentFiles) => recentFiles.clearAll());
 
     expect(session.currentState().recentFiles.entries()).toEqual([]);
+  });
+
+  it('saves kind choices and keeps shortcut choices after a restart', async () => {
+    const { session, appState } = createSession();
+    const bothKinds = WorkspaceKindsState.fromSaved(
+      { enabledKindIds: ['markdownViewer', 'notes'], activeKindId: 'notes' },
+      [
+        { id: 'markdownViewer', availability: 'built' },
+        { id: 'notes', availability: 'built' },
+      ],
+    );
+
+    session.updateWorkspaceKinds(() => bothKinds);
+    session.updateShortcutOverrides((overrides) => ({
+      ...overrides,
+      toggleControlWheel: ['ctrl', 'shift', 'J'],
+    }));
+    await session.save();
+    const restarted = createSession(appState).session;
+    await restarted.restore();
+
+    expect(await appState.load()).toMatchObject({
+      workspaceKinds: { enabledKindIds: ['markdownViewer', 'notes'], activeKindId: 'notes' },
+    });
+    expect(restarted.currentState().shortcutOverrides).toEqual({
+      toggleControlWheel: ['ctrl', 'shift', 'J'],
+    });
+  });
+
+  it('forgets kind choices and shortcut choices when all data is cleared', () => {
+    const { session } = createSession();
+    session.updateShortcutOverrides(() => ({ toggleControlWheel: [] }));
+    session.updateViewSettings((viewSettings) => ({ ...viewSettings, wheelDock: 'bottomInlineStart' }));
+
+    session.clearAllData();
+
+    expect(session.currentState().shortcutOverrides).toEqual({});
+    expect(session.currentState().workspaceKinds.enabledKindIds()).toEqual(['markdownViewer']);
+    expect(session.currentState().viewSettings.wheelDock).toBe('bottomInlineEnd');
   });
 
   it('updates and saves view settings', async () => {
@@ -333,5 +374,27 @@ describe('ViewerSession', () => {
     await session.openDocument(NOTES_PATH);
 
     expect(notifications).toHaveLength(1);
+  });
+
+  it('keeps planned kinds chosen in the UI test build after a restore and Clear All Data', async () => {
+    const appState = new InMemoryAppState();
+    const documentFiles = new InMemoryDocumentFiles({});
+    const kindRegistry = workspaceKindsFor({ allowsPlannedKindPreview: true });
+    const first = new ViewerSession({ documentFiles, appState, now: () => 0, kindRegistry });
+    first.updateWorkspaceKinds((kinds) => kinds.enableKind('notes').state.switchKind('notes'));
+    await first.save();
+    const second = new ViewerSession({ documentFiles, appState, now: () => 0, kindRegistry });
+
+    await second.restore();
+    const restoredActiveKind = second.currentState().workspaceKinds.activeKindId();
+    second.clearAllData();
+
+    expect(restoredActiveKind).toBe('notes');
+    expect(
+      second
+        .currentState()
+        .workspaceKinds.kinds()
+        .every((kind) => kind.availability === 'built'),
+    ).toBe(true);
   });
 });

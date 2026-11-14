@@ -19,6 +19,22 @@ function renderStartPage(recentFiles = [recentFile]) {
 }
 
 describe('StartPage', () => {
+  it('shows the not-built-yet text for a previewed kind', () => {
+    render(StartPage, {
+      recentFiles: [],
+      activeKindId: 'notes',
+      translator: createTranslator(),
+      onCommand: vi.fn(),
+      onOpenRecentFile: vi.fn(),
+    });
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Notes' })).toBeTruthy();
+    expect(
+      screen.getByText('Notes is not built yet. Switch back to Markdown viewer to read documents.'),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'New Document' })).toBeNull();
+  });
+
   it('offers ways to start, each with its keys', () => {
     renderStartPage();
 

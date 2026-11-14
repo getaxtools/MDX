@@ -9,6 +9,10 @@
     ".": {
       "svelte": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./startup": {
+      "svelte": "./src/startup.ts",
+      "default": "./src/startup.ts"
     }
   },
   "dependencies": {

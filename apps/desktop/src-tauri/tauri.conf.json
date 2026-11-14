@@ -14,6 +14,7 @@
     "windows": [
       {
         "label": "main",
+        "create": false,
         "title": "MDX - Markdown Explorer",
         "width": 1200,
         "height": 800,
@@ -46,6 +47,7 @@
         "frame-src": "'none'",
         "form-action": "'none'"
       },
+      "dangerousDisableAssetCspModification": ["style-src"],
       "freezePrototype": true
     }
   },

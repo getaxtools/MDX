@@ -1,15 +1,19 @@
 <script lang="ts">
   import {
     DEFAULT_EDITOR_SHARE_PERCENT,
+    DEFAULT_WORKSPACE_KIND_ID,
     isSidebarViewShown,
+    measureDocument,
+    availableSnippets,
     MAX_PANEL_WIDTH_PX,
     MIN_PANEL_WIDTH_PX,
     panelWidthOf,
     type Favourite,
     type RecentFile,
     type ResizablePanel,
+    type RingPoint,
   } from '@mdx/core';
-  import type { SourceEditor } from '@mdx/editor';
+  import type { SectionAction, SourceEditor } from '@mdx/editor';
   import type { Translator } from '@mdx/i18n';
   import type { CodeHighlighter, OutlineEntry, RichBlockRenderer } from '@mdx/renderer';
   import CommandPalette from '../command-palette/CommandPalette.svelte';
@@ -30,6 +34,8 @@
   import DocumentView from '../document-view/DocumentView.svelte';
   import { isUntitledLocation, type TextSearchOptions } from '@mdx/platform';
   import KeyboardShortcutsDialog from '../help/KeyboardShortcutsDialog.svelte';
+  import WordGoalDialog from '../word-goals/WordGoalDialog.svelte';
+  import { SessionWordCounts } from '../word-goals/SessionWordCounts';
   import PasteTableDialog from '../table-paste/PasteTableDialog.svelte';
   import OutlinePanel from '../outline/OutlinePanel.svelte';
   import type { HeadingRequest } from '../outline/HeadingRequest';
@@ -42,7 +48,9 @@
   import DocumentToolbar from '../view/DocumentToolbar.svelte';
   import NoticeBar from './NoticeBar.svelte';
   import { moveFocusBetweenRegions } from './focusRegions';
-  import { commandForShortcut } from '../shortcuts/commandShortcuts';
+  import { COMMAND_SHORTCUTS, commandForShortcut, shortcutLabelFor } from '../shortcuts/commandShortcuts';
+  import { effectiveCommandShortcuts } from '../shortcuts/effectiveCommandShortcuts';
+  import type { ControlWheelButton } from '../view/ControlWheelButton';
   import type { DesktopPlatform, ViewerCommand } from './viewerCommands';
   import type { NoticeAction, ViewerController, ViewerSnapshot } from './ViewerController';
 
@@ -75,9 +83,61 @@
     if (snapshot) applyTheme(globalThis.document.documentElement, snapshot.viewer.viewSettings.theme);
   });
 
+  const shortcuts = $derived(
+    snapshot ? effectiveCommandShortcuts(snapshot.viewer.shortcutOverrides) : COMMAND_SHORTCUTS,
+  );
+  const isWheelOpenedAtPointer = $derived(snapshot?.viewer.viewSettings.isWheelOpenedAtPointer ?? false);
+  const isControlWheelOpen = $derived(
+    snapshot?.openDialog === 'controlWheel' || snapshot?.openDialog === 'workspaceKindSettings',
+  );
+  const controlWheelButton: ControlWheelButton | undefined = $derived.by(() => {
+    if (!snapshot?.viewer.viewSettings.isWheelButtonInStatusBar) return undefined;
+    const shortcut = shortcutLabelFor({ kind: 'toggleControlWheel' }, translator, shortcuts);
+    return {
+      activeKindId: snapshot.viewer.workspaceKinds.activeKindId(),
+      ...(shortcut ? { shortcut } : {}),
+      onShowControlWheel: () => void controller.execute({ kind: 'toggleControlWheel' }),
+    };
+  });
+
+  /** Read once when the wheel opens, so it is not state: the wheel must not follow the pointer. */
+  const lastPointer: { position: RingPoint | undefined } = { position: undefined };
+
+  $effect(() => {
+    if (!isWheelOpenedAtPointer) return undefined;
+    function rememberPointer(event: PointerEvent) {
+      lastPointer.position = { x: event.clientX, y: event.clientY };
+    }
+    globalThis.addEventListener('pointermove', rememberPointer, { passive: true });
+    return () => {
+      globalThis.removeEventListener('pointermove', rememberPointer);
+      lastPointer.position = undefined;
+    };
+  });
+
+  const isMarkdownViewerActive = $derived(
+    (snapshot?.viewer.workspaceKinds.activeKindId() ?? DEFAULT_WORKSPACE_KIND_ID) ===
+      DEFAULT_WORKSPACE_KIND_ID,
+  );
   const activeTab = $derived(snapshot?.viewer.tabStrip.activeTab());
   const activeKey = $derived(activeTab?.location.canonicalKey);
   let headingRequest: HeadingRequest | undefined = $state();
+  let cursorCount = $state(1);
+  let selectedWords = $state(0);
+  const sessionWordCounts = new SessionWordCounts();
+  const activeWordGoal = $derived(
+    activeKey !== undefined && snapshot && Object.hasOwn(snapshot.viewer.wordGoals, activeKey)
+      ? snapshot.viewer.wordGoals[activeKey]
+      : undefined,
+  );
+  const wordsThisSession = $derived(
+    snapshot?.activeDocument
+      ? sessionWordCounts.changeSince(
+          snapshot.activeDocument.canonicalKey,
+          snapshot.activeDocument.statistics.words,
+        )
+      : 0,
+  );
   let shownEditor: SourceEditor | undefined;
   /** Kept with its document, so another tab never shows the section of the previous one. */
   let currentHeading: { readonly documentKey?: string; readonly id?: string } = $state({});
@@ -147,6 +207,14 @@
     event.preventDefault();
   }
 
+  type ControlWheelComponent = typeof import('../control-wheel/ControlWheel.svelte').default;
+  let controlWheelComponent: Promise<ControlWheelComponent> | undefined;
+
+  function loadControlWheel(): Promise<ControlWheelComponent> {
+    controlWheelComponent ??= import('../control-wheel/ControlWheel.svelte').then((module) => module.default);
+    return controlWheelComponent;
+  }
+
   const MOUSE_BACK_BUTTON = 3;
   const MOUSE_FORWARD_BUTTON = 4;
 
@@ -173,7 +241,7 @@
         event.preventDefault();
       return;
     }
-    const command = commandForShortcut(event, platform);
+    const command = commandForShortcut(event, platform, shortcuts);
     if (!command) return;
     event.preventDefault();
     void controller.execute(command);
@@ -197,6 +265,8 @@
       <ActivityBar
         isSidebarVisible={viewSettings.isSidebarVisible}
         sidebarView={viewSettings.sidebarView}
+        kinds={snapshot.viewer.workspaceKinds}
+        kindSwitcher={viewSettings.kindSwitcher}
         {translator}
         onCommand={(command: ViewerCommand) => void controller.execute(command)}
       />
@@ -215,6 +285,8 @@
           {currentHeadingId}
           {translator}
           onSelectHeading={goToHeading}
+          onChangeSection={(entry: OutlineEntry, action: SectionAction) =>
+            void controller.execute({ kind: 'changeOutlineSection', line: entry.line, action })}
         />
       {:else if viewSettings.isSidebarVisible}
         <ExplorerSidebar
@@ -290,9 +362,10 @@
           onDismiss={() => controller.dismissNotice()}
         />
         <div class="reading-area" data-focus-region>
-          {#if !activeTab}
+          {#if !activeTab || !isMarkdownViewerActive}
             <StartPage
               recentFiles={snapshot.viewer.recentFiles.entries()}
+              activeKindId={snapshot.viewer.workspaceKinds.activeKindId()}
               {translator}
               onCommand={(command: ViewerCommand) => void controller.execute(command)}
               onOpenRecentFile={(recentFile: RecentFile) => void controller.openRecentFile(recentFile)}
@@ -322,6 +395,12 @@
                     scrollRatio={editedDocument.scrollRatio}
                     {translator}
                     editorRequest={snapshot?.editorRequest}
+                    isSlashMenuEnabled={viewSettings.isSlashMenuInSource}
+                    onPastePicture={(bytes: Uint8Array) => controller.pastePicture(bytes)}
+                    onCursorCountChange={(count: number) => (cursorCount = count)}
+                    snippets={snapshot ? availableSnippets(snapshot.viewer.snippetLibrary) : []}
+                    onSelectedTextChange={(selectedText: string) =>
+                      (selectedWords = selectedText === '' ? 0 : measureDocument(selectedText).words)}
                     onReady={(sourceEditor: SourceEditor | undefined) => attachEditor(sync, sourceEditor)}
                     onScroll={(scrollRatio: number) => followEditorScroll(sync, scrollRatio)}
                     onChange={(text: string) =>
@@ -387,6 +466,12 @@
           ? snapshot.unsavedDocumentKeys.has(activeTab.location.canonicalKey)
           : false}
         {translator}
+        {controlWheelButton}
+        cursorCount={editedDocument ? cursorCount : 1}
+        wordGoal={activeWordGoal}
+        {wordsThisSession}
+        selectedWords={editedDocument ? selectedWords : 0}
+        onShowWordGoal={() => void controller.execute({ kind: 'showWordGoal' })}
         onResetZoom={() => void controller.execute({ kind: 'resetZoom' })}
         onReopenWithEncoding={(encoding: string | undefined) =>
           void controller.execute(
@@ -409,8 +494,15 @@
   {/if}
   {#if snapshot.openDialog === 'about'}
     <AboutDialog {appInfo} {translator} {loadThirdPartyLicenses} onClose={() => controller.closeDialog()} />
+  {:else if snapshot.openDialog === 'wordGoal'}
+    <WordGoalDialog
+      currentGoal={activeWordGoal}
+      {translator}
+      onCommand={(command: ViewerCommand) => void controller.execute(command)}
+      onClose={() => controller.closeDialog()}
+    />
   {:else if snapshot.openDialog === 'keyboardShortcuts'}
-    <KeyboardShortcutsDialog {translator} onClose={() => controller.closeDialog()} />
+    <KeyboardShortcutsDialog {translator} {shortcuts} onClose={() => controller.closeDialog()} />
   {:else if snapshot.openDialog === 'pasteTable'}
     <PasteTableDialog
       {translator}
@@ -422,6 +514,9 @@
     <SettingsDialog
       settings={snapshot.viewer.viewSettings}
       dataFolder={appInfo.dataFolder}
+      {shortcuts}
+      {platform}
+      snippetLibrary={snapshot.viewer.snippetLibrary}
       {translator}
       onCommand={(command: ViewerCommand) => void controller.execute(command)}
       onClose={() => controller.closeDialog()}
@@ -429,12 +524,29 @@
   {:else if snapshot.openDialog === 'commandPalette'}
     <CommandPalette
       {translator}
-      commands={paletteCommands(translator)}
+      commands={paletteCommands(translator, {
+        shortcuts,
+        workspaceKinds: snapshot.viewer.workspaceKinds,
+        snippets: availableSnippets(snapshot.viewer.snippetLibrary),
+      })}
       loadDocuments={() => controller.quickOpenDocuments()}
       onRunCommand={(command: ViewerCommand) => void controller.execute(command)}
       onOpenDocument={(documentPath: string) => void controller.openDocuments([documentPath])}
       onClose={() => controller.closeDialog()}
     />
+  {/if}
+  {#if isControlWheelOpen}
+    {#await loadControlWheel() then ControlWheel}
+      <ControlWheel
+        kinds={snapshot.viewer.workspaceKinds}
+        dock={snapshot.viewer.viewSettings.wheelDock}
+        pointer={lastPointer.position}
+        shouldShowKindSettings={snapshot.openDialog === 'workspaceKindSettings'}
+        {translator}
+        onCommand={(command: ViewerCommand) => void controller.execute(command)}
+        onClose={() => controller.closeDialog()}
+      />
+    {/await}
   {/if}
   {#if snapshot.openDialog === 'clearAllData'}
     <ConfirmDialog

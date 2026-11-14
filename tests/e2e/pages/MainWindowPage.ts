@@ -479,11 +479,17 @@ function keyboardEventFor(shortcut: string): KeyboardEventInit {
   const key = parts.at(-1) ?? '';
   const hasShift = parts.includes('Shift');
   return {
-    key: key.length === 1 && !hasShift ? key.toLowerCase() : key,
+    key: keyValueOf(key, hasShift),
     ctrlKey: parts.includes('Ctrl'),
     shiftKey: hasShift,
     altKey: parts.includes('Alt'),
   };
+}
+
+/** `KeyboardEvent.key` is a space character for the space bar and lower case for unshifted letters. */
+function keyValueOf(key: string, hasShift: boolean): string {
+  if (key === 'Space') return ' ';
+  return key.length === 1 && !hasShift ? key.toLowerCase() : key;
 }
 
 function treeItemContaining(name: string): string {

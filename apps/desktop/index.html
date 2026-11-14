@@ -4,8 +4,356 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MDX - Markdown Explorer</title>
+    <style>
+      /* Inline, so the start-up screen paints with the page itself and never waits on another request.
+         Copies of the tokens it needs, because it paints before the token stylesheet loads;
+         src/startup-screen/startupScreenStyles.test.ts keeps them equal to packages/ui/src/tokens/tokens.css. */
+      :root {
+        color-scheme: light dark;
+
+        --font-ui:
+          'Segoe UI Variable Text', 'Segoe UI', -apple-system, BlinkMacSystemFont, Cantarell, Ubuntu,
+          'Noto Sans', system-ui, sans-serif;
+        --text-size-small: 0.8125rem;
+        --text-size-body: 0.875rem;
+        --space-1: 4px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-6: 24px;
+        --radius-large: 12px;
+        --easing-standard: cubic-bezier(0.2, 0, 0, 1);
+
+        --color-background: #ffffff;
+        --color-surface: #f7f8fb;
+        --color-border: #e5e7ee;
+        --color-text: #1f2329;
+        --color-text-secondary: #5b616e;
+        --color-accent: #3b5bdb;
+        --color-accent-text: #ffffff;
+        --color-alert-caution: #cf222e;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-color-scheme]) {
+          --color-background: #1e2026;
+          --color-surface: #25282f;
+          --color-border: #353943;
+          --color-text: #e4e6ed;
+          --color-text-secondary: #a4aab6;
+          --color-accent: #8ea2f2;
+          --color-accent-text: #11131a;
+          --color-alert-caution: #f85149;
+        }
+      }
+
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: var(--color-background);
+      }
+
+      .startup-screen {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: grid;
+        place-items: center;
+        background: var(--color-background);
+        color: var(--color-text);
+        font-family: var(--font-ui);
+        transition: opacity 200ms var(--easing-standard);
+      }
+
+      .startup-screen[data-stage='ready'] {
+        pointer-events: none;
+      }
+
+      .startup-screen[data-leaving='true'] {
+        opacity: 0;
+      }
+
+      .startup-screen-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--space-4);
+        inline-size: min(26rem, 100% - 2 * var(--space-6));
+        text-align: center;
+        opacity: 0;
+        animation: startup-screen-appear 200ms var(--easing-standard) 400ms forwards;
+      }
+
+      /* A development build opens the app on #startup-screen after its own start-up page was already showing. */
+      .startup-screen:target .startup-screen-content {
+        animation: none;
+        opacity: 1;
+      }
+
+      .startup-screen-mark {
+        inline-size: 4.5rem;
+        block-size: 4.5rem;
+        margin-block-end: var(--space-1);
+        filter: drop-shadow(0 0.5rem 1.25rem color-mix(in srgb, var(--color-accent) 35%, transparent));
+        animation: startup-screen-breathe 2.8s ease-in-out infinite;
+      }
+
+      .startup-screen-mark-tile {
+        fill: var(--color-accent);
+      }
+
+      .startup-screen-mark-frame,
+      .startup-screen-mark-stroke {
+        fill: none;
+        stroke: var(--color-accent-text);
+        stroke-width: 56;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .startup-screen-mark-arrow {
+        transform-box: fill-box;
+        animation: startup-screen-nudge 1.4s var(--easing-standard) infinite;
+      }
+
+      .startup-screen-progress {
+        position: relative;
+        inline-size: min(16rem, 100%);
+        block-size: 0.25rem;
+        overflow: hidden;
+        border-radius: 999px;
+        background: var(--color-border);
+      }
+
+      .startup-screen-progress-fill {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        border-radius: inherit;
+        background: var(--color-accent);
+        /* transform-origin has no logical keywords, so the start edge is set per direction. */
+        transform-origin: left center;
+        transform: scaleX(0.15);
+        animation: startup-screen-begin 1.2s var(--easing-standard) both;
+      }
+
+      :root[dir='rtl'] .startup-screen-progress-fill {
+        transform-origin: right center;
+      }
+
+      .startup-screen-progress-fill::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          color-mix(in srgb, var(--color-background) 55%, transparent),
+          transparent
+        );
+        animation: startup-screen-shimmer 1.6s ease-in-out infinite;
+      }
+
+      .startup-screen[data-stage='loadingInterface'] .startup-screen-progress-fill {
+        animation: none;
+        transform: scaleX(0.72);
+        transition: transform 14s cubic-bezier(0.08, 0.6, 0.25, 1);
+      }
+
+      .startup-screen[data-stage='restoringDocuments'] .startup-screen-progress-fill {
+        animation: none;
+        transform: scaleX(0.92);
+        transition: transform 5s cubic-bezier(0.08, 0.6, 0.25, 1);
+      }
+
+      .startup-screen[data-stage='ready'] .startup-screen-progress-fill {
+        animation: none;
+        transform: scaleX(1);
+        transition: transform 160ms var(--easing-standard);
+      }
+
+      .startup-screen[data-stage='failed'] .startup-screen-progress-fill {
+        animation: none;
+        transform: scaleX(1);
+        background: var(--color-alert-caution);
+      }
+
+      .startup-screen[data-stage='failed'] .startup-screen-progress-fill::after,
+      .startup-screen[data-stage='failed'] .startup-screen-mark,
+      .startup-screen[data-stage='failed'] .startup-screen-mark-arrow {
+        animation: none;
+      }
+
+      .startup-screen-status {
+        min-block-size: 1.5em;
+        margin: 0;
+        font-size: var(--text-size-body);
+        color: var(--color-text-secondary);
+      }
+
+      .startup-screen[data-stage='failed'] .startup-screen-status {
+        color: var(--color-text);
+      }
+
+      .startup-screen-tip {
+        box-sizing: border-box;
+        inline-size: 100%;
+        margin-block-start: var(--space-4);
+        padding: var(--space-3) var(--space-4);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-large);
+        background: var(--color-surface);
+        text-align: start;
+      }
+
+      .startup-screen-tip-title {
+        margin: 0 0 var(--space-1);
+        font-size: var(--text-size-small);
+        font-weight: 600;
+        color: var(--color-accent);
+      }
+
+      .startup-screen-tip-text {
+        min-block-size: 3em;
+        margin: 0;
+        font-size: var(--text-size-body);
+        line-height: 1.5;
+      }
+
+      .startup-screen-tip-text[data-tip-parity='even'] {
+        animation: startup-screen-tip-even 200ms var(--easing-standard);
+      }
+
+      .startup-screen-tip-text[data-tip-parity='odd'] {
+        animation: startup-screen-tip-odd 200ms var(--easing-standard);
+      }
+
+      @keyframes startup-screen-appear {
+        from {
+          opacity: 0;
+          transform: translateY(0.5rem);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      @keyframes startup-screen-breathe {
+        50% {
+          transform: scale(1.04);
+        }
+      }
+
+      @keyframes startup-screen-nudge {
+        0%,
+        60%,
+        100% {
+          transform: none;
+        }
+        30% {
+          transform: translateY(48px);
+        }
+      }
+
+      @keyframes startup-screen-begin {
+        from {
+          transform: scaleX(0);
+        }
+      }
+
+      @keyframes startup-screen-shimmer {
+        from {
+          transform: translateX(-100%);
+        }
+        to {
+          transform: translateX(100%);
+        }
+      }
+
+      @keyframes startup-screen-tip-even {
+        from {
+          opacity: 0;
+          transform: translateY(0.25rem);
+        }
+      }
+
+      @keyframes startup-screen-tip-odd {
+        from {
+          opacity: 0;
+          transform: translateY(0.25rem);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .startup-screen-content {
+          animation-duration: 1ms;
+        }
+
+        .startup-screen-mark,
+        .startup-screen-mark-arrow,
+        .startup-screen-progress-fill::after,
+        .startup-screen-tip-text[data-tip-parity] {
+          animation: none;
+        }
+
+        .startup-screen,
+        .startup-screen[data-stage] .startup-screen-progress-fill {
+          animation: none;
+          transition: none;
+        }
+      }
+
+      @media (forced-colors: active) {
+        .startup-screen-progress {
+          border: 1px solid CanvasText;
+        }
+
+        .startup-screen-progress-fill {
+          background: Highlight;
+        }
+
+        .startup-screen-progress-fill::after {
+          display: none;
+        }
+
+        .startup-screen-tip {
+          border-color: CanvasText;
+        }
+      }
+    </style>
   </head>
   <body>
+    <div id="startup-screen" class="startup-screen" data-stage="starting">
+      <div class="startup-screen-content">
+        <svg class="startup-screen-mark" viewBox="0 0 1024 1024" aria-hidden="true" focusable="false">
+          <rect class="startup-screen-mark-tile" width="1024" height="1024" rx="224" />
+          <rect class="startup-screen-mark-frame" x="152" y="272" width="720" height="480" rx="72" />
+          <path class="startup-screen-mark-stroke" d="M272 632V392l96 120 96-120v240" />
+          <path
+            class="startup-screen-mark-stroke startup-screen-mark-arrow"
+            d="M672 392v232M592 552l80 80 80-80"
+          />
+        </svg>
+        <div class="startup-screen-progress" role="progressbar" data-startup-part="progress">
+          <div class="startup-screen-progress-fill"></div>
+        </div>
+        <p class="startup-screen-status" role="status" data-startup-part="status"></p>
+        <section
+          class="startup-screen-tip"
+          aria-labelledby="startup-screen-tip-title"
+          data-startup-part="tip"
+          hidden
+        >
+          <h2
+            id="startup-screen-tip-title"
+            class="startup-screen-tip-title"
+            data-startup-part="tip-title"
+          ></h2>
+          <p class="startup-screen-tip-text" data-startup-part="tip-text"></p>
+        </section>
+      </div>
+    </div>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -1,6 +1,7 @@
 import { READING_WIDTHS, THEME_PREFERENCES, TYPOGRAPHIES } from '@mdx/core';
 import { DETECT_ENCODING_ITEM, isReopenEncoding } from '../encodings/reopenEncodings';
 import type { ExportFormat, TextSearchOptions } from '@mdx/platform';
+import type { WorkspaceKindCommand } from '../control-wheel/workspaceKindCommands';
 import type { EditingCommand } from '../editing/editingCommands';
 import type { ExplorerActionCommand, RemoveExplorerFolderCommand } from '../explorer/explorerCommands';
 import type { FavouriteCommand, FavouritesFileCommand } from '../favourites/favouriteCommands';
@@ -8,6 +9,8 @@ import type { PathCommand } from '../file-paths/pathCommands';
 import type { FolderTreeCommand } from '../folder-tree/folderTreeCommands';
 import type { NavigationCommand } from '../navigation/DocumentNavigation';
 import type { LocateRecentFileCommand, RecentFileCommand } from '../recent-files/recentFileCommands';
+import type { ShortcutOverrideCommand } from '../shortcuts/shortcutOverrideCommands';
+import type { SnippetCommand } from '../snippets/snippetCommands';
 import type { TabCommand } from '../tabs/tabCommands';
 import type { ViewCommand } from '../view/viewCommands';
 
@@ -24,7 +27,15 @@ export type ViewerCommand =
   | LocateRecentFileCommand
   | PathCommand
   | NavigationCommand
+  | WorkspaceKindCommand
+  | ShortcutOverrideCommand
+  | SnippetCommand
   | { readonly kind: 'toggleFullScreen' }
+  | { readonly kind: 'toggleControlWheel' }
+  | { readonly kind: 'showWorkspaceKindSettings' }
+  | { readonly kind: 'showWordGoal' }
+  | { readonly kind: 'setWordGoal'; readonly goal: number }
+  | { readonly kind: 'clearWordGoal' }
   | { readonly kind: 'openDocuments' }
   | { readonly kind: 'openRecentFileAt'; readonly index: number }
   | { readonly kind: 'saveDocument' }
@@ -98,6 +109,7 @@ const COMMANDS_BY_MENU_ITEM: Readonly<Record<string, ViewerCommand>> = {
   goBack: { kind: 'goBack' },
   goForward: { kind: 'goForward' },
   toggleFullScreen: { kind: 'toggleFullScreen' },
+  toggleControlWheel: { kind: 'toggleControlWheel' },
   revertDocument: { kind: 'revertDocument' },
   reloadActiveDocument: { kind: 'reloadActiveDocument' },
   undo: { kind: 'runEditorCommand', command: 'undo' },

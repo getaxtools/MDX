@@ -7,7 +7,13 @@ export {
 } from './createMarkdownRenderer';
 export { splitFrontMatter, type SplitDocument } from './front-matter/splitFrontMatter';
 export { HEADING_ID_PREFIX, slugify, type OutlineEntry } from './plugins/headingAnchorsPlugin';
-export { ALERT_KINDS, type AlertKind, type AlertTitles } from './plugins/alertsPlugin';
+export {
+  ALERT_KINDS,
+  CALLOUT_TYPES,
+  type AlertKind,
+  type AlertTitles,
+  type CalloutType,
+} from './plugins/alertsPlugin';
 export {
   createHtmlSanitizer,
   UnsafeSanitizerEnvironmentError,
@@ -30,3 +36,4 @@ export {
   type RichBlockRenderer,
   type RichBlockRenderOptions,
 } from './rich-blocks/createRichBlockRenderer';
+export type { NotesRendering } from './plugins/wikiLinksPlugin';

@@ -1,11 +1,15 @@
 mod app_setup;
+mod attachments;
 mod commands;
 mod document_images;
 mod documents;
 mod live_reload;
+mod main_window;
 mod menu;
 mod open_requests;
 mod platform;
+#[cfg(dev)]
+mod startup_page;
 mod storage;
 
 use std::sync::Arc;
@@ -16,6 +20,7 @@ use tauri::{Builder, Manager, Wry};
 pub fn run() {
     let builder = with_plugins(Builder::default())
         .setup(|app| {
+            main_window::create_main_window(app)?;
             app_setup::initialize(app)?;
             menu::install_main_menu(app)?;
             Ok(())
@@ -23,7 +28,8 @@ pub fn run() {
         .on_menu_event(|app, event| menu::handle_menu_event(app, &event))
         .on_window_event(open_requests::handle_window_event);
 
-    let result = with_commands(with_image_protocol(builder)).run(tauri::generate_context!());
+    let result = with_commands(with_startup_page_protocol(with_image_protocol(builder)))
+        .run(tauri::generate_context!());
 
     if let Err(error) = result {
         eprintln!("MDX could not start: {error}");
@@ -55,8 +61,22 @@ fn with_image_protocol(builder: Builder<Wry>) -> Builder<Wry> {
     )
 }
 
+#[cfg(dev)]
+fn with_startup_page_protocol(builder: Builder<Wry>) -> Builder<Wry> {
+    builder
+        .register_uri_scheme_protocol(startup_page::STARTUP_PAGE_PROTOCOL, |_context, request| {
+            startup_page::serve_startup_page(&request)
+        })
+}
+
+#[cfg(not(dev))]
+fn with_startup_page_protocol(builder: Builder<Wry>) -> Builder<Wry> {
+    builder
+}
+
 fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
     builder.invoke_handler(tauri::generate_handler![
+        commands::attachments::save_attachment,
         commands::documents::open_document,
         commands::documents::pick_documents,
         commands::documents::check_path_statuses,
@@ -81,6 +101,7 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::window::toggle_full_screen,
         menu::update_view_menu,
         menu::update_menu_language,
+        menu::update_menu_shortcuts,
         menu::recent_files_menu::update_recent_menu,
     ])
 }

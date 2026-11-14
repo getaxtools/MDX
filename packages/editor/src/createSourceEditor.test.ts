@@ -87,6 +87,31 @@ describe('createSourceEditor', () => {
     expect(back.defaultPrevented).toBe(false);
   });
 
+  it('moves the paragraph at the caret down with Alt+Shift+Down', () => {
+    const { parent, editor: opened } = openEditor('First\n\nSecond');
+    const textBox = parent.querySelector('[contenteditable="true"]') ?? parent;
+
+    const moveDown = new KeyboardEvent('keydown', {
+      key: 'ArrowDown',
+      altKey: true,
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    textBox.dispatchEvent(moveDown);
+
+    expect(opened.text()).toBe('Second\n\nFirst');
+    expect(moveDown.defaultPrevented).toBe(true);
+  });
+
+  it('copies a line from the palette command', () => {
+    const { editor: opened } = openEditor('Line');
+
+    opened.run('copyLineDown');
+
+    expect(opened.text()).toBe('Line\nLine');
+  });
+
   it('starts at the first line', () => {
     const { editor: opened } = openEditor('one\ntwo\nthree');
 

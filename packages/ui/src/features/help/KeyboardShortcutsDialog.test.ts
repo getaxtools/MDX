@@ -2,6 +2,7 @@ import { createTranslator } from '@mdx/i18n';
 import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { effectiveCommandShortcuts } from '../shortcuts/effectiveCommandShortcuts';
 import KeyboardShortcutsDialog from './KeyboardShortcutsDialog.svelte';
 
 describe('KeyboardShortcutsDialog', () => {
@@ -45,5 +46,37 @@ describe('KeyboardShortcutsDialog', () => {
     await userEvent.keyboard('{Escape}');
 
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('shows the mouse-button help with the current shortcut and the Back and Forward warning', () => {
+    render(KeyboardShortcutsDialog, {
+      translator: createTranslator(),
+      shortcuts: effectiveCommandShortcuts({ toggleControlWheel: ['ctrl', 'shift', 'J'] }),
+      onClose: vi.fn(),
+    });
+
+    const help = screen.getByText(/To open the control wheel with a mouse button/);
+
+    expect(help.textContent).toContain('Ctrl+Shift+J');
+    expect(help.textContent).toContain('other than Back or Forward');
+  });
+
+  it('shows a removed shortcut as none', async () => {
+    render(KeyboardShortcutsDialog, {
+      translator: createTranslator(),
+      shortcuts: effectiveCommandShortcuts({ toggleControlWheel: [] }),
+      onClose: vi.fn(),
+    });
+
+    await userEvent.type(
+      screen.getByRole('searchbox', { name: 'Search keyboard shortcuts' }),
+      'control wheel',
+    );
+
+    expect(screen.getAllByRole('row').map((row) => row.textContent)).toEqual([
+      'ActionKeys',
+      'Show Control WheelNone',
+    ]);
+    expect(screen.getByText(/Give the control wheel a shortcut/)).toBeTruthy();
   });
 });

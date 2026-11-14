@@ -27,6 +27,7 @@ describe('commandForMenuItem', () => {
     ['closeInactiveTabs', { kind: 'closeInactiveTabs' }],
     ['showAbout', { kind: 'showAbout' }],
     ['showSettings', { kind: 'showSettings' }],
+    ['toggleControlWheel', { kind: 'toggleControlWheel' }],
   ])('maps the %s menu item to %o', (menuItemId, command) => {
     expect(commandForMenuItem(menuItemId)).toEqual(command);
   });

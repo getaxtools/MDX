@@ -92,4 +92,82 @@ describe('StatusBar', () => {
 
     expect(screen.getByRole('button', { name: 'Encoding: UTF-8' }).hasAttribute('disabled')).toBe(true);
   });
+
+  describe('control wheel button', () => {
+    function renderWithWheelButton(onShowControlWheel = vi.fn()) {
+      render(StatusBar, {
+        document: savedDocument,
+        zoomPercent: 100,
+        isSourceView: false,
+        translator: createTranslator(),
+        controlWheelButton: {
+          activeKindId: 'markdownViewer',
+          shortcut: 'Ctrl+Shift+Space',
+          onShowControlWheel,
+        },
+        onResetZoom: vi.fn(),
+      });
+      return screen.getByRole('button', { name: 'Markdown viewer, show control wheel' });
+    }
+
+    it('is not shown unless asked for', () => {
+      renderStatusBar(savedDocument);
+
+      expect(screen.queryByRole('button', { name: /show control wheel/ })).toBeNull();
+    });
+
+    it('shows the active kind with its icon and the wheel shortcut in its tooltip', () => {
+      const button = renderWithWheelButton();
+
+      expect(button.textContent.trim()).toBe('Markdown viewer');
+      expect(button.querySelector('svg')).toBeTruthy();
+      expect(button.title).toBe('Show Control Wheel (Ctrl+Shift+Space)');
+    });
+
+    it('opens the wheel', async () => {
+      const onShowControlWheel = vi.fn();
+      const button = renderWithWheelButton(onShowControlWheel);
+
+      await userEvent.click(button);
+
+      expect(onShowControlWheel).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('shows and announces the number of cursors when there is more than one', () => {
+    render(StatusBar, {
+      document: savedDocument,
+      zoomPercent: 100,
+      isSourceView: false,
+      cursorCount: 3,
+      translator: createTranslator(),
+      onResetZoom: vi.fn(),
+    });
+
+    expect(screen.getByRole('status').textContent.trim()).toBe('3 cursors');
+  });
+
+  it('says nothing about cursors with one', () => {
+    renderStatusBar(savedDocument);
+
+    expect(screen.getByRole('status').textContent.trim()).toBe('');
+  });
+
+  it('shows progress towards a word goal and announces when it is reached', () => {
+    render(StatusBar, {
+      document: { ...savedDocument, statistics: { words: 1200, characters: 6000, readingMinutes: 5 } },
+      zoomPercent: 100,
+      isSourceView: false,
+      wordGoal: 1000,
+      wordsThisSession: 35,
+      translator: createTranslator(),
+      onResetZoom: vi.fn(),
+    });
+
+    const words = screen.getByRole('button', { name: /1,200 of 1,000 words/ });
+
+    expect(screen.getByRole('progressbar', { name: 'Word goal' }).getAttribute('aria-valuenow')).toBe('100');
+    expect(words.title).toBe('35 words added this session');
+    expect(screen.getByRole('status').textContent.trim()).toBe('Word goal reached.');
+  });
 });

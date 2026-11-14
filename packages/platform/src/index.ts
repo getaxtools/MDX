@@ -43,3 +43,5 @@ export { InMemoryFavouritesFile } from './fakes/InMemoryFavouritesFile';
 export { InMemoryFolders, type InMemoryFolderContents } from './fakes/InMemoryFolders';
 export type { DesktopShellPort } from './DesktopShellPort';
 export { InMemoryDesktopShell } from './fakes/InMemoryDesktopShell';
+export type { AttachmentPort, AttachmentTarget, ImagesDrop, ImagesDropListener } from './AttachmentPort';
+export { InMemoryAttachments, type SavedAttachmentRecord } from './fakes/InMemoryAttachments';

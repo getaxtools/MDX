@@ -15,7 +15,9 @@ export type EditorAction =
   | 'taskList'
   | 'quote'
   | 'codeBlock'
-  | 'horizontalRule';
+  | 'horizontalRule'
+  | 'moveBlockUp'
+  | 'moveBlockDown';
 
 export interface EditorShortcut {
   readonly action: EditorAction;
@@ -53,4 +55,6 @@ export const EDITOR_SHORTCUTS: readonly EditorShortcut[] = [
   { action: 'quote', key: 'Mod-Shift-.', combination: ['ctrl', 'shift', '.'] },
   { action: 'codeBlock', key: 'Mod-Shift-c', combination: ['ctrl', 'shift', 'C'] },
   { action: 'horizontalRule', key: 'Mod-Shift--', combination: ['ctrl', 'shift', '-'] },
+  { action: 'moveBlockUp', key: 'Alt-Shift-ArrowUp', combination: ['alt', 'shift', 'ArrowUp'] },
+  { action: 'moveBlockDown', key: 'Alt-Shift-ArrowDown', combination: ['alt', 'shift', 'ArrowDown'] },
 ];

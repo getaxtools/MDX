@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { ViewSettings } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
-  import { tooltipWithShortcut } from '../shortcuts/commandShortcuts';
+  import { shortcutLabelFor, tooltipWithShortcut } from '../shortcuts/commandShortcuts';
   import type { ViewerCommand } from '../viewer/viewerCommands';
   import ViewOptions from './ViewOptions.svelte';
 
@@ -32,7 +32,7 @@
 <div class="toolbar" role="toolbar" aria-label={translator.translate('toolbar.label')}>
   <button
     aria-label={openLabel}
-    title={tooltipWithShortcut(openLabel, openCommand, translator)}
+    title={tooltipWithShortcut(openLabel, shortcutLabelFor(openCommand, translator))}
     onclick={() => onCommand(openCommand)}
   >
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -44,7 +44,7 @@
     class="favourite"
     aria-label={favouriteLabel}
     aria-pressed={isFavourite}
-    title={tooltipWithShortcut(favouriteLabel, favouriteCommand, translator)}
+    title={tooltipWithShortcut(favouriteLabel, shortcutLabelFor(favouriteCommand, translator))}
     disabled={!canBeFavourite}
     onclick={() => onCommand(favouriteCommand)}
   >
@@ -57,7 +57,7 @@
     class="labelled"
     aria-label={editingLabel}
     aria-pressed={isEditing}
-    title={tooltipWithShortcut(editingLabel, editingCommand, translator)}
+    title={tooltipWithShortcut(editingLabel, shortcutLabelFor(editingCommand, translator))}
     disabled={!hasDocument}
     onclick={() => onCommand(editingCommand)}
   >
@@ -75,7 +75,7 @@
   <button
     aria-label={previewBesideLabel}
     aria-pressed={viewSettings.isPreviewBesideEditor}
-    title={tooltipWithShortcut(previewBesideLabel, previewBesideCommand, translator)}
+    title={tooltipWithShortcut(previewBesideLabel, shortcutLabelFor(previewBesideCommand, translator))}
     disabled={!hasDocument}
     onclick={() => onCommand(previewBesideCommand)}
   >

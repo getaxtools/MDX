@@ -8,7 +8,7 @@ import { toggleInlineMarker } from './toggleInlineMarker';
 function run(command: StateCommand, markedText: string): string {
   const from = markedText.indexOf('[');
   const to = markedText.indexOf(']') - 1;
-  const doc = markedText.replace('[', '').replace(']', '');
+  const doc = markedText.slice(0, from) + markedText.slice(from + 1, to + 1) + markedText.slice(to + 2);
   let state = EditorState.create({ doc, selection: EditorSelection.range(from, to) });
   command({ state, dispatch: (transaction: Transaction) => (state = transaction.state) });
   const { from: newFrom, to: newTo } = state.selection.main;

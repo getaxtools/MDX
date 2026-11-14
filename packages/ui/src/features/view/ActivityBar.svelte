@@ -1,27 +1,41 @@
 <script lang="ts">
-  import type { SidebarView } from '@mdx/core';
+  import type { KindSwitcher, SidebarView, WorkspaceKindsState } from '@mdx/core';
   import type { MessageKey, Translator } from '@mdx/i18n';
-  import { tooltipWithShortcut } from '../shortcuts/commandShortcuts';
+  import KindBar from '../control-wheel/KindBar.svelte';
+  import { shortcutLabelFor, tooltipWithShortcut } from '../shortcuts/commandShortcuts';
   import type { ViewerCommand } from '../viewer/viewerCommands';
 
   interface Props {
     isSidebarVisible: boolean;
     sidebarView?: SidebarView;
+    /** The workspace kinds for the kind group at the top; without them the group is left out. */
+    kinds?: WorkspaceKindsState | undefined;
+    kindSwitcher?: KindSwitcher;
     translator: Translator;
     onCommand: (command: ViewerCommand) => void;
   }
 
-  const { isSidebarVisible, sidebarView = 'explorer', translator, onCommand }: Props = $props();
+  const {
+    isSidebarVisible,
+    sidebarView = 'explorer',
+    kinds,
+    kindSwitcher = 'both',
+    translator,
+    onCommand,
+  }: Props = $props();
 
   const explorerCommand: ViewerCommand = { kind: 'toggleSidebarView', sidebarView: 'explorer' };
   const searchCommand: ViewerCommand = { kind: 'showFolderSearch' };
 
   function labelOf(labelKey: MessageKey, command: ViewerCommand): string {
-    return tooltipWithShortcut(translator.translate(labelKey), command, translator);
+    return tooltipWithShortcut(translator.translate(labelKey), shortcutLabelFor(command, translator));
   }
 </script>
 
-<nav class="activity-bar" aria-label={translator.translate('activityBar.label')}>
+<nav class="activity-bar" data-focus-region aria-label={translator.translate('activityBar.label')}>
+  {#if kinds}
+    <KindBar {kinds} {kindSwitcher} {translator} {onCommand} />
+  {/if}
   <button
     aria-label={translator.translate('activityBar.sidebar')}
     title={labelOf('activityBar.sidebar', explorerCommand)}

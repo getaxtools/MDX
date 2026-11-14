@@ -330,6 +330,33 @@
   font-weight: 600;
 }
 
+.rendered-document summary.markdown-alert-title {
+  cursor: pointer;
+}
+
+/* A note that does not exist yet: dashed, so it is told apart without colour. */
+.rendered-document .wiki-link-unresolved {
+  color: var(--color-text-secondary);
+  text-decoration: underline dashed;
+  text-underline-offset: 0.2em;
+}
+
+.rendered-document .tag {
+  padding: 0 0.35em;
+  border-radius: var(--radius-xsmall);
+  background: var(--color-surface-selected);
+  color: var(--color-accent);
+}
+
+.rendered-document .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .rendered-document .footnotes {
   font-size: 0.875em;
   color: var(--color-text-secondary);

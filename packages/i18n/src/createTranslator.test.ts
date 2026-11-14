@@ -15,6 +15,7 @@ const SAMPLE_VALUES = {
   encoding: 'UTF-8',
   lineEnding: 'LF',
   version: '1.0.0',
+  shortcut: 'Ctrl+Shift+P',
   group: 'Theme',
   action: 'Dark',
   section: 'Favourites',
@@ -25,6 +26,11 @@ const SAMPLE_VALUES = {
   query: 'theme',
   matches: 3,
   documents: 2,
+  kind: 'Notes',
+  turnedOffKind: 'Spec viewer',
+  keys: 'Ctrl+S',
+  words: 120,
+  goal: 500,
 };
 
 describe('createTranslator', () => {

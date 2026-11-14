@@ -5,6 +5,11 @@ import {
 } from '../explorer/explorerCommands';
 import { applyFavouriteCommand, isFavouriteCommand } from '../favourites/favouriteCommands';
 import { applyRecentFileCommand, isRecentFileCommand } from '../recent-files/recentFileCommands';
+import { applySnippetLibraryCommand, isSnippetLibraryCommand } from '../snippets/snippetCommands';
+import {
+  applyShortcutOverrideCommand,
+  isShortcutOverrideCommand,
+} from '../shortcuts/shortcutOverrideCommands';
 import { applyTabCommand, isTabCommand } from '../tabs/tabCommands';
 import { applyViewCommand, isViewCommand } from '../view/viewCommands';
 import type { ViewerCommand } from './viewerCommands';
@@ -31,6 +36,14 @@ export function applySessionCommand(session: ViewerSession, command: ViewerComma
   }
   if (isRecentFileCommand(command)) {
     session.updateRecentFiles((recentFiles) => applyRecentFileCommand(recentFiles, command));
+    return true;
+  }
+  if (isShortcutOverrideCommand(command)) {
+    session.updateShortcutOverrides((overrides) => applyShortcutOverrideCommand(overrides, command));
+    return true;
+  }
+  if (isSnippetLibraryCommand(command)) {
+    session.updateSnippetLibrary((library) => applySnippetLibraryCommand(library, command));
     return true;
   }
   return false;

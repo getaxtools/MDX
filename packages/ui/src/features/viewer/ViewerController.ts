@@ -1,5 +1,9 @@
 import {
   measureDocument,
+  availableSnippets,
+  clearWordGoal,
+  setWordGoal,
+  type WordGoals,
   isSidebarViewShown,
   showSidebarView,
   type DocumentStatistics,
@@ -28,6 +32,7 @@ import {
   type DocumentWatcherPort,
   type DocumentLocation,
   type DocumentRequestsPort,
+  type AttachmentPort,
   type FolderSearchResults,
   type TextSearchOptions,
   type LineEnding,
@@ -35,7 +40,9 @@ import {
   type PathStatus,
 } from '@mdx/platform';
 import type { MarkdownRenderer, OutlineEntry } from '@mdx/renderer';
+import { applyWorkspaceKindCommand, type WorkspaceKindCommand } from '../control-wheel/workspaceKindCommands';
 import type { DocumentLink } from '../document-view/DocumentLink';
+import { DocumentAttachments } from '../editing/DocumentAttachments';
 import { DocumentEditing } from '../editing/DocumentEditing';
 import type { FindQuery } from '../find/findTextRanges';
 import { EditingActions } from '../editing/EditingActions';
@@ -48,6 +55,9 @@ import {
   type UnsavedChangesChoice,
   type UnsavedChangesRequest,
 } from '../saving/DocumentSaving';
+import { shortcutLabelFor } from '../shortcuts/commandShortcuts';
+import { effectiveCommandShortcuts } from '../shortcuts/effectiveCommandShortcuts';
+import { REBINDABLE_COMMANDS } from '../shortcuts/rebindableCommands';
 import { isTabCommand } from '../tabs/tabCommands';
 import { applySessionCommand } from './applySessionCommand';
 import { LiveReload } from './LiveReload';
@@ -85,6 +95,7 @@ export interface ViewerControllerDependencies {
   readonly favouritesFile?: FavouritesFilePort;
   readonly desktopShell?: DesktopShellPort;
   readonly documentExport?: DocumentExportPort;
+  readonly attachments?: AttachmentPort;
 }
 
 export interface RenderedActiveDocument {
@@ -142,7 +153,15 @@ export interface ExportRequest {
 }
 
 export type ViewerDialog =
-  'about' | 'keyboardShortcuts' | 'pasteTable' | 'commandPalette' | 'settings' | 'clearAllData';
+  | 'about'
+  | 'keyboardShortcuts'
+  | 'pasteTable'
+  | 'commandPalette'
+  | 'settings'
+  | 'clearAllData'
+  | 'controlWheel'
+  | 'workspaceKindSettings'
+  | 'wordGoal';
 
 const DIALOGS_BY_COMMAND: Partial<Record<ViewerCommand['kind'], ViewerDialog>> = {
   showAbout: 'about',
@@ -150,6 +169,7 @@ const DIALOGS_BY_COMMAND: Partial<Record<ViewerCommand['kind'], ViewerDialog>> =
   showPasteTable: 'pasteTable',
   showCommandPalette: 'commandPalette',
   showSettings: 'settings',
+  showWordGoal: 'wordGoal',
 };
 
 type SnapshotListener = (snapshot: ViewerSnapshot) => void;
@@ -181,6 +201,7 @@ export class ViewerController {
   private externalLinkRequest: string | undefined;
   private isSourceView = false;
   private shownMenuViewState = '';
+  private shownMenuShortcuts = '';
   private shownRecentFiles: ViewerState['recentFiles'] | undefined;
   private pathStatuses: ReadonlyMap<string, PathStatus> = new Map();
   private checkedLocationKeys = '';
@@ -191,6 +212,7 @@ export class ViewerController {
   private readonly editing = new DocumentEditing();
   private readonly editingActions: EditingActions;
   private readonly navigation: DocumentNavigation;
+  private readonly documentAttachments: DocumentAttachments | undefined;
 
   constructor(private readonly dependencies: ViewerControllerDependencies) {
     this.snapshot = {
@@ -229,6 +251,26 @@ export class ViewerController {
     this.folderRefresh = new FolderRefresh(dependencies.folderWatcher, () =>
       this.publish(this.composeSnapshot(this.snapshot.notice)),
     );
+    this.documentAttachments = this.createDocumentAttachments();
+  }
+
+  private createDocumentAttachments(): DocumentAttachments | undefined {
+    const { attachments, session, translator } = this.dependencies;
+    if (!attachments) return undefined;
+    return new DocumentAttachments(session, attachments, {
+      isEditing: () => this.editingActions.isActiveDocumentEditing(),
+      insertLinks: (links, point) => this.editingActions.insertPictureLinks(links, point),
+      notify: (key, values) => this.showNotice(key, values),
+      askToSaveFirst: () =>
+        this.showNotice('attachments.saveFirst', undefined, [
+          { label: translator.translate('menu.file.saveAs'), command: { kind: 'saveDocumentAs' } },
+        ]),
+    });
+  }
+
+  /** Saves a picture pasted into the editor; undefined when it cannot be added. */
+  pastePicture(bytes: Uint8Array): Promise<string | undefined> {
+    return this.documentAttachments?.pastePicture(bytes) ?? Promise.resolve(undefined);
   }
 
   async start(): Promise<void> {
@@ -243,6 +285,7 @@ export class ViewerController {
     this.refreshPathStatuses();
     if (this.liveReload) this.stopActions.push(this.liveReload.start());
     this.stopActions.push(this.folderRefresh.start());
+    if (this.documentAttachments) this.stopActions.push(this.documentAttachments.start());
     await this.openDocuments(await requests.takeStartupDocuments());
     await this.refreshActiveDocument();
   }
@@ -454,10 +497,29 @@ export class ViewerController {
     copyPath: ({ path }) => this.copyPath(path),
     revealInFileManager: ({ path }) => this.revealInFileManager(path),
     toggleFullScreen: () => this.dependencies.desktopShell?.toggleFullScreen(),
+    toggleControlWheel: () => this.toggleControlWheel(),
+    setWordGoal: ({ goal }) => this.changeWordGoal((goals, key) => setWordGoal(goals, key, goal)),
+    clearWordGoal: () => this.changeWordGoal(clearWordGoal),
+    insertSnippet: ({ snippetId }) => {
+      const snippet = availableSnippets(this.dependencies.session.currentState().snippetLibrary).find(
+        (candidate) => candidate.id === snippetId,
+      );
+      if (snippet) this.editingActions.insertSnippet(snippet.body);
+    },
+    showWorkspaceKindSettings: () => {
+      this.openDialog = 'workspaceKindSettings';
+      this.publish(this.composeSnapshot(this.snapshot.notice));
+    },
+    switchWorkspaceKind: (command) => this.runWorkspaceKindCommand(command),
+    setWorkspaceKindEnabled: (command) => this.runWorkspaceKindCommand(command),
     runEditorCommand: ({ command }) => {
       this.editingActions.runEditorCommand(command);
     },
     revertDocument: () => this.editingActions.revertActiveDocument(),
+    changeOutlineSection: ({ line, action }) => {
+      const refusal = this.editingActions.changeOutlineSection(line, action);
+      if (refusal) this.showNotice(`outline.section.refused.${refusal}`);
+    },
     reloadActiveDocument: () => this.reloadActiveDocument(),
     reloadFromDisk: ({ canonicalKey }) => this.editingActions.reloadFromDisk(canonicalKey),
     overwriteChangesOnDisk: ({ canonicalKey }) => this.saving.overwriteChangesOnDisk(canonicalKey),
@@ -511,6 +573,7 @@ export class ViewerController {
     );
     this.showViewStateInMenu();
     this.showRecentFilesInMenu();
+    this.showShortcutsInMenu();
   }
 
   private showViewStateInMenu(): void {
@@ -532,6 +595,23 @@ export class ViewerController {
     if (stateKey === this.shownMenuViewState) return;
     this.shownMenuViewState = stateKey;
     void menu.showViewState(state);
+  }
+
+  /** The menu shows the keys of commands the user can change; an empty text shows none. */
+  private showShortcutsInMenu(): void {
+    const { menu, session, translator } = this.dependencies;
+    if (!menu) return;
+    const shortcuts = effectiveCommandShortcuts(session.currentState().shortcutOverrides);
+    const shortcutTexts = Object.fromEntries(
+      REBINDABLE_COMMANDS.map(({ id, command }) => [
+        id,
+        shortcutLabelFor(command, translator, shortcuts) ?? '',
+      ]),
+    );
+    const shortcutsKey = JSON.stringify(shortcutTexts);
+    if (shortcutsKey === this.shownMenuShortcuts) return;
+    this.shownMenuShortcuts = shortcutsKey;
+    void menu.showShortcuts(shortcutTexts);
   }
 
   private showRecentFilesInMenu(): void {
@@ -594,13 +674,17 @@ export class ViewerController {
     else this.scheduleOutlineRefresh(canonicalKey, text);
   }
 
-  /** Without the preview beside it the edited text is not rendered, so only its headings are read again. */
+  /** Without the preview beside it the edited text is not rendered; its headings and counts are read again. */
   private scheduleOutlineRefresh(canonicalKey: string, text: string): void {
     clearTimeout(this.pendingOutlineRefresh);
     this.pendingOutlineRefresh = setTimeout(() => {
       const shown = this.activeDocument;
       if (shown?.canonicalKey !== canonicalKey) return;
-      this.activeDocument = { ...shown, outline: this.dependencies.renderer.outlineOf(text) };
+      this.activeDocument = {
+        ...shown,
+        outline: this.dependencies.renderer.outlineOf(text),
+        statistics: measureDocument(text, this.dependencies.translator.locale),
+      };
       this.publish(this.composeSnapshot(this.snapshot.notice));
     }, OUTLINE_REFRESH_DELAY_MS);
   }
@@ -652,6 +736,30 @@ export class ViewerController {
     } catch {
       this.showNotice('errors.paths.copyFailed');
     }
+  }
+
+  /** Goals belong to the active document; the dialog closes once the goal is set or cleared. */
+  private changeWordGoal(change: (goals: WordGoals, canonicalKey: string) => WordGoals): void {
+    const { session } = this.dependencies;
+    const key = session.currentState().tabStrip.activeTab()?.location.canonicalKey;
+    if (key === undefined) return;
+    session.updateWordGoals((goals) => change(goals, key));
+    if (this.openDialog === 'wordGoal') this.openDialog = undefined;
+    this.publish(this.composeSnapshot(this.snapshot.notice));
+  }
+
+  private toggleControlWheel(): void {
+    const isWheelOpen = this.openDialog === 'controlWheel' || this.openDialog === 'workspaceKindSettings';
+    this.openDialog = isWheelOpen ? undefined : 'controlWheel';
+    this.publish(this.composeSnapshot(this.snapshot.notice));
+  }
+
+  private runWorkspaceKindCommand(command: WorkspaceKindCommand): void {
+    const { session, translator } = this.dependencies;
+    const current = session.currentState().workspaceKinds;
+    const { state, notice } = applyWorkspaceKindCommand(current, command, translator);
+    if (state !== current) session.updateWorkspaceKinds(() => state);
+    if (notice) this.showNotice(notice.key, notice.values);
   }
 
   /** The translator is made once at startup, so a new language shows after the next start. */
@@ -797,6 +905,7 @@ export class ViewerController {
     this.publish(this.composeSnapshot(this.snapshot.notice));
     this.showViewStateInMenu();
     this.showRecentFilesInMenu();
+    this.showShortcutsInMenu();
     this.refreshPathStatuses();
     this.liveReload?.watchOpenTabs();
     this.editing.keepOnly(

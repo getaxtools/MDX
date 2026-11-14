@@ -61,15 +61,17 @@ describe('view options', () => {
     await app.browser.waitUntil(async () => (await findBar.$('[role="status"]').getText()) === 'No matches');
   });
 
-  it('moves focus from the Explorer to the tabs and the document with F6', async () => {
+  it('moves focus from the activity bar to the Explorer, the tabs and the document with F6', async () => {
     const focusedRegion = () =>
       app.browser.execute(() => {
         const region = document.activeElement?.closest('[data-focus-region]');
-        return region?.getAttribute('role') ?? region?.tagName.toLowerCase() ?? '';
+        return region?.getAttribute('role') ?? region?.getAttribute('aria-label') ?? '';
       });
 
     await mainWindow.pressShortcut('F6');
-    expect(await focusedRegion()).toBe('nav');
+    expect(await focusedRegion()).toBe('Panels');
+    await mainWindow.pressShortcut('F6');
+    expect(await focusedRegion()).toBe('Explorer');
     await mainWindow.pressShortcut('F6');
     expect(await focusedRegion()).toBe('tablist');
     await mainWindow.pressShortcut('F6');

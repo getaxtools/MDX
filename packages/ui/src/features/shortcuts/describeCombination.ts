@@ -14,6 +14,9 @@ const MODIFIER_LABELS: Readonly<Record<Modifier, MessageKey>> = {
 const TRANSLATED_KEY_LABELS: Readonly<Record<string, MessageKey>> = {
   ...MODIFIER_LABELS,
   wheel: 'keys.mouseWheel',
+  click: 'keys.click',
+  drag: 'keys.drag',
+  Space: 'keys.space',
 };
 
 const KEY_SYMBOLS: Readonly<Record<string, string>> = {

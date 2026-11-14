@@ -28,6 +28,26 @@ describe('OutlinePanel', () => {
     expect(items[1]?.style.paddingInlineStart).toBe('0.75rem');
   });
 
+  it('Alt+Shift+arrows on a heading ask to move, promote or demote its section', async () => {
+    const onChangeSection = vi.fn();
+    render(OutlinePanel, {
+      outline: OUTLINE,
+      translator: createTranslator(),
+      onSelectHeading: vi.fn(),
+      onChangeSection,
+    });
+    screen.getByRole('button', { name: 'Install' }).focus();
+
+    await userEvent.keyboard('{Alt>}{Shift>}{ArrowDown}{ArrowLeft}{ArrowRight}{ArrowUp}{/Shift}{/Alt}');
+
+    expect(onChangeSection.mock.calls).toEqual([
+      [OUTLINE[1], 'moveDown'],
+      [OUTLINE[1], 'promote'],
+      [OUTLINE[1], 'demote'],
+      [OUTLINE[1], 'moveUp'],
+    ]);
+  });
+
   it('asks to go to the chosen heading, with the mouse or the keyboard', async () => {
     const { onSelectHeading } = renderOutline();
 

@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use tauri::{App, AppHandle, Emitter, Manager};
 
+use crate::attachments::DroppedImages;
 use crate::documents::DocumentAccessList;
 use crate::live_reload::{
     DOCUMENTS_CHANGED_EVENT, DocumentWatcher, FOLDERS_CHANGED_EVENT, FolderWatcher,
@@ -27,6 +28,7 @@ pub fn initialize(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(store);
     app.manage(access);
     app.manage(startup_documents);
+    app.manage(Arc::new(DroppedImages::default()));
     app.manage(start_document_watcher(app.handle().clone()));
     app.manage(start_folder_watcher(app.handle().clone()));
     Ok(())

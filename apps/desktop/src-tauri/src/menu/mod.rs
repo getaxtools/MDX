@@ -183,6 +183,16 @@ const PANEL_TOGGLE_ITEMS: [CommandItem; 3] = [
 
 const FULL_SCREEN_ITEM: CommandItem = ("toggleFullScreen", "menu.view.fullScreen", Some("F11"));
 
+const CONTROL_WHEEL_ITEM: CommandItem = (
+    "toggleControlWheel",
+    "menu.view.controlWheel",
+    Some("Ctrl+Shift+Space"),
+);
+
+/// Items whose shortcut the user can change, so the window sends the keys to show.
+const REBINDABLE_ITEMS: [CommandItem; 1] = [CONTROL_WHEEL_ITEM];
+const MAX_MENU_SHORTCUT_CHARACTERS: usize = 40;
+
 const NAVIGATION_ITEMS: [CommandItem; 2] = [
     ("goBack", "menu.view.goBack", Some("Alt+Left")),
     ("goForward", "menu.view.goForward", Some("Alt+Right")),
@@ -239,26 +249,35 @@ const HELP_ITEMS: [CommandItem; 2] = [
 const MAX_TRANSLATED_LABELS: usize = 5_000;
 const MAX_TRANSLATED_LABEL_CHARACTERS: usize = 1_000;
 
-/// The parts of the main menu that change after it is built: check marks, Open Recent and labels.
+/// The parts of the main menu that change after it is built: check marks, Open Recent, labels and
+/// the shortcuts the user changed.
 pub struct MainMenuParts {
     pub labels: MenuLabels,
     pub view_items: Vec<CheckMenuItem<Wry>>,
     pub recent_files: Submenu<Wry>,
+    pub rebindable_items: Vec<MenuItem<Wry>>,
+    pub shortcut_texts: HashMap<String, String>,
 }
 
 pub struct MainMenu(pub Mutex<MainMenuParts>);
 
 pub fn install_main_menu(app: &App) -> tauri::Result<()> {
-    let parts = build_main_menu(app.handle(), MenuLabels::english())?;
+    let parts = build_main_menu(app.handle(), MenuLabels::english(), HashMap::new())?;
     app.manage(MainMenu(Mutex::new(parts)));
     Ok(())
 }
 
-fn build_main_menu(app: &AppHandle, labels: MenuLabels) -> tauri::Result<MainMenuParts> {
+fn build_main_menu(
+    app: &AppHandle,
+    labels: MenuLabels,
+    shortcut_texts: HashMap<String, String>,
+) -> tauri::Result<MainMenuParts> {
     let mut builder = MainMenuBuilder {
         app,
         labels,
         view_items: Vec::new(),
+        rebindable_items: Vec::new(),
+        shortcut_texts,
     };
     let recent_files =
         SubmenuBuilder::new(app, builder.labels.label("menu.file.openRecent")).build()?;
@@ -278,6 +297,8 @@ fn build_main_menu(app: &AppHandle, labels: MenuLabels) -> tauri::Result<MainMen
         labels: builder.labels,
         view_items: builder.view_items,
         recent_files,
+        rebindable_items: builder.rebindable_items,
+        shortcut_texts: builder.shortcut_texts,
     })
 }
 
@@ -292,10 +313,61 @@ pub fn update_menu_language(
     if !are_valid_menu_labels(&labels) {
         return Err(DocumentError::InvalidRequest);
     }
-    let parts = build_main_menu(&app, MenuLabels::with_translations(labels))
+    let mut parts = menu.0.lock().map_err(|_| DocumentError::InvalidRequest)?;
+    let shortcut_texts = parts.shortcut_texts.clone();
+    *parts = build_main_menu(&app, MenuLabels::with_translations(labels), shortcut_texts)
         .map_err(|_| DocumentError::InvalidRequest)?;
-    *menu.0.lock().map_err(|_| DocumentError::InvalidRequest)? = parts;
     Ok(())
+}
+
+/// Shows the keys the user gave a command next to its menu item; an empty text shows none.
+#[tauri::command]
+pub fn update_menu_shortcuts(
+    shortcuts: HashMap<String, String>,
+    menu: State<'_, MainMenu>,
+) -> Result<(), DocumentError> {
+    if !are_valid_menu_shortcuts(&shortcuts) {
+        return Err(DocumentError::InvalidRequest);
+    }
+    let mut parts = menu.0.lock().map_err(|_| DocumentError::InvalidRequest)?;
+    parts.shortcut_texts.extend(shortcuts);
+    for item in &parts.rebindable_items {
+        let Some((id, label_key, default)) = REBINDABLE_ITEMS
+            .iter()
+            .find(|(id, _, _)| *id == item.id().as_ref())
+        else {
+            continue;
+        };
+        let shortcut = shown_shortcut(id, *default, &parts.shortcut_texts);
+        let _ = item.set_text(label_for(&parts.labels, label_key, shortcut));
+    }
+    Ok(())
+}
+
+fn are_valid_menu_shortcuts(shortcuts: &HashMap<String, String>) -> bool {
+    shortcuts.iter().all(|(item_id, text)| {
+        REBINDABLE_ITEMS.iter().any(|(id, _, _)| id == item_id)
+            && text.chars().count() <= MAX_MENU_SHORTCUT_CHARACTERS
+    })
+}
+
+fn shown_shortcut<'a>(
+    item_id: &str,
+    default: Option<&'a str>,
+    shortcut_texts: &'a HashMap<String, String>,
+) -> Option<&'a str> {
+    match shortcut_texts.get(item_id) {
+        Some(text) if text.is_empty() => None,
+        Some(text) => Some(text),
+        None => default,
+    }
+}
+
+fn label_for(labels: &MenuLabels, label_key: &str, shortcut: Option<&str>) -> String {
+    match shortcut {
+        Some(shortcut) => labels.label_with_shortcut(label_key, shortcut),
+        None => labels.label(label_key),
+    }
 }
 
 fn are_valid_menu_labels(labels: &HashMap<String, String>) -> bool {
@@ -331,6 +403,8 @@ struct MainMenuBuilder<'a> {
     app: &'a AppHandle,
     labels: MenuLabels,
     view_items: Vec<CheckMenuItem<Wry>>,
+    rebindable_items: Vec<MenuItem<Wry>>,
+    shortcut_texts: HashMap<String, String>,
 }
 
 impl MainMenuBuilder<'_> {
@@ -422,10 +496,12 @@ impl MainMenuBuilder<'_> {
             .collect::<tauri::Result<Vec<_>>>()?;
         let preview_beside_editor = self.toggle_item(PREVIEW_BESIDE_EDITOR_TOGGLE_ITEM)?;
         let command_palette = self.command_item(COMMAND_PALETTE_ITEM)?;
+        let control_wheel = self.rebindable_item(CONTROL_WHEEL_ITEM)?;
         let toggle_editing = self.command_item(TOGGLE_EDITING_ITEM)?;
         let full_screen = self.command_item(FULL_SCREEN_ITEM)?;
         let builder = SubmenuBuilder::new(self.app, self.labels.label("menu.view"))
             .item(&command_palette)
+            .item(&control_wheel)
             .item(&toggle_editing)
             .item(&preview_beside_editor)
             .separator()
@@ -508,11 +584,19 @@ impl MainMenuBuilder<'_> {
         MenuItemBuilder::with_id(id, self.label_for(label_key, shortcut)).build(self.app)
     }
 
+    fn rebindable_item(
+        &mut self,
+        (id, label_key, default): CommandItem,
+    ) -> tauri::Result<MenuItem<Wry>> {
+        let shortcut = shown_shortcut(id, default, &self.shortcut_texts);
+        let item = MenuItemBuilder::with_id(id, label_for(&self.labels, label_key, shortcut))
+            .build(self.app)?;
+        self.rebindable_items.push(item.clone());
+        Ok(item)
+    }
+
     fn label_for(&self, label_key: &str, shortcut: Option<&str>) -> String {
-        match shortcut {
-            Some(shortcut) => self.labels.label_with_shortcut(label_key, shortcut),
-            None => self.labels.label(label_key),
-        }
+        label_for(&self.labels, label_key, shortcut)
     }
 }
 
@@ -558,6 +642,7 @@ mod tests {
                 TOGGLE_EDITING_ITEM,
                 COMMAND_PALETTE_ITEM,
                 FULL_SCREEN_ITEM,
+                CONTROL_WHEEL_ITEM,
             ])
             .chain(&EXPORT_ITEMS)
             .chain(&NAVIGATION_ITEMS)
@@ -586,6 +671,53 @@ mod tests {
         assert!(are_valid_menu_labels(&catalog));
         assert!(!are_valid_menu_labels(&overlong));
         assert!(!are_valid_menu_labels(&too_many));
+    }
+
+    #[test]
+    fn the_view_menu_has_control_wheel_with_ctrl_shift_space() {
+        assert_eq!(
+            CONTROL_WHEEL_ITEM,
+            (
+                "toggleControlWheel",
+                "menu.view.controlWheel",
+                Some("Ctrl+Shift+Space")
+            )
+        );
+        assert!(REBINDABLE_ITEMS.contains(&CONTROL_WHEEL_ITEM));
+    }
+
+    #[test]
+    fn rejects_unknown_item_ids_and_long_shortcut_texts() {
+        let changed = HashMap::from([("toggleControlWheel".to_owned(), "Ctrl+Shift+J".to_owned())]);
+        let unknown = HashMap::from([("saveDocument".to_owned(), "Ctrl+J".to_owned())]);
+        let overlong = HashMap::from([(
+            "toggleControlWheel".to_owned(),
+            "x".repeat(MAX_MENU_SHORTCUT_CHARACTERS + 1),
+        )]);
+
+        assert!(are_valid_menu_shortcuts(&changed));
+        assert!(!are_valid_menu_shortcuts(&unknown));
+        assert!(!are_valid_menu_shortcuts(&overlong));
+    }
+
+    #[test]
+    fn shows_a_changed_or_removed_shortcut_and_otherwise_the_default() {
+        let changed = HashMap::from([("toggleControlWheel".to_owned(), "Ctrl+Shift+J".to_owned())]);
+        let removed = HashMap::from([("toggleControlWheel".to_owned(), String::new())]);
+        let default = Some("Ctrl+Shift+Space");
+
+        assert_eq!(
+            shown_shortcut("toggleControlWheel", default, &changed),
+            Some("Ctrl+Shift+J")
+        );
+        assert_eq!(
+            shown_shortcut("toggleControlWheel", default, &removed),
+            None
+        );
+        assert_eq!(
+            shown_shortcut("toggleControlWheel", default, &HashMap::new()),
+            default
+        );
     }
 
     #[test]

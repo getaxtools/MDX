@@ -99,18 +99,40 @@ describe('shortcutLabelFor', () => {
     expect(shortcutLabelFor({ kind: 'moveActiveTab', step: 1 }, translator)).toBe('Ctrl+Shift+PageDown');
   });
 
+  it('names the Space key in the control wheel shortcut', () => {
+    expect(shortcutLabelFor({ kind: 'toggleControlWheel' }, createTranslator())).toBe('Ctrl+Shift+Space');
+  });
+
   it('has no label for a command without a shortcut', () => {
     expect(shortcutLabelFor({ kind: 'showAbout' }, createTranslator())).toBeUndefined();
   });
 });
 
+describe('control wheel shortcut', () => {
+  it('opens the wheel with Ctrl+Shift+Space', () => {
+    expect(commandForShortcut(keys(' ', { ctrlKey: true, shiftKey: true }), 'windows')).toEqual({
+      kind: 'toggleControlWheel',
+    });
+  });
+
+  it('does not open the wheel with Ctrl+Space', () => {
+    expect(commandForShortcut(keys(' ', { ctrlKey: true }), 'windows')).toBeUndefined();
+  });
+
+  it('does nothing while an input method is composing text', () => {
+    expect(
+      commandForShortcut(keys(' ', { ctrlKey: true, shiftKey: true, isComposing: true }), 'windows'),
+    ).toBeUndefined();
+  });
+});
+
 describe('tooltipWithShortcut', () => {
   it('adds the shortcut after the label', () => {
-    expect(tooltipWithShortcut('Open', { kind: 'openDocuments' }, createTranslator())).toBe('Open (Ctrl+O)');
+    expect(tooltipWithShortcut('Open', 'Ctrl+O')).toBe('Open (Ctrl+O)');
   });
 
   it('is only the label for a command without a shortcut', () => {
-    expect(tooltipWithShortcut('About', { kind: 'showAbout' }, createTranslator())).toBe('About');
+    expect(tooltipWithShortcut('About', undefined)).toBe('About');
   });
 });
 

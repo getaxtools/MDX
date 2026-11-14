@@ -25,6 +25,12 @@ describe('view commands', () => {
       panelWidths: {},
       isPreviewBesideEditor: false,
       editorSharePercent: 50,
+      kindSwitcher: 'both',
+      wheelDock: 'bottomInlineEnd',
+      isWheelOpenedAtPointer: false,
+      isWheelButtonInStatusBar: false,
+      isSlashMenuInRichText: true,
+      isSlashMenuInSource: false,
     });
     expect(applyViewCommand(withoutSidebar, { kind: 'resetZoom' }).zoomPercent).toBe(100);
     expect(applyViewCommand(withoutSidebar, { kind: 'zoomOut' }).zoomPercent).toBe(100);
@@ -95,5 +101,24 @@ describe('view commands', () => {
     expect(shared.panelWidths).toEqual({ explorer: 300 });
     expect(shared.editorSharePercent).toBe(70);
     expect(applyViewCommand(shared, { kind: 'resetPanelWidth', panel: 'explorer' }).panelWidths).toEqual({});
+  });
+
+  it('chooses how kinds are switched and where the control wheel opens', () => {
+    const barOnly = applyViewCommand(DEFAULT_VIEW_SETTINGS, { kind: 'setKindSwitcher', kindSwitcher: 'bar' });
+    const docked = applyViewCommand(barOnly, { kind: 'setWheelDock', wheelDock: 'bottomInlineStart' });
+
+    expect(docked.kindSwitcher).toBe('bar');
+    expect(docked.wheelDock).toBe('bottomInlineStart');
+  });
+
+  it('turns opening the wheel at the pointer and its status bar button on and off', () => {
+    const atPointer = applyViewCommand(DEFAULT_VIEW_SETTINGS, { kind: 'toggleWheelOpenedAtPointer' });
+    const withButton = applyViewCommand(atPointer, { kind: 'toggleWheelButtonInStatusBar' });
+
+    expect(withButton.isWheelOpenedAtPointer).toBe(true);
+    expect(withButton.isWheelButtonInStatusBar).toBe(true);
+    expect(
+      applyViewCommand(withButton, { kind: 'toggleWheelButtonInStatusBar' }).isWheelButtonInStatusBar,
+    ).toBe(false);
   });
 });

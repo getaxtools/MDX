@@ -2,7 +2,11 @@
   import type { ViewSettings } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
   import Dialog from '../../components/Dialog.svelte';
-  import type { ViewerCommand } from '../viewer/viewerCommands';
+  import { COMMAND_SHORTCUTS, type CommandShortcut } from '../shortcuts/commandShortcuts';
+  import type { DesktopPlatform, ViewerCommand } from '../viewer/viewerCommands';
+  import ShortcutSetting from './ShortcutSetting.svelte';
+  import SnippetsSection from '../snippets/SnippetsSection.svelte';
+  import { EMPTY_SNIPPET_LIBRARY, type SnippetLibrary } from '@mdx/core';
   import {
     SETTING_SECTIONS,
     matchesQuery,
@@ -15,12 +19,25 @@
     settings: ViewSettings;
     /** Where the app keeps its data, shown in the Privacy section. */
     dataFolder: string;
+    /** The keys each command has now, including the user's changes. */
+    shortcuts?: readonly CommandShortcut[];
+    platform?: DesktopPlatform;
+    snippetLibrary?: SnippetLibrary;
     translator: Translator;
     onCommand: (command: ViewerCommand) => void;
     onClose: () => void;
   }
 
-  const { settings, dataFolder, translator, onCommand, onClose }: Props = $props();
+  const {
+    settings,
+    dataFolder,
+    shortcuts = COMMAND_SHORTCUTS,
+    platform = 'windows',
+    snippetLibrary = EMPTY_SNIPPET_LIBRARY,
+    translator,
+    onCommand,
+    onClose,
+  }: Props = $props();
 
   let query = $state('');
   let searchInput: HTMLInputElement | undefined = $state();
@@ -35,6 +52,14 @@
     })).filter(({ settings: sectionSettings }) => sectionSettings.length > 0),
   );
 
+  const isSnippetsShown = $derived(
+    matchesQuery(
+      query,
+      [translator.translate('settings.section.snippets'), translator.translate('snippets.description')].join(
+        ' ',
+      ),
+    ),
+  );
   const privacyDescription = $derived(
     translator.translate('settings.privacy.description', { path: dataFolder }),
   );
@@ -76,38 +101,58 @@
     <section aria-labelledby="settings-section-{section}">
       <h3 id="settings-section-{section}">{translator.translate(`settings.section.${section}`)}</h3>
       {#each sectionSettings as setting (setting.id)}
-        <div class="setting">
-          {#if setting.kind === 'choice'}
-            <label for={controlId(setting)}>{translator.translate(setting.labelKey).replace('…', '')}</label>
-            <select
-              id={controlId(setting)}
-              aria-describedby="{controlId(setting)}-description"
-              value={setting.valueIn(settings)}
-              onchange={(event) => choose(setting, event)}
-            >
-              {#each setting.choices(translator) as choice (choice.value)}
-                <option value={choice.value}>{choice.label}</option>
-              {/each}
-            </select>
-          {:else}
-            <label class="toggle">
-              <input
+        {#if setting.kind === 'shortcut'}
+          <ShortcutSetting {setting} {shortcuts} {platform} {translator} {onCommand} />
+        {:else}
+          <div class="setting">
+            {#if setting.kind === 'choice'}
+              <label for={controlId(setting)}>{translator.translate(setting.labelKey).replace('…', '')}</label
+              >
+              <select
                 id={controlId(setting)}
-                type="checkbox"
                 aria-describedby="{controlId(setting)}-description"
-                checked={setting.isOnIn(settings)}
-                onchange={() => onCommand(setting.toggleCommand)}
-              />
-              {translator.translate(setting.labelKey)}
-            </label>
-          {/if}
-          <p id="{controlId(setting)}-description" class="description">
-            {translator.translate(setting.descriptionKey)}
-          </p>
-        </div>
+                value={setting.valueIn(settings)}
+                onchange={(event) => choose(setting, event)}
+              >
+                {#each setting.choices(translator) as choice (choice.value)}
+                  <option value={choice.value}>{choice.label}</option>
+                {/each}
+              </select>
+            {:else if setting.kind === 'action'}
+              <span class="label" id="{controlId(setting)}-label"
+                >{translator.translate(setting.labelKey)}</span
+              >
+              <button
+                id={controlId(setting)}
+                class="beside-label"
+                aria-describedby="{controlId(setting)}-label {controlId(setting)}-description"
+                onclick={() => onCommand(setting.command)}
+              >
+                {translator.translate(setting.buttonLabelKey)}
+              </button>
+            {:else}
+              <label class="toggle">
+                <input
+                  id={controlId(setting)}
+                  type="checkbox"
+                  aria-describedby="{controlId(setting)}-description"
+                  checked={setting.isOnIn(settings)}
+                  onchange={() => onCommand(setting.toggleCommand)}
+                />
+                {translator.translate(setting.labelKey)}
+              </label>
+            {/if}
+            <p id="{controlId(setting)}-description" class="description">
+              {translator.translate(setting.descriptionKey)}
+            </p>
+          </div>
+        {/if}
       {/each}
     </section>
   {/each}
+  {#if isSnippetsShown}
+    <SnippetsSection library={snippetLibrary} {translator} {onCommand} />
+  {/if}
   {#if isPrivacyShown}
     <section aria-labelledby="settings-section-privacy">
       <h3 id="settings-section-privacy">{translator.translate('settings.section.privacy')}</h3>
@@ -204,6 +249,10 @@
     background: var(--color-surface-raised);
     color: var(--color-text);
     font-family: var(--font-ui);
+  }
+
+  .setting > button.beside-label {
+    margin-top: 0;
   }
 
   :is(.setting > button, select):hover {
