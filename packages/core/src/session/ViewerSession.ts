@@ -8,6 +8,7 @@ import {
   type PathStatus,
   type SaveSource,
   type StoredWorkspace,
+  type WorkspaceListName,
   type WorkspaceStorePort,
 } from '@mdx/platform';
 import { withDocumentLineBreaks } from '../documents/lineEndings';
@@ -58,6 +59,9 @@ export interface ViewerSessionDependencies {
 
 /** What the user enters for a new workspace; the session adds the id and the time. */
 export type WorkspaceRequest = Omit<NewWorkspace, 'id' | 'nowMs'>;
+
+/** Lists a new workspace starts with, such as the folders and favourites of a workspace file. */
+export type InitialWorkspaceLists = Partial<Readonly<Record<WorkspaceListName, unknown>>>;
 
 export interface RestoreOutcome {
   readonly wasReset: boolean;
@@ -193,7 +197,10 @@ export class ViewerSession {
   }
 
   /** Creates a workspace of an enabled kind and shows it in this window. */
-  async createWorkspace(request: WorkspaceRequest): Promise<WorkspaceChange | undefined> {
+  async createWorkspace(
+    request: WorkspaceRequest,
+    initialLists: InitialWorkspaceLists = {},
+  ): Promise<WorkspaceChange | undefined> {
     const storage = this.workspaceStorage;
     const registry = this.workspaces();
     if (!storage || !registry) return undefined;
@@ -204,6 +211,7 @@ export class ViewerSession {
     );
     if (change.outcome !== 'changed') return change;
     await storage.saveWorkspace(change.registry, change.workspace);
+    await storage.saveInitialLists(change.workspace.id, initialLists);
     await this.switchWorkspace(change.workspace.id);
     return change;
   }

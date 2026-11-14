@@ -60,3 +60,5 @@ export {
   type WorkspaceStorePort,
 } from './WorkspaceStorePort';
 export { InMemoryWorkspaceStore } from './fakes/InMemoryWorkspaceStore';
+export type { WorkspaceFileContents, WorkspaceFileListener, WorkspaceFilePort } from './WorkspaceFilePort';
+export { InMemoryWorkspaceFiles } from './fakes/InMemoryWorkspaceFiles';

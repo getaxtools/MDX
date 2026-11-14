@@ -28,6 +28,10 @@ export type WorkspaceCommand =
   | { readonly kind: 'deleteWorkspace' }
   | { readonly kind: 'switchWorkspace'; readonly workspaceId: string }
   | { readonly kind: 'showWorkspaceSwitcher' }
+  | { readonly kind: 'exportWorkspace' }
+  | { readonly kind: 'openWorkspaceFile' }
+  | { readonly kind: 'confirmOpenWorkspaceFile' }
+  | { readonly kind: 'cancelOpenWorkspaceFile' }
   | {
       readonly kind: 'setWorkspaceOverride';
       readonly field: WorkspaceOverrideField;
@@ -44,7 +48,27 @@ const WORKSPACE_COMMAND_KINDS: ReadonlySet<string> = new Set([
   'switchWorkspace',
   'showWorkspaceSwitcher',
   'setWorkspaceOverride',
+  'exportWorkspace',
+  'openWorkspaceFile',
+  'confirmOpenWorkspaceFile',
+  'cancelOpenWorkspaceFile',
 ]);
+
+const WORKSPACE_FILE_COMMAND_KINDS: ReadonlySet<string> = new Set([
+  'exportWorkspace',
+  'openWorkspaceFile',
+  'confirmOpenWorkspaceFile',
+  'cancelOpenWorkspaceFile',
+]);
+
+export type WorkspaceFileCommand = Extract<
+  WorkspaceCommand,
+  { kind: 'exportWorkspace' | 'openWorkspaceFile' | 'confirmOpenWorkspaceFile' | 'cancelOpenWorkspaceFile' }
+>;
+
+export function isWorkspaceFileCommand(command: { readonly kind: string }): command is WorkspaceFileCommand {
+  return WORKSPACE_FILE_COMMAND_KINDS.has(command.kind);
+}
 
 export function isWorkspaceCommand(command: { readonly kind: string }): command is WorkspaceCommand {
   return WORKSPACE_COMMAND_KINDS.has(command.kind);

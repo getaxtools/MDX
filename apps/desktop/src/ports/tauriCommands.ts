@@ -12,6 +12,7 @@ import type {
   StoredWorkspace,
   TextSearchOptions,
   ViewMenuState,
+  WorkspaceFileContents,
 } from '@mdx/platform';
 import type { AppInfo } from '@mdx/ui';
 
@@ -54,6 +55,11 @@ export const tauriCommands = {
   importLegacyState: (legacyState: LegacyStateImportRequest) =>
     invoke<null>('import_legacy_state', { legacyState }),
   clearWorkspaces: () => invoke<null>('clear_workspaces'),
+  pickWorkspaceExportPlace: (suggestedFileName: string) =>
+    invoke<{ folder: string } | null>('pick_workspace_export_place', { suggestedFileName }),
+  writeWorkspaceExport: (contents: string) => invoke<string>('write_workspace_export', { contents }),
+  openWorkspaceFile: () => invoke<WorkspaceFileContents | null>('open_workspace_file'),
+  takeStartupWorkspaceFile: () => invoke<WorkspaceFileContents | null>('take_startup_workspace_file'),
   grantWorkspaceAccess: (workspaceId: string, windowId: string) =>
     invoke<null>('grant_workspace_access', { workspaceId, windowId }),
   loadWorkspaceRegistry: () => invoke<StoredWorkspace[]>('load_workspace_registry'),
@@ -99,6 +105,7 @@ export const tauriCommands = {
 };
 
 export const OPEN_DOCUMENTS_EVENT = 'open-documents';
+export const OPEN_WORKSPACE_FILE_EVENT = 'open-workspace-file';
 export const IMAGES_DROPPED_EVENT = 'images-dropped';
 export const MENU_COMMAND_EVENT = 'menu-command';
 export const DOCUMENTS_CHANGED_EVENT = 'documents-changed';

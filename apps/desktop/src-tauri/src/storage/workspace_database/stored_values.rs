@@ -11,6 +11,8 @@ const MAX_APP_VALUE_KEY_LENGTH: usize = 64;
 const MAX_NAME_CHARACTERS: usize = 100;
 const MAX_ICON_LENGTH: usize = 40;
 const MAX_COLOUR_LENGTH: usize = 20;
+/// The longest path Windows accepts with long paths turned on.
+const MAX_SOURCE_FILE_CHARACTERS: usize = 32_767;
 
 /// `default` or a generated id: lowercase letters, digits and hyphens.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -173,6 +175,8 @@ pub struct WorkspaceRecord {
     pub colour: Option<String>,
     pub position: i64,
     pub last_shown_at_ms: Option<i64>,
+    /// The workspace file it was opened from, if any.
+    pub source_file: Option<String>,
 }
 
 /// A workspace as the webview sends it, validated into a `WorkspaceRecord`.
@@ -186,6 +190,8 @@ pub struct WorkspaceRecordInput {
     pub colour: Option<String>,
     pub position: i64,
     pub last_shown_at_ms: Option<i64>,
+    #[serde(default)]
+    pub source_file: Option<String>,
 }
 
 impl TryFrom<WorkspaceRecordInput> for WorkspaceRecord {
@@ -200,6 +206,7 @@ impl TryFrom<WorkspaceRecordInput> for WorkspaceRecord {
             colour: validated_label(input.colour, MAX_COLOUR_LENGTH, "colour")?,
             position: input.position,
             last_shown_at_ms: input.last_shown_at_ms,
+            source_file: input.source_file.map(validated_source_file).transpose()?,
         })
     }
 }
@@ -213,6 +220,17 @@ fn validated_name(name: String) -> Result<String, DatabaseError> {
         Ok(name)
     } else {
         Err(DatabaseError::InvalidArgument("name"))
+    }
+}
+
+fn validated_source_file(path: String) -> Result<String, DatabaseError> {
+    let is_valid = !path.trim().is_empty()
+        && path.chars().count() <= MAX_SOURCE_FILE_CHARACTERS
+        && !path.chars().any(char::is_control);
+    if is_valid {
+        Ok(path)
+    } else {
+        Err(DatabaseError::InvalidArgument("sourceFile"))
     }
 }
 
@@ -261,6 +279,7 @@ mod tests {
             colour: Some("#3366cc".to_owned()),
             position: 0,
             last_shown_at_ms: None,
+            source_file: None,
         }
     }
 

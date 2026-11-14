@@ -23,6 +23,7 @@ export {
   ViewerSession,
   type RestoreOutcome,
   type ViewerSessionDependencies,
+  type InitialWorkspaceLists,
   type WorkspaceRequest,
 } from './session/ViewerSession';
 export {
@@ -188,3 +189,12 @@ export {
   type WorkspaceOverrideField,
   type WorkspaceOverrides,
 } from './view/viewSettingsScopes';
+export {
+  MAX_WORKSPACE_FILE_BYTES,
+  WORKSPACE_FILE_EXTENSION,
+  readWorkspaceFile,
+  writeWorkspaceFile,
+  type PortableWorkspace,
+  type WorkspaceFileReading,
+  type WorkspaceFileRefusal,
+} from './workspaces/workspaceFile';

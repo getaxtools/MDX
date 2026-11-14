@@ -122,6 +122,8 @@ const COMMANDS_BY_MENU_ITEM: Readonly<Record<string, ViewerCommand>> = {
   showSettings: { kind: 'showSettings' },
   showNewWorkspace: { kind: 'showNewWorkspace' },
   showWorkspaceSwitcher: { kind: 'showWorkspaceSwitcher' },
+  openWorkspaceFile: { kind: 'openWorkspaceFile' },
+  exportWorkspace: { kind: 'exportWorkspace' },
   showRenameWorkspace: { kind: 'showRenameWorkspace' },
   confirmDeleteWorkspace: { kind: 'confirmDeleteWorkspace' },
 };

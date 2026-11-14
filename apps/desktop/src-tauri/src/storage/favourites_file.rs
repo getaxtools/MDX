@@ -1,7 +1,7 @@
-use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use super::file_extensions::with_extension;
 use crate::documents::DocumentError;
 
 pub const MAX_FAVOURITES_FILE_BYTES: u64 = 5 * 1024 * 1024;
@@ -27,15 +27,7 @@ pub fn validated_favourites_json(contents: &str) -> Result<&str, DocumentError> 
 }
 
 pub fn with_json_extension(path: PathBuf) -> PathBuf {
-    let has_extension = path
-        .extension()
-        .is_some_and(|extension| extension.eq_ignore_ascii_case(FAVOURITES_FILE_EXTENSION));
-    if has_extension {
-        return path;
-    }
-    let mut file_name = path.file_name().map(OsString::from).unwrap_or_default();
-    file_name.push(format!(".{FAVOURITES_FILE_EXTENSION}"));
-    path.with_file_name(file_name)
+    with_extension(path, FAVOURITES_FILE_EXTENSION)
 }
 
 #[cfg(test)]

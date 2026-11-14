@@ -1,4 +1,4 @@
-import type { ViewerSession, WorkspaceKindId } from '@mdx/core';
+import type { InitialWorkspaceLists, ViewerSession, WorkspaceKindId, WorkspaceRequest } from '@mdx/core';
 import type { MessageKey, Translator } from '@mdx/i18n';
 import { workspaceNameOf, type WorkspaceCommand, type WorkspaceDetails } from './workspaceCommands';
 
@@ -7,6 +7,7 @@ const WORKSPACE_DIALOGS = [
   'renameWorkspace',
   'deleteWorkspace',
   'workspaceSwitcher',
+  'openWorkspaceFile',
 ] as const;
 
 export type WorkspaceDialog = (typeof WORKSPACE_DIALOGS)[number];
@@ -69,12 +70,18 @@ export class WorkspaceActions {
   }
 
   private async create({ name, kindId, icon, colour, isFolderStepChosen }: WorkspaceDetails): Promise<void> {
-    if (!(await this.dependencies.confirmLeavingDocuments())) return;
-    const change = await this.dependencies.session.createWorkspace({ name, kindId, icon, colour });
-    if (change?.outcome !== 'changed') return;
+    const isCreated = await this.createAndShow({ name, kindId, icon, colour });
+    if (isCreated && isFolderStepChosen === true) await this.dependencies.addFolder();
+  }
+
+  /** Creates a workspace with its first lists and shows it, after asking about unsaved edits. */
+  async createAndShow(request: WorkspaceRequest, lists: InitialWorkspaceLists = {}): Promise<boolean> {
+    if (!(await this.dependencies.confirmLeavingDocuments())) return false;
+    const change = await this.dependencies.session.createWorkspace(request, lists);
+    if (change?.outcome !== 'changed') return false;
     this.dependencies.showDialog(undefined);
     await this.dependencies.showSwitchedWorkspace();
-    if (isFolderStepChosen === true) await this.dependencies.addFolder();
+    return true;
   }
 
   private async rename(name: string): Promise<void> {
@@ -107,7 +114,7 @@ export class WorkspaceActions {
     showNotice('workspaces.deleted', { name: workspaceNameOf(shown, translator) });
   }
 
-  private async switchTo(workspaceId: string): Promise<void> {
+  async switchTo(workspaceId: string): Promise<void> {
     const { session } = this.dependencies;
     if (session.shownWorkspace()?.id === workspaceId) return;
     if (!(await this.dependencies.confirmLeavingDocuments())) return;

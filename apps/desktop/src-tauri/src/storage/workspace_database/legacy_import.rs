@@ -139,6 +139,7 @@ mod tests {
                 colour: None,
                 position: 0,
                 last_shown_at_ms: Some(1),
+                source_file: None,
             },
             lists: BTreeMap::from([
                 ("favourites".to_owned(), "[1]".to_owned()),

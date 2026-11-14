@@ -2,6 +2,7 @@ import {
   WORKSPACE_LIST_NAMES,
   type AppStatePort,
   type StoredWorkspace,
+  type WorkspaceListName,
   type WorkspaceStorePort,
 } from '@mdx/platform';
 import { restoreAppState, toPersistedAppState, type ViewerState } from '../session/persistedAppState';
@@ -96,6 +97,15 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
   async saveWorkspace(registry: WorkspaceRegistry, workspace: StoredWorkspace): Promise<void> {
     await this.options.workspaceStore.saveWorkspace(workspace);
     this.registry = registry;
+  }
+
+  /** Lists a new workspace starts with, such as the folders and favourites of a workspace file. */
+  async saveInitialLists(
+    workspaceId: string,
+    lists: Partial<Readonly<Record<WorkspaceListName, unknown>>>,
+  ): Promise<void> {
+    for (const [listName, value] of Object.entries(lists))
+      await this.options.workspaceStore.saveList(workspaceId, listName as WorkspaceListName, value);
   }
 
   async deleteWorkspace(registry: WorkspaceRegistry, workspaceId: string): Promise<void> {

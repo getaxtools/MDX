@@ -82,6 +82,13 @@
         "description": "Markdown document",
         "role": "Viewer",
         "mimeType": "text/markdown"
+      },
+      {
+        "ext": ["mdxworkspace"],
+        "name": "MDX workspace",
+        "description": "MDX workspace",
+        "role": "Editor",
+        "mimeType": "application/json"
       }
     ],
     "windows": {

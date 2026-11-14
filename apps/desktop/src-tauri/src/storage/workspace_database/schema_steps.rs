@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use super::DatabaseError;
 
 /// Each step moves the schema up by one version and never changes once released; add new steps at the end.
-pub const SCHEMA_STEPS: &[&str] = &[CREATE_WORKSPACE_TABLES];
+pub const SCHEMA_STEPS: &[&str] = &[CREATE_WORKSPACE_TABLES, ADD_WORKSPACE_SOURCE_FILE];
 
 const CREATE_WORKSPACE_TABLES: &str = "
 CREATE TABLE app_values (
@@ -37,6 +37,9 @@ CREATE TABLE window_sessions (
 
 CREATE INDEX window_sessions_by_workspace ON window_sessions (workspace_id);
 ";
+
+/// The workspace file a workspace was opened from, so opening that file again switches to it.
+const ADD_WORKSPACE_SOURCE_FILE: &str = "ALTER TABLE workspaces ADD COLUMN source_file TEXT;";
 
 pub fn schema_version(connection: &Connection) -> Result<usize, DatabaseError> {
     let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
@@ -104,6 +107,30 @@ mod tests {
                 "workspaces"
             ]
         );
+    }
+
+    #[test]
+    fn a_first_version_database_gains_the_source_file_and_keeps_its_workspaces() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        upgrade_schema(&mut connection, &SCHEMA_STEPS[..1]).unwrap();
+        connection
+            .execute(
+                "INSERT INTO workspaces (id, kind_id, name, position) VALUES ('default', 'markdownViewer', NULL, 0)",
+                [],
+            )
+            .unwrap();
+
+        upgrade_schema(&mut connection, SCHEMA_STEPS).unwrap();
+
+        let source_file: Option<String> = connection
+            .query_row(
+                "SELECT source_file FROM workspaces WHERE id = 'default'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(source_file, None);
+        assert_eq!(schema_version(&connection).unwrap(), SCHEMA_STEPS.len());
     }
 
     #[test]

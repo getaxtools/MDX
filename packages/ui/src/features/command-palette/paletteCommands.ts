@@ -125,6 +125,8 @@ function workspaceCommands(
     { command: { kind: 'showNewWorkspace' }, label: translator.translate('workspaces.new') },
     { command: { kind: 'showRenameWorkspace' }, label: translator.translate('workspaces.rename') },
     { command: { kind: 'confirmDeleteWorkspace' }, label: translator.translate('workspaces.delete') },
+    { command: { kind: 'openWorkspaceFile' }, label: translator.translate('workspaces.openFile') },
+    { command: { kind: 'exportWorkspace' }, label: translator.translate('workspaces.export') },
     ...switches,
   ];
 }

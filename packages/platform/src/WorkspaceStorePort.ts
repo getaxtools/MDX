@@ -20,6 +20,8 @@ export interface StoredWorkspace {
   readonly colour: string | null;
   readonly position: number;
   readonly lastShownAtMs: number | null;
+  /** The workspace file it was opened from, so opening that file again switches to it. */
+  readonly sourceFile?: string | null;
 }
 
 /** A workspace's lists, and the session the asking window last had in it. */

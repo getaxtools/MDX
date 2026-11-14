@@ -209,6 +209,7 @@ mod tests {
             colour: None,
             position: 0,
             last_shown_at_ms: None,
+            source_file: None,
         }
     }
 

@@ -205,6 +205,7 @@ mod tests {
             colour: Some("#3366cc".to_owned()),
             position: 0,
             last_shown_at_ms: Some(5),
+            source_file: None,
         };
 
         let record = WorkspaceRecord::try_from(input).unwrap();
@@ -218,7 +219,8 @@ mod tests {
                 "icon": null,
                 "colour": "#3366cc",
                 "position": 0,
-                "lastShownAtMs": 5
+                "lastShownAtMs": 5,
+                "sourceFile": null
             })
         );
     }

@@ -19,7 +19,7 @@ pub struct WorkspaceContents {
 
 pub fn load_registry(connection: &Connection) -> Result<Vec<WorkspaceRecord>, DatabaseError> {
     let mut statement = connection.prepare_cached(
-        "SELECT id, kind_id, name, icon, colour, position, last_shown_at_ms
+        "SELECT id, kind_id, name, icon, colour, position, last_shown_at_ms, source_file
          FROM workspaces ORDER BY position, id",
     )?;
     let rows = statement.query_map([], |row| Ok(stored_record_of(row)))?;
@@ -42,6 +42,7 @@ fn stored_record_of(row: &Row<'_>) -> Result<WorkspaceRecord, DatabaseError> {
         colour: row.get(4)?,
         position: row.get(5)?,
         last_shown_at_ms: row.get(6)?,
+        source_file: row.get(7)?,
     })
 }
 
@@ -121,11 +122,11 @@ pub fn save_workspace(
 ) -> Result<(), DatabaseError> {
     connection
         .prepare_cached(
-            "INSERT INTO workspaces (id, kind_id, name, icon, colour, position, last_shown_at_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "INSERT INTO workspaces (id, kind_id, name, icon, colour, position, last_shown_at_ms, source_file)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              ON CONFLICT (id) DO UPDATE SET kind_id = excluded.kind_id, name = excluded.name,
                  icon = excluded.icon, colour = excluded.colour, position = excluded.position,
-                 last_shown_at_ms = excluded.last_shown_at_ms",
+                 last_shown_at_ms = excluded.last_shown_at_ms, source_file = excluded.source_file",
         )?
         .execute(params![
             record.id.as_str(),
@@ -135,6 +136,7 @@ pub fn save_workspace(
             record.colour,
             record.position,
             record.last_shown_at_ms,
+            record.source_file,
         ])?;
     Ok(())
 }
@@ -223,6 +225,7 @@ mod tests {
             colour: None,
             position,
             last_shown_at_ms: Some(1_000),
+            source_file: None,
         }
     }
 

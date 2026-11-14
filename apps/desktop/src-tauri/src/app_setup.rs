@@ -9,9 +9,10 @@ use crate::live_reload::{
     DOCUMENTS_CHANGED_EVENT, DocumentWatcher, FOLDERS_CHANGED_EVENT, FolderWatcher,
 };
 use crate::open_requests::{
-    MAIN_WINDOW_LABEL, StartupDocuments, grant_documents, markdown_paths_from_arguments,
+    MAIN_WINDOW_LABEL, StartupDocuments, StartupWorkspaceFile, grant_documents,
+    markdown_paths_from_arguments, workspace_file_from_arguments,
 };
-use crate::storage::{AppStateStore, WorkspaceDatabase};
+use crate::storage::{AppStateStore, PendingWorkspaceExport, WorkspaceDatabase};
 
 const DATA_FOLDER_OVERRIDE_VARIABLE: &str = "MDX_DATA_DIR";
 
@@ -24,11 +25,15 @@ pub fn initialize(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     let working_folder = std::env::current_dir().unwrap_or_default();
     let startup_paths = markdown_paths_from_arguments(&arguments, &working_folder);
     let startup_documents = StartupDocuments::new(grant_documents(&startup_paths, &access));
+    let startup_workspace_file =
+        StartupWorkspaceFile::new(workspace_file_from_arguments(&arguments, &working_folder));
 
     app.manage(store);
     app.manage(WorkspaceDatabase::new(&data_folder));
+    app.manage(PendingWorkspaceExport::default());
     app.manage(access);
     app.manage(startup_documents);
+    app.manage(startup_workspace_file);
     app.manage(Arc::new(DroppedImages::default()));
     app.manage(start_document_watcher(app.handle().clone()));
     app.manage(start_folder_watcher(app.handle().clone()));

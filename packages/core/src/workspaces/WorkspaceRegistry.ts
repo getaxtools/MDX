@@ -22,6 +22,8 @@ export interface NewWorkspace {
   readonly kindId: string;
   readonly icon?: WorkspaceIcon | undefined;
   readonly colour?: WorkspaceColour | undefined;
+  /** The workspace file it is created from, so opening that file again switches to it. */
+  readonly sourceFile?: string | undefined;
   readonly nowMs: number;
 }
 
@@ -76,6 +78,23 @@ export class WorkspaceRegistry {
     );
   }
 
+  /** The workspace created from this workspace file, compared as Windows compares paths. */
+  findBySourceFile(path: string): StoredWorkspace | undefined {
+    const key = path.toLowerCase();
+    return this.ordered.find((workspace) => workspace.sourceFile?.toLowerCase() === key);
+  }
+
+  /** The name, or the name with the first free number after it, such as "Handbook 2". */
+  freeNameFor(name: string, kindId: string): string {
+    const trimmed = name.trim().slice(0, MAX_WORKSPACE_NAME_LENGTH);
+    if (this.checkName(trimmed, kindId) !== 'duplicate') return trimmed;
+    for (let number = 2; ; number += 1) {
+      const suffix = ` ${String(number)}`;
+      const numbered = `${trimmed.slice(0, MAX_WORKSPACE_NAME_LENGTH - suffix.length)}${suffix}`;
+      if (this.checkName(numbered, kindId) === undefined) return numbered;
+    }
+  }
+
   /** Names are 1 to 100 characters after trimming and differ, ignoring case, within a kind. */
   checkName(name: string, kindId: string, exceptWorkspaceId?: string): WorkspaceNameProblem | undefined {
     const trimmed = name.trim();
@@ -104,6 +123,7 @@ export class WorkspaceRegistry {
       colour: newWorkspace.colour ?? null,
       position: this.nextPosition(),
       lastShownAtMs: newWorkspace.nowMs,
+      ...(newWorkspace.sourceFile === undefined ? {} : { sourceFile: newWorkspace.sourceFile }),
     };
     return { outcome: 'changed', registry: new WorkspaceRegistry([...this.ordered, workspace]), workspace };
   }

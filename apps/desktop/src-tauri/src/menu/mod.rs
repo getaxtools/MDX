@@ -68,7 +68,7 @@ const FILE_OPEN_ITEMS: [CommandItem; 3] = [
     ("openFolder", "menu.file.openFolder", None),
 ];
 
-const WORKSPACE_ITEMS: [CommandItem; 4] = [
+const WORKSPACE_ITEMS: [CommandItem; 6] = [
     (
         "showWorkspaceSwitcher",
         "workspaces.switch",
@@ -77,6 +77,8 @@ const WORKSPACE_ITEMS: [CommandItem; 4] = [
     ("showNewWorkspace", "workspaces.new", None),
     ("showRenameWorkspace", "workspaces.rename", None),
     ("confirmDeleteWorkspace", "workspaces.delete", None),
+    ("openWorkspaceFile", "workspaces.openFile", None),
+    ("exportWorkspace", "workspaces.export", None),
 ];
 
 const FILE_SAVE_ITEMS: [CommandItem; 5] = [

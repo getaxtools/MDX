@@ -13,6 +13,7 @@
   import { workspaceNameOf, type WorkspaceDetails } from './workspaceCommands';
   import WorkspaceNameDialog from './WorkspaceNameDialog.svelte';
   import WorkspaceSwitcher from './WorkspaceSwitcher.svelte';
+  import WorkspaceFileConfirmation from './WorkspaceFileConfirmation.svelte';
 
   interface Props {
     dialog: WorkspaceDialog;
@@ -35,7 +36,14 @@
   const shownKindId = $derived((shown?.kindId ?? DEFAULT_WORKSPACE_KIND_ID) as WorkspaceKindId);
 </script>
 
-{#if dialog === 'workspaceSwitcher'}
+{#if dialog === 'openWorkspaceFile' && workspaces.pendingFile}
+  <WorkspaceFileConfirmation
+    pending={workspaces.pendingFile}
+    {translator}
+    onOpen={() => onCommand({ kind: 'confirmOpenWorkspaceFile' })}
+    onCancel={() => onCommand({ kind: 'cancelOpenWorkspaceFile' })}
+  />
+{:else if dialog === 'workspaceSwitcher'}
   <WorkspaceSwitcher
     source={{ registry: workspaces.registry, shownWorkspaceId: workspaces.shownWorkspaceId, kinds }}
     {translator}

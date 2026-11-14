@@ -704,5 +704,22 @@
   "workspaces.switcher.optionShown": "{name}, {kind}, shown now",
   "settings.scope.label": "Applies to",
   "settings.scope.allWorkspaces": "All workspaces",
-  "settings.scope.thisWorkspace": "Only {name}"
+  "settings.scope.thisWorkspace": "Only {name}",
+  "workspaces.openFile": "Open Workspace…",
+  "workspaces.export": "Export Workspace…",
+  "workspaces.file.exported": "Saved {fileName}.",
+  "workspaces.file.exportedWithAbsolute": "Saved {fileName}. {count, plural, one {# path is} other {# paths are}} on another drive or share, so {count, plural, one {it was} other {they were}} written in full.",
+  "workspaces.file.exportFailed": "The workspace file could not be saved.",
+  "workspaces.file.openFailed": "The workspace file could not be read.",
+  "workspaces.file.refused.tooLarge": "This workspace file is larger than 1 MB, so MDX did not open it.",
+  "workspaces.file.refused.notWorkspaceFile": "This is not an MDX workspace file.",
+  "workspaces.file.refused.unsupportedVersion": "This workspace file was made by a newer version of MDX.",
+  "workspaces.file.refused.unknownKind": "This kind of workspace is not supported in this version of MDX.",
+  "workspaces.fileDialog.title": "Open the workspace {name}?",
+  "workspaces.fileDialog.kind": "Kind: {kind}",
+  "workspaces.fileDialog.readable": "MDX will be able to read these folders and files:",
+  "workspaces.fileDialog.nothingReadable": "This workspace lists no folders or files.",
+  "workspaces.fileDialog.open": "Open",
+  "workspaces.fileDialog.enableAndOpen": "Turn On {kind} and Open",
+  "workspaces.fileDialog.cancel": "Cancel"
 }
