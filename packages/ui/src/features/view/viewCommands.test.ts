@@ -29,6 +29,8 @@ describe('view commands', () => {
       wheelDock: 'bottomInlineEnd',
       isWheelOpenedAtPointer: false,
       isWheelButtonInStatusBar: false,
+      isSlashMenuInRichText: true,
+      isSlashMenuInSource: false,
     });
     expect(applyViewCommand(withoutSidebar, { kind: 'resetZoom' }).zoomPercent).toBe(100);
     expect(applyViewCommand(withoutSidebar, { kind: 'zoomOut' }).zoomPercent).toBe(100);

@@ -7,12 +7,14 @@
 
   interface Props {
     kinds: WorkspaceKindsState;
+    /** Above the wheel's gear, or beside the kind bar's gear. */
+    anchor?: 'wheel' | 'bar';
     translator: Translator;
     onCommand: (command: ViewerCommand) => void;
     onClose: () => void;
   }
 
-  const { kinds, translator, onCommand, onClose }: Props = $props();
+  const { kinds, anchor = 'wheel', translator, onCommand, onClose }: Props = $props();
 
   let popup: HTMLElement | undefined = $state();
 
@@ -42,6 +44,7 @@
 <div
   bind:this={popup}
   class="kind-settings"
+  class:beside-bar={anchor === 'bar'}
   role="dialog"
   aria-labelledby="kind-settings-title"
   tabindex="-1"
@@ -89,6 +92,12 @@
     background: var(--color-surface-raised);
     box-shadow: var(--shadow-medium);
     color: var(--color-text);
+  }
+
+  .kind-settings.beside-bar {
+    z-index: 15;
+    inset-block: 0 auto;
+    inset-inline: calc(100% + var(--space-2)) auto;
   }
 
   h2 {

@@ -10,6 +10,7 @@ import type { FolderTreeCommand } from '../folder-tree/folderTreeCommands';
 import type { NavigationCommand } from '../navigation/DocumentNavigation';
 import type { LocateRecentFileCommand, RecentFileCommand } from '../recent-files/recentFileCommands';
 import type { ShortcutOverrideCommand } from '../shortcuts/shortcutOverrideCommands';
+import type { SnippetCommand } from '../snippets/snippetCommands';
 import type { TabCommand } from '../tabs/tabCommands';
 import type { ViewCommand } from '../view/viewCommands';
 
@@ -28,9 +29,13 @@ export type ViewerCommand =
   | NavigationCommand
   | WorkspaceKindCommand
   | ShortcutOverrideCommand
+  | SnippetCommand
   | { readonly kind: 'toggleFullScreen' }
   | { readonly kind: 'toggleControlWheel' }
   | { readonly kind: 'showWorkspaceKindSettings' }
+  | { readonly kind: 'showWordGoal' }
+  | { readonly kind: 'setWordGoal'; readonly goal: number }
+  | { readonly kind: 'clearWordGoal' }
   | { readonly kind: 'openDocuments' }
   | { readonly kind: 'openRecentFileAt'; readonly index: number }
   | { readonly kind: 'saveDocument' }

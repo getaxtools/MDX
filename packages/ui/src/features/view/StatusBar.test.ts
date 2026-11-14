@@ -133,4 +133,41 @@ describe('StatusBar', () => {
       expect(onShowControlWheel).toHaveBeenCalledOnce();
     });
   });
+
+  it('shows and announces the number of cursors when there is more than one', () => {
+    render(StatusBar, {
+      document: savedDocument,
+      zoomPercent: 100,
+      isSourceView: false,
+      cursorCount: 3,
+      translator: createTranslator(),
+      onResetZoom: vi.fn(),
+    });
+
+    expect(screen.getByRole('status').textContent.trim()).toBe('3 cursors');
+  });
+
+  it('says nothing about cursors with one', () => {
+    renderStatusBar(savedDocument);
+
+    expect(screen.getByRole('status').textContent.trim()).toBe('');
+  });
+
+  it('shows progress towards a word goal and announces when it is reached', () => {
+    render(StatusBar, {
+      document: { ...savedDocument, statistics: { words: 1200, characters: 6000, readingMinutes: 5 } },
+      zoomPercent: 100,
+      isSourceView: false,
+      wordGoal: 1000,
+      wordsThisSession: 35,
+      translator: createTranslator(),
+      onResetZoom: vi.fn(),
+    });
+
+    const words = screen.getByRole('button', { name: /1,200 of 1,000 words/ });
+
+    expect(screen.getByRole('progressbar', { name: 'Word goal' }).getAttribute('aria-valuenow')).toBe('100');
+    expect(words.title).toBe('35 words added this session');
+    expect(screen.getByRole('status').textContent.trim()).toBe('Word goal reached.');
+  });
 });

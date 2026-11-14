@@ -40,6 +40,9 @@ export interface ViewSettings {
   /** The control wheel opens where the pointer is instead of in its corner. */
   readonly isWheelOpenedAtPointer: boolean;
   readonly isWheelButtonInStatusBar: boolean;
+  /** A slash at the start of a line or after a space opens the insert menu, per editing mode. */
+  readonly isSlashMenuInRichText: boolean;
+  readonly isSlashMenuInSource: boolean;
 }
 
 export const THEME_PREFERENCES: readonly ThemePreference[] = [
@@ -106,6 +109,8 @@ export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
   wheelDock: 'bottomInlineEnd',
   isWheelOpenedAtPointer: false,
   isWheelButtonInStatusBar: false,
+  isSlashMenuInRichText: true,
+  isSlashMenuInSource: false,
 };
 
 export function zoomIn(settings: ViewSettings): ViewSettings {
@@ -228,6 +233,7 @@ export function parseViewSettings(saved: unknown): ViewSettings {
     isPreviewBesideEditor: isPreviewBesideEditor === true,
     editorSharePercent: parseEditorShare(editorSharePercent),
     ...parseKindSwitcherSettings(saved as Record<string, unknown>),
+    ...parseSlashMenuSettings(saved as Record<string, unknown>),
   };
 }
 
@@ -242,6 +248,15 @@ function parseKindSwitcherSettings(saved: Record<string, unknown>): KindSwitcher
     wheelDock: oneOf(WHEEL_DOCKS, saved.wheelDock, DEFAULT_VIEW_SETTINGS.wheelDock),
     isWheelOpenedAtPointer: saved.isWheelOpenedAtPointer === true,
     isWheelButtonInStatusBar: saved.isWheelButtonInStatusBar === true,
+  };
+}
+
+function parseSlashMenuSettings(
+  saved: Record<string, unknown>,
+): Pick<ViewSettings, 'isSlashMenuInRichText' | 'isSlashMenuInSource'> {
+  return {
+    isSlashMenuInRichText: saved.isSlashMenuInRichText !== false,
+    isSlashMenuInSource: saved.isSlashMenuInSource === true,
   };
 }
 

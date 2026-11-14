@@ -45,7 +45,9 @@ export type ViewCommand =
   | { readonly kind: 'setKindSwitcher'; readonly kindSwitcher: KindSwitcher }
   | { readonly kind: 'setWheelDock'; readonly wheelDock: WheelDock }
   | { readonly kind: 'toggleWheelOpenedAtPointer' }
-  | { readonly kind: 'toggleWheelButtonInStatusBar' };
+  | { readonly kind: 'toggleWheelButtonInStatusBar' }
+  | { readonly kind: 'toggleSlashMenuInRichText' }
+  | { readonly kind: 'toggleSlashMenuInSource' };
 
 type ViewCommandHandlers = {
   readonly [Kind in ViewCommand['kind']]: (
@@ -84,6 +86,14 @@ const VIEW_COMMAND_HANDLERS: ViewCommandHandlers = {
   toggleWheelButtonInStatusBar: (settings) => ({
     ...settings,
     isWheelButtonInStatusBar: !settings.isWheelButtonInStatusBar,
+  }),
+  toggleSlashMenuInRichText: (settings) => ({
+    ...settings,
+    isSlashMenuInRichText: !settings.isSlashMenuInRichText,
+  }),
+  toggleSlashMenuInSource: (settings) => ({
+    ...settings,
+    isSlashMenuInSource: !settings.isSlashMenuInSource,
   }),
 };
 

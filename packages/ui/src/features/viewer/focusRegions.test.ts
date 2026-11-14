@@ -45,6 +45,23 @@ describe('moveFocusBetweenRegions', () => {
     expect(focusedText()).toBe('Document');
   });
 
+  it('F6 reaches the activity bar with the kind group in it as one region', () => {
+    const root = document.createElement('div');
+    root.innerHTML = `
+      <nav data-focus-region aria-label="Panels">
+        <div role="group" aria-label="Workspace kinds"><button>Markdown viewer</button><button>Notes</button></div>
+        <button>Explorer</button>
+      </nav>
+      <footer data-focus-region><button>Encoding</button></footer>`;
+    document.body.append(root);
+
+    moveFocusBetweenRegions(root, 1, document.activeElement);
+    expect(focusedText()).toBe('Markdown viewer');
+    moveFocusBetweenRegions(root, 1, document.activeElement);
+
+    expect(focusedText()).toBe('Encoding');
+  });
+
   it('keeps focus inside an open dialog', () => {
     const root = windowWithRegions();
     const dialog = document.createElement('div');

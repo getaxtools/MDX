@@ -27,6 +27,15 @@ describe('createHtmlSanitizer', () => {
     );
   });
 
+  it('callout output passes the sanitizer unchanged', () => {
+    const sanitize = createHtmlSanitizer(window);
+    const foldableCallout =
+      '<details class="markdown-alert markdown-alert-note" open=""><summary class="markdown-alert-title">' +
+      'Can I export?</summary><p>Yes.</p></details>';
+
+    expect(sanitize(foldableCallout)).toBe(foldableCallout);
+  });
+
   it('leaves anchors without href and images without src untouched', () => {
     const sanitize = createHtmlSanitizer(window);
 

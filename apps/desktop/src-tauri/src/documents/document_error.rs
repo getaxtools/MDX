@@ -25,6 +25,8 @@ pub enum DocumentError {
     ChangedOnDisk,
     #[error("the document contains characters its encoding cannot store")]
     CannotEncode,
+    #[error("the file is not a picture")]
+    NotAnImage,
 }
 
 impl From<io::Error> for DocumentError {

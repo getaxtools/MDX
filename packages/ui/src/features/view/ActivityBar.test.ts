@@ -1,4 +1,4 @@
-import type { SidebarView } from '@mdx/core';
+import { WorkspaceKindsState, type SidebarView, type WorkspaceKind } from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
 import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
@@ -67,5 +67,52 @@ describe('ActivityBar', () => {
       [{ kind: 'showSettings' }],
       [{ kind: 'showKeyboardShortcuts' }],
     ]);
+  });
+
+  describe('with the kind group', () => {
+    const NOTES_BUILT: readonly WorkspaceKind[] = [
+      { id: 'markdownViewer', availability: 'built' },
+      { id: 'notes', availability: 'built' },
+      { id: 'specViewer', availability: 'planned' },
+    ];
+
+    function renderWithKinds() {
+      const kinds = WorkspaceKindsState.fromSaved(
+        { enabledKindIds: ['markdownViewer', 'notes'], activeKindId: 'markdownViewer' },
+        NOTES_BUILT,
+      );
+      render(ActivityBar, {
+        isSidebarVisible: true,
+        sidebarView: 'outline',
+        kinds,
+        translator: createTranslator(),
+        onCommand: vi.fn(),
+      });
+    }
+
+    it('puts the kind group above the view buttons', () => {
+      renderWithKinds();
+
+      const panels = screen.getByRole('navigation', { name: 'Panels' });
+      const names = [...panels.querySelectorAll('button')].map((button) => button.getAttribute('aria-label'));
+
+      expect(names.slice(0, 4)).toEqual(['Markdown viewer', 'Notes', 'Choose workspace kinds', 'Explorer']);
+    });
+
+    it('existing view buttons keep their pressed states below the kind group', () => {
+      renderWithKinds();
+
+      expect(screen.getByRole('button', { name: 'Markdown viewer' }).getAttribute('aria-pressed')).toBe(
+        'true',
+      );
+      expect(screen.getByRole('button', { name: 'Outline' }).getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getByRole('button', { name: 'Explorer' }).getAttribute('aria-pressed')).toBe('false');
+    });
+  });
+
+  it('is one region that F6 moves to', () => {
+    renderActivityBar();
+
+    expect(screen.getByRole('navigation', { name: 'Panels' }).hasAttribute('data-focus-region')).toBe(true);
   });
 });

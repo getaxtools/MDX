@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createMarkdownRenderer } from './createMarkdownRenderer';
+import { ENGLISH_ALERT_TITLES } from './plugins/alertsPlugin';
 
 const renderer = createMarkdownRenderer({
   window,
@@ -125,13 +126,7 @@ describe('createMarkdownRenderer', () => {
     it('names alerts in the language it is given', () => {
       const translated = createMarkdownRenderer({
         window,
-        alertTitles: {
-          note: 'नोट',
-          tip: 'Tip',
-          important: 'Important',
-          warning: 'Warning',
-          caution: 'Caution',
-        },
+        alertTitles: { ...ENGLISH_ALERT_TITLES, note: 'नोट' },
       });
 
       expect(translated.render('> [!NOTE]\n> Text').html).toContain(

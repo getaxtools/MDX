@@ -29,6 +29,9 @@ export {
   DEFAULT_WORKSPACE_KIND_ID,
   isBuiltKind,
   WORKSPACE_KINDS,
+  workspaceKindsFor,
+  attachmentFolderFor,
+  DEFAULT_ATTACHMENT_FOLDER,
   type WorkspaceKind,
   type WorkspaceKindAvailability,
   type WorkspaceKindId,
@@ -114,3 +117,49 @@ export {
   NavigationHistory,
   type NavigationStep,
 } from './navigation/NavigationHistory';
+export {
+  altTextOf,
+  attachmentLinkTarget,
+  imageMarkdown,
+  pastedImageName,
+} from './attachments/attachmentLinks';
+export {
+  clearWordGoal,
+  isValidWordGoal,
+  MAX_WORD_GOAL,
+  parseWordGoals,
+  renameWordGoal,
+  setWordGoal,
+  wordGoalProgress,
+  type WordGoalProgress,
+  type WordGoals,
+} from './word-goals/wordGoals';
+export {
+  availableSnippets,
+  BUILT_IN_SNIPPETS,
+  deleteSnippet,
+  EMPTY_SNIPPET_LIBRARY,
+  isBuiltInSnippetId,
+  MAX_SNIPPET_BODY_CHARACTERS,
+  MAX_SNIPPET_NAME_CHARACTERS,
+  parseSnippetLibrary,
+  saveSnippet,
+  setBuiltInSnippetHidden,
+  snippetRefusal,
+  type Snippet,
+  type SnippetLibrary,
+  type SnippetRefusal,
+} from './snippets/snippetLibrary';
+export {
+  expandSnippet,
+  expandTemplate,
+  type ExpandedSnippet,
+  type SnippetContext,
+} from './snippets/expandSnippet';
+export { formatDate } from './dates/formatDate';
+export { parseWikiLink, resolveWikiLink, type NoteEntry, type WikiLink } from './notes/wikiLinks';
+export {
+  editFrontMatter,
+  type FrontMatterEdit,
+  type FrontMatterEditResult,
+} from './front-matter/editFrontMatter';

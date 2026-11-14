@@ -5,6 +5,8 @@ import { FavouritesList, type Favourite, type FavouriteGroup } from '../favourit
 import { parseFavourites } from '../favourites/parseFavourites';
 import { RecentFilesList, type RecentFile } from '../recent-files/RecentFilesList';
 import { parseShortcutOverrides, type ShortcutOverrides } from '../shortcuts/parseShortcutOverrides';
+import { parseWordGoals, type WordGoals } from '../word-goals/wordGoals';
+import { EMPTY_SNIPPET_LIBRARY, parseSnippetLibrary, type SnippetLibrary } from '../snippets/snippetLibrary';
 import { TabStrip, type Tab, type TabStripSnapshot } from '../tabs/TabStrip';
 import {
   DEFAULT_VIEW_SETTINGS,
@@ -12,6 +14,7 @@ import {
   type LanguagePreference,
   type ViewSettings,
 } from '../view/ViewSettings';
+import { WORKSPACE_KINDS, type WorkspaceKind } from '../workspace-kinds/workspaceKinds';
 import { WorkspaceKindsState, type SavedWorkspaceKinds } from '../workspace-kinds/WorkspaceKindsState';
 import { isRecord, parseLocation, validEntries } from './savedValues';
 
@@ -28,6 +31,8 @@ export interface PersistedAppState {
   readonly view: ViewSettings;
   readonly workspaceKinds: SavedWorkspaceKinds;
   readonly shortcutOverrides: ShortcutOverrides;
+  readonly wordGoals: WordGoals;
+  readonly snippetLibrary: SnippetLibrary;
 }
 
 export interface ViewerState {
@@ -38,6 +43,8 @@ export interface ViewerState {
   readonly viewSettings: ViewSettings;
   readonly workspaceKinds: WorkspaceKindsState;
   readonly shortcutOverrides: ShortcutOverrides;
+  readonly wordGoals: WordGoals;
+  readonly snippetLibrary: SnippetLibrary;
 }
 
 export interface RestoredAppState extends ViewerState {
@@ -52,6 +59,8 @@ export function toPersistedAppState({
   viewSettings,
   workspaceKinds,
   shortcutOverrides,
+  wordGoals,
+  snippetLibrary,
 }: ViewerState): PersistedAppState {
   return {
     schemaVersion: APP_STATE_SCHEMA_VERSION,
@@ -63,6 +72,8 @@ export function toPersistedAppState({
     view: viewSettings,
     workspaceKinds: workspaceKinds.toSaved(),
     shortcutOverrides,
+    wordGoals,
+    snippetLibrary,
   };
 }
 
@@ -80,10 +91,13 @@ export function savedLanguagePreference(saved: unknown): LanguagePreference {
     : DEFAULT_VIEW_SETTINGS.language;
 }
 
-export function restoreAppState(saved: unknown): RestoredAppState {
-  if (saved === undefined || saved === null) return emptyAppState({ wasReset: false });
+export function restoreAppState(
+  saved: unknown,
+  kindRegistry: readonly WorkspaceKind[] = WORKSPACE_KINDS,
+): RestoredAppState {
+  if (saved === undefined || saved === null) return emptyAppState({ wasReset: false, kindRegistry });
   if (!isRecord(saved) || saved.schemaVersion !== APP_STATE_SCHEMA_VERSION)
-    return emptyAppState({ wasReset: true });
+    return emptyAppState({ wasReset: true, kindRegistry });
   const savedTabs = isRecord(saved.tabs) ? saved.tabs : {};
   const activeKey = typeof savedTabs.activeKey === 'string' ? { activeKey: savedTabs.activeKey } : {};
   return {
@@ -92,21 +106,31 @@ export function restoreAppState(saved: unknown): RestoredAppState {
     favourites: parseFavourites(saved.favourites, saved.favouriteGroups),
     explorerFolders: ExplorerFolders.fromFolders(validEntries(saved.explorerFolders, parseLocation)),
     viewSettings: parseViewSettings(saved.view),
-    workspaceKinds: WorkspaceKindsState.fromSaved(saved.workspaceKinds),
+    workspaceKinds: WorkspaceKindsState.fromSaved(saved.workspaceKinds, kindRegistry),
     shortcutOverrides: parseShortcutOverrides(saved.shortcutOverrides),
+    wordGoals: parseWordGoals(saved.wordGoals),
+    snippetLibrary: parseSnippetLibrary(saved.snippetLibrary),
     wasReset: false,
   };
 }
 
-function emptyAppState({ wasReset }: { wasReset: boolean }): RestoredAppState {
+function emptyAppState({
+  wasReset,
+  kindRegistry,
+}: {
+  wasReset: boolean;
+  kindRegistry: readonly WorkspaceKind[];
+}): RestoredAppState {
   return {
     tabStrip: TabStrip.empty(),
     recentFiles: RecentFilesList.empty(),
     favourites: FavouritesList.empty(),
     explorerFolders: ExplorerFolders.empty(),
     viewSettings: DEFAULT_VIEW_SETTINGS,
-    workspaceKinds: WorkspaceKindsState.initial(),
+    workspaceKinds: WorkspaceKindsState.initial(kindRegistry),
     shortcutOverrides: {},
+    wordGoals: {},
+    snippetLibrary: EMPTY_SNIPPET_LIBRARY,
     wasReset,
   };
 }

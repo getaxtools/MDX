@@ -8,7 +8,8 @@ export type DocumentOpenFailure =
   | 'invalidRequest'
   | 'changedOnDisk'
   | 'cannotEncode'
-  | 'lossyDecoding';
+  | 'lossyDecoding'
+  | 'notAnImage';
 
 const DOCUMENT_OPEN_FAILURES: readonly string[] = [
   'notFound',
@@ -21,6 +22,7 @@ const DOCUMENT_OPEN_FAILURES: readonly string[] = [
   'changedOnDisk',
   'cannotEncode',
   'lossyDecoding',
+  'notAnImage',
 ];
 
 export function isDocumentOpenFailure(value: unknown): value is DocumentOpenFailure {

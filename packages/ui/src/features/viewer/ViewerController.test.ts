@@ -675,6 +675,33 @@ describe('ViewerController', () => {
       ]);
     });
 
+    it('a section moved in the outline opens the editor with the change unsaved', async () => {
+      const viewer = createViewer({ startupPaths: [GUIDE] });
+      await viewer.controller.start();
+      viewer.controller.updateEditedText(guideKey, '# Guide\n\n## A\n\nOne.\n\n## B\n\nTwo.\n');
+
+      await viewer.controller.execute({ kind: 'changeOutlineSection', line: 2, action: 'moveDown' });
+
+      expect(viewer.snapshot().isActiveDocumentEditing).toBe(true);
+      expect(viewer.snapshot().unsavedDocumentKeys.has(guideKey)).toBe(true);
+    });
+
+    it('sends a section move to the open editor so it can be undone there', async () => {
+      const { controller, snapshot } = await editGuide('# Guide\n\n## A\n\nOne.\n\n## B\n\nTwo.\n');
+
+      await controller.execute({ kind: 'changeOutlineSection', line: 2, action: 'demote' });
+
+      expect(snapshot().editorRequest).toMatchObject({ kind: 'changeSection', line: 2, action: 'demote' });
+    });
+
+    it('says why a section cannot change', async () => {
+      const { controller, snapshot } = await editGuide('# Guide\n');
+
+      await controller.execute({ kind: 'changeOutlineSection', line: 0, action: 'promote' });
+
+      expect(snapshot().notice).toBe('This section is already at the top level.');
+    });
+
     it('saves edited text over the file and clears the unsaved mark', async () => {
       const { controller, documentFiles, snapshot } = await editGuide('# Saved guide');
 
@@ -1731,6 +1758,59 @@ describe('ViewerController', () => {
 
       expect(openedDialog).toBe('workspaceKindSettings');
       expect(snapshot().openDialog).toBeUndefined();
+    });
+  });
+
+  describe('word goals', () => {
+    it('sets a goal for the active document and leaves the document unchanged', async () => {
+      const { controller, snapshot, documentFiles } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+      await controller.execute({ kind: 'showWordGoal' });
+
+      await controller.execute({ kind: 'setWordGoal', goal: 500 });
+
+      const guideKey = InMemoryDocumentFiles.locationOf(GUIDE).canonicalKey;
+      expect(snapshot().viewer.wordGoals).toEqual({ [guideKey]: 500 });
+      expect(snapshot().openDialog).toBeUndefined();
+      expect(documentFiles.textOf(GUIDE)).toBe('# Guide');
+    });
+
+    it('Clear All Data removes goals', async () => {
+      const { controller, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+      await controller.execute({ kind: 'setWordGoal', goal: 500 });
+
+      await controller.execute({ kind: 'clearAllData' });
+
+      expect(snapshot().viewer.wordGoals).toEqual({});
+    });
+  });
+
+  describe('snippets', () => {
+    it('saves a snippet and inserts it in the editor, opening it when needed', async () => {
+      const { controller, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      await controller.start();
+      const snippet = { id: 'user.1', name: 'Sign-off', trigger: 'sig', body: 'Best' };
+
+      await controller.execute({ kind: 'saveSnippet', snippet });
+      await controller.execute({ kind: 'insertSnippet', snippetId: 'user.1' });
+
+      expect(snapshot().viewer.snippetLibrary.snippets).toEqual([snippet]);
+      expect(snapshot().isActiveDocumentEditing).toBe(true);
+      expect(snapshot().editorRequest).toMatchObject({ kind: 'insertSnippet', body: 'Best' });
+    });
+
+    it('Clear All Data removes snippets', async () => {
+      const { controller, snapshot } = createViewer();
+      await controller.start();
+      await controller.execute({
+        kind: 'saveSnippet',
+        snippet: { id: 'user.1', name: 'Sign-off', trigger: '', body: 'Best' },
+      });
+
+      await controller.execute({ kind: 'clearAllData' });
+
+      expect(snapshot().viewer.snippetLibrary.snippets).toEqual([]);
     });
   });
 });

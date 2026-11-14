@@ -90,4 +90,21 @@ describe('paletteCommands', () => {
     expect(kindSwitchesIn(['markdownViewer', 'specViewer'], 'markdownViewer')).toEqual([]);
     expect(kindSwitchesIn(['markdownViewer'], 'markdownViewer')).toEqual([]);
   });
+
+  it('offers each snippet, built-ins named in the display language', () => {
+    const withSnippets = paletteCommands(createTranslator(), {
+      shortcuts: effectiveCommandShortcuts({}),
+      workspaceKinds: WorkspaceKindsState.initial(NOTES_BUILT_SPEC_VIEWER_PLANNED),
+      snippets: [
+        { id: 'builtIn.date', name: 'Date', trigger: 'date', body: '{{date}}' },
+        { id: 'user.1', name: 'Sign-off', trigger: 'sig', body: 'Best' },
+      ],
+    });
+
+    expect(withSnippets).toContainEqual({
+      command: { kind: 'insertSnippet', snippetId: 'user.1' },
+      label: 'Insert Snippet: Sign-off',
+    });
+    expect(withSnippets.map(({ label }) => label)).toContain('Insert Snippet: Date');
+  });
 });

@@ -13,6 +13,7 @@ import {
   type OutlineEnvironment,
 } from './plugins/headingAnchorsPlugin';
 import { alertsPlugin, ENGLISH_ALERT_TITLES, type AlertTitles } from './plugins/alertsPlugin';
+import { wikiLinksPlugin, type NotesRendering } from './plugins/wikiLinksPlugin';
 import { footnotesPlugin } from './plugins/footnotesPlugin';
 import { mathPlugin } from './plugins/mathPlugin';
 import { sourceLinesPlugin, type SourceLinesEnvironment } from './plugins/sourceLinesPlugin';
@@ -34,6 +35,8 @@ export interface MarkdownRendererOptions {
   readonly resolveResourceUrl?: ResourceUrlResolver;
   /** Titles of GitHub alerts such as `[!NOTE]`, in the language of the app. */
   readonly alertTitles?: AlertTitles;
+  /** Wiki-links and tags, for documents of a Notes workspace. */
+  readonly notes?: NotesRendering;
 }
 
 export interface RenderOptions {
@@ -53,8 +56,10 @@ export function createMarkdownRenderer({
   window,
   resolveResourceUrl,
   alertTitles = ENGLISH_ALERT_TITLES,
+  notes,
 }: MarkdownRendererOptions): MarkdownRenderer {
   const markdown = createMarkdownParser(alertTitles);
+  if (notes) markdown.use(wikiLinksPlugin, notes);
   const sanitizeHtml = createHtmlSanitizer(window);
 
   return {

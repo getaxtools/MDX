@@ -1,3 +1,4 @@
+import { EMPTY_SNIPPET_LIBRARY } from '../snippets/snippetLibrary';
 import { InMemoryDocumentFiles, untitledLocation } from '@mdx/platform';
 import { describe, expect, it } from 'vitest';
 import { ExplorerFolders } from '../explorer/ExplorerFolders';
@@ -30,6 +31,8 @@ function emptyViewerState() {
     viewSettings: DEFAULT_VIEW_SETTINGS,
     workspaceKinds: WorkspaceKindsState.initial(),
     shortcutOverrides: {},
+    wordGoals: {},
+    snippetLibrary: EMPTY_SNIPPET_LIBRARY,
   };
 }
 

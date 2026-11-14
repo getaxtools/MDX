@@ -5,6 +5,8 @@
   import { COMMAND_SHORTCUTS, type CommandShortcut } from '../shortcuts/commandShortcuts';
   import type { DesktopPlatform, ViewerCommand } from '../viewer/viewerCommands';
   import ShortcutSetting from './ShortcutSetting.svelte';
+  import SnippetsSection from '../snippets/SnippetsSection.svelte';
+  import { EMPTY_SNIPPET_LIBRARY, type SnippetLibrary } from '@mdx/core';
   import {
     SETTING_SECTIONS,
     matchesQuery,
@@ -20,6 +22,7 @@
     /** The keys each command has now, including the user's changes. */
     shortcuts?: readonly CommandShortcut[];
     platform?: DesktopPlatform;
+    snippetLibrary?: SnippetLibrary;
     translator: Translator;
     onCommand: (command: ViewerCommand) => void;
     onClose: () => void;
@@ -30,6 +33,7 @@
     dataFolder,
     shortcuts = COMMAND_SHORTCUTS,
     platform = 'windows',
+    snippetLibrary = EMPTY_SNIPPET_LIBRARY,
     translator,
     onCommand,
     onClose,
@@ -48,6 +52,14 @@
     })).filter(({ settings: sectionSettings }) => sectionSettings.length > 0),
   );
 
+  const isSnippetsShown = $derived(
+    matchesQuery(
+      query,
+      [translator.translate('settings.section.snippets'), translator.translate('snippets.description')].join(
+        ' ',
+      ),
+    ),
+  );
   const privacyDescription = $derived(
     translator.translate('settings.privacy.description', { path: dataFolder }),
   );
@@ -138,6 +150,9 @@
       {/each}
     </section>
   {/each}
+  {#if isSnippetsShown}
+    <SnippetsSection library={snippetLibrary} {translator} {onCommand} />
+  {/if}
   {#if isPrivacyShown}
     <section aria-labelledby="settings-section-privacy">
       <h3 id="settings-section-privacy">{translator.translate('settings.section.privacy')}</h3>

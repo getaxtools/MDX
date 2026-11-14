@@ -13,8 +13,11 @@ import { ExplorerFolders } from '../explorer/ExplorerFolders';
 import { FavouritesList } from '../favourites/FavouritesList';
 import { RecentFilesList } from '../recent-files/RecentFilesList';
 import type { ShortcutOverrides } from '../shortcuts/parseShortcutOverrides';
+import type { WordGoals } from '../word-goals/wordGoals';
+import { EMPTY_SNIPPET_LIBRARY, type SnippetLibrary } from '../snippets/snippetLibrary';
 import { TabStrip } from '../tabs/TabStrip';
 import { DEFAULT_VIEW_SETTINGS, type ViewSettings } from '../view/ViewSettings';
+import { WORKSPACE_KINDS, type WorkspaceKind } from '../workspace-kinds/workspaceKinds';
 import { WorkspaceKindsState } from '../workspace-kinds/WorkspaceKindsState';
 import { restoreAppState, toPersistedAppState, type ViewerState } from './persistedAppState';
 
@@ -22,24 +25,30 @@ export interface ViewerSessionDependencies {
   readonly documentFiles: DocumentFilePort;
   readonly appState: AppStatePort;
   readonly now: () => number;
+  /** The workspace kinds this build offers; the UI test build also offers planned ones. */
+  readonly kindRegistry?: readonly WorkspaceKind[];
 }
 
 export type { ViewerState } from './persistedAppState';
 
 type ViewerStateListener = (state: ViewerState) => void;
 
-const EMPTY_STATE: ViewerState = {
-  tabStrip: TabStrip.empty(),
-  recentFiles: RecentFilesList.empty(),
-  favourites: FavouritesList.empty(),
-  explorerFolders: ExplorerFolders.empty(),
-  viewSettings: DEFAULT_VIEW_SETTINGS,
-  workspaceKinds: WorkspaceKindsState.initial(),
-  shortcutOverrides: {},
-};
+function emptyState(kindRegistry: readonly WorkspaceKind[]): ViewerState {
+  return {
+    tabStrip: TabStrip.empty(),
+    recentFiles: RecentFilesList.empty(),
+    favourites: FavouritesList.empty(),
+    explorerFolders: ExplorerFolders.empty(),
+    viewSettings: DEFAULT_VIEW_SETTINGS,
+    workspaceKinds: WorkspaceKindsState.initial(kindRegistry),
+    shortcutOverrides: {},
+    wordGoals: {},
+    snippetLibrary: EMPTY_SNIPPET_LIBRARY,
+  };
+}
 
 export class ViewerSession {
-  private state: ViewerState = EMPTY_STATE;
+  private state: ViewerState;
   private readonly openedDocuments = new Map<string, OpenedDocument>();
   private readonly untitledDocuments = new Map<string, OpenedDocument>();
   /** Encodings the user chose with Reopen with Encoding, kept for live reload. */
@@ -47,14 +56,19 @@ export class ViewerSession {
   private untitledCount = 0;
   private readonly listeners = new Set<ViewerStateListener>();
 
-  constructor(private readonly dependencies: ViewerSessionDependencies) {}
+  private readonly kindRegistry: readonly WorkspaceKind[];
+
+  constructor(private readonly dependencies: ViewerSessionDependencies) {
+    this.kindRegistry = dependencies.kindRegistry ?? WORKSPACE_KINDS;
+    this.state = emptyState(this.kindRegistry);
+  }
 
   currentState(): ViewerState {
     return this.state;
   }
 
   async restore(): Promise<{ wasReset: boolean }> {
-    const restored = restoreAppState(await this.dependencies.appState.load());
+    const restored = restoreAppState(await this.dependencies.appState.load(), this.kindRegistry);
     this.openedDocuments.clear();
     this.replaceState({
       tabStrip: restored.tabStrip,
@@ -64,6 +78,8 @@ export class ViewerSession {
       viewSettings: restored.viewSettings,
       workspaceKinds: restored.workspaceKinds,
       shortcutOverrides: restored.shortcutOverrides,
+      wordGoals: restored.wordGoals,
+      snippetLibrary: restored.snippetLibrary,
     });
     return { wasReset: restored.wasReset };
   }
@@ -74,7 +90,7 @@ export class ViewerSession {
     this.untitledDocuments.clear();
     this.chosenEncodings.clear();
     this.untitledCount = 0;
-    this.replaceState(EMPTY_STATE);
+    this.replaceState(emptyState(this.kindRegistry));
   }
 
   async save(): Promise<void> {
@@ -248,6 +264,14 @@ export class ViewerSession {
 
   updateShortcutOverrides(change: (shortcutOverrides: ShortcutOverrides) => ShortcutOverrides): void {
     this.replaceState({ ...this.state, shortcutOverrides: change(this.state.shortcutOverrides) });
+  }
+
+  updateWordGoals(change: (wordGoals: WordGoals) => WordGoals): void {
+    this.replaceState({ ...this.state, wordGoals: change(this.state.wordGoals) });
+  }
+
+  updateSnippetLibrary(change: (snippetLibrary: SnippetLibrary) => SnippetLibrary): void {
+    this.replaceState({ ...this.state, snippetLibrary: change(this.state.snippetLibrary) });
   }
 
   subscribe(listener: ViewerStateListener): () => void {

@@ -14,12 +14,13 @@ import {
 import { SUPPORTED_LOCALES, directionOf, isKnownLocale, type MessageKey, type Translator } from '@mdx/i18n';
 import type { ViewerCommand } from '../viewer/viewerCommands';
 
-export type SettingSection = 'appearance' | 'language' | 'layout' | 'workspaceKinds' | 'keyboard';
+export type SettingSection = 'appearance' | 'language' | 'layout' | 'editing' | 'workspaceKinds' | 'keyboard';
 
 export const SETTING_SECTIONS: readonly SettingSection[] = [
   'appearance',
   'language',
   'layout',
+  'editing',
   'workspaceKinds',
   'keyboard',
 ];
@@ -232,6 +233,27 @@ const WORKSPACE_KIND_SETTINGS: readonly SettingDefinition[] = [
   },
 ];
 
+const EDITING_SETTINGS: readonly SettingDefinition[] = [
+  {
+    id: 'slashMenuInRichText',
+    kind: 'toggle',
+    section: 'editing',
+    labelKey: 'settings.slashMenuInRichText.label',
+    descriptionKey: 'settings.slashMenuInRichText.description',
+    isOnIn: (settings) => settings.isSlashMenuInRichText,
+    toggleCommand: { kind: 'toggleSlashMenuInRichText' },
+  },
+  {
+    id: 'slashMenuInSource',
+    kind: 'toggle',
+    section: 'editing',
+    labelKey: 'settings.slashMenuInSource.label',
+    descriptionKey: 'settings.slashMenuInSource.description',
+    isOnIn: (settings) => settings.isSlashMenuInSource,
+    toggleCommand: { kind: 'toggleSlashMenuInSource' },
+  },
+];
+
 const KEYBOARD_SETTINGS: readonly SettingDefinition[] = [
   {
     id: 'controlWheelShortcut',
@@ -303,6 +325,7 @@ export const SETTING_DEFINITIONS: readonly SettingDefinition[] = [
     },
     (settings) => settings.isPreviewBesideEditor,
   ),
+  ...EDITING_SETTINGS,
   ...WORKSPACE_KIND_SETTINGS,
   ...KEYBOARD_SETTINGS,
 ];

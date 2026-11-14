@@ -1,5 +1,6 @@
 pub mod app_info;
 pub mod app_state;
+pub mod attachments;
 pub mod document_export;
 pub mod document_saving;
 pub mod document_search;

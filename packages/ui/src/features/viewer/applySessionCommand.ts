@@ -5,6 +5,7 @@ import {
 } from '../explorer/explorerCommands';
 import { applyFavouriteCommand, isFavouriteCommand } from '../favourites/favouriteCommands';
 import { applyRecentFileCommand, isRecentFileCommand } from '../recent-files/recentFileCommands';
+import { applySnippetLibraryCommand, isSnippetLibraryCommand } from '../snippets/snippetCommands';
 import {
   applyShortcutOverrideCommand,
   isShortcutOverrideCommand,
@@ -39,6 +40,10 @@ export function applySessionCommand(session: ViewerSession, command: ViewerComma
   }
   if (isShortcutOverrideCommand(command)) {
     session.updateShortcutOverrides((overrides) => applyShortcutOverrideCommand(overrides, command));
+    return true;
+  }
+  if (isSnippetLibraryCommand(command)) {
+    session.updateSnippetLibrary((library) => applySnippetLibraryCommand(library, command));
     return true;
   }
   return false;

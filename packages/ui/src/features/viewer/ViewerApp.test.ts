@@ -1,4 +1,4 @@
-import { ViewerSession } from '@mdx/core';
+import { ViewerSession, WorkspaceKindsState, type WorkspaceKind } from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
 import { InMemoryAppState, InMemoryDocumentFiles, InMemoryDocumentRequests } from '@mdx/platform';
 import { createMarkdownRenderer } from '@mdx/renderer';
@@ -15,12 +15,13 @@ const NOTES = 'C:\\Docs\\Notes.md';
 async function renderViewer(startupPaths: string[] = []) {
   const requests = new InMemoryDocumentRequests(startupPaths);
   const translator = createTranslator();
+  const session = new ViewerSession({
+    documentFiles: new InMemoryDocumentFiles({ [GUIDE]: '# Guide\n\nWelcome.', [NOTES]: '# Notes' }),
+    appState: new InMemoryAppState(),
+    now: () => 0,
+  });
   const controller = new ViewerController({
-    session: new ViewerSession({
-      documentFiles: new InMemoryDocumentFiles({ [GUIDE]: '# Guide\n\nWelcome.', [NOTES]: '# Notes' }),
-      appState: new InMemoryAppState(),
-      now: () => 0,
-    }),
+    session,
     requests,
     renderer: createMarkdownRenderer({ window }),
     translator,
@@ -32,7 +33,25 @@ async function renderViewer(startupPaths: string[] = []) {
     platform: 'windows',
     appInfo: { version: '1.0.0', dataFolder: 'C:\\Data' },
   });
-  return { requests, controller };
+  return { requests, controller, session };
+}
+
+const NOTES_BUILT: readonly WorkspaceKind[] = [
+  { id: 'markdownViewer', availability: 'built' },
+  { id: 'notes', availability: 'built' },
+  { id: 'specViewer', availability: 'planned' },
+];
+
+async function renderViewerWithNotesBuilt() {
+  const viewer = await renderViewer();
+  viewer.session.updateWorkspaceKinds(() =>
+    WorkspaceKindsState.fromSaved(
+      { enabledKindIds: ['markdownViewer', 'notes'], activeKindId: 'markdownViewer' },
+      NOTES_BUILT,
+    ),
+  );
+  await tick();
+  return viewer;
 }
 
 describe('ViewerApp', () => {
@@ -192,11 +211,13 @@ describe('ViewerApp', () => {
     expect(document.documentElement.dataset.theme).toBe('dark');
   });
 
-  it('moves focus between the Explorer, the tabs, the document and the status bar with F6', async () => {
+  it('moves focus between the activity bar, the Explorer, the tabs, the document and the status bar with F6', async () => {
     await renderViewer([GUIDE]);
     const article = await screen.findByRole('article', { name: 'Guide.md' });
     const documentArea = article.closest('main');
 
+    await userEvent.keyboard('{F6}');
+    expect(screen.getByRole('navigation', { name: 'Panels' }).contains(document.activeElement)).toBe(true);
     await userEvent.keyboard('{F6}');
     expect(screen.getByRole('navigation', { name: 'Explorer' }).contains(document.activeElement)).toBe(true);
     await userEvent.keyboard('{F6}');
@@ -298,6 +319,54 @@ describe('ViewerApp', () => {
 
     const wheel = await screen.findByRole('dialog', { name: 'Control wheel' });
     expect(wheel.style.left).toBe('400px');
+  });
+
+  describe('kind bar and control wheel', () => {
+    const kindBar = () => screen.getByRole('group', { name: 'Workspace kinds' });
+
+    it("a kind turned off in the bar's popup leaves the wheel", async () => {
+      const { controller } = await renderViewerWithNotesBuilt();
+      await userEvent.click(screen.getByRole('button', { name: 'Choose workspace kinds' }));
+
+      await userEvent.click(screen.getByRole('switch', { name: /^Notes/ }));
+      await userEvent.keyboard('{Escape}');
+      await controller.execute({ kind: 'toggleControlWheel' });
+
+      await screen.findByRole('dialog', { name: 'Control wheel' });
+      expect(screen.getAllByRole('menuitemradio').map((item) => item.getAttribute('aria-label'))).toEqual([
+        'Markdown viewer',
+      ]);
+    });
+
+    it("switching in the wheel presses the kind's bar button", async () => {
+      const { controller } = await renderViewerWithNotesBuilt();
+      await controller.execute({ kind: 'toggleControlWheel' });
+      await screen.findByRole('dialog', { name: 'Control wheel' });
+
+      await userEvent.keyboard('2');
+
+      expect(kindBar().querySelector('[aria-pressed="true"]')?.getAttribute('aria-label')).toBe('Notes');
+    });
+
+    it('turning off the active kind from the bar announces both kinds', async () => {
+      await renderViewerWithNotesBuilt();
+      await userEvent.click(screen.getByRole('button', { name: 'Notes' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Choose workspace kinds' }));
+
+      await userEvent.click(screen.getByRole('switch', { name: /^Notes/ }));
+
+      expect(await screen.findByText('Notes is off. Showing Markdown viewer.')).toBeTruthy();
+    });
+
+    it('hides the kind bar when the setting is wheel only', async () => {
+      const { controller } = await renderViewerWithNotesBuilt();
+      expect(kindBar()).toBeTruthy();
+
+      await controller.execute({ kind: 'setKindSwitcher', kindSwitcher: 'wheel' });
+      await tick();
+
+      expect(screen.queryByRole('group', { name: 'Workspace kinds' })).toBeNull();
+    });
   });
 
   it('stays at the end of the document after scrolling there', async () => {

@@ -13,6 +13,15 @@ import type {
 } from '@mdx/platform';
 import type { AppInfo } from '@mdx/ui';
 
+interface AttachmentRequest {
+  readonly documentPath: string;
+  readonly attachmentFolder: string;
+  readonly suggestedName: string;
+  readonly source:
+    | { readonly kind: 'droppedFile'; readonly path: string }
+    | { readonly kind: 'pastedBytes'; readonly bytes: readonly number[] };
+}
+
 export const tauriCommands = {
   openDocument: (path: string, encoding?: string) =>
     invoke<OpenedDocument>('open_document', { path, encoding: encoding ?? null }),
@@ -30,6 +39,8 @@ export const tauriCommands = {
     invoke<null>('update_menu_language', { labels }),
   updateMenuShortcuts: (shortcuts: Readonly<Record<string, string>>) =>
     invoke<null>('update_menu_shortcuts', { shortcuts }),
+  saveAttachment: (request: AttachmentRequest) =>
+    invoke<{ relativePath: string }>('save_attachment', { request }),
   watchDocuments: (paths: readonly string[]) => invoke<null>('watch_documents', { paths }),
   watchFolders: (paths: readonly string[]) => invoke<null>('watch_folders', { paths }),
   resolveDocumentLink: (document: string, href: string) =>
@@ -51,6 +62,7 @@ export const tauriCommands = {
 };
 
 export const OPEN_DOCUMENTS_EVENT = 'open-documents';
+export const IMAGES_DROPPED_EVENT = 'images-dropped';
 export const MENU_COMMAND_EVENT = 'menu-command';
 export const DOCUMENTS_CHANGED_EVENT = 'documents-changed';
 export const FOLDERS_CHANGED_EVENT = 'folders-changed';

@@ -1,5 +1,10 @@
 import { withUnixLineBreaks, type ViewerSession } from '@mdx/core';
-import type { EditorMenuCommand } from '@mdx/editor';
+import {
+  changeSectionInText,
+  type EditorMenuCommand,
+  type SectionAction,
+  type SectionRefusal,
+} from '@mdx/editor';
 import { isUntitledLocation, type DocumentLocation } from '@mdx/platform';
 import type { DocumentEditing } from './DocumentEditing';
 import type { EditorRequest } from './editingCommands';
@@ -67,6 +72,53 @@ export class EditingActions {
     });
     this.callbacks.onChange();
     return true;
+  }
+
+  /**
+   * Moves, promotes or demotes a section chosen in the outline. An open editor makes the change itself,
+   * so it can be undone there; otherwise the document opens in the editor with the change unsaved.
+   */
+  changeOutlineSection(line: number, action: SectionAction): SectionRefusal | undefined {
+    const location = this.activeLocation();
+    if (!location) return undefined;
+    const { canonicalKey } = location;
+    const savedText = withUnixLineBreaks(this.session.openedDocument(canonicalKey)?.text ?? '');
+    const change = changeSectionInText(this.editing.editedTextOf(canonicalKey) ?? savedText, line, action);
+    if (change.outcome === 'refused') return change.refusal;
+    if (this.editing.isEditing(canonicalKey)) {
+      const id = this.nextRequestId();
+      this.requests.set(canonicalKey, { id, canonicalKey, kind: 'changeSection', line, action });
+    } else {
+      this.editing.toggleEditing(canonicalKey);
+      this.editing.updateText(canonicalKey, change.text, savedText);
+    }
+    this.callbacks.onChange();
+    return undefined;
+  }
+
+  /** Inserts a snippet in the active document, opening it in the editor first when needed. */
+  insertSnippet(body: string): void {
+    const location = this.activeLocation();
+    if (!location) return;
+    const { canonicalKey } = location;
+    if (!this.editing.isEditing(canonicalKey)) this.editing.toggleEditing(canonicalKey);
+    this.requests.set(canonicalKey, { id: this.nextRequestId(), canonicalKey, kind: 'insertSnippet', body });
+    this.callbacks.onChange();
+  }
+
+  /** Asks the active document's editor to add picture links near a point. */
+  insertPictureLinks(links: readonly string[], point: { readonly x: number; readonly y: number }): void {
+    const location = this.activeLocation();
+    if (!location || !this.editing.isEditing(location.canonicalKey)) return;
+    const { canonicalKey } = location;
+    this.requests.set(canonicalKey, {
+      id: this.nextRequestId(),
+      canonicalKey,
+      kind: 'insertPictureLinks',
+      links,
+      point,
+    });
+    this.callbacks.onChange();
   }
 
   revertActiveDocument(): Promise<void> {

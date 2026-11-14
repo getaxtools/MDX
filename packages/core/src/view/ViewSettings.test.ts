@@ -40,6 +40,8 @@ describe('view settings', () => {
       wheelDock: 'bottomInlineEnd',
       isWheelOpenedAtPointer: false,
       isWheelButtonInStatusBar: false,
+      isSlashMenuInRichText: true,
+      isSlashMenuInSource: false,
     });
   });
 
@@ -83,6 +85,8 @@ describe('view settings', () => {
       wheelDock: 'bottomInlineStart',
       isWheelOpenedAtPointer: true,
       isWheelButtonInStatusBar: true,
+      isSlashMenuInRichText: false,
+      isSlashMenuInSource: true,
     };
 
     expect(parseViewSettings(saved)).toEqual(saved);

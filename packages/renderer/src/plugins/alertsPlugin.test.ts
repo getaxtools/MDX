@@ -28,10 +28,56 @@ describe('alertsPlugin', () => {
     );
   });
 
-  it('leaves ordinary quotes and unknown markers alone', () => {
+  it.each([
+    ['info', 'note', 'Info'],
+    ['todo', 'note', 'To do'],
+    ['abstract', 'note', 'Abstract'],
+    ['summary', 'note', 'Summary'],
+    ['quote', 'note', 'Quote'],
+    ['success', 'tip', 'Success'],
+    ['example', 'important', 'Example'],
+    ['question', 'warning', 'Question'],
+    ['failure', 'caution', 'Failure'],
+    ['danger', 'caution', 'Danger'],
+    ['bug', 'caution', 'Bug'],
+  ])('shows a [!%s] callout with the %s look and its own title', (type, look, title) => {
+    const html = markdown.render(`> [!${type}]\n> Text`);
+
+    expect(html).toContain(`<div class="markdown-alert markdown-alert-${look}">`);
+    expect(html).toContain(`<p class="markdown-alert-title">${title}</p>`);
+  });
+
+  it('unknown type uses note look and its own title', () => {
+    const html = markdown.render('> [!recipe]\n> Flour');
+
+    expect(html).toContain('<div class="markdown-alert markdown-alert-note">');
+    expect(html).toContain('<p class="markdown-alert-title">Recipe</p>');
+  });
+
+  it('a title after the marker replaces the type name', () => {
+    expect(markdown.render('> [!TIP] Shortcut\n> Text')).toContain(
+      '<p class="markdown-alert-title">Shortcut</p>',
+    );
+  });
+
+  it('minus starts collapsed', () => {
+    const html = markdown.render('> [!faq]- Can I export?\n> Yes.');
+
+    expect(html).toBe(
+      '<details class="markdown-alert markdown-alert-note">\n' +
+        '<summary class="markdown-alert-title">Can I export?</summary>\n<p>Yes.</p>\n</details>\n',
+    );
+  });
+
+  it('plus starts expanded', () => {
+    expect(markdown.render('> [!NOTE]+\n> Body')).toContain(
+      '<details class="markdown-alert markdown-alert-note" open="">',
+    );
+  });
+
+  it('leaves ordinary quotes and quotes without a marker alone', () => {
     expect(markdown.render('> Just a quote')).toBe('<blockquote>\n<p>Just a quote</p>\n</blockquote>\n');
-    expect(markdown.render('> [!DANGER]\n> Text')).toContain('<blockquote>');
-    expect(markdown.render('> [!NOTE] with text on the same line')).toContain('<blockquote>');
+    expect(markdown.render('> [link](x) [!NOTE]')).toContain('<blockquote>');
   });
 
   it('closes the alert at its own end when quotes are nested', () => {

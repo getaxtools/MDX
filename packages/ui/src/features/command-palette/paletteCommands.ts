@@ -4,6 +4,8 @@ import {
   TYPOGRAPHIES,
   WorkspaceKindsState,
   WORKSPACE_KINDS,
+  isBuiltInSnippetId,
+  type Snippet,
 } from '@mdx/core';
 import type { MessageKey, Translator } from '@mdx/i18n';
 import { kindNameOf } from '../control-wheel/kindPresentation';
@@ -21,6 +23,7 @@ export interface PaletteContext {
   /** The keys each command has now, including the user's changes. */
   readonly shortcuts: readonly CommandShortcut[];
   readonly workspaceKinds: WorkspaceKindsState;
+  readonly snippets?: readonly Snippet[];
 }
 
 const DEFAULT_PALETTE_CONTEXT: PaletteContext = {
@@ -51,17 +54,25 @@ const COMMANDS_WITHOUT_SHORTCUTS: readonly CommandWithoutShortcut[] = [
   { command: { kind: 'showAbout' }, actionKey: 'menu.help.about' },
   { command: { kind: 'confirmClearAllData' }, actionKey: 'privacy.clearAllData' },
   { command: { kind: 'showWorkspaceKindSettings' }, actionKey: 'workspaceKinds.choose' },
+  { command: { kind: 'showWordGoal' }, actionKey: 'wordGoal.set' },
+  { command: { kind: 'clearWordGoal' }, actionKey: 'wordGoal.clear' },
   { command: { kind: 'revertDocument' }, actionKey: 'menu.file.revert' },
   { command: { kind: 'runEditorCommand', command: 'undo' }, actionKey: 'menu.edit.undo' },
   { command: { kind: 'runEditorCommand', command: 'redo' }, actionKey: 'menu.edit.redo' },
   { command: { kind: 'runEditorCommand', command: 'replace' }, actionKey: 'menu.edit.replace' },
   { command: { kind: 'runEditorCommand', command: 'goToLine' }, actionKey: 'menu.edit.goToLine' },
+  { command: { kind: 'runEditorCommand', command: 'copyLineUp' }, actionKey: 'menu.edit.copyLineUp' },
+  { command: { kind: 'runEditorCommand', command: 'copyLineDown' }, actionKey: 'menu.edit.copyLineDown' },
+  {
+    command: { kind: 'runEditorCommand', command: 'addNextOccurrence' },
+    actionKey: 'menu.edit.addNextOccurrence',
+  },
 ];
 
 /** Every command the palette offers, labelled as in the menus, with its shortcut where it has one. */
 export function paletteCommands(
   translator: Translator,
-  { shortcuts, workspaceKinds }: PaletteContext = DEFAULT_PALETTE_CONTEXT,
+  { shortcuts, workspaceKinds, snippets = [] }: PaletteContext = DEFAULT_PALETTE_CONTEXT,
 ): PaletteCommand[] {
   const withShortcuts = shortcuts
     .filter(({ command }) => command.kind !== 'showCommandPalette')
@@ -81,6 +92,7 @@ export function paletteCommands(
     ...withShortcuts,
     ...withoutShortcuts,
     ...workspaceKindCommands(workspaceKinds, translator),
+    ...snippetCommands(snippets, translator),
     ...themeCommands(translator),
     ...readingWidthCommands(translator),
     ...typographyCommands(translator),
@@ -100,6 +112,24 @@ function workspaceKindCommands(
       command: { kind: 'switchWorkspaceKind', kindId },
       label: translator.translate('palette.groupedAction', { group, action: kindNameOf(kindId, translator) }),
     }));
+}
+
+function snippetCommands(snippets: readonly Snippet[], translator: Translator): PaletteCommand[] {
+  const group = translator.translate('snippets.palette.group');
+  return snippets.map((snippet) => ({
+    command: { kind: 'insertSnippet', snippetId: snippet.id },
+    label: translator.translate('palette.groupedAction', {
+      group,
+      action: snippetNameOf(snippet, translator),
+    }),
+  }));
+}
+
+/** Built-in snippets are named in the display language; the user's keep the names they gave. */
+export function snippetNameOf(snippet: Snippet, translator: Translator): string {
+  return isBuiltInSnippetId(snippet.id)
+    ? translator.translate(`snippets.builtIn.${snippet.id.slice('builtIn.'.length)}` as MessageKey)
+    : snippet.name;
 }
 
 function themeCommands(translator: Translator): PaletteCommand[] {

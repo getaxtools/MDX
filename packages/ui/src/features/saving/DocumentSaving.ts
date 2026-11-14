@@ -1,4 +1,4 @@
-import type { ViewerSession } from '@mdx/core';
+import { renameWordGoal, type ViewerSession } from '@mdx/core';
 import { DocumentOpenError, isUntitledLocation, type DocumentLocation } from '@mdx/platform';
 import type { DocumentEditing } from '../editing/DocumentEditing';
 import { applyTabCommand, type TabCommand } from '../tabs/tabCommands';
@@ -144,6 +144,7 @@ export class DocumentSaving {
   /** Saving under a new name gives the tab a new key; the document stays open for editing there. */
   private continueEditingUnder(previousKey: string, savedKey: string, wasEditing: boolean): void {
     this.editing.rename(previousKey, savedKey);
+    this.session.updateWordGoals((goals) => renameWordGoal(goals, previousKey, savedKey));
     if (wasEditing && !this.editing.isEditing(savedKey)) this.editing.toggleEditing(savedKey);
     this.callbacks.onChange();
   }

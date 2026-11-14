@@ -1,5 +1,6 @@
 import { InMemoryAppState, InMemoryDocumentFiles } from '@mdx/platform';
 import { describe, expect, it } from 'vitest';
+import { workspaceKindsFor } from '../workspace-kinds/workspaceKinds';
 import { WorkspaceKindsState } from '../workspace-kinds/WorkspaceKindsState';
 import { ViewerSession, type ViewerState } from './ViewerSession';
 
@@ -373,5 +374,27 @@ describe('ViewerSession', () => {
     await session.openDocument(NOTES_PATH);
 
     expect(notifications).toHaveLength(1);
+  });
+
+  it('keeps planned kinds chosen in the UI test build after a restore and Clear All Data', async () => {
+    const appState = new InMemoryAppState();
+    const documentFiles = new InMemoryDocumentFiles({});
+    const kindRegistry = workspaceKindsFor({ allowsPlannedKindPreview: true });
+    const first = new ViewerSession({ documentFiles, appState, now: () => 0, kindRegistry });
+    first.updateWorkspaceKinds((kinds) => kinds.enableKind('notes').state.switchKind('notes'));
+    await first.save();
+    const second = new ViewerSession({ documentFiles, appState, now: () => 0, kindRegistry });
+
+    await second.restore();
+    const restoredActiveKind = second.currentState().workspaceKinds.activeKindId();
+    second.clearAllData();
+
+    expect(restoredActiveKind).toBe('notes');
+    expect(
+      second
+        .currentState()
+        .workspaceKinds.kinds()
+        .every((kind) => kind.availability === 'built'),
+    ).toBe(true);
   });
 });

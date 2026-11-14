@@ -29,6 +29,16 @@ export const SHORTCUTS_HANDLED_IN_PLACE: readonly KeyboardShortcut[] = [
   { combinations: [['ctrl', 'Y']], actionKey: 'menu.edit.redo' },
   { combinations: [['ctrl', 'H']], actionKey: 'menu.edit.replace' },
   { combinations: [['ctrl', 'G']], actionKey: 'menu.edit.goToLine' },
+  {
+    combinations: [
+      ['ctrl', 'alt', 'ArrowUp'],
+      ['ctrl', 'alt', 'ArrowDown'],
+      ['alt', 'click'],
+    ],
+    actionKey: 'shortcuts.addCursor',
+  },
+  { combinations: [['alt', 'shift', 'drag']], actionKey: 'shortcuts.columnSelection' },
+  { combinations: [['ctrl', 'shift', 'L']], actionKey: 'shortcuts.selectAllOccurrences' },
 ];
 
 export const EDITOR_FORMATTING_SHORTCUTS: readonly KeyboardShortcut[] = EDITOR_SHORTCUTS.map(

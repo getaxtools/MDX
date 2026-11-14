@@ -1,4 +1,4 @@
-import { ViewerSession } from '@mdx/core';
+import { ViewerSession, workspaceKindsFor, type WorkspaceKind } from '@mdx/core';
 import { DEFAULT_LOCALE, type Translator } from '@mdx/i18n';
 import { createCodeHighlighter, createMarkdownRenderer, createRichBlockRenderer } from '@mdx/renderer';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -6,6 +6,7 @@ import { ViewerApp, ViewerController, translatedAlertTitles } from '@mdx/ui';
 import type { DisplayLanguage, StartupProgress } from '@mdx/ui/startup';
 import { mount } from 'svelte';
 import { TauriAppMenu } from './ports/TauriAppMenu';
+import { TauriAttachments } from './ports/TauriAttachments';
 import type { TauriAppState } from './ports/TauriAppState';
 import { TauriDocumentFiles } from './ports/TauriDocumentFiles';
 import { TauriDocumentLinks } from './ports/TauriDocumentLinks';
@@ -39,14 +40,18 @@ export async function startViewerApp({
   const { locale, messages, translator } = displayLanguage;
   const menu = new TauriAppMenu();
   if (locale !== DEFAULT_LOCALE) await menu.showLabels(messages);
-  const controller = createViewerController({ appState, menu, translator });
+  const appInfo = await tauriCommands.getAppInfo();
+  const kindRegistry = workspaceKindsFor({
+    allowsPlannedKindPreview: appInfo.allowsPlannedKindPreview ?? false,
+  });
+  const controller = createViewerController({ appState, menu, translator, kindRegistry });
   mount(ViewerApp, {
     target: appElement,
     props: {
       controller,
       translator,
       platform: 'windows',
-      appInfo: await tauriCommands.getAppInfo(),
+      appInfo,
       codeHighlighter: createCodeHighlighter(),
       richBlocks: createRichBlockRenderer({ window }),
       loadThirdPartyLicenses,
@@ -66,14 +71,21 @@ interface ViewerControllerSources {
   readonly appState: TauriAppState;
   readonly menu: TauriAppMenu;
   readonly translator: Translator;
+  readonly kindRegistry: readonly WorkspaceKind[];
 }
 
-function createViewerController({ appState, menu, translator }: ViewerControllerSources): ViewerController {
+function createViewerController({
+  appState,
+  menu,
+  translator,
+  kindRegistry,
+}: ViewerControllerSources): ViewerController {
   return new ViewerController({
     session: new ViewerSession({
       documentFiles: new TauriDocumentFiles(),
       appState,
       now: () => Date.now(),
+      kindRegistry,
     }),
     requests: new TauriDocumentRequests(),
     renderer: createMarkdownRenderer({ window, alertTitles: translatedAlertTitles(translator) }),
@@ -88,6 +100,7 @@ function createViewerController({ appState, menu, translator }: ViewerController
     favouritesFile: new TauriFavouritesFile(),
     desktopShell: new TauriDesktopShell(),
     documentExport: new TauriDocumentExport(),
+    attachments: new TauriAttachments(),
   });
 }
 
