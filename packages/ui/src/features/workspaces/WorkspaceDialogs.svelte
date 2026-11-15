@@ -55,8 +55,10 @@
   <WorkspaceNameDialog
     titleKey="workspaces.newDialog.title"
     confirmKey="workspaces.newDialog.create"
-    initialName=""
-    kindIds={choosableKindIds}
+    initialName={workspaces.newWorkspaceFromFile?.name ?? ''}
+    initialIcon={workspaces.newWorkspaceFromFile?.icon}
+    initialColour={workspaces.newWorkspaceFromFile?.colour}
+    kindIds={workspaces.newWorkspaceFromFile ? [newWorkspaceKindId] : choosableKindIds}
     initialKindId={newWorkspaceKindId}
     checkName={(name: string, kindId: WorkspaceKindId) => workspaces.registry.checkName(name, kindId)}
     {translator}

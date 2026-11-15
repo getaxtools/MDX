@@ -51,6 +51,30 @@ describe('workspace dialogs', () => {
     });
   });
 
+  it('finishing a workspace file starts with its name, icon and colour and keeps its kind', () => {
+    render(WorkspaceDialogs, {
+      dialog: 'newWorkspace',
+      workspaces: {
+        registry: WorkspaceRegistry.fromStored([stored('default', 'markdownViewer', null)]),
+        shownWorkspaceId: 'default',
+        kindForNewWorkspace: 'notes',
+        newWorkspaceFromFile: { name: 'Journal', icon: 'book', colour: 'teal' },
+      },
+      kinds: WorkspaceKindsState.fromSaved(
+        { enabledKindIds: ['markdownViewer', 'notes'], activeKindId: 'markdownViewer' },
+        ALL_KINDS_BUILT,
+      ),
+      translator: createTranslator(),
+      onCommand: vi.fn(),
+      onClose: vi.fn(),
+    });
+
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Name' }).value).toBe('Journal');
+    expect(screen.queryByRole('combobox', { name: 'Kind' })).toBeNull();
+    expect(screen.getByRole<HTMLInputElement>('radio', { name: 'Book' }).checked).toBe(true);
+    expect(screen.getByRole<HTMLInputElement>('radio', { name: 'Teal' }).checked).toBe(true);
+  });
+
   it('creates a workspace with the chosen icon and colour, then the folder step', async () => {
     const { onCommand } = renderDialog('newWorkspace');
 

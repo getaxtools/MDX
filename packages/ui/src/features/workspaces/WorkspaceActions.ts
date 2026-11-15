@@ -2,12 +2,14 @@ import {
   NOTES_KIND_ID,
   claimedNotesLocations,
   notesKindData,
+  notesWorkspaceFileLists,
   type InitialWorkspaceLists,
+  type PortableWorkspace,
   type ViewerSession,
   type WorkspaceKindId,
   type WorkspaceRequest,
 } from '@mdx/core';
-import type { NotesLocationPort } from '@mdx/platform';
+import type { DocumentLocation, NotesLocationPort } from '@mdx/platform';
 import type { MessageKey, Translator } from '@mdx/i18n';
 import { workspaceNameOf, type WorkspaceCommand, type WorkspaceDetails } from './workspaceCommands';
 
@@ -50,16 +52,44 @@ export interface WorkspaceActionsDependencies {
   readonly createLocationId?: () => string;
 }
 
+/** A Notes workspace file waiting for its notes folder, since the file carries none. */
+export interface NotesWorkspaceFileDraft {
+  readonly request: WorkspaceRequest;
+  readonly workspace: PortableWorkspace;
+}
+
+/** What New Workspace starts with when it finishes a workspace file; its kind is fixed. */
+export type NewWorkspaceFromFile = Pick<WorkspaceRequest, 'name' | 'icon' | 'colour'>;
+
 /** New, Rename, Delete and Switch Workspace; switching away asks about unsaved edits first. */
 export class WorkspaceActions {
   /** The kind the New Workspace dialog starts on, such as the kind chosen on the control wheel. */
   private newWorkspaceKindId: WorkspaceKindId | undefined;
   private shownNotesSetup: NotesSetup | undefined;
+  private fileDraft: NotesWorkspaceFileDraft | undefined;
 
   constructor(private readonly dependencies: WorkspaceActionsDependencies) {}
 
   kindForNewWorkspace(): WorkspaceKindId | undefined {
     return this.newWorkspaceKindId;
+  }
+
+  newWorkspaceFromFile(): NewWorkspaceFromFile | undefined {
+    if (!this.fileDraft) return undefined;
+    const { name, icon, colour } = this.fileDraft.request;
+    return { name, icon, colour };
+  }
+
+  forgetWorkspaceFile(): void {
+    this.fileDraft = undefined;
+  }
+
+  /** Shows New Workspace for the file, so the workspace is created only once its folder is prepared. */
+  async chooseFolderForWorkspaceFile(draft: NotesWorkspaceFileDraft): Promise<void> {
+    this.newWorkspaceKindId = NOTES_KIND_ID;
+    this.shownNotesSetup = await this.loadNotesSetup();
+    this.fileDraft = draft;
+    this.dependencies.showDialog('newWorkspace');
   }
 
   notesSetup(): NotesSetup | undefined {
@@ -70,6 +100,7 @@ export class WorkspaceActions {
     switch (command.kind) {
       case 'showNewWorkspace':
         this.newWorkspaceKindId = command.kindId;
+        this.fileDraft = undefined;
         this.shownNotesSetup = await this.loadNotesSetup();
         this.dependencies.showDialog('newWorkspace');
         return;
@@ -97,14 +128,14 @@ export class WorkspaceActions {
   }
 
   private async create(details: WorkspaceDetails): Promise<void> {
-    const { name, kindId, icon, colour, isFolderStepChosen } = details;
-    const notesStart = kindId === NOTES_KIND_ID ? await this.prepareNotesLocation(details) : undefined;
-    if (kindId === NOTES_KIND_ID && !notesStart) return;
-    const isCreated = await this.createAndShow(
-      { name, kindId, icon, colour, ...(notesStart ? { kindData: notesStart.kindData } : {}) },
-      notesStart?.lists,
-    );
-    if (isCreated && isFolderStepChosen === true) await this.dependencies.addFolder();
+    const isNotes = details.kindId === NOTES_KIND_ID;
+    const notesStart = isNotes ? await this.prepareNotesLocation(details) : undefined;
+    if (isNotes && !notesStart) return;
+    const draft = isNotes ? this.fileDraft : undefined;
+    const lists = notesStart ? listsForNotesFolder(notesStart.location, draft?.workspace) : {};
+    if (!(await this.createAndShow(requestFor(details, draft, notesStart?.kindData), lists))) return;
+    this.fileDraft = undefined;
+    if (details.isFolderStepChosen === true) await this.dependencies.addFolder();
   }
 
   private async loadNotesSetup(): Promise<NotesSetup | undefined> {
@@ -118,7 +149,7 @@ export class WorkspaceActions {
   /** Marks the chosen folder as a Notes location; nothing is created when it cannot be used. */
   private async prepareNotesLocation({
     notesLocationPath,
-  }: WorkspaceDetails): Promise<{ kindData: unknown; lists: InitialWorkspaceLists } | undefined> {
+  }: WorkspaceDetails): Promise<{ kindData: unknown; location: DocumentLocation } | undefined> {
     const { notesLocations, showNotice } = this.dependencies;
     if (!notesLocations || notesLocationPath === undefined) return undefined;
     const locationId = this.dependencies.createLocationId?.() ?? crypto.randomUUID();
@@ -127,7 +158,7 @@ export class WorkspaceActions {
       const { displayPath, canonicalKey } = prepared.location;
       return {
         kindData: notesKindData({ path: displayPath, canonicalKey, locationId: prepared.locationId }),
-        lists: { explorerFolders: [prepared.location] },
+        location: prepared.location,
       };
     } catch {
       showNotice('workspaces.notes.locationFailed', { path: notesLocationPath });
@@ -183,4 +214,25 @@ export class WorkspaceActions {
     this.dependencies.showDialog(undefined);
     await this.dependencies.showSwitchedWorkspace();
   }
+}
+
+/** The dialog's choices, plus the source file of a workspace file it finishes. */
+function requestFor(
+  { name, kindId, icon, colour }: WorkspaceDetails,
+  draft: NotesWorkspaceFileDraft | undefined,
+  kindData: unknown,
+): WorkspaceRequest {
+  return { ...draft?.request, name, kindId, icon, colour, ...(kindData === undefined ? {} : { kindData }) };
+}
+
+function listsForNotesFolder(
+  notesFolder: DocumentLocation,
+  fromFile: PortableWorkspace | undefined,
+): InitialWorkspaceLists {
+  if (!fromFile) return { explorerFolders: [notesFolder] };
+  return {
+    ...notesWorkspaceFileLists(fromFile, notesFolder),
+    favouriteGroups: fromFile.favouriteGroups,
+    settingsOverrides: fromFile.settingsOverrides,
+  };
 }

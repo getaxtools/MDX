@@ -70,7 +70,12 @@ import { shortcutLabelFor } from '../shortcuts/commandShortcuts';
 import { effectiveCommandShortcuts } from '../shortcuts/effectiveCommandShortcuts';
 import { REBINDABLE_COMMANDS } from '../shortcuts/rebindableCommands';
 import { isTabCommand } from '../tabs/tabCommands';
-import { WorkspaceActions, type NotesSetup, type WorkspaceDialog } from '../workspaces/WorkspaceActions';
+import {
+  WorkspaceActions,
+  type NewWorkspaceFromFile,
+  type NotesSetup,
+  type WorkspaceDialog,
+} from '../workspaces/WorkspaceActions';
 import {
   isWorkspaceCommand,
   isWorkspaceFileCommand,
@@ -188,6 +193,8 @@ export interface WorkspacesView {
   readonly shownWorkspaceId: string;
   /** The kind the New Workspace dialog starts on. */
   readonly kindForNewWorkspace?: WorkspaceKindId;
+  /** A workspace file New Workspace finishes; its kind cannot be changed. */
+  readonly newWorkspaceFromFile?: NewWorkspaceFromFile;
   /** A workspace file waiting for the user to confirm it. */
   readonly pendingFile?: PendingWorkspaceFile;
   /** Loaded when New Workspace opens, to suggest and check a Notes folder. */
@@ -431,6 +438,8 @@ export class ViewerController {
       createAndShow: async (request, lists) => {
         await this.workspaceActions.createAndShow(request, lists);
       },
+      chooseNotesFolder: (request, workspace) =>
+        this.workspaceActions.chooseFolderForWorkspaceFile({ request, workspace }),
     });
   }
 
@@ -717,6 +726,7 @@ export class ViewerController {
 
   closeDialog(): void {
     this.openDialog = undefined;
+    this.workspaceActions.forgetWorkspaceFile();
     this.publish(this.composeSnapshot(this.snapshot.notice));
   }
 
@@ -1418,11 +1428,13 @@ export class ViewerController {
     const shownWorkspaceId = session.shownWorkspace()?.id;
     if (!registry || shownWorkspaceId === undefined) return {};
     const kindForNewWorkspace = this.workspaceActions.kindForNewWorkspace();
+    const newWorkspaceFromFile = this.workspaceActions.newWorkspaceFromFile();
     return {
       workspaces: {
         registry,
         shownWorkspaceId,
         ...(kindForNewWorkspace ? { kindForNewWorkspace } : {}),
+        ...(newWorkspaceFromFile ? { newWorkspaceFromFile } : {}),
         ...(this.pendingWorkspaceFile ? { pendingFile: this.pendingWorkspaceFile } : {}),
         ...this.notesSetupPart(),
       },

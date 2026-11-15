@@ -31,6 +31,8 @@
     /** The kinds a new workspace can have; a rename passes the workspace's own kind only. */
     kindIds: readonly WorkspaceKindId[];
     initialKindId: WorkspaceKindId;
+    initialIcon?: WorkspaceIcon | undefined;
+    initialColour?: WorkspaceColour | undefined;
     checkName: (name: string, kindId: WorkspaceKindId) => WorkspaceNameProblem | undefined;
     /** A new workspace also gets an icon, a colour and, for the Markdown viewer, a first folder. */
     hasAppearanceChoices?: boolean;
@@ -48,6 +50,8 @@
     initialName,
     kindIds,
     initialKindId,
+    initialIcon,
+    initialColour,
     checkName,
     hasAppearanceChoices = false,
     notesSetup,
@@ -59,8 +63,8 @@
 
   let name = $state(untrack(() => initialName));
   let kindId = $state(untrack(() => initialKindId));
-  let icon: WorkspaceIcon | undefined = $state();
-  let colour: WorkspaceColour | undefined = $state();
+  let icon: WorkspaceIcon | undefined = $state(untrack(() => initialIcon));
+  let colour: WorkspaceColour | undefined = $state(untrack(() => initialColour));
   let isFolderStepChosen = $state(true);
   let notesLocationPath: string | undefined = $state();
   let hasTriedToConfirm = $state(false);

@@ -219,6 +219,7 @@ export {
   type WorkspaceFileReading,
   type WorkspaceFileRefusal,
 } from './workspaces/workspaceFile';
+export { notesWorkspaceFileLists } from './workspaces/notesWorkspaceFileLists';
 export {
   DEFAULT_NOTES_FOLDER_NAME,
   NOTES_KIND_ID,

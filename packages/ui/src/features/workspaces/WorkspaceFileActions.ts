@@ -1,4 +1,5 @@
 import {
+  NOTES_KIND_ID,
   WORKSPACE_FILE_EXTENSION,
   readWorkspaceFile,
   writeWorkspaceFile,
@@ -29,6 +30,8 @@ export interface WorkspaceFileActionsDependencies {
   /** Switches after asking about unsaved edits; false when the user cancelled. */
   readonly switchTo: (workspaceId: string) => Promise<void>;
   readonly createAndShow: (request: WorkspaceRequest, lists: InitialWorkspaceLists) => Promise<void>;
+  /** A Notes workspace file has no folder, so the user chooses one before it is created. */
+  readonly chooseNotesFolder: (request: WorkspaceRequest, workspace: PortableWorkspace) => Promise<void>;
 }
 
 /** Export Workspace and opening workspace files, from the menu, from Windows or at start-up. */
@@ -100,21 +103,23 @@ export class WorkspaceFileActions {
     const { workspace, path, isKindDisabled } = pending;
     if (isKindDisabled)
       this.dependencies.session.updateWorkspaceKinds((kinds) => kinds.enableKind(workspace.kindId).state);
-    await this.dependencies.createAndShow(
-      {
-        name: registry.freeNameFor(workspace.name, workspace.kindId),
-        kindId: workspace.kindId,
-        icon: workspaceIconOf(workspace.icon),
-        colour: workspaceColourOf(workspace.colour),
-        sourceFile: path,
-      },
-      {
-        explorerFolders: workspace.roots,
-        favourites: workspace.favourites,
-        favouriteGroups: workspace.favouriteGroups,
-        settingsOverrides: workspace.settingsOverrides,
-      },
-    );
+    const request = {
+      name: registry.freeNameFor(workspace.name, workspace.kindId),
+      kindId: workspace.kindId,
+      icon: workspaceIconOf(workspace.icon),
+      colour: workspaceColourOf(workspace.colour),
+      sourceFile: path,
+    };
+    if (workspace.kindId === NOTES_KIND_ID) {
+      await this.dependencies.chooseNotesFolder(request, workspace);
+      return;
+    }
+    await this.dependencies.createAndShow(request, {
+      explorerFolders: workspace.roots,
+      favourites: workspace.favourites,
+      favouriteGroups: workspace.favouriteGroups,
+      settingsOverrides: workspace.settingsOverrides,
+    });
   }
 
   cancel(): void {

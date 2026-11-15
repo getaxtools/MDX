@@ -202,7 +202,11 @@ describe('workspace files', () => {
     const workspaceFiles = new InMemoryWorkspaceFiles();
     workspaceFiles.pickedFile = {
       ...HANDBOOK_FILE,
-      text: JSON.stringify({ ...(JSON.parse(HANDBOOK_FILE.text) as object), kind: 'notes', name: 'Journal' }),
+      text: JSON.stringify({
+        ...(JSON.parse(HANDBOOK_FILE.text) as object),
+        kind: 'specViewer',
+        name: 'Specs',
+      }),
     };
     const { controller, snapshot } = await startViewer({ kindRegistry, workspaceFiles });
 
@@ -211,8 +215,8 @@ describe('workspace files', () => {
     await controller.execute({ kind: 'confirmOpenWorkspaceFile' });
 
     expect(isKindDisabled).toBe(true);
-    expect(snapshot().viewer.workspaceKinds.isEnabled('notes')).toBe(true);
-    expect(snapshot().viewer.workspaceKinds.activeKindId()).toBe('notes');
+    expect(snapshot().viewer.workspaceKinds.isEnabled('specViewer')).toBe(true);
+    expect(snapshot().viewer.workspaceKinds.activeKindId()).toBe('specViewer');
   });
 
   it('offers the workspace file the app was started with', async () => {
