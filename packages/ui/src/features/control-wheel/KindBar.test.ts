@@ -51,6 +51,15 @@ describe('KindBar', () => {
     expect(onCommand).toHaveBeenCalledWith({ kind: 'switchWorkspaceKind', kindId: 'notes' });
   });
 
+  it("shows the pressed button in its kind's colour", () => {
+    renderKindBar({ activeKindId: 'notes' });
+
+    expect(kindButton('Notes').style.getPropertyValue('--kind-colour')).toBe('var(--color-kind-notes)');
+    expect(kindButton('Markdown viewer').style.getPropertyValue('--kind-colour')).toBe(
+      'var(--color-kind-markdown-viewer)',
+    );
+  });
+
   it('tooltips name the kind', () => {
     renderKindBar();
 

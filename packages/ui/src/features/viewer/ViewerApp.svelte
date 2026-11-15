@@ -20,6 +20,7 @@
   import type { SectionAction, SourceEditor } from '@mdx/editor';
   import type { Translator } from '@mdx/i18n';
   import type { CodeHighlighter, OutlineEntry, RichBlockRenderer } from '@mdx/renderer';
+  import { untrack } from 'svelte';
   import CommandPalette from '../command-palette/CommandPalette.svelte';
   import { paletteCommands } from '../command-palette/paletteCommands';
   import ExplorerSidebar from '../explorer/ExplorerSidebar.svelte';
@@ -90,7 +91,22 @@
   // Raw, not deep state: a deep proxy gives the same document a new identity on every
   // snapshot, and the document view treats that as a newly opened document.
   let snapshot: ViewerSnapshot | undefined = $state.raw();
-  $effect(() => controller.subscribe((latest) => (snapshot = latest)));
+  /** A closed wheel stays in the page while it fades out, and opening it again during the fade reuses it. */
+  let isControlWheelFading = $state(false);
+  $effect(() => controller.subscribe(receiveSnapshot));
+
+  function isControlWheelShownIn(shown: ViewerSnapshot | undefined): boolean {
+    return shown?.openDialog === 'controlWheel' || shown?.openDialog === 'workspaceKindSettings';
+  }
+
+  // The first snapshot arrives while the effect above runs, so reads here must not subscribe it again.
+  function receiveSnapshot(latest: ViewerSnapshot) {
+    untrack(() => {
+      if (isControlWheelShownIn(latest)) isControlWheelFading = false;
+      else if (isControlWheelShownIn(snapshot)) isControlWheelFading = true;
+      snapshot = latest;
+    });
+  }
 
   $effect(() => {
     if (snapshot) applyTheme(globalThis.document.documentElement, snapshot.viewer.viewSettings.theme);
@@ -100,9 +116,7 @@
     snapshot ? effectiveCommandShortcuts(snapshot.viewer.shortcutOverrides) : COMMAND_SHORTCUTS,
   );
   const isWheelOpenedAtPointer = $derived(snapshot?.viewer.viewSettings.isWheelOpenedAtPointer ?? false);
-  const isControlWheelOpen = $derived(
-    snapshot?.openDialog === 'controlWheel' || snapshot?.openDialog === 'workspaceKindSettings',
-  );
+  const isControlWheelOpen = $derived(isControlWheelShownIn(snapshot));
   const controlWheelButton: ControlWheelButton | undefined = $derived.by(() => {
     if (!snapshot?.viewer.viewSettings.isWheelButtonInStatusBar) return undefined;
     const shortcut = shortcutLabelFor({ kind: 'toggleControlWheel' }, translator, shortcuts);
@@ -646,16 +660,18 @@
       onClose={() => controller.closeDialog()}
     />
   {/if}
-  {#if isControlWheelOpen}
+  {#if isControlWheelOpen || isControlWheelFading}
     {#await loadControlWheel() then ControlWheel}
       <ControlWheel
         kinds={snapshot.viewer.workspaceKinds}
         dock={snapshot.viewer.viewSettings.wheelDock}
         pointer={lastPointer.position}
         shouldShowKindSettings={snapshot.openDialog === 'workspaceKindSettings'}
+        isClosing={!isControlWheelOpen}
         {translator}
         onCommand={(command: ViewerCommand) => void controller.execute(command)}
         onClose={() => controller.closeDialog()}
+        onClosed={() => (isControlWheelFading = false)}
       />
     {/await}
   {/if}

@@ -52,13 +52,17 @@ export {
 export {
   hitTestRing,
   ringLayout,
+  rimArcPath,
   sectorPath,
+  sectorPointAt,
+  type RimShape,
   type RingDirection,
   type RingHit,
   type RingLayout,
   type RingPoint,
   type RingRadii,
   type RingSector,
+  type SectorShape,
 } from './workspace-kinds/ringGeometry';
 export {
   LAST_TAB_NUMBER_KEY,

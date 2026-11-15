@@ -271,8 +271,10 @@ describe('ViewerApp', () => {
     expect(await screen.findByRole('dialog', { name: 'Control wheel' })).toBeTruthy();
     await userEvent.keyboard('{Escape}');
 
-    expect(screen.queryByRole('dialog', { name: 'Control wheel' })).toBeNull();
-    expect(screen.queryByRole('menu', { name: 'Workspace kinds' })).toBeNull();
+    await vi.waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Control wheel', hidden: true })).toBeNull();
+      expect(screen.queryByRole('menu', { name: 'Workspace kinds', hidden: true })).toBeNull();
+    });
   });
 
   it('a changed wheel shortcut works at once and the default keys stop working', async () => {
@@ -373,6 +375,32 @@ describe('ViewerApp', () => {
       await userEvent.click(screen.getByRole('switch', { name: /^Notes/ }));
 
       expect(await screen.findByText('Notes is off. Showing Markdown viewer.')).toBeTruthy();
+    });
+
+    it('a closing wheel cannot be clicked', async () => {
+      const { controller } = await renderViewerWithNotesBuilt();
+      await controller.execute({ kind: 'toggleControlWheel' });
+      await screen.findByRole('dialog', { name: 'Control wheel' });
+      await userEvent.keyboard('{Escape}');
+
+      await fireEvent.click(screen.getByRole('menuitemradio', { name: 'Notes', hidden: true }));
+
+      expect(screen.getByRole('dialog', { name: 'Control wheel', hidden: true }).inert).toBe(true);
+      expect(kindBar().querySelector('[aria-pressed="true"]')?.getAttribute('aria-label')).toBe(
+        'Markdown viewer',
+      );
+    });
+
+    it('the shortcut during the fade opens the same wheel again at once', async () => {
+      const { controller } = await renderViewerWithNotesBuilt();
+      await controller.execute({ kind: 'toggleControlWheel' });
+      const wheel = await screen.findByRole('dialog', { name: 'Control wheel' });
+      await userEvent.keyboard('{Escape}');
+
+      await userEvent.keyboard('{Control>}{Shift>} {/Shift}{/Control}');
+
+      expect(screen.getByRole('dialog', { name: 'Control wheel' })).toBe(wheel);
+      expect(wheel.inert).toBe(false);
     });
 
     it('hides the kind bar when the setting is wheel only', async () => {

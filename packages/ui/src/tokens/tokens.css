@@ -43,6 +43,7 @@ body {
   --motion-fast: 120ms;
   --motion-medium: 200ms;
   --easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --easing-emphasized: cubic-bezier(0.34, 1.4, 0.64, 1);
 
   --color-background: #ffffff;
   --color-surface: #f7f8fb;
@@ -71,6 +72,16 @@ body {
   --color-alert-caution: #cf222e;
   --color-mark-background: #fff3a3;
   --color-mark-text: #1f2329;
+
+  --color-kind-markdown-viewer: #3b6fd8;
+  --color-kind-notes: #a86f00;
+  --color-kind-spec-viewer: #1c8f82;
+  --color-wheel-surface: #e6e8ee;
+  --color-wheel-tile: #ffffff;
+  --color-wheel-tile-edge: transparent;
+  --wheel-surface-opacity: 90%;
+  --wheel-surface-backdrop: blur(24px) saturate(160%);
+  --shadow-wheel: 0 12px 40px rgb(0 0 0 / 18%), 0 2px 6px rgb(0 0 0 / 8%);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -102,6 +113,13 @@ body {
     --color-alert-caution: #f85149;
     --color-mark-background: #5c4d00;
     --color-mark-text: #f4f0d9;
+    --color-kind-markdown-viewer: #7aa2f7;
+    --color-kind-notes: #e0a83a;
+    --color-kind-spec-viewer: #4fc1b1;
+    --color-wheel-surface: #1b1d23;
+    --color-wheel-tile: #33363f;
+    --shadow-wheel:
+      0 12px 40px rgb(0 0 0 / 48%), 0 2px 6px rgb(0 0 0 / 24%), inset 0 1px 0 rgb(255 255 255 / 6%);
   }
 }
 
@@ -138,6 +156,13 @@ body {
   --color-alert-caution: #f85149;
   --color-mark-background: #5c4d00;
   --color-mark-text: #f4f0d9;
+  --color-kind-markdown-viewer: #7aa2f7;
+  --color-kind-notes: #e0a83a;
+  --color-kind-spec-viewer: #4fc1b1;
+  --color-wheel-surface: #1b1d23;
+  --color-wheel-tile: #33363f;
+  --shadow-wheel:
+    0 12px 40px rgb(0 0 0 / 48%), 0 2px 6px rgb(0 0 0 / 24%), inset 0 1px 0 rgb(255 255 255 / 6%);
 }
 
 :root[data-theme='sepia'] {
@@ -159,6 +184,8 @@ body {
   --color-code-background: #f0e6d0;
   --color-mark-background: #f2d675;
   --color-mark-text: #3d2f1f;
+  --color-wheel-surface: #e8dec9;
+  --color-wheel-tile: #fbf7ee;
 }
 
 :root[data-theme='solarizedLight'] {
@@ -176,6 +203,8 @@ body {
   --color-accent-hover: #15578f;
   --color-focus: #268bd2;
   --color-code-background: #f5eedb;
+  --color-wheel-surface: #e6dfca;
+  --color-wheel-tile: #fffbf0;
 }
 
 :root[data-theme='solarizedDark'] {
@@ -194,6 +223,8 @@ body {
   --color-accent-text: #002b36;
   --color-focus: #4aa3e8;
   --color-code-background: #073642;
+  --color-wheel-surface: #001c24;
+  --color-wheel-tile: #0a3c49;
 }
 
 :root[data-theme='nord'] {
@@ -212,6 +243,8 @@ body {
   --color-accent-text: #2e3440;
   --color-focus: #88c0d0;
   --color-code-background: #343a47;
+  --color-wheel-surface: #242933;
+  --color-wheel-tile: #3b4252;
 }
 
 :root[data-theme='highContrast'] {
@@ -231,6 +264,25 @@ body {
   --color-focus: #ffd60a;
   --color-overlay: rgb(0 0 0 / 75%);
   --color-code-background: #141414;
+  --color-wheel-surface: #000000;
+  --color-wheel-tile: #000000;
+  --color-wheel-tile-edge: #ffffff;
+  --shadow-wheel: none;
+}
+
+/* Listed with the theme selectors so the system colours win over every theme block above. */
+@media (forced-colors: active) {
+  :root,
+  :root[data-color-scheme],
+  :root[data-theme] {
+    --color-kind-markdown-viewer: CanvasText;
+    --color-kind-notes: CanvasText;
+    --color-kind-spec-viewer: CanvasText;
+    --color-wheel-surface: Canvas;
+    --color-wheel-tile: Canvas;
+    --color-wheel-tile-edge: CanvasText;
+    --shadow-wheel: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

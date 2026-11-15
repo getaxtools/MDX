@@ -4,7 +4,7 @@
   import type { ViewerCommand } from '../viewer/viewerCommands';
   import KindIcon from './KindIcon.svelte';
   import KindSettingsPopup from './KindSettingsPopup.svelte';
-  import { GEAR_ICON, KIND_ICONS, kindNameOf } from './kindPresentation';
+  import { GEAR_ICON, KIND_ICONS, kindColourOf, kindNameOf } from './kindPresentation';
 
   interface Props {
     kinds: WorkspaceKindsState;
@@ -51,9 +51,11 @@
     {#each kinds.enabledKindIds() as kindId (kindId)}
       {@const name = kindNameOf(kindId, translator)}
       <button
+        class="kind"
         aria-label={name}
         title={name}
         aria-pressed={kindId === kinds.activeKindId()}
+        style:--kind-colour={kindColourOf(kindId)}
         onclick={() => onCommand({ kind: 'switchWorkspaceKind', kindId })}
       >
         <KindIcon paths={KIND_ICONS[kindId]} />
@@ -102,9 +104,16 @@
     background: var(--color-surface-hover);
   }
 
+  .kind {
+    color: var(--kind-colour);
+  }
+
+  .kind:hover {
+    color: var(--kind-colour);
+  }
+
   button[aria-pressed='true'] {
-    color: var(--color-accent);
-    background: var(--color-surface-selected);
+    background: color-mix(in srgb, var(--kind-colour) 14%, transparent);
   }
 
   /* The pressed kind also gets a mark at its start edge, so it is not shown by colour alone. */
@@ -115,7 +124,7 @@
     inset-inline-start: -6px;
     width: 3px;
     border-radius: 2px;
-    background: var(--color-accent);
+    background: var(--kind-colour);
   }
 
   button:focus-visible {

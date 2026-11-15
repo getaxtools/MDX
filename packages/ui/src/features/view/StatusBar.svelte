@@ -3,7 +3,7 @@
   import type { Translator } from '@mdx/i18n';
   import ContextMenu from '../../components/ContextMenu.svelte';
   import KindIcon from '../control-wheel/KindIcon.svelte';
-  import { KIND_ICONS, kindNameOf } from '../control-wheel/kindPresentation';
+  import { KIND_ICONS, kindColourOf, kindNameOf } from '../control-wheel/kindPresentation';
   import { tooltipWithShortcut } from '../shortcuts/commandShortcuts';
   import { contextMenuPosition, type ContextMenuRequest } from '../../components/ContextMenuItem';
   import {
@@ -153,6 +153,7 @@
         title={tooltipWithShortcut(translator.translate('controlWheel.show'), controlWheelButton.shortcut)}
         aria-label={translator.translate('statusBar.controlWheel', { kind })}
         aria-haspopup="dialog"
+        style:--kind-colour={kindColourOf(controlWheelButton.activeKindId)}
         onclick={controlWheelButton.onShowControlWheel}
       >
         <KindIcon paths={KIND_ICONS[controlWheelButton.activeKindId]} />
@@ -218,6 +219,7 @@
   .control-wheel :global(svg) {
     width: 1rem;
     height: 1rem;
+    color: var(--kind-colour);
   }
 
   .words {

@@ -3,7 +3,8 @@
   import type { Translator } from '@mdx/i18n';
   import type { ViewerCommand } from '../viewer/viewerCommands';
   import KindIcon from './KindIcon.svelte';
-  import { KIND_ICONS, kindNameOf } from './kindPresentation';
+  import { KIND_ICONS, kindColourOf, kindNameOf } from './kindPresentation';
+  import { readWheelMediaPreferences } from './wheelMediaPreferences';
 
   interface Props {
     kinds: WorkspaceKindsState;
@@ -17,6 +18,7 @@
   const { kinds, anchor = 'wheel', translator, onCommand, onClose }: Props = $props();
 
   let popup: HTMLElement | undefined = $state();
+  const isSurfaceOpaque = readWheelMediaPreferences(globalThis.document.documentElement).isSurfaceOpaque;
 
   $effect(() => popup?.querySelector<HTMLElement>('[role="switch"]')?.focus());
 
@@ -47,6 +49,7 @@
   class:beside-bar={anchor === 'bar'}
   role="dialog"
   aria-labelledby="kind-settings-title"
+  data-surface={isSurfaceOpaque ? 'opaque' : 'frosted'}
   tabindex="-1"
   onkeydown={handleKeydown}
 >
@@ -63,7 +66,9 @@
           aria-describedby={isLastEnabled(kind) ? reasonId : undefined}
           onclick={() => toggle(kind)}
         >
-          <KindIcon paths={KIND_ICONS[kind.id]} />
+          <span class="kind-icon" style:--kind-colour={isPlanned(kind) ? undefined : kindColourOf(kind.id)}>
+            <KindIcon paths={KIND_ICONS[kind.id]} />
+          </span>
           <span class="name">{kindNameOf(kind.id, translator)}</span>
           {#if isPlanned(kind)}
             <span class="later">{translator.translate('workspaceKinds.availability.later')}</span>
@@ -87,11 +92,30 @@
     inset-inline-end: 0;
     width: 18rem;
     padding: var(--space-3);
-    border: 1px solid var(--color-border);
+    border: 1px solid color-mix(in srgb, var(--color-border-strong) 70%, transparent);
     border-radius: var(--radius-large);
-    background: var(--color-surface-raised);
-    box-shadow: var(--shadow-medium);
+    background: color-mix(in srgb, var(--color-wheel-surface) var(--wheel-surface-opacity), transparent);
+    backdrop-filter: var(--wheel-surface-backdrop);
+    box-shadow: var(--shadow-wheel);
     color: var(--color-text);
+  }
+
+  .kind-settings[data-surface='opaque'] {
+    background: var(--color-wheel-surface);
+    backdrop-filter: none;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .kind-settings {
+      animation: popup-in var(--motion-fast) var(--easing-emphasized) both;
+    }
+  }
+
+  @keyframes popup-in {
+    from {
+      opacity: 0;
+      scale: 0.96;
+    }
   }
 
   .kind-settings.beside-bar {
@@ -136,6 +160,11 @@
 
   button[aria-disabled='true'] {
     color: var(--color-text-secondary);
+  }
+
+  .kind-icon {
+    display: grid;
+    color: var(--kind-colour, currentcolor);
   }
 
   .name {
@@ -189,6 +218,11 @@
   }
 
   @media (forced-colors: active) {
+    .kind-settings {
+      border-color: CanvasText;
+      box-shadow: none;
+    }
+
     .track {
       border-color: ButtonText;
     }

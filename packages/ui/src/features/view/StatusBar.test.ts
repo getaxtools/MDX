@@ -124,6 +124,12 @@ describe('StatusBar', () => {
       expect(button.title).toBe('Show Control Wheel (Ctrl+Shift+Space)');
     });
 
+    it("shows the active kind's colour", () => {
+      const button = renderWithWheelButton();
+
+      expect(button.style.getPropertyValue('--kind-colour')).toBe('var(--color-kind-markdown-viewer)');
+    });
+
     it('opens the wheel', async () => {
       const onShowControlWheel = vi.fn();
       const button = renderWithWheelButton(onShowControlWheel);
