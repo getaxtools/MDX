@@ -273,6 +273,7 @@
   "editing.previewBeside.resize": "Resize editor and preview",
   "startPage.title": "Welcome",
   "startPage.start": "Start",
+  "startPage.notesIntroduction": "Notes keeps your notes as Markdown files in a folder. Create a Notes workspace to start.",
   "paths.copyPath": "Copy Path",
   "paths.revealInFileManager": "Reveal in File Explorer",
   "editing.loading": "Opening the editor…",

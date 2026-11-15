@@ -105,7 +105,7 @@ describe('workspace file', () => {
     ],
     [
       'a kind not built yet',
-      '{"format":"mdx-workspace","formatVersion":1,"name":"A","kind":"notes"}',
+      '{"format":"mdx-workspace","formatVersion":1,"name":"A","kind":"specViewer"}',
       'unknownKind',
     ],
   ])('refuses %s with a reason', (_description, text, reason) => {
@@ -119,8 +119,14 @@ describe('workspace file', () => {
   });
 
   it('reads a kind that is built in this version even while it is turned off', () => {
-    const kinds = workspaceKindsFor({ allowsPlannedKindPreview: true });
     const text = '{"format":"mdx-workspace","formatVersion":1,"name":"Journal","kind":"notes"}';
+
+    expect(readWorkspaceFile(text, READ_OPTIONS).outcome).toBe('read');
+  });
+
+  it('reads a planned kind when the preview allows it', () => {
+    const kinds = workspaceKindsFor({ allowsPlannedKindPreview: true });
+    const text = '{"format":"mdx-workspace","formatVersion":1,"name":"Specs","kind":"specViewer"}';
 
     expect(readWorkspaceFile(text, { ...READ_OPTIONS, kindRegistry: kinds }).outcome).toBe('read');
   });

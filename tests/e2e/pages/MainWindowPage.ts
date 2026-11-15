@@ -451,15 +451,22 @@ export class MainWindowPage {
     return this.browser.$('[role="toolbar"]').$(`button[aria-label="${translator.translate(labelKey)}"]`);
   }
 
+  async hasSidebarSection(titleKey: MessageKey): Promise<boolean> {
+    return (await this.sidebarSectionsTitled(titleKey)).length > 0;
+  }
+
   private async sidebarSection(titleKey: MessageKey) {
-    const title = translator.translate(titleKey);
-    const sections = await this.browser
-      .$(`nav[aria-label="${translator.translate('sidebar.label')}"]`)
-      .$$('section')
-      .filter(async (section) => String(await section.$('h2').getProperty('textContent')).trim() === title);
-    const [section] = sections;
-    if (!section) throw new Error(`The sidebar has no ${title} section`);
+    const [section] = await this.sidebarSectionsTitled(titleKey);
+    if (!section) throw new Error(`The sidebar has no ${translator.translate(titleKey)} section`);
     return section;
+  }
+
+  private sidebarSectionsTitled(titleKey: MessageKey) {
+    const title = translator.translate(titleKey);
+    return this.browser
+      .$(`nav[aria-label="${translator.translate('sidebar.label')}"]`)
+      .$$(`.//h2[normalize-space(.)="${title}"]/ancestor::section[1]`)
+      .getElements();
   }
 
   private async sidebarEntryNames(titleKey: MessageKey): Promise<string[]> {

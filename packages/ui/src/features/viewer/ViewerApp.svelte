@@ -157,6 +157,8 @@
       : 0,
   );
   let shownEditor: SourceEditor | undefined;
+  /** A heading chosen while the editor was still starting, revealed once it is ready. */
+  let pendingEditorLine: number | undefined;
   /** Kept with its document, so another tab never shows the section of the previous one. */
   let currentHeading: { readonly documentKey?: string; readonly id?: string } = $state({});
   const currentHeadingId = $derived(currentHeading.documentKey === activeKey ? currentHeading.id : undefined);
@@ -208,13 +210,16 @@
   function attachEditor(sync: ScrollSync, sourceEditor: SourceEditor | undefined) {
     shownEditor = sourceEditor;
     sync.attachEditor(sourceEditor);
+    if (sourceEditor && pendingEditorLine !== undefined) sourceEditor.revealLine(pendingEditorLine);
+    pendingEditorLine = undefined;
   }
 
   /** While editing the caret moves to the heading; otherwise the shown document scrolls to it. */
   function goToHeading(entry: OutlineEntry) {
     showCurrentHeading(entry.id);
-    if (editedDocument && shownEditor) {
-      shownEditor.revealLine(entry.line);
+    if (editedDocument) {
+      if (shownEditor) shownEditor.revealLine(entry.line);
+      else pendingEditorLine = entry.line;
       return;
     }
     headingRequest = { entry, number: (headingRequest?.number ?? 0) + 1 };

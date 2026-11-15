@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { DEFAULT_WORKSPACE_KIND_ID, type RecentFile, type WorkspaceKindId } from '@mdx/core';
+  import { DEFAULT_WORKSPACE_KIND_ID, NOTES_KIND_ID, type RecentFile, type WorkspaceKindId } from '@mdx/core';
   import type { MessageKey, Translator } from '@mdx/i18n';
   import { kindNameOf } from '../control-wheel/kindPresentation';
   import { shortcutLabelFor } from '../shortcuts/commandShortcuts';
@@ -65,7 +65,11 @@
   {@const kind = kindNameOf(activeKindId, translator)}
   <main class="start-page" aria-labelledby="start-page-heading">
     <h1 id="start-page-heading">{kind}</h1>
-    <p class="introduction">{translator.translate('workspaceKinds.notBuiltYet', { kind })}</p>
+    <p class="introduction">
+      {activeKindId === NOTES_KIND_ID
+        ? translator.translate('startPage.notesIntroduction')
+        : translator.translate('workspaceKinds.notBuiltYet', { kind })}
+    </p>
     {#if canCreateWorkspace}
       <button
         class="link-button"

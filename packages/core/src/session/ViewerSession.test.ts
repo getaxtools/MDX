@@ -440,7 +440,7 @@ describe('ViewerSession', () => {
     const documentFiles = new InMemoryDocumentFiles({});
     const kindRegistry = workspaceKindsFor({ allowsPlannedKindPreview: true });
     const first = new ViewerSession({ documentFiles, appState, now: () => 0, kindRegistry });
-    first.updateWorkspaceKinds((kinds) => kinds.enableKind('notes').state.switchKind('notes'));
+    first.updateWorkspaceKinds((kinds) => kinds.enableKind('specViewer').state.switchKind('specViewer'));
     await first.save();
     const second = new ViewerSession({ documentFiles, appState, now: () => 0, kindRegistry });
 
@@ -448,7 +448,7 @@ describe('ViewerSession', () => {
     const restoredActiveKind = second.currentState().workspaceKinds.activeKindId();
     second.clearAllData();
 
-    expect(restoredActiveKind).toBe('notes');
+    expect(restoredActiveKind).toBe('specViewer');
     expect(
       second
         .currentState()

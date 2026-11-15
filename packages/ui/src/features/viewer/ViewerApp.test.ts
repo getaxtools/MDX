@@ -2,7 +2,7 @@ import { ViewerSession, WorkspaceKindsState, type WorkspaceKind } from '@mdx/cor
 import { createTranslator } from '@mdx/i18n';
 import { InMemoryAppState, InMemoryDocumentFiles, InMemoryDocumentRequests } from '@mdx/platform';
 import { createMarkdownRenderer } from '@mdx/renderer';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { tick } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -189,6 +189,23 @@ describe('ViewerApp', () => {
     expect(screen.getByRole('button', { name: 'Preview' }).getAttribute('aria-pressed')).toBe('true');
     await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
     expect(await screen.findByText('Edited.')).toBeTruthy();
+  });
+
+  it('moves the editor caret to a heading chosen while the editor is still starting', async () => {
+    await renderViewer([GUIDE]);
+    await screen.findByRole('heading', { name: 'Guide' });
+    await userEvent.click(screen.getByRole('button', { name: 'Outline' }));
+    const outline = await screen.findByRole('navigation', { name: 'Outline' });
+    const heldFrames: FrameRequestCallback[] = [];
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((frame) => heldFrames.push(frame));
+
+    await userEvent.keyboard('{Control>}/{/Control}');
+    const source = await screen.findByRole('textbox', { name: 'Source of Guide.md' });
+    await userEvent.click(within(outline).getByRole('button', { name: 'Guide' }));
+    for (const frame of heldFrames.splice(0)) frame(0);
+    await tick();
+
+    expect(source.contains(document.activeElement)).toBe(true);
   });
 
   it('hides and shows the Explorer with Ctrl+Shift+E', async () => {

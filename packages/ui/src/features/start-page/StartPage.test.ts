@@ -81,6 +81,22 @@ describe('StartPage', () => {
   it('shows the not-built-yet text for a previewed kind', () => {
     render(StartPage, {
       recentFiles: [],
+      activeKindId: 'specViewer',
+      translator: createTranslator(),
+      onCommand: vi.fn(),
+      onOpenRecentFile: vi.fn(),
+    });
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Spec viewer' })).toBeTruthy();
+    expect(
+      screen.getByText('Spec viewer is not built yet. Switch back to Markdown viewer to read documents.'),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'New Document' })).toBeNull();
+  });
+
+  it('asks for a Notes workspace when Notes is chosen without one', () => {
+    render(StartPage, {
+      recentFiles: [],
       activeKindId: 'notes',
       translator: createTranslator(),
       onCommand: vi.fn(),
@@ -89,9 +105,11 @@ describe('StartPage', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'Notes' })).toBeTruthy();
     expect(
-      screen.getByText('Notes is not built yet. Switch back to Markdown viewer to read documents.'),
+      screen.getByText(
+        'Notes keeps your notes as Markdown files in a folder. Create a Notes workspace to start.',
+      ),
     ).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'New Document' })).toBeNull();
+    expect(screen.queryByText(/is not built yet/)).toBeNull();
   });
 
   it('offers ways to start, each with its keys', () => {
