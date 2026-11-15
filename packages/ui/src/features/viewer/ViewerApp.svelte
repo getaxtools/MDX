@@ -600,6 +600,7 @@
       onCommand={(command: ViewerCommand) => void controller.execute(command)}
       onClose={() => controller.closeDialog()}
       onPickFolder={() => controller.pickNotesFolder()}
+      onInspectNotesFolder={(path: string) => controller.inspectNotesFolder(path)}
     />
   {:else if snapshot.openDialog === 'noteTrash' && snapshot.notes?.trash}
     <NoteTrashDialog

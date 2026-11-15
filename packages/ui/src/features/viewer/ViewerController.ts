@@ -48,6 +48,7 @@ import {
   type WorkspaceFilePort,
   type NoteFilesPort,
   type NotesIndexPort,
+  type NotesFolderInspection,
   type NotesLocationPort,
 } from '@mdx/platform';
 import type { MarkdownRenderer, OutlineEntry, RenderOptions } from '@mdx/renderer';
@@ -1414,6 +1415,11 @@ export class ViewerController {
   private notesSetupPart(): Pick<WorkspacesView, 'notesSetup'> {
     const notesSetup = this.workspaceActions.notesSetup();
     return notesSetup ? { notesSetup } : {};
+  }
+
+  /** What a folder for a new Notes workspace holds; without a Notes port nothing is there to look at. */
+  inspectNotesFolder(path: string): Promise<NotesFolderInspection> {
+    return this.dependencies.notesLocations?.inspectFolder(path) ?? Promise.resolve('empty');
   }
 
   /** The folder picker for a Notes folder; the picked folder becomes readable, as any opened folder. */

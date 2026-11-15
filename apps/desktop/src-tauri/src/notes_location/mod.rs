@@ -1,6 +1,10 @@
+mod folder_inspection;
 mod known_folders;
 mod location_marker;
 
+pub use folder_inspection::{
+    NotesFolderInspection, canonical_folder, inspect_folder, is_refused_place,
+};
 pub use known_folders::one_drive_folders;
 pub use location_marker::{NOTES_APP_FOLDER, mark_location, read_marker};
 

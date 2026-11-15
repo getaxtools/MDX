@@ -10,6 +10,7 @@
     type WorkspaceNameProblem,
   } from '@mdx/core';
   import type { MessageKey, Translator } from '@mdx/i18n';
+  import type { NotesFolderInspection } from '@mdx/platform';
   import { untrack } from 'svelte';
   import Dialog from '../../components/Dialog.svelte';
   import { kindNameOf } from '../control-wheel/kindPresentation';
@@ -39,6 +40,7 @@
     /** Suggests and checks the folder of a new Notes workspace. */
     notesSetup?: NotesSetup | undefined;
     onPickFolder?: (() => Promise<string | undefined>) | undefined;
+    onInspectNotesFolder?: ((path: string) => Promise<NotesFolderInspection>) | undefined;
     translator: Translator;
     onConfirm: (details: WorkspaceDetails) => void;
     onClose: () => void;
@@ -56,6 +58,7 @@
     hasAppearanceChoices = false,
     notesSetup,
     onPickFolder = () => Promise.resolve(undefined),
+    onInspectNotesFolder = () => Promise.resolve('empty'),
     translator,
     onConfirm,
     onClose,
@@ -162,6 +165,8 @@
           workspaceName={name}
           {translator}
           {onPickFolder}
+          onInspectFolder={onInspectNotesFolder}
+          {hasTriedToConfirm}
           bind:locationPath={notesLocationPath}
         />
       {/if}

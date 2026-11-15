@@ -55,7 +55,48 @@ pub fn mark_location(
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
+
+    fn every_entry_under(root: &Path) -> Vec<(PathBuf, Option<Vec<u8>>)> {
+        let mut entries = Vec::new();
+        let mut folders = vec![root.to_path_buf()];
+        while let Some(folder) = folders.pop() {
+            for entry in fs::read_dir(&folder).unwrap().map(Result::unwrap) {
+                let path = entry.path();
+                let relative = path.strip_prefix(root).unwrap().to_path_buf();
+                if path.is_dir() {
+                    folders.push(path);
+                    entries.push((relative, None));
+                } else {
+                    entries.push((relative, Some(fs::read(&path).unwrap())));
+                }
+            }
+        }
+        entries.sort();
+        entries
+    }
+
+    #[test]
+    fn the_only_new_item_is_the_app_folder() {
+        let folder = tempfile::tempdir().unwrap();
+        fs::write(folder.path().join("Plan.md"), "# Plan\r\nSee [[Ideas]].\n").unwrap();
+        fs::create_dir(folder.path().join("Projects")).unwrap();
+        fs::write(folder.path().join("Projects").join("Ideas.md"), "# Ideas").unwrap();
+        fs::create_dir(folder.path().join(".other-app")).unwrap();
+        fs::write(folder.path().join(".other-app").join("settings.json"), "{}").unwrap();
+        let before = every_entry_under(folder.path());
+
+        mark_location(folder.path(), "location-1", 1).unwrap();
+
+        let after_outside_app_folder: Vec<_> = every_entry_under(folder.path())
+            .into_iter()
+            .filter(|(relative, _)| !relative.starts_with(NOTES_APP_FOLDER))
+            .collect();
+        assert_eq!(after_outside_app_folder, before);
+        assert!(folder.path().join(NOTES_APP_FOLDER).is_dir());
+    }
 
     #[test]
     fn a_new_folder_gets_a_marker() {

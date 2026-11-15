@@ -8,6 +8,7 @@ import type {
   FolderSearchResults,
   KnownFolders,
   LocationAvailability,
+  NotesFolderInspection,
   NoteCreation,
   NoteDeletion,
   NoteInFolder,
@@ -86,6 +87,7 @@ export const tauriCommands = {
     invoke<StoredWorkspaceReply | null>('load_workspace', { workspaceId, windowId }),
   saveWorkspace: (workspace: StoredWorkspaceRow) => invoke<null>('save_workspace', { workspace }),
   knownFolders: () => invoke<KnownFolders>('known_folders'),
+  inspectNotesFolder: (path: string) => invoke<NotesFolderInspection>('inspect_notes_folder', { path }),
   prepareNotesLocation: (path: string, locationId: string) =>
     invoke<PreparedNotesLocation>('prepare_notes_location', { path, locationId }),
   checkNotesLocation: (path: string, locationId: string) =>

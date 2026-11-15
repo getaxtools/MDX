@@ -42,7 +42,7 @@ describe('Clear All Data in a Notes workspace', () => {
     await app.browser.waitUntil(async () => !(await controlWheel.isOpen()));
   }
 
-  async function createNotesWorkspace(name: string): Promise<void> {
+  async function createNotesWorkspace(name: string, { holdsFiles }: { holdsFiles: boolean }): Promise<void> {
     await mainWindow.searchInCommandPalette('>New Workspace…');
     await mainWindow.waitForCommandPaletteOption('New Workspace…');
     await mainWindow.pressShortcut('Enter');
@@ -50,6 +50,7 @@ describe('Clear All Data in a Notes workspace', () => {
     await dialog.$('input#workspace-name').setValue(name);
     await mainWindow.chooseOption('[role="dialog"] select#workspace-kind', 'notes');
     await dialog.$('[role="group"][aria-labelledby="notes-location-label"] code').waitForDisplayed();
+    await mainWindow.confirmNotesFolder({ holdsFiles });
     await dialog.$('button=Create').click();
     await app.browser.waitUntil(async () => (await mainWindow.windowTitle()) === `${name} - MDX`);
   }
@@ -76,7 +77,7 @@ describe('Clear All Data in a Notes workspace', () => {
 
   it('notes survive Clear All Data and the index rebuilds', async () => {
     await turnOnNotes();
-    await createNotesWorkspace('Journal');
+    await createNotesWorkspace('Journal', { holdsFiles: true });
     await searchUntilFound('venue', 'Plan.md');
     expect(indexFiles()).toHaveLength(1);
 
@@ -90,7 +91,8 @@ describe('Clear All Data in a Notes workspace', () => {
     await app.browser.waitUntil(() => indexFiles().length === 0);
     expect(readFileSync(join(notesFolder, 'Plan.md'), 'utf8')).toBe('# Plan\n\nBook the venue.\n');
     await turnOnNotes();
-    await createNotesWorkspace('Journal');
+    // The folder keeps its marker through Clear All Data, so it is known as a Notes folder again.
+    await createNotesWorkspace('Journal', { holdsFiles: false });
     await searchUntilFound('venue', 'Plan.md');
   });
 });

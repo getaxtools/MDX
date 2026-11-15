@@ -58,6 +58,7 @@ describe('searching notes', () => {
     await dialog.$('input#workspace-name').setValue(name);
     await mainWindow.chooseOption('[role="dialog"] select#workspace-kind', 'notes');
     await dialog.$('[role="group"][aria-labelledby="notes-location-label"] code').waitForDisplayed();
+    await mainWindow.confirmNotesFolder({ holdsFiles: true });
     await dialog.$('button=Create').click();
     await app.browser.waitUntil(async () => (await mainWindow.windowTitle()) === `${name} - MDX`);
   }

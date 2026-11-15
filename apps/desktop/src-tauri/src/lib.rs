@@ -116,6 +116,7 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::notes_location::known_folders,
         commands::notes_location::prepare_notes_location,
         commands::notes_location::check_notes_location,
+        commands::notes_location::inspect_notes_folder,
         commands::notes_location::locate_notes_location,
         commands::notes::create_note,
         commands::notes::create_note_in_folder,

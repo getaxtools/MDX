@@ -45,6 +45,7 @@ describe('opening a Notes workspace file', () => {
     expect(await app.browser.$('[role="dialog"] input#workspace-name').getValue()).toBe('Journal');
     expect(await app.browser.$('[role="dialog"] select#workspace-kind').isExisting()).toBe(false);
     expect(await findAccessibilityViolations(app.browser)).toEqual([]);
+    await mainWindow.confirmNotesFolder({ holdsFiles: false });
     await app.browser.$('[role="dialog"]').$('button=Create').click();
 
     await app.browser.waitUntil(async () => (await mainWindow.windowTitle()) === 'Journal - MDX');

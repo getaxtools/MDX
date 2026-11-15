@@ -6,6 +6,7 @@
     type WorkspaceKindsState,
   } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
+  import type { NotesFolderInspection } from '@mdx/platform';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
   import type { ViewerCommand } from '../viewer/viewerCommands';
   import type { WorkspacesView } from '../viewer/ViewerController';
@@ -23,9 +24,19 @@
     onCommand: (command: ViewerCommand) => void;
     onClose: () => void;
     onPickFolder?: () => Promise<string | undefined>;
+    onInspectNotesFolder?: (path: string) => Promise<NotesFolderInspection>;
   }
 
-  const { dialog, workspaces, kinds, translator, onCommand, onClose, onPickFolder }: Props = $props();
+  const {
+    dialog,
+    workspaces,
+    kinds,
+    translator,
+    onCommand,
+    onClose,
+    onPickFolder,
+    onInspectNotesFolder,
+  }: Props = $props();
 
   const shown = $derived(workspaces.registry.find(workspaces.shownWorkspaceId));
   const choosableKindIds = $derived(
@@ -65,6 +76,7 @@
     hasAppearanceChoices
     notesSetup={workspaces.notesSetup}
     {onPickFolder}
+    {onInspectNotesFolder}
     onConfirm={(details: WorkspaceDetails) => onCommand({ kind: 'createWorkspace', ...details })}
     {onClose}
   />

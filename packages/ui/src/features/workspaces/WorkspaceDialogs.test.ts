@@ -75,6 +75,72 @@ describe('workspace dialogs', () => {
     expect(screen.getByRole<HTMLInputElement>('radio', { name: 'Teal' }).checked).toBe(true);
   });
 
+  it('never creates a Notes workspace in a refused folder', async () => {
+    const onCommand = vi.fn();
+    render(WorkspaceDialogs, {
+      dialog: 'newWorkspace',
+      workspaces: {
+        registry: WorkspaceRegistry.fromStored([stored('default', 'markdownViewer', null)]),
+        shownWorkspaceId: 'default',
+        kindForNewWorkspace: 'notes',
+        notesSetup: { documents: 'C:\\Users\\Ana\\Documents', syncedFolders: [], claimedPaths: [] },
+      },
+      kinds: WorkspaceKindsState.fromSaved(
+        { enabledKindIds: ['markdownViewer', 'notes'], activeKindId: 'markdownViewer' },
+        ALL_KINDS_BUILT,
+      ),
+      translator: createTranslator(),
+      onCommand,
+      onClose: vi.fn(),
+      onInspectNotesFolder: () => Promise.resolve('refused' as const),
+    });
+    await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Journal');
+    await screen.findByText(
+      'MDX cannot keep notes in a whole drive or in your user folder. Choose a folder inside it.',
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    expect(onCommand).not.toHaveBeenCalled();
+  });
+
+  it('creates a Notes workspace in a folder with files only once the user agrees', async () => {
+    const onCommand = vi.fn();
+    render(WorkspaceDialogs, {
+      dialog: 'newWorkspace',
+      workspaces: {
+        registry: WorkspaceRegistry.fromStored([stored('default', 'markdownViewer', null)]),
+        shownWorkspaceId: 'default',
+        kindForNewWorkspace: 'notes',
+        notesSetup: { documents: 'C:\\Users\\Ana\\Documents', syncedFolders: [], claimedPaths: [] },
+      },
+      kinds: WorkspaceKindsState.fromSaved(
+        { enabledKindIds: ['markdownViewer', 'notes'], activeKindId: 'markdownViewer' },
+        ALL_KINDS_BUILT,
+      ),
+      translator: createTranslator(),
+      onCommand,
+      onClose: vi.fn(),
+      onInspectNotesFolder: () => Promise.resolve('existingFiles' as const),
+    });
+    await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Journal');
+    const agreement = await screen.findByRole('checkbox', { name: 'Use this folder with its files' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    const commandsBeforeAgreeing = onCommand.mock.calls.length;
+    await userEvent.click(agreement);
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    expect(commandsBeforeAgreeing).toBe(0);
+    expect(onCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'createWorkspace',
+        kindId: 'notes',
+        notesLocationPath: 'C:\\Users\\Ana\\Documents\\MDX Notes',
+      }),
+    );
+  });
+
   it('creates a workspace with the chosen icon and colour, then the folder step', async () => {
     const { onCommand } = renderDialog('newWorkspace');
 

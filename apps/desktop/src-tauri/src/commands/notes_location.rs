@@ -6,12 +6,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
-use crate::commands::documents::validated_path;
+use crate::commands::documents::{run_blocking, validated_path};
 use crate::documents::{
     DocumentAccessList, DocumentError, DocumentLocation, canonical_key_of, locate_document,
 };
 use crate::notes_location::{
-    DEFAULT_NOTES_FOLDER_NAME, mark_location, one_drive_folders, read_marker,
+    DEFAULT_NOTES_FOLDER_NAME, NotesFolderInspection, canonical_folder, inspect_folder,
+    is_refused_place, mark_location, one_drive_folders, read_marker,
 };
 use crate::storage::WorkspaceId;
 
@@ -61,14 +62,10 @@ pub fn prepare_notes_location(
     app: AppHandle,
     access: State<'_, Arc<DocumentAccessList>>,
 ) -> Result<PreparedNotesLocation, DocumentError> {
-    let path = validated_path(&path)?;
+    let path = claimable_path(&path, &app, &access)?;
     let location_id =
         WorkspaceId::try_from(location_id).map_err(|_| DocumentError::InvalidRequest)?;
-    let documents = documents_folder(&app);
-    let is_picked = |folder: &Path| {
-        locate_document(folder).is_ok_and(|location| access.is_folder_allowed(&location))
-    };
-    if !may_claim(&path, documents.as_deref(), is_picked) {
+    if is_refused_place(&path, user_folder(&app).as_deref()) {
         return Err(DocumentError::AccessDenied);
     }
     fs::create_dir_all(&path)?;
@@ -79,6 +76,45 @@ pub fn prepare_notes_location(
         is_existing: marker.location_id != location_id.as_str(),
         location_id: marker.location_id,
     })
+}
+
+/// What a folder the window may claim holds, so it can ask before using one with files in it. Off
+/// the window's thread, since a network or cloud folder can be slow to list.
+#[tauri::command]
+pub async fn inspect_notes_folder(
+    path: String,
+    app: AppHandle,
+    access: State<'_, Arc<DocumentAccessList>>,
+) -> Result<NotesFolderInspection, DocumentError> {
+    let access = Arc::clone(&access);
+    run_blocking(move || {
+        let path = claimable_path(&path, &app, &access)?;
+        inspect_folder(&path, user_folder(&app).as_deref())
+    })
+    .await?
+}
+
+fn claimable_path(
+    path: &str,
+    app: &AppHandle,
+    access: &DocumentAccessList,
+) -> Result<PathBuf, DocumentError> {
+    let path = validated_path(path)?;
+    let is_picked = |folder: &Path| {
+        locate_document(folder).is_ok_and(|location| access.is_folder_allowed(&location))
+    };
+    if may_claim(&path, documents_folder(app).as_deref(), is_picked) {
+        Ok(canonical_folder(&path))
+    } else {
+        Err(DocumentError::AccessDenied)
+    }
+}
+
+fn user_folder(app: &AppHandle) -> Option<PathBuf> {
+    app.path()
+        .home_dir()
+        .ok()
+        .map(|folder| canonical_folder(&folder))
 }
 
 /// A folder the user picked, or the default place for Notes folders, which may not exist yet.

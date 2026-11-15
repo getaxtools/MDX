@@ -15,8 +15,17 @@ export interface PreparedNotesLocation {
   readonly isExisting: boolean;
 }
 
+/**
+ * What a folder holds before it becomes a Notes location: `empty` (missing, or only dot entries),
+ * `existingFiles` (the user's files, which stay as they are), `notesLocation` (already one), or
+ * `refused` (a drive root or the user folder).
+ */
+export type NotesFolderInspection = 'empty' | 'existingFiles' | 'notesLocation' | 'refused';
+
 export interface NotesLocationPort {
   knownFolders(): Promise<KnownFolders>;
+  /** Looks into a folder the user picked, or the default place, without changing anything. */
+  inspectFolder(path: string): Promise<NotesFolderInspection>;
   /**
    * Marks the folder as a Notes location and lets the window read it. A new folder is made only at the
    * default place in Documents; any other folder must have been picked by the user.

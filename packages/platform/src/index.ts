@@ -65,6 +65,7 @@ export { InMemoryWorkspaceFiles } from './fakes/InMemoryWorkspaceFiles';
 export type {
   KnownFolders,
   LocationAvailability,
+  NotesFolderInspection,
   NotesLocationPort,
   PreparedNotesLocation,
 } from './NotesLocationPort';

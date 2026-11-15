@@ -2,6 +2,7 @@ import type { DocumentLocation } from '../DocumentLocation';
 import type {
   KnownFolders,
   LocationAvailability,
+  NotesFolderInspection,
   NotesLocationPort,
   PreparedNotesLocation,
 } from '../NotesLocationPort';
@@ -15,9 +16,15 @@ export class InMemoryNotesLocations implements NotesLocationPort {
   readonly missingPaths = new Set<string>();
   /** Set to make preparing fail, as a folder the app may not use would. */
   isRefusing = false;
+  /** What folders hold, by lowercased path; any other folder is empty. */
+  readonly inspections = new Map<string, NotesFolderInspection>();
 
   knownFolders(): Promise<KnownFolders> {
     return Promise.resolve(this.folders);
+  }
+
+  inspectFolder(path: string): Promise<NotesFolderInspection> {
+    return Promise.resolve(this.inspections.get(path.toLowerCase()) ?? 'empty');
   }
 
   prepareLocation(path: string, locationId: string): Promise<PreparedNotesLocation> {

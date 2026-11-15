@@ -212,6 +212,15 @@ describe('creating a Notes workspace', () => {
     expect(snapshot().viewer.favourites.favourites()).toHaveLength(0);
   });
 
+  it('asks the Notes port what a folder holds, and finds an unknown folder empty', async () => {
+    const notesLocations = new InMemoryNotesLocations();
+    notesLocations.inspections.set('e:\\vault', 'existingFiles');
+    const { controller } = await startViewer(notesLocations);
+
+    expect(await controller.inspectNotesFolder('E:\\Vault')).toBe('existingFiles');
+    expect(await controller.inspectNotesFolder('E:\\Elsewhere')).toBe('empty');
+  });
+
   it('New Workspace knows the folders other Notes workspaces use', async () => {
     const { controller, snapshot, createNotesWorkspace } = await startViewer();
     await createNotesWorkspace('Journal', DEFAULT_NOTES_FOLDER);

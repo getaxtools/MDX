@@ -455,6 +455,27 @@ export class MainWindowPage {
     return (await this.sidebarSectionsTitled(titleKey)).length > 0;
   }
 
+  /**
+   * Waits until New Workspace has looked into the Notes folder, checks that it asks about files exactly
+   * when the folder holds some, and agrees when it does.
+   */
+  async confirmNotesFolder({ holdsFiles }: { readonly holdsFiles: boolean }): Promise<void> {
+    const step = this.browser.$('[role="dialog"] [role="group"][aria-labelledby="notes-location-label"]');
+    await step.waitForDisplayed();
+    await this.browser.waitUntil(async () => (await step.getAttribute('aria-busy')) !== 'true');
+    const agreement = step.$(
+      `.//label[normalize-space(.)="${translator.translate('workspaces.notes.useExistingFiles')}"]/input`,
+    );
+    const isAsked = await agreement.isExisting();
+    if (isAsked !== holdsFiles)
+      throw new Error(
+        holdsFiles
+          ? 'New Workspace did not ask about the files in the Notes folder'
+          : 'New Workspace asked about files in a Notes folder without any',
+      );
+    if (holdsFiles) await agreement.click();
+  }
+
   private async sidebarSection(titleKey: MessageKey) {
     const [section] = await this.sidebarSectionsTitled(titleKey);
     if (!section) throw new Error(`The sidebar has no ${translator.translate(titleKey)} section`);
