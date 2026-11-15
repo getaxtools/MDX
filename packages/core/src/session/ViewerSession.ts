@@ -14,6 +14,7 @@ import {
 import { withDocumentLineBreaks } from '../documents/lineEndings';
 import { ExplorerFolders } from '../explorer/ExplorerFolders';
 import { FavouritesList } from '../favourites/FavouritesList';
+import { locationAfterNoteMove, type MovedNote } from '../notes/noteMoves';
 import { RecentFilesList } from '../recent-files/RecentFilesList';
 import type { ShortcutOverrides } from '../shortcuts/parseShortcutOverrides';
 import type { WordGoals } from '../word-goals/wordGoals';
@@ -401,6 +402,24 @@ export class ViewerSession {
       if (!tabStrip.isOpen(canonicalKey)) this.openedDocuments.delete(canonicalKey);
     }
     this.replaceState({ ...this.state, tabStrip });
+  }
+
+  /** After a note was renamed or moved, its tabs, child notes' tabs and recent files point at the new place. */
+  followMovedNote(move: MovedNote): void {
+    let { tabStrip, recentFiles } = this.state;
+    for (const tab of tabStrip.tabs()) {
+      const moved = locationAfterNoteMove(tab.location, move);
+      if (!moved) continue;
+      tabStrip = tabStrip.replace(tab.location.canonicalKey, moved);
+      const document = this.openedDocuments.get(tab.location.canonicalKey);
+      this.openedDocuments.delete(tab.location.canonicalKey);
+      if (document) this.openedDocuments.set(moved.canonicalKey, { ...document, location: moved });
+    }
+    for (const recentFile of recentFiles.entries()) {
+      const moved = locationAfterNoteMove(recentFile.location, move);
+      if (moved) recentFiles = recentFiles.relocate(recentFile.location.canonicalKey, moved);
+    }
+    this.replaceState({ ...this.state, tabStrip, recentFiles });
   }
 
   updateRecentFiles(change: (recentFiles: RecentFilesList) => RecentFilesList): void {

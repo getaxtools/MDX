@@ -5,6 +5,9 @@
   import FavouritesSection from '../favourites/FavouritesSection.svelte';
   import RecentFilesSection from '../recent-files/RecentFilesSection.svelte';
   import type { ViewerCommand } from '../viewer/viewerCommands';
+  import NotesSection from '../notes/NotesSection.svelte';
+  import NoteTagsSection from '../notes/NoteTagsSection.svelte';
+  import type { NotesView } from '../notes/NotesActions';
   import ExplorerFoldersSection from './ExplorerFoldersSection.svelte';
   import SectionResizer from './SectionResizer.svelte';
 
@@ -25,6 +28,11 @@
     folderRevisions?: ReadonlyMap<string, number>;
     onShowFolder?: (folderPath: string) => () => void;
     activeDocumentKey?: string | undefined;
+    /** In a Notes workspace, the note tree takes the place of Folders. */
+    notes?: NotesView | undefined;
+    isNoteDeletionConfirmed?: boolean;
+    onNotesCommand?: (command: ViewerCommand) => Promise<void>;
+    onListNoteFolder?: (folderPath: string) => Promise<FolderListing>;
   }
 
   const {
@@ -44,6 +52,13 @@
     folderRevisions = new Map(),
     onShowFolder = () => () => undefined,
     activeDocumentKey,
+    notes,
+    isNoteDeletionConfirmed = true,
+    onNotesCommand = (command) => {
+      onCommand(command);
+      return Promise.resolve();
+    },
+    onListNoteFolder = onListFolder,
   }: Props = $props();
 
   const favouriteKeys = $derived(new Set(favourites.map((favourite) => favourite.location.canonicalKey)));
@@ -56,6 +71,7 @@
   const SECTION_TITLE_KEYS = {
     favourites: 'favourites.sidebar.title',
     folders: 'explorer.folders.title',
+    tags: 'notes.tags.title',
     recentFiles: 'recentFiles.title',
   } as const;
   const sectionSlots: Partial<Record<ExplorerSection, HTMLDivElement>> = $state({});
@@ -113,23 +129,52 @@
   <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a snippet is not a value -->
   {@render divider('favourites')}
   <div class="section-slot" style:height={heightOf('folders')} bind:this={sectionSlots.folders}>
-    <ExplorerFoldersSection
-      folders={explorerFolders}
-      {activeDocumentKey}
-      {favouriteKeys}
-      {pathStatuses}
-      {translator}
-      isExpanded={isExpanded('folders')}
-      onToggleExpanded={() => toggle('folders')}
-      {folderRevisions}
-      {onListFolder}
-      {onShowFolder}
-      {onOpenDocument}
-      {onCommand}
-    />
+    {#if notes}
+      <NotesSection
+        locationPath={notes.locationPath}
+        revision={notes.revision}
+        isDeletionConfirmed={isNoteDeletionConfirmed}
+        {translator}
+        isExpanded={isExpanded('folders')}
+        onToggleExpanded={() => toggle('folders')}
+        {folderRevisions}
+        {activeDocumentKey}
+        onListFolder={onListNoteFolder}
+        {onShowFolder}
+        {onOpenDocument}
+        onCommand={onNotesCommand}
+      />
+    {:else}
+      <ExplorerFoldersSection
+        folders={explorerFolders}
+        {activeDocumentKey}
+        {favouriteKeys}
+        {pathStatuses}
+        {translator}
+        isExpanded={isExpanded('folders')}
+        onToggleExpanded={() => toggle('folders')}
+        {folderRevisions}
+        {onListFolder}
+        {onShowFolder}
+        {onOpenDocument}
+        {onCommand}
+      />
+    {/if}
   </div>
   <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a snippet is not a value -->
   {@render divider('folders')}
+  {#if notes}
+    <div class="section-slot">
+      <NoteTagsSection
+        tags={notes.tags}
+        {translator}
+        isExpanded={isExpanded('tags')}
+        onToggleExpanded={() => toggle('tags')}
+        onCommand={(command: ViewerCommand) => void onNotesCommand(command)}
+      />
+    </div>
+    <div class="section-divider" aria-hidden="true"></div>
+  {/if}
   <div class="section-slot">
     <RecentFilesSection
       {recentFiles}

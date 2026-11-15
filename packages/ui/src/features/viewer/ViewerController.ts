@@ -16,7 +16,10 @@ import {
   type WorkspaceRegistry,
   parseFavouritesFile,
   toFavouritesFile,
+  notesLocationOf,
+  notesSettingsOf,
 } from '@mdx/core';
+import type { WikiLinkSuggester } from '@mdx/editor';
 import type { MessageKey, Translator } from '@mdx/i18n';
 import {
   DocumentOpenError,
@@ -43,9 +46,11 @@ import {
   type PathStatus,
   type RecentWorkspaceMenuEntry,
   type WorkspaceFilePort,
+  type NoteFilesPort,
+  type NotesIndexPort,
   type NotesLocationPort,
 } from '@mdx/platform';
-import type { MarkdownRenderer, OutlineEntry } from '@mdx/renderer';
+import type { MarkdownRenderer, OutlineEntry, RenderOptions } from '@mdx/renderer';
 import { applyWorkspaceKindCommand, type WorkspaceKindCommand } from '../control-wheel/workspaceKindCommands';
 import type { DocumentLink } from '../document-view/DocumentLink';
 import { DocumentAttachments } from '../editing/DocumentAttachments';
@@ -74,6 +79,8 @@ import {
 } from '../workspaces/workspaceCommands';
 import { WorkspaceFileActions, type PendingWorkspaceFile } from '../workspaces/WorkspaceFileActions';
 import { NotesLocationActions, isNotesLocationCommand } from '../notes-location/NotesLocationActions';
+import { NotesActions, isNotesCommand, type NotesCommand, type NotesView } from '../notes/NotesActions';
+import { NotesIndexActions, type NoteBacklinks } from '../notes/NotesIndexActions';
 import { windowTitleFor } from '../workspaces/windowTitle';
 import { recentWorkspaceLinks } from '../workspaces/recentWorkspaceLinks';
 import { applySessionCommand } from './applySessionCommand';
@@ -115,6 +122,10 @@ export interface ViewerControllerDependencies {
   readonly attachments?: AttachmentPort;
   readonly workspaceFiles?: WorkspaceFilePort;
   readonly notesLocations?: NotesLocationPort;
+  readonly noteFiles?: NoteFilesPort;
+  readonly notesIndex?: NotesIndexPort;
+  /** The clock for daily notes and templates; the real one unless a test sets it. */
+  readonly now?: () => Date;
 }
 
 export interface RenderedActiveDocument {
@@ -144,11 +155,17 @@ export interface ViewerSnapshot {
   readonly findQuery?: FindQuery;
   /** Goes up each time the Find in Folders box should get the keyboard focus. */
   readonly folderSearchFocusRequest?: number;
+  /** What the search box holds when it next gets the focus, such as `tag:work` for a chosen tag. */
+  readonly folderSearchQuery?: string;
+  /** The notes linking to the shown note, in a Notes workspace. */
+  readonly noteBacklinks?: NoteBacklinks;
   /** Goes up each time the shown document should be copied as HTML, from the Edit menu or the palette. */
   readonly copyAsHtmlRequest?: number;
   /** The format the shown document should export to, numbered so the same format can be asked again. */
   readonly exportRequest?: ExportRequest;
   readonly externalLinkRequest?: string;
+  /** A heading to show once the document a link opened is shown. */
+  readonly linkedHeadingRequest?: LinkedHeadingRequest;
   readonly isSourceView?: boolean;
   readonly unsavedChanges?: UnsavedChangesRequest;
   readonly pathStatuses: ReadonlyMap<string, PathStatus>;
@@ -162,6 +179,8 @@ export interface ViewerSnapshot {
   readonly workspaces?: WorkspacesView;
   /** The folder of the shown Notes workspace while it cannot be found. */
   readonly missingNotesLocation?: string;
+  /** The note tree, shown in place of Folders in a Notes workspace whose folder is there. */
+  readonly notes?: NotesView;
 }
 
 export interface WorkspacesView {
@@ -176,6 +195,13 @@ export interface WorkspacesView {
 }
 
 /** A button in the notice bar that runs a command, such as Locate for a file that has moved. */
+export interface LinkedHeadingRequest {
+  readonly canonicalKey: string;
+  /** The part of the link after #, as written. */
+  readonly fragment: string;
+  readonly number: number;
+}
+
 export interface NoticeAction {
   readonly label: string;
   readonly command: ViewerCommand;
@@ -196,6 +222,8 @@ export type ViewerDialog =
   | 'controlWheel'
   | 'workspaceKindSettings'
   | 'wordGoal'
+  | 'noteTrash'
+  | 'noteFromTemplate'
   | WorkspaceDialog;
 
 const DIALOGS_BY_COMMAND: Partial<Record<ViewerCommand['kind'], ViewerDialog>> = {
@@ -221,6 +249,7 @@ export class ViewerController {
   private readonly stopActions: (() => void)[] = [];
   private pendingSave: ReturnType<typeof setTimeout> | undefined;
   private renderedDocument: OpenedDocument | undefined;
+  private renderedNoteList: object | undefined;
   private renderedText: string | undefined;
   private hasRenderedSourceLines = false;
   private pendingLivePreview: ReturnType<typeof setTimeout> | undefined;
@@ -230,14 +259,18 @@ export class ViewerController {
   private readonly workspaceActions: WorkspaceActions;
   private readonly workspaceFileActions: WorkspaceFileActions | undefined;
   private readonly notesLocationActions: NotesLocationActions | undefined;
+  private readonly notesActions: NotesActions | undefined;
+  private readonly notesIndexActions: NotesIndexActions | undefined;
   private pendingWorkspaceFile: PendingWorkspaceFile | undefined;
   private noticeActions: readonly NoticeAction[] = [];
   private findRequest = 0;
   private findQuery: FindQuery | undefined;
   private folderSearchFocusRequest = 0;
+  private folderSearchQuery: string | undefined;
   private copyAsHtmlRequest = 0;
   private exportRequest: ExportRequest | undefined;
   private externalLinkRequest: string | undefined;
+  private linkedHeadingRequest: LinkedHeadingRequest | undefined;
   private isSourceView = false;
   private shownMenuViewState = '';
   private shownWindowTitle = '';
@@ -278,13 +311,48 @@ export class ViewerController {
       : undefined;
     this.explorerFolderActions = new ExplorerFolderActions(dependencies.session, dependencies.folders);
     this.navigation = new DocumentNavigation(dependencies.session, (path) => this.openDocument(path));
-    this.folderRefresh = new FolderRefresh(dependencies.folderWatcher, () =>
-      this.publish(this.composeSnapshot(this.snapshot.notice)),
-    );
+    this.folderRefresh = new FolderRefresh(dependencies.folderWatcher, () => {
+      this.notesActions?.forgetNoteList();
+      this.publish(this.composeSnapshot(this.snapshot.notice));
+    });
     this.documentAttachments = this.createDocumentAttachments();
     this.workspaceActions = this.createWorkspaceActions();
     this.workspaceFileActions = this.createWorkspaceFileActions();
     this.notesLocationActions = this.createNotesLocationActions();
+    this.notesActions = this.createNotesActions();
+    this.notesIndexActions = this.createNotesIndexActions();
+  }
+
+  private createNotesActions(): NotesActions | undefined {
+    const { session, noteFiles } = this.dependencies;
+    if (!noteFiles) return undefined;
+    return new NotesActions({
+      session,
+      noteFiles,
+      translator: this.dependencies.translator,
+      unsavedKeys: () => this.editing.unsavedKeys(),
+      openForEditing: async (path) => {
+        await this.openDocument(path);
+        this.editingActions.startEditingActiveDocument();
+      },
+      showNotice: (key, values, actions) => this.showNotice(key, values, actions),
+      showTrashDialog: () => {
+        this.openDialog = 'noteTrash';
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+      },
+      showTemplateDialog: () => {
+        this.openDialog = 'noteFromTemplate';
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+      },
+      now: this.dependencies.now ?? (() => new Date()),
+      openDocument: (path) => this.openDocument(path),
+      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+    });
+  }
+
+  /** The notes and folders directly inside a folder of the shown Notes workspace. */
+  listNoteFolder(folderPath: string): Promise<FolderListing> {
+    return this.notesActions?.listFolder(folderPath) ?? Promise.resolve({ folders: [], documents: [] });
   }
 
   private createNotesLocationActions(): NotesLocationActions | undefined {
@@ -295,8 +363,42 @@ export class ViewerController {
       notesLocations,
       pickFolder: () => this.pickNotesFolder(),
       showNotice: (key, values) => this.showNotice(key, values),
-      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+      onChange: () => {
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+        void this.showNotesIndex();
+      },
     });
+  }
+
+  private createNotesIndexActions(): NotesIndexActions | undefined {
+    const { notesIndex } = this.dependencies;
+    if (!notesIndex) return undefined;
+    return new NotesIndexActions({
+      notesIndex,
+      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+      onNotesChanged: () => {
+        this.notesActions?.forgetNoteList();
+        void this.refreshActiveDocument();
+      },
+    });
+  }
+
+  /** Suggests notes after `[[` while a note of the shown Notes workspace is edited. */
+  wikiLinkSuggesterFor(document: DocumentLocation): WikiLinkSuggester | undefined {
+    return this.notesIndexActions?.linkSuggesterFor(document, () => this.notesActions?.noteEntries());
+  }
+
+  /** The window got the focus: a Notes folder that reports no changes is checked again now. */
+  windowFocused(): Promise<void> {
+    return this.notesIndexActions?.windowFocused() ?? Promise.resolve();
+  }
+
+  /** The index follows the shown workspace: a Notes workspace whose folder is there, or none. */
+  private async showNotesIndex(): Promise<void> {
+    const shown = this.dependencies.session.shownWorkspace();
+    const isMissing = this.notesLocationActions?.missingLocation() !== undefined;
+    const location = shown && !isMissing ? notesLocationOf(shown) : undefined;
+    await this.notesIndexActions?.show(location, notesSettingsOf(shown).excludedPaths);
   }
 
   private createDocumentSaving(): DocumentSaving {
@@ -376,6 +478,7 @@ export class ViewerController {
     this.refreshPathStatuses();
     await this.refreshActiveDocument();
     await this.notesLocationActions?.check();
+    await this.showNotesIndex();
   }
 
   private createDocumentAttachments(): DocumentAttachments | undefined {
@@ -409,10 +512,12 @@ export class ViewerController {
     this.refreshPathStatuses();
     if (this.liveReload) this.stopActions.push(this.liveReload.start());
     this.stopActions.push(this.folderRefresh.start());
+    if (this.notesIndexActions) this.stopActions.push(this.notesIndexActions.start());
     if (this.documentAttachments) this.stopActions.push(this.documentAttachments.start());
     await this.openDocuments(await requests.takeStartupDocuments());
     await this.refreshActiveDocument();
     await this.notesLocationActions?.check();
+    await this.showNotesIndex();
     await this.offerWorkspaceFiles();
   }
 
@@ -556,13 +661,36 @@ export class ViewerController {
     }
     const { links, session } = this.dependencies;
     const activeLocation = session.currentState().tabStrip.activeTab()?.location;
-    if (!links || !activeLocation || isUntitledLocation(activeLocation)) return;
-    const documentPath = activeLocation.displayPath;
+    if (!activeLocation || isUntitledLocation(activeLocation)) return;
+    if (link.kind === 'unresolvedNote') {
+      this.notesActions?.offerNoteFor(link.href, activeLocation);
+      return;
+    }
+    if (!links) return;
     try {
-      await this.openDocuments([await links.resolveDocumentLink(documentPath, link.href)]);
+      await this.openDocuments([await links.resolveDocumentLink(activeLocation.displayPath, link.href)]);
+      this.revealLinkedHeading(link.href);
     } catch (error) {
       this.showOpenFailure(error, link.href);
     }
+  }
+
+  /** A link such as `plan.md#next-steps` opens the document at that heading. */
+  private revealLinkedHeading(href: string): void {
+    const fragment = href.split('#')[1];
+    const opened = this.dependencies.session.currentState().tabStrip.activeTab()?.location;
+    if (!fragment || !opened) return;
+    this.linkedHeadingRequest = {
+      canonicalKey: opened.canonicalKey,
+      fragment,
+      number: (this.linkedHeadingRequest?.number ?? 0) + 1,
+    };
+    this.publish(this.composeSnapshot(this.snapshot.notice));
+  }
+
+  private notesRenderingFor(location: DocumentLocation): Pick<RenderOptions, 'notes'> {
+    const notes = this.notesActions?.renderingFor(location);
+    return notes ? { notes } : {};
   }
 
   answerExternalLink(shouldOpen: boolean): void {
@@ -601,16 +729,9 @@ export class ViewerController {
       this.changeLanguage(command.language);
       return;
     }
-    if (isNotesLocationCommand(command)) {
-      await this.notesLocationActions?.run(command);
-      return;
-    }
-    if (isWorkspaceFileCommand(command)) {
-      await this.runWorkspaceFileCommand(command);
-      return;
-    }
-    if (isWorkspaceCommand(command)) {
-      await this.workspaceActions.run(command);
+    const featureRun = this.runFeatureCommand(command);
+    if (featureRun) {
+      await featureRun;
       return;
     }
     if (applySessionCommand(this.dependencies.session, command)) return;
@@ -622,6 +743,23 @@ export class ViewerController {
     }
     const handler = this.commandHandlers[command.kind] as ((command: ViewerCommand) => unknown) | undefined;
     await handler?.(command);
+  }
+
+  /**
+   * Starts a command one feature's actions run; undefined when it belongs to none of them. Other
+   * commands must start without waiting, so a save takes the text as it was when Save was chosen.
+   */
+  private runFeatureCommand(command: ViewerCommand): Promise<void> | undefined {
+    if (isNotesLocationCommand(command)) return this.notesLocationActions?.run(command) ?? Promise.resolve();
+    if (isNotesCommand(command)) return this.runNotesCommand(command);
+    if (isWorkspaceFileCommand(command)) return this.runWorkspaceFileCommand(command);
+    if (isWorkspaceCommand(command)) return this.workspaceActions.run(command);
+    return undefined;
+  }
+
+  private async runNotesCommand(command: NotesCommand): Promise<void> {
+    await this.notesActions?.run(command);
+    if (command.kind === 'updateNotesSettings') await this.showNotesIndex();
   }
 
   private readonly commandHandlers: CommandHandlers = {
@@ -677,9 +815,21 @@ export class ViewerController {
       if (this.activeDocument) this.dependencies.printer?.printActiveDocument();
     },
     showFolderSearch: () => {
+      this.folderSearchQuery = undefined;
       this.dependencies.session.updateViewSettings((viewSettings) => showSidebarView(viewSettings, 'search'));
       this.folderSearchFocusRequest += 1;
       this.publish(this.composeSnapshot(this.snapshot.notice));
+    },
+    showNotesWithTag: ({ tag }) => {
+      this.folderSearchQuery = `tag:${tag}`;
+      this.dependencies.session.updateViewSettings((viewSettings) => showSidebarView(viewSettings, 'search'));
+      this.folderSearchFocusRequest += 1;
+      this.publish(this.composeSnapshot(this.snapshot.notice));
+    },
+    openBacklink: async ({ path, noteName }) => {
+      const displayPath = this.notesIndexActions?.displayPathOf(path);
+      if (displayPath === undefined) return;
+      await this.openSearchMatch(displayPath, { text: noteName, isCaseSensitive: false, isWholeWord: false });
     },
     openSearchMatch: ({ path, query, options }) => this.openSearchMatch(path, { text: query, ...options }),
     showFind: () => {
@@ -810,11 +960,12 @@ export class ViewerController {
 
   /** Finds text in the opened and favourite folders, for the Search view. */
   searchFolders(query: string, options: TextSearchOptions): Promise<FolderSearchResults> {
+    if (this.notesIndexActions?.isShown()) return this.notesIndexActions.search(query);
     return this.explorerFolderActions.searchDocuments(query, options);
   }
 
   hasSearchableFolders(): boolean {
-    return this.explorerFolderActions.hasSearchedFolders();
+    return this.notesIndexActions?.isShown() === true || this.explorerFolderActions.hasSearchedFolders();
   }
 
   /** Opens a document found by Find in Folders with the find bar showing the same matches. */
@@ -960,7 +1111,9 @@ export class ViewerController {
     this.navigation.forgetHistory();
     this.navigation.recordActiveDocument();
     await this.dependencies.session.clearStoredData();
+    await this.notesIndexActions?.clearAll();
     await this.saveNow();
+    await this.showNotesIndex();
     this.showNotice('privacy.clearAllData.done');
   }
 
@@ -1101,15 +1254,13 @@ export class ViewerController {
   /** Renders the active document again when it or its edited text changed. */
   private async refreshActiveDocument(): Promise<void> {
     const document = await this.loadActiveDocument();
+    void this.notesIndexActions?.showBacklinksOf(document?.location);
+    if (document) await this.notesActions?.prepareRendering(document.location);
     const text = document ? this.textShownFor(document) : undefined;
     const shouldMarkSourceLines = this.isPreviewBesideEditor();
-    if (
-      document === this.renderedDocument &&
-      text === this.renderedText &&
-      shouldMarkSourceLines === this.hasRenderedSourceLines
-    ) {
-      return;
-    }
+    const noteList = this.notesActions?.noteListVersion();
+    if (this.isRenderUpToDate({ document, text, shouldMarkSourceLines, noteList })) return;
+    this.renderedNoteList = noteList;
     this.renderedDocument = document;
     this.renderedText = text;
     this.hasRenderedSourceLines = shouldMarkSourceLines;
@@ -1118,6 +1269,19 @@ export class ViewerController {
     this.publish(this.composeSnapshot(this.snapshot.notice));
   }
 
+  private isRenderUpToDate(next: {
+    readonly document: OpenedDocument | undefined;
+    readonly text: string | undefined;
+    readonly shouldMarkSourceLines: boolean;
+    readonly noteList: object | undefined;
+  }): boolean {
+    return (
+      next.document === this.renderedDocument &&
+      next.text === this.renderedText &&
+      next.shouldMarkSourceLines === this.hasRenderedSourceLines &&
+      next.noteList === this.renderedNoteList
+    );
+  }
   /** While the document is edited without a preview beside it, its last rendered text is enough. */
   private textShownFor(document: OpenedDocument): string {
     const { canonicalKey } = document.location;
@@ -1175,6 +1339,7 @@ export class ViewerController {
       resolveResourceUrl: (source) =>
         isUntitled ? undefined : resources?.imageUrl(document.location.displayPath, source),
       includeSourceLines: shouldMarkSourceLines,
+      ...this.notesRenderingFor(document.location),
     });
     return {
       canonicalKey: document.location.canonicalKey,
@@ -1206,16 +1371,34 @@ export class ViewerController {
       ...(this.openDialog === undefined ? {} : { openDialog: this.openDialog }),
       ...this.documentRequestsPart(),
       ...(this.externalLinkRequest === undefined ? {} : { externalLinkRequest: this.externalLinkRequest }),
+      ...(this.linkedHeadingRequest ? { linkedHeadingRequest: this.linkedHeadingRequest } : {}),
       ...(this.isSourceView ? { isSourceView: true } : {}),
       ...this.unsavedChangesPart(),
       ...this.workspacesPart(),
-      ...this.missingNotesLocationPart(),
+      ...this.notesPart(),
     };
   }
 
-  private missingNotesLocationPart(): Pick<ViewerSnapshot, 'missingNotesLocation'> {
+  /** Either the missing folder's path or, while the folder is there, its note tree. */
+  private notesPart(): Pick<ViewerSnapshot, 'missingNotesLocation' | 'notes' | 'noteBacklinks'> {
     const missingNotesLocation = this.notesLocationActions?.missingLocation();
-    return missingNotesLocation === undefined ? {} : { missingNotesLocation };
+    if (missingNotesLocation !== undefined) return { missingNotesLocation };
+    const notes = this.notesActions?.view();
+    if (!notes) return {};
+    return { notes: { ...notes, ...this.notesIndexPart() }, ...this.noteBacklinksPart() };
+  }
+
+  private notesIndexPart(): Pick<NotesView, 'indexStatus' | 'tags'> {
+    const indexStatus = this.notesIndexActions?.status();
+    const tags = this.notesIndexActions?.tags();
+    return { ...(indexStatus ? { indexStatus } : {}), ...(tags ? { tags } : {}) };
+  }
+
+  /** Only the shown note's backlinks; while another note loads, none. */
+  private noteBacklinksPart(): Pick<ViewerSnapshot, 'noteBacklinks'> {
+    const backlinks = this.notesIndexActions?.backlinks();
+    const isForShownNote = backlinks?.canonicalKey === this.activeDocument?.canonicalKey;
+    return backlinks && isForShownNote ? { noteBacklinks: backlinks } : {};
   }
 
   private notesSetupPart(): Pick<WorkspacesView, 'notesSetup'> {
@@ -1248,7 +1431,12 @@ export class ViewerController {
 
   private documentRequestsPart(): Pick<
     ViewerSnapshot,
-    'findRequest' | 'findQuery' | 'copyAsHtmlRequest' | 'exportRequest' | 'folderSearchFocusRequest'
+    | 'findRequest'
+    | 'findQuery'
+    | 'copyAsHtmlRequest'
+    | 'exportRequest'
+    | 'folderSearchFocusRequest'
+    | 'folderSearchQuery'
   > {
     return {
       ...(this.findRequest > 0 ? { findRequest: this.findRequest } : {}),
@@ -1256,6 +1444,7 @@ export class ViewerController {
       ...(this.folderSearchFocusRequest > 0
         ? { folderSearchFocusRequest: this.folderSearchFocusRequest }
         : {}),
+      ...(this.folderSearchQuery === undefined ? {} : { folderSearchQuery: this.folderSearchQuery }),
       ...(this.copyAsHtmlRequest > 0 ? { copyAsHtmlRequest: this.copyAsHtmlRequest } : {}),
       ...(this.exportRequest ? { exportRequest: this.exportRequest } : {}),
     };

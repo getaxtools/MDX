@@ -69,3 +69,28 @@ export type {
   PreparedNotesLocation,
 } from './NotesLocationPort';
 export { InMemoryNotesLocations } from './fakes/InMemoryNotesLocations';
+export { InMemoryNoteFiles } from './fakes/InMemoryNoteFiles';
+export { InMemoryNotesIndex } from './fakes/InMemoryNotesIndex';
+export type {
+  Backlink,
+  NoteChange,
+  NoteChanges,
+  NoteHeading,
+  NoteSuggestion,
+  TagCount,
+  NoteSearchHit,
+  NoteSearchResults,
+  NotesIndexPort,
+  ShownNotesIndex,
+  NotesIndexStatus,
+} from './NotesIndexPort';
+export type {
+  NoteCreation,
+  NoteDeletion,
+  NoteFilesPort,
+  NoteInFolder,
+  NoteMove,
+  NoteRename,
+  NoteRestore,
+  NoteTrashEntry,
+} from './NoteFilesPort';

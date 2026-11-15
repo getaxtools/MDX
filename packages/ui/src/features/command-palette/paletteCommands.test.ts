@@ -1,6 +1,7 @@
-import { WorkspaceKindsState, type WorkspaceKind } from '@mdx/core';
+import { WORKSPACE_KINDS, WorkspaceKindsState, type WorkspaceKind } from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
 import { describe, expect, it } from 'vitest';
+import { COMMAND_SHORTCUTS } from '../shortcuts/commandShortcuts';
 import { effectiveCommandShortcuts } from '../shortcuts/effectiveCommandShortcuts';
 import { paletteCommands } from './paletteCommands';
 
@@ -106,5 +107,20 @@ describe('paletteCommands', () => {
       label: 'Insert Snippet: Sign-off',
     });
     expect(withSnippets.map(({ label }) => label)).toContain('Insert Snippet: Date');
+  });
+
+  it('offers today’s note, templates and the trash only in a Notes workspace', () => {
+    const translator = createTranslator();
+    const kinds = paletteCommands(translator).map((entry) => entry.command.kind);
+    const inNotes = paletteCommands(translator, {
+      shortcuts: COMMAND_SHORTCUTS,
+      workspaceKinds: WorkspaceKindsState.initial(WORKSPACE_KINDS),
+      isNotesWorkspace: true,
+    });
+
+    expect(kinds).not.toContain('openTodaysNote');
+    expect(inNotes.map((entry) => entry.label)).toEqual(
+      expect.arrayContaining(["Open Today's Note", 'New Note from Template…', 'Show Trash']),
+    );
   });
 });

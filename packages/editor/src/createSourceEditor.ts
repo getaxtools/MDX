@@ -28,7 +28,8 @@ import { blockAction, blockAtCaret, type BlockAction } from './blocks/blockActio
 import type { BlockKind } from './blocks/markdownBlocks';
 import { sectionChange, type SectionAction } from './blocks/outlineSections';
 import { EDITOR_ACTION_COMMANDS } from './editorActionCommands';
-import { slashMenu } from './slash-menu/slashMenu';
+import { editorCompletions } from './slash-menu/slashMenu';
+import { wikiLinkCompletions, type WikiLinkSuggester } from './wiki-links/wikiLinkCompletions';
 import { snippetFields, snippetInsertion, type SnippetExpander } from './snippets/snippetFields';
 import { snippetMenuProvider, type EditorSnippet } from './snippets/snippetMenu';
 import { selectNextCell, selectPreviousCell } from './tables/tableNavigation';
@@ -66,6 +67,8 @@ export interface SourceEditorOptions {
   readonly onSelectedTextChange?: (selectedText: string) => void;
   /** Snippets offered in the insert menu. */
   readonly snippets?: readonly EditorSnippet[];
+  /** Suggests notes after `[[` and their headings after `#`, in a note of a Notes workspace. */
+  readonly wikiLinks?: WikiLinkSuggester;
 }
 
 export interface SourceEditor {
@@ -149,7 +152,18 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
 }
 
 function initialSlashMenu(options: SourceEditorOptions): Extension {
-  return options.isSlashMenuEnabled === true ? slashMenu([snippetMenuProvider(options.snippets ?? [])]) : [];
+  return completionsFor(options.isSlashMenuEnabled === true, options.snippets ?? [], options.wikiLinks);
+}
+
+function completionsFor(
+  isSlashMenuEnabled: boolean,
+  snippets: readonly EditorSnippet[],
+  wikiLinks: WikiLinkSuggester | undefined,
+): Extension {
+  return editorCompletions({
+    ...(isSlashMenuEnabled ? { slashProviders: [snippetMenuProvider(snippets)] } : {}),
+    sources: wikiLinks ? [wikiLinkCompletions(wikiLinks)] : [],
+  });
 }
 
 /** The insert menu can be turned on and off, and its snippet group changes with the user's snippets. */
@@ -162,9 +176,7 @@ function slashMenuControlOf(
   let snippets = options.snippets ?? [];
   const reconfigureSlashMenu = () =>
     view.dispatch({
-      effects: slashMenuSwitch.reconfigure(
-        isSlashMenuEnabled ? slashMenu([snippetMenuProvider(snippets)]) : [],
-      ),
+      effects: slashMenuSwitch.reconfigure(completionsFor(isSlashMenuEnabled, snippets, options.wikiLinks)),
     });
   return {
     setSnippets: (changed) => {

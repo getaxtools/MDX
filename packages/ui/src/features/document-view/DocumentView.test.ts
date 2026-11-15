@@ -125,6 +125,33 @@ describe('DocumentView', () => {
     expect(document.activeElement?.textContent).toBe('Install');
   });
 
+  it('shows the heading a link from another note points to, once that note is shown', async () => {
+    const { rerender } = renderDocument('<h2 id="mdx-next-steps">Next Steps</h2>');
+    const scrollIntoView = vi.fn();
+    screen.getByRole('heading', { name: 'Next Steps' }).scrollIntoView = scrollIntoView;
+
+    await rerender({ linkedHeadingRequest: { canonicalKey: 'other.md', fragment: 'next-steps', number: 1 } });
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    await rerender({ linkedHeadingRequest: { canonicalKey: 'a.md', fragment: 'next-steps', number: 2 } });
+
+    expect(scrollIntoView).toHaveBeenCalledOnce();
+  });
+
+  it('a link to a note that does not exist yet can be reached and chosen from the keyboard', async () => {
+    const { onOpenLink } = renderDocument(
+      '<p><span class="wiki-link wiki-link-unresolved" title="Budget">Budget<span class="visually-hidden"> (no note yet)</span></span></p>',
+    );
+
+    const link = screen.getByRole('link', { name: /^Budget\s*\(no note yet\)$/ });
+    link.focus();
+    await fireEvent.keyDown(link, { key: 'Enter' });
+    await fireEvent.click(link);
+
+    expect(link.tabIndex).toBe(0);
+    expect(onOpenLink).toHaveBeenCalledTimes(2);
+    expect(onOpenLink).toHaveBeenCalledWith({ kind: 'unresolvedNote', href: 'Budget' });
+  });
+
   it('ignores clicks outside links', async () => {
     const { onOpenLink } = renderDocument('<p>plain text</p>');
 

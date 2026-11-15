@@ -24,6 +24,26 @@ describe('createSourceEditor', () => {
     document.body.innerHTML = '';
   });
 
+  it('offers wiki-link suggestions next to the insert menu, and keeps them when the menu is turned off', () => {
+    const parent = document.createElement('div');
+    document.body.append(parent);
+    const wikiLinks = { notes: vi.fn(() => Promise.resolve([])), headings: vi.fn(() => Promise.resolve([])) };
+
+    editor = createSourceEditor({
+      parent,
+      text: '',
+      label: 'Source of Plan.md',
+      phrases: {},
+      onChange: vi.fn(),
+      isSlashMenuEnabled: true,
+      wikiLinks,
+    });
+    editor.setSlashMenuEnabled(false);
+    editor.setSlashMenuEnabled(true);
+
+    expect(editor.text()).toBe('');
+  });
+
   it('shows the text in a labelled text box', () => {
     const { parent, editor: opened } = openEditor();
 

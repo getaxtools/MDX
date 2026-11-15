@@ -42,6 +42,7 @@ describe('view settings', () => {
       isWheelButtonInStatusBar: false,
       isSlashMenuInRichText: true,
       isSlashMenuInSource: false,
+      isNoteDeletionConfirmed: true,
     });
   });
 
@@ -87,6 +88,7 @@ describe('view settings', () => {
       isWheelButtonInStatusBar: true,
       isSlashMenuInRichText: false,
       isSlashMenuInSource: true,
+      isNoteDeletionConfirmed: false,
     };
 
     expect(parseViewSettings(saved)).toEqual(saved);

@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
+  Backlink,
   DocumentLocation,
   EditedDocumentSave,
   ExportFormat,
@@ -7,12 +8,24 @@ import type {
   FolderSearchResults,
   KnownFolders,
   LocationAvailability,
+  NoteCreation,
+  NoteDeletion,
+  NoteInFolder,
+  NoteMove,
+  NoteRename,
+  NoteRestore,
+  NoteSearchResults,
+  NoteHeading,
+  NoteSuggestion,
+  NoteTrashEntry,
   PreparedNotesLocation,
   OpenedDocument,
   PathStatus,
   RecentWorkspaceMenuEntry,
   SaveSource,
   StoredWorkspace,
+  ShownNotesIndex,
+  TagCount,
   TextSearchOptions,
   ViewMenuState,
   WorkspaceFileContents,
@@ -79,6 +92,28 @@ export const tauriCommands = {
     invoke<LocationAvailability>('check_notes_location', { path, locationId }),
   locateNotesLocation: (path: string, locationId: string) =>
     invoke<DocumentLocation | null>('locate_notes_location', { path, locationId }),
+  createNote: (creation: NoteCreation) => invoke<DocumentLocation>('create_note', { ...creation }),
+  createNoteInFolder: ({ location, folder, name, text }: NoteInFolder) =>
+    invoke<DocumentLocation>('create_note_in_folder', { location, note: { folder, name, text } }),
+  renameNote: (rename: NoteRename) => invoke<DocumentLocation>('rename_note', { ...rename }),
+  moveNote: (move: NoteMove) => invoke<DocumentLocation>('move_note', { ...move }),
+  deleteNote: (deletion: NoteDeletion) => invoke<NoteTrashEntry>('delete_note', { ...deletion }),
+  listNoteTrash: (location: string) => invoke<NoteTrashEntry[]>('list_note_trash', { location }),
+  restoreNote: (restore: NoteRestore) => invoke<DocumentLocation>('restore_note', { ...restore }),
+  emptyNoteTrash: (location: string) => invoke<number>('empty_note_trash', { location }),
+  showNotesIndex: (location: ShownNotesIndex) => invoke<null>('show_notes_index', { location }),
+  hideNotesIndex: () => invoke<null>('hide_notes_index'),
+  clearNotesIndexes: () => invoke<number>('clear_notes_indexes'),
+  refreshNotesIndex: (locationId: string) => invoke<null>('refresh_notes_index', { locationId }),
+  noteBacklinks: (locationId: string, notePath: string) =>
+    invoke<Backlink[]>('note_backlinks', { locationId, notePath }),
+  noteTags: (locationId: string) => invoke<TagCount[]>('note_tags', { locationId }),
+  noteHeadings: (locationId: string, target: string, fromNote: string) =>
+    invoke<NoteHeading[]>('note_headings', { locationId, target, fromNote }),
+  noteSuggestions: (locationId: string, typed: string, fromNote: string) =>
+    invoke<NoteSuggestion[]>('note_suggestions', { locationId, typed, fromNote }),
+  searchNotes: (locationId: string, query: string) =>
+    invoke<NoteSearchResults>('search_notes', { locationId, query }),
   deleteWorkspace: (workspaceId: string) => invoke<null>('delete_workspace', { workspaceId }),
   saveWorkspaceList: (workspaceId: string, listName: string, valueJson: string) =>
     invoke<null>('save_workspace_list', { workspaceId, listName, valueJson }),
@@ -123,3 +158,5 @@ export const IMAGES_DROPPED_EVENT = 'images-dropped';
 export const MENU_COMMAND_EVENT = 'menu-command';
 export const DOCUMENTS_CHANGED_EVENT = 'documents-changed';
 export const FOLDERS_CHANGED_EVENT = 'folders-changed';
+export const NOTES_INDEX_STATUS_EVENT = 'notes-index-status';
+export const NOTES_INDEX_CHANGES_EVENT = 'notes-index-changes';

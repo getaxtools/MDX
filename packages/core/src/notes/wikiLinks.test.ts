@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseWikiLink, resolveWikiLink, type NoteEntry } from './wikiLinks';
+import { noteAddress, parseWikiLink, resolveWikiLink, wikiLinkTargetFor, type NoteEntry } from './wikiLinks';
 
 const NOTES: readonly NoteEntry[] = [
   { path: 'Plan.md' },
@@ -54,5 +54,37 @@ describe('resolveWikiLink', () => {
 
   it('an unknown name resolves to nothing', () => {
     expect(resolveWikiLink('Missing', 'Plan.md', NOTES)).toBeUndefined();
+  });
+
+  describe('noteAddress', () => {
+    it('links to a note in the same folder by its encoded name', () => {
+      expect(noteAddress('Projects/Plan.md', 'Projects/Next Steps.md')).toBe('Next%20Steps.md');
+    });
+
+    it('goes up and down through the folders between two notes', () => {
+      expect(noteAddress('Daily/2026/Today.md', 'Projects/Plan.md')).toBe('../../Projects/Plan.md');
+      expect(noteAddress('Inbox.md', 'Projects/Work/Plan.md')).toBe('Projects/Work/Plan.md');
+    });
+
+    it('encodes characters a link would otherwise read as its end or its heading', () => {
+      expect(noteAddress('Inbox.md', 'Q&A #1 (draft).md')).toBe('Q%26A%20%231%20(draft).md');
+    });
+  });
+});
+
+describe('wikiLinkTargetFor', () => {
+  const notes: NoteEntry[] = [{ path: 'Plan.md' }, { path: 'Projects/Plan.md' }, { path: 'Budget.md' }];
+
+  it('a unique note is named by its name', () => {
+    expect(wikiLinkTargetFor('Budget.md', 'Projects/Inbox.md', notes)).toBe('Budget');
+  });
+
+  it('the nearest of two notes with one name is named by its name, the other by its path', () => {
+    expect(wikiLinkTargetFor('Projects/Plan.md', 'Projects/Inbox.md', notes)).toBe('Plan');
+    expect(wikiLinkTargetFor('Projects/Plan.md', 'Inbox.md', notes)).toBe('Projects/Plan');
+  });
+
+  it('a note hidden by a nearer note of the same name has no wiki-link', () => {
+    expect(wikiLinkTargetFor('Plan.md', 'Projects/Work/Inbox.md', notes)).toBeUndefined();
   });
 });

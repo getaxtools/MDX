@@ -1,7 +1,7 @@
 import {
   claimedNotesLocations,
   locationClaimProblem,
-  notesKindData,
+  kindDataWithLocation,
   notesLocationOf,
   type NotesLocation,
   type ViewerSession,
@@ -116,7 +116,10 @@ export class NotesLocationActions {
     const shownId = session.shownWorkspace()?.id;
     if (shownId === undefined) return;
     const location = { path: folder.displayPath, canonicalKey: folder.canonicalKey, locationId };
-    await session.updateWorkspaceKindData(shownId, notesKindData(location));
+    await session.updateWorkspaceKindData(
+      shownId,
+      kindDataWithLocation(session.shownWorkspace()?.kindData, location),
+    );
     session.updateExplorerFolders((folders) => folders.remove(previous.canonicalKey).add(folder));
     this.missingFolder = undefined;
     this.dependencies.onChange();

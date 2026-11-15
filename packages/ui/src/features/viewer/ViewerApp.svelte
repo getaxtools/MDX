@@ -14,6 +14,8 @@
     type RingPoint,
     type WorkspaceKindId,
     notesLocationOf,
+    noteNameOf,
+    notesSettingsOf,
   } from '@mdx/core';
   import type { SectionAction, SourceEditor } from '@mdx/editor';
   import type { Translator } from '@mdx/i18n';
@@ -41,6 +43,9 @@
   import { isWorkspaceDialog } from '../workspaces/WorkspaceActions';
   import WorkspaceButton from '../workspaces/WorkspaceButton.svelte';
   import NotesLocationMissing from '../notes-location/NotesLocationMissing.svelte';
+  import NoteTrashDialog from '../notes/NoteTrashDialog.svelte';
+  import NoteBacklinks from '../notes/NoteBacklinks.svelte';
+  import NoteFromTemplateDialog from '../notes/NoteFromTemplateDialog.svelte';
   import { workspaceNameOf } from '../workspaces/workspaceCommands';
   import { recentWorkspaceLinks } from '../workspaces/recentWorkspaceLinks';
   import { SessionWordCounts } from '../word-goals/SessionWordCounts';
@@ -123,9 +128,10 @@
     };
   });
 
-  const isMarkdownViewerActive = $derived(
+  /** Documents show in the Markdown viewer, and in a Notes workspace whose notes folder is there. */
+  const isReadingDocuments = $derived(
     (snapshot?.viewer.workspaceKinds.activeKindId() ?? DEFAULT_WORKSPACE_KIND_ID) ===
-      DEFAULT_WORKSPACE_KIND_ID,
+      DEFAULT_WORKSPACE_KIND_ID || snapshot?.notes !== undefined,
   );
   const activeTab = $derived(snapshot?.viewer.tabStrip.activeTab());
   const shownWorkspace = $derived(snapshot?.workspaces?.registry.find(snapshot.workspaces.shownWorkspaceId));
@@ -260,10 +266,22 @@
   }
 </script>
 
+{#snippet backlinksFooter()}
+  {#if snapshot?.noteBacklinks && snapshot.activeDocument}
+    <NoteBacklinks
+      backlinks={snapshot.noteBacklinks.backlinks}
+      noteName={noteNameOf(snapshot.activeDocument.fileName)}
+      {translator}
+      onCommand={(command: ViewerCommand) => void controller.execute(command)}
+    />
+  {/if}
+{/snippet}
+
 <svelte:window
   onkeydown={handleKeydown}
   onmouseup={handleMouseUp}
   oncontextmenu={preventBrowserContextMenu}
+  onfocus={() => void controller.windowFocused()}
 />
 
 {#if snapshot}
@@ -304,6 +322,9 @@
                 controller.searchFolders(query, options)}
               onOpenMatch={(path: string, query: string, options: TextSearchOptions) =>
                 void controller.execute({ kind: 'openSearchMatch', path, query, options })}
+              isNotesSearch={snapshot.notes !== undefined}
+              requestedQuery={snapshot.folderSearchQuery}
+              notesIndexStatus={snapshot.notes?.indexStatus}
             />
           {:else if viewSettings.sidebarView === 'outline'}
             <OutlinePanel
@@ -326,6 +347,10 @@
               pathStatuses={snapshot.pathStatuses}
               onCommand={(command: ViewerCommand) => void controller.execute(command)}
               onListFolder={(folderPath: string) => controller.listFolderContents(folderPath)}
+              notes={snapshot.notes}
+              isNoteDeletionConfirmed={viewSettings.isNoteDeletionConfirmed}
+              onNotesCommand={(command: ViewerCommand) => controller.execute(command)}
+              onListNoteFolder={(folderPath: string) => controller.listNoteFolder(folderPath)}
               folderRevisions={snapshot.folderRevisions}
               onShowFolder={(folderPath: string) => controller.showFolder(folderPath)}
               onOpenDocument={(documentPath: string) => void controller.openDocuments([documentPath])}
@@ -396,10 +421,13 @@
               {translator}
               onCommand={(command: ViewerCommand) => void controller.execute(command)}
             />
-          {:else if !activeTab || !isMarkdownViewerActive}
+          {:else if !activeTab || !isReadingDocuments}
             <StartPage
               recentFiles={snapshot.viewer.recentFiles.entries()}
               activeKindId={snapshot.viewer.workspaceKinds.activeKindId()}
+              notesWorkspaceName={snapshot.notes && shownWorkspace
+                ? workspaceNameOf(shownWorkspace, translator)
+                : undefined}
               recentWorkspaces={snapshot.workspaces
                 ? recentWorkspaceLinks(snapshot.workspaces, snapshot.viewer.workspaceKinds, translator)
                 : []}
@@ -439,6 +467,7 @@
                     onPastePicture={(bytes: Uint8Array) => controller.pastePicture(bytes)}
                     onCursorCountChange={(count: number) => (cursorCount = count)}
                     snippets={snapshot ? availableSnippets(snapshot.viewer.snippetLibrary) : []}
+                    wikiLinks={activeTab ? controller.wikiLinkSuggesterFor(activeTab.location) : undefined}
                     onSelectedTextChange={(selectedText: string) =>
                       (selectedWords = selectedText === '' ? 0 : measureDocument(selectedText).words)}
                     onReady={(sourceEditor: SourceEditor | undefined) => attachEditor(sync, sourceEditor)}
@@ -480,6 +509,8 @@
               copyAsHtmlRequest={snapshot.copyAsHtmlRequest}
               exportRequest={snapshot.exportRequest}
               {headingRequest}
+              linkedHeadingRequest={snapshot.linkedHeadingRequest}
+              footer={snapshot.noteBacklinks ? backlinksFooter : undefined}
               locale={translator.locale}
               isSourceView={snapshot.isSourceView ?? false}
               onCloseFind={() => controller.closeFind()}
@@ -551,6 +582,21 @@
       onClose={() => controller.closeDialog()}
       onPickFolder={() => controller.pickNotesFolder()}
     />
+  {:else if snapshot.openDialog === 'noteTrash' && snapshot.notes?.trash}
+    <NoteTrashDialog
+      entries={snapshot.notes.trash}
+      {translator}
+      onCommand={(command: ViewerCommand) => void controller.execute(command)}
+      onClose={() => controller.closeDialog()}
+    />
+  {:else if snapshot.openDialog === 'noteFromTemplate' && snapshot.notes?.templates}
+    <NoteFromTemplateDialog
+      templates={snapshot.notes.templates}
+      templatesFolder={notesSettingsOf(shownWorkspace).templatesFolder}
+      {translator}
+      onCommand={(command: ViewerCommand) => void controller.execute(command)}
+      onClose={() => controller.closeDialog()}
+    />
   {:else if snapshot.openDialog === 'keyboardShortcuts'}
     <KeyboardShortcutsDialog {translator} {shortcuts} onClose={() => controller.closeDialog()} />
   {:else if snapshot.openDialog === 'pasteTable'}
@@ -571,6 +617,7 @@
       onCommand={(command: ViewerCommand) => void controller.execute(command)}
       onClose={() => controller.closeDialog()}
       notesFolder={shownWorkspace ? notesLocationOf(shownWorkspace)?.path : undefined}
+      notesSettings={shownWorkspace ? notesSettingsOf(shownWorkspace) : undefined}
       workspace={shownWorkspace
         ? {
             name: workspaceNameOf(shownWorkspace, translator),
@@ -585,6 +632,7 @@
         shortcuts,
         workspaceKinds: snapshot.viewer.workspaceKinds,
         snippets: availableSnippets(snapshot.viewer.snippetLibrary),
+        isNotesWorkspace: snapshot.notes !== undefined,
         ...(snapshot.workspaces ? { workspaces: snapshot.workspaces } : {}),
       })}
       loadDocuments={() => controller.quickOpenDocuments()}

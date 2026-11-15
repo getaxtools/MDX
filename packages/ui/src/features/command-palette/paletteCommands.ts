@@ -28,6 +28,8 @@ export interface PaletteContext {
   readonly snippets?: readonly Snippet[];
   /** Absent while the earlier state file stands in for the workspace store. */
   readonly workspaces?: WorkspacesView;
+  /** A Notes workspace is shown, so its daily note, templates and trash are offered. */
+  readonly isNotesWorkspace?: boolean;
 }
 
 const DEFAULT_PALETTE_CONTEXT: PaletteContext = {
@@ -76,7 +78,13 @@ const COMMANDS_WITHOUT_SHORTCUTS: readonly CommandWithoutShortcut[] = [
 /** Every command the palette offers, labelled as in the menus, with its shortcut where it has one. */
 export function paletteCommands(
   translator: Translator,
-  { shortcuts, workspaceKinds, snippets = [], workspaces }: PaletteContext = DEFAULT_PALETTE_CONTEXT,
+  {
+    shortcuts,
+    workspaceKinds,
+    snippets = [],
+    workspaces,
+    isNotesWorkspace = false,
+  }: PaletteContext = DEFAULT_PALETTE_CONTEXT,
 ): PaletteCommand[] {
   const withShortcuts = shortcuts
     .filter(({ command }) => command.kind !== 'showCommandPalette')
@@ -97,10 +105,19 @@ export function paletteCommands(
     ...withoutShortcuts,
     ...workspaceKindCommands(workspaceKinds, translator),
     ...(workspaces ? workspaceCommands(workspaces, workspaceKinds, translator) : []),
+    ...(isNotesWorkspace ? notesCommands(translator) : []),
     ...snippetCommands(snippets, translator),
     ...themeCommands(translator),
     ...readingWidthCommands(translator),
     ...typographyCommands(translator),
+  ];
+}
+
+function notesCommands(translator: Translator): PaletteCommand[] {
+  return [
+    { command: { kind: 'openTodaysNote' }, label: translator.translate('notes.today') },
+    { command: { kind: 'showNewNoteFromTemplate' }, label: translator.translate('notes.fromTemplate') },
+    { command: { kind: 'showNoteTrash' }, label: translator.translate('notes.tree.showTrash') },
   ];
 }
 

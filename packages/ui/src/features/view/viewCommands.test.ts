@@ -31,6 +31,7 @@ describe('view commands', () => {
       isWheelButtonInStatusBar: false,
       isSlashMenuInRichText: true,
       isSlashMenuInSource: false,
+      isNoteDeletionConfirmed: true,
     });
     expect(applyViewCommand(withoutSidebar, { kind: 'resetZoom' }).zoomPercent).toBe(100);
     expect(applyViewCommand(withoutSidebar, { kind: 'zoomOut' }).zoomPercent).toBe(100);

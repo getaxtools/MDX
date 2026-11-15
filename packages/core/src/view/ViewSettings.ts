@@ -5,7 +5,7 @@ export type ReadingWidth = 'narrow' | 'medium' | 'wide' | 'full';
 export type Typography = 'github' | 'book' | 'academic';
 /** A language tag such as `hi` or `pt-BR`, or `system` to follow the language of Windows. */
 export type LanguagePreference = 'system' | (string & {});
-export type ExplorerSection = 'favourites' | 'folders' | 'recentFiles';
+export type ExplorerSection = 'favourites' | 'folders' | 'tags' | 'recentFiles';
 /** The side bar, whatever view it shows; saved as `explorer` by earlier versions. */
 export type ResizablePanel = 'explorer';
 export type SidebarView = 'explorer' | 'search' | 'outline';
@@ -43,6 +43,8 @@ export interface ViewSettings {
   /** A slash at the start of a line or after a space opens the insert menu, per editing mode. */
   readonly isSlashMenuInRichText: boolean;
   readonly isSlashMenuInSource: boolean;
+  /** Deleting a note asks first; the note goes to the Notes trash either way. */
+  readonly isNoteDeletionConfirmed: boolean;
 }
 
 export const THEME_PREFERENCES: readonly ThemePreference[] = [
@@ -67,7 +69,7 @@ export const THEME_COLOR_SCHEMES: Readonly<Record<Exclude<ThemePreference, 'syst
 };
 export const READING_WIDTHS: readonly ReadingWidth[] = ['narrow', 'medium', 'wide', 'full'];
 export const TYPOGRAPHIES: readonly Typography[] = ['github', 'book', 'academic'];
-export const EXPLORER_SECTIONS: readonly ExplorerSection[] = ['favourites', 'folders', 'recentFiles'];
+export const EXPLORER_SECTIONS: readonly ExplorerSection[] = ['favourites', 'folders', 'tags', 'recentFiles'];
 export const MIN_EXPLORER_SECTION_HEIGHT_PX = 48;
 export const MAX_EXPLORER_SECTION_HEIGHT_PX = 4000;
 export const RESIZABLE_PANELS: readonly ResizablePanel[] = ['explorer'];
@@ -111,6 +113,7 @@ export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
   isWheelButtonInStatusBar: false,
   isSlashMenuInRichText: true,
   isSlashMenuInSource: false,
+  isNoteDeletionConfirmed: true,
 };
 
 export function zoomIn(settings: ViewSettings): ViewSettings {
@@ -234,6 +237,7 @@ export function parseViewSettings(saved: unknown): ViewSettings {
     editorSharePercent: parseEditorShare(editorSharePercent),
     ...parseKindSwitcherSettings(saved as Record<string, unknown>),
     ...parseSlashMenuSettings(saved as Record<string, unknown>),
+    isNoteDeletionConfirmed: (saved as Record<string, unknown>).isNoteDeletionConfirmed !== false,
   };
 }
 

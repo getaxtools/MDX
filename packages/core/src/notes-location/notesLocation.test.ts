@@ -4,7 +4,9 @@ import {
   claimedNotesLocations,
   defaultNotesLocationPath,
   isSyncedFolder,
+  kindDataWithLocation,
   locationClaimProblem,
+  notePathInLocation,
   notesKindData,
   notesLocationOf,
 } from './notesLocation';
@@ -107,5 +109,18 @@ describe('Notes location', () => {
     expect(
       notesLocationOf({ ...notesWorkspace('journal', 'C:\\Journal'), kindData: { location: 'C:\\x' } }),
     ).toBe(undefined);
+  });
+
+  it('a new location keeps the other settings of the workspace', () => {
+    const moved = { path: 'D:\\Archive\\Journal', canonicalKey: 'd:\\archive\\journal', locationId: 'one' };
+
+    const kindData = kindDataWithLocation({ location: {}, settings: { dailyFolder: 'Days' } }, moved);
+
+    expect(kindData).toEqual({ location: moved, settings: { dailyFolder: 'Days' } });
+  });
+
+  it('a note path inside the location uses forward slashes, with or without a trailing separator', () => {
+    expect(notePathInLocation('E:\\Journal', 'E:\\Journal\\Projects\\Plan.md')).toBe('Projects/Plan.md');
+    expect(notePathInLocation('E:\\Journal\\', 'E:\\Journal\\Plan.md')).toBe('Plan.md');
   });
 });

@@ -14,6 +14,8 @@
     canCreateWorkspace?: boolean;
     /** Other workspaces of enabled kinds, most recently used first. */
     recentWorkspaces?: readonly RecentWorkspaceLink[];
+    /** The shown Notes workspace, whose start page points to its note tree. */
+    notesWorkspaceName?: string | undefined;
     translator: Translator;
     onCommand: (command: ViewerCommand) => void;
     onOpenRecentFile: (recentFile: RecentFile) => void;
@@ -24,6 +26,7 @@
     activeKindId = DEFAULT_WORKSPACE_KIND_ID,
     canCreateWorkspace = false,
     recentWorkspaces = [],
+    notesWorkspaceName,
     translator,
     onCommand,
     onOpenRecentFile,
@@ -39,6 +42,17 @@
     { labelKey: 'menu.view.commandPalette', command: { kind: 'showCommandPalette' } },
   ];
 
+  const NOTES_STARTING_ACTIONS: readonly {
+    readonly labelKey: MessageKey;
+    readonly command: ViewerCommand;
+  }[] = [
+    { labelKey: 'notes.tree.showTrash', command: { kind: 'showNoteTrash' } },
+    { labelKey: 'menu.view.commandPalette', command: { kind: 'showCommandPalette' } },
+  ];
+
+  const startingActions = $derived(
+    notesWorkspaceName === undefined ? STARTING_ACTIONS : NOTES_STARTING_ACTIONS,
+  );
   const shownRecentFiles = $derived(recentFiles.slice(0, MAX_START_PAGE_RECENT_FILES));
   const shownRecentWorkspaces = $derived(recentWorkspaces.slice(0, MAX_START_PAGE_RECENT_WORKSPACES));
 
@@ -47,7 +61,7 @@
   }
 </script>
 
-{#if activeKindId !== DEFAULT_WORKSPACE_KIND_ID}
+{#if activeKindId !== DEFAULT_WORKSPACE_KIND_ID && notesWorkspaceName === undefined}
   {@const kind = kindNameOf(activeKindId, translator)}
   <main class="start-page" aria-labelledby="start-page-heading">
     <h1 id="start-page-heading">{kind}</h1>
@@ -63,13 +77,17 @@
   </main>
 {:else}
   <main class="start-page" aria-labelledby="start-page-heading">
-    <h1 id="start-page-heading">{translator.translate('startPage.title')}</h1>
-    <p class="introduction">{translator.translate('document.emptyState')}</p>
+    <h1 id="start-page-heading">{notesWorkspaceName ?? translator.translate('startPage.title')}</h1>
+    <p class="introduction">
+      {translator.translate(
+        notesWorkspaceName === undefined ? 'document.emptyState' : 'notes.start.introduction',
+      )}
+    </p>
     <div class="columns">
       <section aria-labelledby="start-page-start">
         <h2 id="start-page-start">{translator.translate('startPage.start')}</h2>
         <ul>
-          {#each STARTING_ACTIONS as action (action.labelKey)}
+          {#each startingActions as action (action.labelKey)}
             {@const shortcut = shortcutLabelFor(action.command, translator)}
             <li>
               <button class="link-button" onclick={() => onCommand(action.command)}>

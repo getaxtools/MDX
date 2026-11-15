@@ -143,7 +143,7 @@ fn is_default_place(path: &Path, documents: Option<&Path>) -> bool {
             .starts_with(DEFAULT_NOTES_FOLDER_NAME)
 }
 
-fn now_ms() -> u64 {
+pub(crate) fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .ok()

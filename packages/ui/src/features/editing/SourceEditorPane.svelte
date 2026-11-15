@@ -6,7 +6,7 @@
   import ContextMenu from '../../components/ContextMenu.svelte';
   import { isContextMenuKey, type ContextMenuRequest } from '../../components/ContextMenuItem';
   import { blockMenuItems } from './blockMenu';
-  import type { SourceEditor } from '@mdx/editor';
+  import type { SourceEditor, WikiLinkSuggester } from '@mdx/editor';
   import type { Translator } from '@mdx/i18n';
   import { untrack } from 'svelte';
   import type { EditorRequest } from './editingCommands';
@@ -28,6 +28,8 @@
     onSelectedTextChange?: (selectedText: string) => void;
     /** Snippets for the insert menu. */
     snippets?: readonly Snippet[];
+    /** Suggests notes after `[[` in a note of a Notes workspace. */
+    wikiLinks?: WikiLinkSuggester | undefined;
     onChange: (text: string) => void;
     onScroll?: (scrollRatio: number) => void;
     /** Called once the editor has loaded, for example to keep a preview beside it in step. */
@@ -46,6 +48,7 @@
     onCursorCountChange = () => undefined,
     onSelectedTextChange = () => undefined,
     snippets = [],
+    wikiLinks,
     onChange,
     scrollRatio = 0,
     onScroll = () => undefined,
@@ -104,6 +107,7 @@
         onCursorCountChange: (count) => onCursorCountChange(count),
         onSelectedTextChange: (selectedText) => onSelectedTextChange(selectedText),
         snippets: untrack(() => editorSnippets),
+        ...untrack(() => (wikiLinks ? { wikiLinks } : {})),
       });
       editor = created;
       const startingEditor = created;

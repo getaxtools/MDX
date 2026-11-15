@@ -6,6 +6,8 @@ mod documents;
 mod live_reload;
 mod main_window;
 mod menu;
+mod notes;
+mod notes_index;
 mod notes_location;
 mod open_requests;
 mod platform;
@@ -115,6 +117,23 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::notes_location::prepare_notes_location,
         commands::notes_location::check_notes_location,
         commands::notes_location::locate_notes_location,
+        commands::notes::create_note,
+        commands::notes::create_note_in_folder,
+        commands::notes::rename_note,
+        commands::notes::move_note,
+        commands::notes::delete_note,
+        commands::notes::list_note_trash,
+        commands::notes::restore_note,
+        commands::notes::empty_note_trash,
+        commands::notes_index::show_notes_index,
+        commands::notes_index::hide_notes_index,
+        commands::notes_index::refresh_notes_index,
+        commands::notes_index::clear_notes_indexes,
+        commands::notes_index::search_notes,
+        commands::notes_index::note_backlinks,
+        commands::notes_index::note_tags,
+        commands::notes_index::note_suggestions,
+        commands::notes_index::note_headings,
         commands::workspaces::load_workspace_registry,
         commands::workspaces::load_workspace,
         commands::workspaces::save_workspace,

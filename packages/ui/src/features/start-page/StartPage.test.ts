@@ -58,6 +58,26 @@ describe('StartPage', () => {
     expect(screen.queryByRole('region', { name: 'Workspaces' })).toBeNull();
   });
 
+  it('a shown Notes workspace gets its own start page with its recent notes', async () => {
+    const onCommand = vi.fn();
+    render(StartPage, {
+      recentFiles: [recentFile],
+      activeKindId: 'notes',
+      notesWorkspaceName: 'Journal',
+      translator: createTranslator(),
+      onCommand,
+      onOpenRecentFile: vi.fn(),
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show Trash' }));
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Journal' })).toBeTruthy();
+    expect(screen.getByText('Choose a note in the side bar, or create one with New Note.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Guide.md' })).toBeTruthy();
+    expect(screen.queryByText(/is not built yet/)).toBeNull();
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'showNoteTrash' });
+  });
+
   it('shows the not-built-yet text for a previewed kind', () => {
     render(StartPage, {
       recentFiles: [],

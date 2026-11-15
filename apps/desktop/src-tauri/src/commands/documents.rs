@@ -176,7 +176,7 @@ pub(crate) fn validated_path(path: &str) -> Result<PathBuf, DocumentError> {
     }
 }
 
-async fn run_blocking<Output: Send + 'static>(
+pub(crate) async fn run_blocking<Output: Send + 'static>(
     work: impl FnOnce() -> Output + Send + 'static,
 ) -> Result<Output, DocumentError> {
     tauri::async_runtime::spawn_blocking(work)

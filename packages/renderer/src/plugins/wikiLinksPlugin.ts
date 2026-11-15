@@ -11,19 +11,36 @@ export interface NotesRendering {
 
 const OPENING = '[[';
 const CLOSING = ']]';
-const TAG = /^#([\p{L}\p{N}_/-]+)/u;
+/**
+ * A tag runs until whitespace or punctuation, keeping `_`, `-` and `/`, so scripts with combining marks
+ * such as Telugu keep whole words; the notes index reads tags by the same rule.
+ */
+const TAG = /^#((?:[_/-]|[^\s\p{Cc}!-,.:-@[-^`{-~、。，．：；！？「」『』（）【】“”‘’…—–«»·])+)/u;
 const NUMBER_ONLY = /^\p{N}+$/u;
 const MARKDOWN_EXTENSION = /\.(md|markdown)$/i;
 
+/** A render of one note passes its own wiki-link resolution, as links are relative to the note. */
+export interface NotesEnvironment {
+  notes?: NotesRendering;
+}
+
 /**
- * Notes syntax: `[[Note#Heading|text]]` links between notes and `#tag` marks topics. Both are
- * inline rules, so code spans and code blocks are never linked; all text goes out as text tokens.
+ * Notes syntax: `[[Note#Heading|text]]` links between notes and `#tag` marks topics, only when the
+ * render or the renderer is for notes. Both are inline rules, so code spans and code blocks are never
+ * linked; all text goes out as text tokens.
  */
-export function wikiLinksPlugin(markdown: MarkdownIt, notes: NotesRendering): void {
-  markdown.inline.ruler.before('link', 'mdx_wiki_link', (state, isSilent) =>
-    wikiLink(state, isSilent, notes),
+export function wikiLinksPlugin(markdown: MarkdownIt, rendererNotes?: NotesRendering): void {
+  markdown.inline.ruler.before('link', 'mdx_wiki_link', (state, isSilent) => {
+    const notes = notesOf(state, rendererNotes);
+    return notes ? wikiLink(state, isSilent, notes) : false;
+  });
+  markdown.inline.ruler.push('mdx_tag', (state, isSilent) =>
+    notesOf(state, rendererNotes) ? tag(state, isSilent) : false,
   );
-  markdown.inline.ruler.push('mdx_tag', tag);
+}
+
+function notesOf(state: StateInline, rendererNotes: NotesRendering | undefined): NotesRendering | undefined {
+  return (state.env as NotesEnvironment).notes ?? rendererNotes;
 }
 
 function wikiLink(state: StateInline, isSilent: boolean, notes: NotesRendering): boolean {
@@ -80,7 +97,7 @@ function pushUnresolved(state: StateInline, { target, text }: WikiLinkParts, not
   state.push('wiki_link_unresolved_close', 'span', -1);
 }
 
-/** A tag starts a word, holds letters, digits, `_`, `-` or `/`, and is never only a number. */
+/** A tag starts a word and is never only a number. */
 function tag(state: StateInline, isSilent: boolean): boolean {
   if (state.src.charAt(state.pos) !== '#') return false;
   const previous = state.pos === 0 ? '' : state.src.charAt(state.pos - 1);

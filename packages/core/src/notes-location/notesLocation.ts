@@ -47,6 +47,11 @@ export function isInsideFolder(path: string, folder: string): boolean {
   return pathKey === folderKey || pathKey.startsWith(`${folderKey}\\`);
 }
 
+/** A path inside the location as notes name each other: relative, with forward slashes. */
+export function notePathInLocation(location: string, path: string): string {
+  return path.slice(withoutTrailing(location, '\\/').length + 1).replaceAll('\\', '/');
+}
+
 /** Whether a sync program such as OneDrive backs up the folder. */
 export function isSyncedFolder(path: string, syncedFolders: readonly string[]): boolean {
   return syncedFolders.some((syncedFolder) => isInsideFolder(path, syncedFolder));
@@ -78,6 +83,11 @@ export function notesKindData(location: NotesLocation): { readonly location: Not
   return { location };
 }
 
+/** A workspace's kind data with a new location; its other settings, such as daily notes, stay. */
+export function kindDataWithLocation(kindData: unknown, location: NotesLocation): Record<string, unknown> {
+  return { ...(isRecord(kindData) ? kindData : {}), location };
+}
+
 /** The folders other Notes workspaces have claimed, leaving out the one being changed. */
 export function claimedNotesLocations(
   workspaces: readonly StoredWorkspace[],
@@ -92,5 +102,5 @@ export function claimedNotesLocations(
 }
 
 function keyOf(path: string): string {
-  return path.replaceAll('/', '\\').replace(/\\+$/, '').toLowerCase();
+  return withoutTrailing(path.replaceAll('/', '\\'), '\\').toLowerCase();
 }

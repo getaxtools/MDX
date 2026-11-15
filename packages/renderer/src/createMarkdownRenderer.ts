@@ -13,7 +13,7 @@ import {
   type OutlineEnvironment,
 } from './plugins/headingAnchorsPlugin';
 import { alertsPlugin, ENGLISH_ALERT_TITLES, type AlertTitles } from './plugins/alertsPlugin';
-import { wikiLinksPlugin, type NotesRendering } from './plugins/wikiLinksPlugin';
+import { wikiLinksPlugin, type NotesEnvironment, type NotesRendering } from './plugins/wikiLinksPlugin';
 import { footnotesPlugin } from './plugins/footnotesPlugin';
 import { mathPlugin } from './plugins/mathPlugin';
 import { sourceLinesPlugin, type SourceLinesEnvironment } from './plugins/sourceLinesPlugin';
@@ -44,6 +44,8 @@ export interface RenderOptions {
   readonly resolveResourceUrl?: ResourceUrlResolver;
   /** Marks blocks with the source line they start on, so a preview can scroll with the editor. */
   readonly includeSourceLines?: boolean;
+  /** Wiki-links and tags for this note; replaces the renderer-wide resolution. */
+  readonly notes?: NotesRendering;
 }
 
 export interface MarkdownRenderer {
@@ -58,17 +60,15 @@ export function createMarkdownRenderer({
   alertTitles = ENGLISH_ALERT_TITLES,
   notes,
 }: MarkdownRendererOptions): MarkdownRenderer {
-  const markdown = createMarkdownParser(alertTitles);
-  if (notes) markdown.use(wikiLinksPlugin, notes);
+  const markdown = createMarkdownParser(alertTitles).use(wikiLinksPlugin, notes);
   const sanitizeHtml = createHtmlSanitizer(window);
 
   return {
     render(source, options = {}) {
       const { frontMatter, body } = splitFrontMatter(source);
-      const environment: CountedOutlineEnvironment & SourceLinesEnvironment = outlineEnvironmentFor(
-        source,
-        body,
-      );
+      const environment: CountedOutlineEnvironment & SourceLinesEnvironment & NotesEnvironment =
+        outlineEnvironmentFor(source, body);
+      if (options.notes) environment.notes = options.notes;
       const shouldMarkSourceLines = options.includeSourceLines === true;
       if (shouldMarkSourceLines) environment.sourceLineOffset = environment.outlineLineOffset;
       const html = sanitizeHtml(

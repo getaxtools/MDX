@@ -11,7 +11,13 @@
   import type { DesktopPlatform, ViewerCommand } from '../viewer/viewerCommands';
   import ShortcutSetting from './ShortcutSetting.svelte';
   import SnippetsSection from '../snippets/SnippetsSection.svelte';
-  import { EMPTY_SNIPPET_LIBRARY, type SnippetLibrary } from '@mdx/core';
+  import {
+    DEFAULT_NOTES_SETTINGS,
+    EMPTY_SNIPPET_LIBRARY,
+    type NotesSettings,
+    type SnippetLibrary,
+  } from '@mdx/core';
+  import NotesSettingsSection from '../notes/NotesSettingsSection.svelte';
   import {
     SETTING_SECTIONS,
     matchesQuery,
@@ -32,6 +38,7 @@
     workspace?: { readonly name: string; readonly overrides: WorkspaceOverrides } | undefined;
     /** The folder of the shown Notes workspace; absent for other kinds. */
     notesFolder?: string | undefined;
+    notesSettings?: NotesSettings | undefined;
     translator: Translator;
     onCommand: (command: ViewerCommand) => void;
     onClose: () => void;
@@ -45,6 +52,7 @@
     snippetLibrary = EMPTY_SNIPPET_LIBRARY,
     workspace,
     notesFolder,
+    notesSettings,
     translator,
     onCommand,
     onClose,
@@ -205,23 +213,13 @@
     <SnippetsSection library={snippetLibrary} {translator} {onCommand} />
   {/if}
   {#if isNotesShown && notesFolder !== undefined}
-    <section aria-labelledby="settings-section-notes">
-      <h3 id="settings-section-notes">{translator.translate('settings.section.notes')}</h3>
-      <div class="setting">
-        <span class="label" id="settings-notes-folder-label"
-          >{translator.translate('settings.notes.folder')}</span
-        >
-        <button
-          class="beside-label"
-          aria-describedby="settings-notes-folder-label settings-notes-folder"
-          onclick={() => onCommand({ kind: 'revealInFileManager', path: notesFolder })}
-        >
-          {translator.translate('settings.notes.openInFileExplorer')}
-        </button>
-        <p id="settings-notes-folder" class="description"><code>{notesFolder}</code></p>
-        <p class="description">{translator.translate('settings.notes.description')}</p>
-      </div>
-    </section>
+    <NotesSettingsSection
+      folder={notesFolder}
+      settings={notesSettings ?? DEFAULT_NOTES_SETTINGS}
+      isDeletionConfirmed={settings.isNoteDeletionConfirmed}
+      {translator}
+      {onCommand}
+    />
   {/if}
   {#if isPrivacyShown}
     <section aria-labelledby="settings-section-privacy">

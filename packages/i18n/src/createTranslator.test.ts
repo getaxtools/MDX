@@ -33,6 +33,9 @@ const SAMPLE_VALUES = {
   goal: 500,
   names: 'guide.md - Handbook',
   app: 'MDX',
+  folder: 'Projects › Work',
+  date: 'Nov 14, 2026, 9:30 AM',
+  indexed: 120,
 };
 
 describe('createTranslator', () => {

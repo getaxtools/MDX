@@ -240,10 +240,8 @@ export class MainWindowPage {
   }
 
   async clickNoticeAction(labelKey: MessageKey): Promise<void> {
-    await this.browser
-      .$('[aria-live="polite"]')
-      .$(`button=${translator.translate(labelKey)}`)
-      .click();
+    const label = translator.translate(labelKey);
+    await this.browser.$(`.//*[@aria-live="polite"]//button[normalize-space(.)="${label}"]`).click();
   }
 
   async statusBarText(): Promise<string> {

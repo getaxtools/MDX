@@ -1,6 +1,8 @@
 import { logicalArrowKey } from '../../components/textDirection';
 
 const TREE_ITEM_SELECTOR = '[role="treeitem"]';
+/** A part of a row that expands it, for rows whose own click does something else, such as opening a note. */
+const TREE_TOGGLE_SELECTOR = '[data-tree-toggle]';
 const TYPE_AHEAD_RESET_MS = 700;
 
 type KeyAction = (rows: readonly HTMLElement[], current: HTMLElement) => HTMLElement | undefined;
@@ -86,7 +88,7 @@ function levelOf(row: HTMLElement): number {
 function expandOrEnter(rows: readonly HTMLElement[], current: HTMLElement): HTMLElement | undefined {
   const expanded = current.getAttribute('aria-expanded');
   if (expanded === 'false') {
-    current.click();
+    toggleOf(current).click();
     return current;
   }
   if (expanded !== 'true') return undefined;
@@ -96,7 +98,7 @@ function expandOrEnter(rows: readonly HTMLElement[], current: HTMLElement): HTML
 
 function collapseOrLeave(rows: readonly HTMLElement[], current: HTMLElement): HTMLElement | undefined {
   if (current.getAttribute('aria-expanded') === 'true') {
-    current.click();
+    toggleOf(current).click();
     return current;
   }
   const level = levelOf(current);
@@ -104,6 +106,10 @@ function collapseOrLeave(rows: readonly HTMLElement[], current: HTMLElement): HT
     .slice(0, rows.indexOf(current))
     .reverse()
     .find((row) => levelOf(row) < level);
+}
+
+function toggleOf(row: HTMLElement): HTMLElement {
+  return row.querySelector<HTMLElement>(TREE_TOGGLE_SELECTOR) ?? row;
 }
 
 function rowStartingWith(

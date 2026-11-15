@@ -12,13 +12,14 @@
   import type { HeadingRequest } from '../outline/HeadingRequest';
   import type { DocumentLink } from './DocumentLink';
   import PropertiesPanel from './PropertiesPanel.svelte';
-  import { untrack } from 'svelte';
+  import { untrack, type Snippet } from 'svelte';
   import type { ExportFormat } from '@mdx/platform';
   import { standaloneDocumentHtml } from '../document-export/standaloneDocumentHtml';
-  import type { ExportRequest } from '../viewer/ViewerController';
+  import type { ExportRequest, LinkedHeadingRequest } from '../viewer/ViewerController';
   import { documentClipboardHtml, documentExportHtml, documentPlainText } from './documentClipboardHtml';
   import { enhanceCodeBlocks } from './enhanceCodeBlocks';
   import { findLinkedHeading } from './findLinkedHeading';
+  import { makeUnresolvedNoteLinksFocusable } from './unresolvedNoteLinks';
   import { revealHeading } from './scrollToHeading';
   import { showBlockedRemoteImages } from './showBlockedRemoteImages';
   import { headingIdInSourceView, scrollSourceLineToTop } from './sourceViewLines';
@@ -44,6 +45,8 @@
     exportRequest?: ExportRequest | undefined;
     /** A heading chosen in the outline; the request it starts with is ignored. */
     headingRequest?: HeadingRequest | undefined;
+    /** A heading a link from another document points to; the request it starts with is ignored. */
+    linkedHeadingRequest?: LinkedHeadingRequest | undefined;
     locale?: string;
     isSourceView?: boolean;
     onCloseFind?: () => void;
@@ -56,6 +59,8 @@
     canBeFavourite?: boolean;
     /** False for a preview beside the editor, which follows the editor instead of the tab's position. */
     shouldRestoreScroll?: boolean;
+    /** Shown below the document, such as the notes linking to a note. */
+    footer?: Snippet | undefined;
   }
 
   const {
@@ -71,6 +76,7 @@
     copyAsHtmlRequest,
     exportRequest,
     headingRequest,
+    linkedHeadingRequest,
     locale = 'en',
     isSourceView = false,
     onCloseFind = () => undefined,
@@ -82,6 +88,7 @@
     isFavourite = false,
     canBeFavourite = true,
     shouldRestoreScroll = true,
+    footer,
   }: Props = $props();
 
   const SCROLL_REPORT_DELAY_MS = 250;
@@ -133,6 +140,24 @@
     if (request === undefined || request === handledHeadingRequest) return;
     handledHeadingRequest = request;
     goToHeading(request.entry);
+  });
+
+  let handledLinkedHeading = untrack(() => linkedHeadingRequest);
+
+  $effect(() => {
+    const request = linkedHeadingRequest;
+    const article = articleElement;
+    if (!request || request === handledLinkedHeading || !article) return;
+    if (document?.canonicalKey !== request.canonicalKey || !document.html || isSourceView) return;
+    handledLinkedHeading = request;
+    const heading = findLinkedHeading(article, request.fragment);
+    if (heading) revealHeading(heading);
+  });
+
+  $effect(() => {
+    const article = articleElement;
+    if (!document?.html || !article || isSourceView) return;
+    makeUnresolvedNoteLinksFocusable(article);
   });
 
   function goToHeading(entry: OutlineEntry) {
@@ -256,6 +281,7 @@
 
   function handleClick(event: MouseEvent) {
     if (!(event.target instanceof Element)) return;
+    if (openUnresolvedNoteLink(event.target)) return;
     const link = event.target.closest('a');
     if (!link) return;
     // The webview must never navigate away from the app, so every link is handled here.
@@ -268,6 +294,18 @@
     const kind = link.dataset.mdxLink;
     const href = link.getAttribute('href');
     if (href && (kind === 'document' || kind === 'external')) onOpenLink({ kind, href });
+  }
+  /** A wiki-link to a note that does not exist yet offers to create it. */
+  function openUnresolvedNoteLink(target: Element): boolean {
+    const unresolved = target.closest<HTMLElement>('.wiki-link-unresolved');
+    if (!unresolved) return false;
+    onOpenLink({ kind: 'unresolvedNote', href: unresolved.title });
+    return true;
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Enter' || !(event.target instanceof Element)) return;
+    if (openUnresolvedNoteLink(event.target)) event.preventDefault();
   }
 </script>
 
@@ -294,7 +332,7 @@
     <PropertiesPanel frontMatter={document.frontMatter} {translator} />
   {/if}
   {#if document}
-    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <article
       bind:this={articleElement}
       class="rendered-document"
@@ -302,6 +340,7 @@
       aria-label={document.fileName}
       style:zoom={zoomPercent / PERCENT}
       onclick={handleClick}
+      onkeydown={handleKeydown}
       oncontextmenu={openMenu}
     >
       {#if isSourceView}
@@ -311,6 +350,8 @@
         {@html document.html}
       {/if}
     </article>
+    <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a snippet is not a value -->
+    {@render footer?.()}
   {:else}
     <p class="empty-state">{translator.translate('document.emptyState')}</p>
   {/if}

@@ -45,6 +45,34 @@ export function resolveWikiLink(
   )[0];
 }
 
+/**
+ * What a wiki-link from one note names to reach another: the other note's name when the name means
+ * that note from there, or else its path inside the location, both without `.md`; undefined when a
+ * nearer note of the same name hides it from every wiki-link.
+ */
+export function wikiLinkTargetFor(
+  notePath: string,
+  fromNotePath: string,
+  notes: readonly NoteEntry[],
+): string | undefined {
+  const withoutExtension = notePath.replace(MARKDOWN_EXTENSION, '');
+  const name = withoutExtension.split('/').at(-1) ?? withoutExtension;
+  return [name, withoutExtension].find(
+    (target) => resolveWikiLink(target, fromNotePath, notes)?.path === notePath,
+  );
+}
+/**
+ * The link address from one note to another, both given by their path in the location: relative,
+ * with each part percent-encoded, as a Markdown link to the note would be written.
+ */
+export function noteAddress(fromNotePath: string, toNotePath: string): string {
+  const fromFolder = folderOf(fromNotePath);
+  const toParts = toNotePath.split('/');
+  const shared = sharedDepth(fromFolder, toParts.slice(0, -1));
+  const upwards = fromFolder.slice(shared).map(() => '..');
+  return [...upwards, ...toParts.slice(shared).map(encodeURIComponent)].join('/');
+}
+
 function matchesTarget(note: NoteEntry, wanted: string): boolean {
   const path = note.path.replace(MARKDOWN_EXTENSION, '').toLowerCase();
   const name = path.split('/').at(-1) ?? path;

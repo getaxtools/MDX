@@ -410,6 +410,31 @@ describe('ViewerSession', () => {
     expect(notifications).toHaveLength(1);
   });
 
+  it('a renamed note keeps its tab, its child note’s tab and its text', async () => {
+    const documentFiles = new InMemoryDocumentFiles({
+      'C:\\Notes\\Projects.md': '# Projects',
+      'C:\\Notes\\Projects\\Plan.md': '# Plan',
+    });
+    const session = new ViewerSession({ documentFiles, appState: new InMemoryAppState(), now: () => 1 });
+    await session.openDocument('C:\\Notes\\Projects\\Plan.md');
+    const projects = await session.openDocument('C:\\Notes\\Projects.md');
+
+    session.followMovedNote({
+      from: projects.location,
+      to: InMemoryDocumentFiles.locationOf('C:\\Notes\\Work.md'),
+    });
+
+    const state = session.currentState();
+    expect(state.tabStrip.tabs().map((tab) => tab.location.displayPath)).toEqual([
+      'C:\\Notes\\Work\\Plan.md',
+      'C:\\Notes\\Work.md',
+    ]);
+    expect(state.tabStrip.activeTab()?.location.fileName).toBe('Work.md');
+    expect(session.openedDocument('c:\\notes\\work.md')?.text).toBe('# Projects');
+    expect(state.recentFiles.has('c:\\notes\\work\\plan.md')).toBe(true);
+    expect(state.recentFiles.has('c:\\notes\\projects.md')).toBe(false);
+  });
+
   it('keeps planned kinds chosen in the UI test build after a restore and Clear All Data', async () => {
     const appState = new InMemoryAppState();
     const documentFiles = new InMemoryDocumentFiles({});

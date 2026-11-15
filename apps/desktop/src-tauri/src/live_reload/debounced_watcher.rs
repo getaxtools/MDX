@@ -1,5 +1,5 @@
 use std::collections::BTreeSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
@@ -14,10 +14,31 @@ const QUIET_PERIOD: Duration = Duration::from_millis(300);
 /// A folder that never goes quiet, such as one holding a growing log, still gets its changes reported.
 const MAX_BATCH_AGE: Duration = Duration::from_secs(2);
 
-/// Watches the direct contents of a set of folders and reports the changed paths in batches.
+/// How a watcher looks at its folders.
+#[derive(Debug, Clone, Copy)]
+pub struct WatchMode {
+    recursive_mode: RecursiveMode,
+    /// A watcher error, such as a lost queue of events, is reported as an empty path: anything may have changed.
+    reports_errors: bool,
+}
+
+/// Only the entries directly inside each folder.
+pub const DIRECT_CONTENTS: WatchMode = WatchMode {
+    recursive_mode: RecursiveMode::NonRecursive,
+    reports_errors: false,
+};
+
+/// Every folder below, with watcher errors reported, for a notes index that must not miss a change.
+pub const WHOLE_TREE: WatchMode = WatchMode {
+    recursive_mode: RecursiveMode::Recursive,
+    reports_errors: true,
+};
+
+/// Watches a set of folders and reports the changed paths in batches.
 pub struct DebouncedWatcher {
     watcher: Mutex<Option<RecommendedWatcher>>,
     watched_folders: Mutex<BTreeSet<PathBuf>>,
+    mode: WatchMode,
 }
 
 impl DebouncedWatcher {
@@ -25,10 +46,25 @@ impl DebouncedWatcher {
         is_relevant: fn(&EventKind) -> bool,
         on_changed_paths: impl Fn(Vec<PathBuf>) + Send + 'static,
     ) -> Self {
+        Self::start_in_mode(DIRECT_CONTENTS, is_relevant, on_changed_paths)
+    }
+
+    pub fn start_in_mode(
+        mode: WatchMode,
+        is_relevant: fn(&EventKind) -> bool,
+        on_changed_paths: impl Fn(Vec<PathBuf>) + Send + 'static,
+    ) -> Self {
         let (sender, receiver) = mpsc::channel::<PathBuf>();
         thread::spawn(move || deliver_in_batches(&receiver, &on_changed_paths));
         let watcher = notify::recommended_watcher(move |result: notify::Result<Event>| {
-            let Ok(event) = result else { return };
+            let event = match result {
+                Ok(event) => event,
+                Err(_) if mode.reports_errors => {
+                    let _ = sender.send(PathBuf::new());
+                    return;
+                }
+                Err(_) => return,
+            };
             if !is_relevant(&event.kind) {
                 return;
             }
@@ -40,7 +76,13 @@ impl DebouncedWatcher {
         Self {
             watcher: Mutex::new(watcher),
             watched_folders: Mutex::new(BTreeSet::new()),
+            mode,
         }
+    }
+
+    /// False when the folder could not be watched, for example on a share that reports no changes.
+    pub fn is_watching(&self, folder: &Path) -> bool {
+        lock(&self.watched_folders).contains(folder)
     }
 
     /// Replaces the watched folders; a folder that cannot be watched now is tried again next time.
@@ -56,7 +98,7 @@ impl DebouncedWatcher {
         let mut now_watched: BTreeSet<PathBuf> =
             watched_folders.intersection(folders).cloned().collect();
         for folder in folders.difference(&watched_folders) {
-            if watcher.watch(folder, RecursiveMode::NonRecursive).is_ok() {
+            if watcher.watch(folder, self.mode.recursive_mode).is_ok() {
                 now_watched.insert(folder.clone());
             }
         }

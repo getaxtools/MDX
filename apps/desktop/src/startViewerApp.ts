@@ -18,6 +18,8 @@ import { TauriDocumentWatcher } from './ports/TauriDocumentWatcher';
 import { TauriFavouritesFile } from './ports/TauriFavouritesFile';
 import { TauriFolderWatcher } from './ports/TauriFolderWatcher';
 import { TauriFolders } from './ports/TauriFolders';
+import { TauriNoteFiles } from './ports/TauriNoteFiles';
+import { TauriNotesIndex } from './ports/TauriNotesIndex';
 import { TauriNotesLocations } from './ports/TauriNotesLocations';
 import { TauriWorkspaceFiles } from './ports/TauriWorkspaceFiles';
 import { TauriWorkspaceStore } from './ports/TauriWorkspaceStore';
@@ -107,6 +109,8 @@ function createViewerController({
     attachments: new TauriAttachments(),
     workspaceFiles: new TauriWorkspaceFiles(),
     notesLocations: new TauriNotesLocations(),
+    noteFiles: new TauriNoteFiles(),
+    notesIndex: new TauriNotesIndex(),
   });
 }
 

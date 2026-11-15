@@ -15,6 +15,12 @@ export {
 } from './blocks/outlineSections';
 export { BUILT_IN_SLASH_ITEMS, type SlashMenuItem } from './slash-menu/slashMenuItems';
 export { SLASH_MENU_SECTION, type SlashMenuProvider } from './slash-menu/slashMenu';
+export {
+  wikiLinkCompletions,
+  type WikiLinkHeading,
+  type WikiLinkNote,
+  type WikiLinkSuggester,
+} from './wiki-links/wikiLinkCompletions';
 export type { ExpandedSnippetText, SnippetExpander } from './snippets/snippetFields';
 export { SNIPPETS_SECTION, type EditorSnippet } from './snippets/snippetMenu';
 export { EDITOR_SHORTCUTS, type EditorAction, type EditorShortcut } from './editorShortcuts';

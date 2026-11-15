@@ -10,6 +10,7 @@ import {
   type CompletionContext,
   type CompletionResult,
   type CompletionSection,
+  type CompletionSource,
 } from '@codemirror/autocomplete';
 import { syntaxTree } from '@codemirror/language';
 import { Prec, type EditorState, type Extension } from '@codemirror/state';
@@ -39,14 +40,36 @@ const NODES_WHERE_A_SLASH_IS_TEXT: ReadonlySet<string> = new Set([
   'LinkReference',
 ]);
 export const SLASH_MENU_SECTION = 'Blocks';
+/** CodeMirror waits 100 ms by default, the whole budget for showing wiki-link suggestions. */
+const TYPING_PAUSE_BEFORE_COMPLETIONS_MS = 25;
 const PROVIDED_SECTION_RANK = 1;
 
 /** The insert menu: a slash at the start of a line or after a space offers blocks to insert. */
 export function slashMenu(providers: readonly SlashMenuProvider[] = []): Extension {
+  return editorCompletions({ slashProviders: providers });
+}
+
+/**
+ * Every completion menu of the editor in one place, as CodeMirror keeps a single completion setup:
+ * the insert menu when it is on, and other menus such as wiki-link suggestions.
+ */
+export function editorCompletions({
+  slashProviders,
+  sources = [],
+}: {
+  readonly slashProviders?: readonly SlashMenuProvider[] | undefined;
+  readonly sources?: readonly CompletionSource[];
+}): Extension {
+  const slashSource: CompletionSource[] = slashProviders
+    ? [(context) => slashCompletions(context, slashProviders)]
+    : [];
+  const override = [...slashSource, ...sources];
+  if (override.length === 0) return [];
   return [
     autocompletion({
-      override: [(context) => slashCompletions(context, providers)],
+      override,
       activateOnTyping: true,
+      activateOnTypingDelay: TYPING_PAUSE_BEFORE_COMPLETIONS_MS,
       icons: false,
       defaultKeymap: false,
     }),

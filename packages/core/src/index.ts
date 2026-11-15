@@ -164,7 +164,28 @@ export {
   type SnippetContext,
 } from './snippets/expandSnippet';
 export { formatDate } from './dates/formatDate';
-export { parseWikiLink, resolveWikiLink, type NoteEntry, type WikiLink } from './notes/wikiLinks';
+export {
+  noteAddress,
+  wikiLinkTargetFor,
+  parseWikiLink,
+  resolveWikiLink,
+  type NoteEntry,
+  type WikiLink,
+} from './notes/wikiLinks';
+export { noteNameOf, noteTreeNodes, type NoteTreeNode } from './notes/noteTree';
+export { tagTree, type TagNode } from './notes/tagTree';
+export {
+  DEFAULT_NOTES_SETTINGS,
+  MAX_EXCLUDED_PATHS,
+  dailyNoteName,
+  excludedPathsFromLines,
+  isValidFolderSetting,
+  isValidNameFormat,
+  kindDataWithNotesSettings,
+  notesSettingsOf,
+  type NotesSettings,
+} from './notes/notesSettings';
+export { isNoteOrChildAmong, locationAfterNoteMove, type MovedNote } from './notes/noteMoves';
 export {
   editFrontMatter,
   type FrontMatterEdit,
@@ -203,7 +224,10 @@ export {
   NOTES_KIND_ID,
   claimedNotesLocations,
   defaultNotesLocationPath,
+  isInsideFolder,
+  kindDataWithLocation,
   isSyncedFolder,
+  notePathInLocation,
   locationClaimProblem,
   notesKindData,
   notesLocationOf,

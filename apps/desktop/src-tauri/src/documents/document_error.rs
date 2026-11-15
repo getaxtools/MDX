@@ -27,6 +27,10 @@ pub enum DocumentError {
     CannotEncode,
     #[error("the file is not a picture")]
     NotAnImage,
+    #[error("another note in the folder already has this name")]
+    NameTaken,
+    #[error("the name cannot be used for a file")]
+    InvalidName,
 }
 
 impl From<io::Error> for DocumentError {

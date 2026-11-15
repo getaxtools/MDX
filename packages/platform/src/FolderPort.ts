@@ -28,6 +28,8 @@ export interface FolderSearchResults {
   readonly documents: readonly DocumentMatches[];
   /** True when a limit stopped the search early, so there may be more matches. */
   readonly isIncomplete: boolean;
+  /** In a Notes workspace, notes kept only in the cloud, which a search never opens. */
+  readonly notSearchedOnlineOnly?: number;
 }
 
 export interface FolderPort {

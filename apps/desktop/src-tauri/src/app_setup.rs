@@ -8,6 +8,7 @@ use crate::documents::DocumentAccessList;
 use crate::live_reload::{
     DOCUMENTS_CHANGED_EVENT, DocumentWatcher, FOLDERS_CHANGED_EVENT, FolderWatcher,
 };
+use crate::notes_index::NotesIndexes;
 use crate::open_requests::{
     MAIN_WINDOW_LABEL, StartupDocuments, StartupWorkspaceFile, grant_documents,
     markdown_paths_from_arguments, workspace_file_from_arguments,
@@ -15,6 +16,7 @@ use crate::open_requests::{
 use crate::storage::{AppStateStore, PendingWorkspaceExport, WorkspaceDatabase};
 
 const DATA_FOLDER_OVERRIDE_VARIABLE: &str = "MDX_DATA_DIR";
+const NOTES_INDEX_FOLDER_NAME: &str = "notes-index";
 
 pub fn initialize(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     let data_folder = data_folder(app)?;
@@ -37,6 +39,7 @@ pub fn initialize(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(Arc::new(DroppedImages::default()));
     app.manage(start_document_watcher(app.handle().clone()));
     app.manage(start_folder_watcher(app.handle().clone()));
+    app.manage(Arc::new(NotesIndexes::new(notes_index_folder(app)?)));
     Ok(())
 }
 
@@ -54,6 +57,21 @@ fn start_folder_watcher(app: AppHandle) -> FolderWatcher {
             let _ = window.emit(FOLDERS_CHANGED_EVENT, folder_paths);
         }
     })
+}
+
+/// Notes indexes are rebuilt from the notes, so they stay on this computer instead of roaming.
+fn notes_index_folder(app: &App) -> Result<PathBuf, tauri::Error> {
+    if cfg!(debug_assertions)
+        && let Some(override_folder) = std::env::var_os(DATA_FOLDER_OVERRIDE_VARIABLE)
+    {
+        return Ok(PathBuf::from(override_folder).join(NOTES_INDEX_FOLDER_NAME));
+    }
+    Ok(app
+        .path()
+        .local_data_dir()?
+        .join("getaxtools")
+        .join("MDX")
+        .join(NOTES_INDEX_FOLDER_NAME))
 }
 
 fn data_folder(app: &App) -> Result<PathBuf, tauri::Error> {

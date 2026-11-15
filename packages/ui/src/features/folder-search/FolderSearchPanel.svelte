@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Translator } from '@mdx/i18n';
-  import type { FolderSearchResults, LineMatch, TextSearchOptions } from '@mdx/platform';
+  import type { FolderSearchResults, LineMatch, NotesIndexStatus, TextSearchOptions } from '@mdx/platform';
+  import { untrack } from 'svelte';
   import { previewParts } from './previewParts';
 
   interface Props {
@@ -10,9 +11,23 @@
     hasFolders: boolean;
     onSearch: (query: string, options: TextSearchOptions) => Promise<FolderSearchResults>;
     onOpenMatch: (path: string, query: string, options: TextSearchOptions) => void;
+    /** A Notes workspace searches its index, which ignores case and accents and takes filters. */
+    isNotesSearch?: boolean;
+    notesIndexStatus?: NotesIndexStatus | undefined;
+    /** Put in the search box and searched when the box next gets the focus, such as `tag:work`. */
+    requestedQuery?: string | undefined;
   }
 
-  const { translator, focusRequest, hasFolders, onSearch, onOpenMatch }: Props = $props();
+  const {
+    translator,
+    focusRequest,
+    hasFolders,
+    onSearch,
+    onOpenMatch,
+    isNotesSearch = false,
+    notesIndexStatus,
+    requestedQuery,
+  }: Props = $props();
 
   const TYPING_PAUSE_MS = 300;
 
@@ -29,9 +44,17 @@
   let input: HTMLInputElement | undefined = $state();
   let latestSearch = 0;
   let pendingSearch: ReturnType<typeof globalThis.setTimeout> | undefined;
+  let handledFocusRequest: number | undefined;
 
+  // The effect also runs when the props are passed again unchanged, which must not take the focus.
   $effect(() => {
-    if (focusRequest === undefined) return;
+    if (focusRequest === undefined || focusRequest === handledFocusRequest) return;
+    handledFocusRequest = focusRequest;
+    const wanted = untrack(() => requestedQuery);
+    if (wanted !== undefined) {
+      query = wanted;
+      void search();
+    }
     input?.focus();
     input?.select();
   });
@@ -106,30 +129,43 @@
       oninput={scheduleSearch}
       onkeydown={handleInputKeydown}
     />
-    <button
-      class="option"
-      aria-pressed={isCaseSensitive}
-      aria-label={translator.translate('find.matchCase')}
-      title={translator.translate('find.matchCase')}
-      disabled={!hasFolders}
-      onclick={toggleCaseSensitive}
-      ><span class="symbol" aria-hidden="true" data-symbol={translator.translate('find.matchCase.symbol')}
-      ></span></button
-    >
-    <button
-      class="option"
-      aria-pressed={isWholeWord}
-      aria-label={translator.translate('find.wholeWord')}
-      title={translator.translate('find.wholeWord')}
-      disabled={!hasFolders}
-      onclick={toggleWholeWord}
-      ><span
-        class="symbol whole-word"
-        aria-hidden="true"
-        data-symbol={translator.translate('find.wholeWord.symbol')}
-      ></span></button
-    >
+    {#if !isNotesSearch}
+      <button
+        class="option"
+        aria-pressed={isCaseSensitive}
+        aria-label={translator.translate('find.matchCase')}
+        title={translator.translate('find.matchCase')}
+        disabled={!hasFolders}
+        onclick={toggleCaseSensitive}
+        ><span class="symbol" aria-hidden="true" data-symbol={translator.translate('find.matchCase.symbol')}
+        ></span></button
+      >
+      <button
+        class="option"
+        aria-pressed={isWholeWord}
+        aria-label={translator.translate('find.wholeWord')}
+        title={translator.translate('find.wholeWord')}
+        disabled={!hasFolders}
+        onclick={toggleWholeWord}
+        ><span
+          class="symbol whole-word"
+          aria-hidden="true"
+          data-symbol={translator.translate('find.wholeWord.symbol')}
+        ></span></button
+      >
+    {/if}
   </div>
+  {#if isNotesSearch}
+    <p class="hint">{translator.translate('notes.search.hint')}</p>
+    {#if notesIndexStatus?.isBuilding}
+      <p class="hint" role="status">
+        {translator.translate('notes.search.indexing', {
+          indexed: notesIndexStatus.indexed,
+          total: notesIndexStatus.toIndex,
+        })}
+      </p>
+    {/if}
+  {/if}
   <p class="status" role="status">
     {#if !hasFolders}
       {translator.translate('folderSearch.noFolders')}
@@ -137,6 +173,8 @@
       {translator.translate('folderSearch.searching')}
     {:else if searchState.kind === 'failed'}
       {translator.translate('folderSearch.failed')}
+    {:else if searchState.kind === 'done' && matchCount === 0 && searchState.results.documents.length > 0}
+      {translator.translate('notes.search.noteCount', { count: searchState.results.documents.length })}
     {:else if searchState.kind === 'done' && matchCount === 0}
       {translator.translate('folderSearch.noResults')}
     {:else if searchState.kind === 'done'}
@@ -148,8 +186,25 @@
         {translator.translate('folderSearch.incomplete')}
       {/if}
     {/if}
+    {#if searchState.kind === 'done' && (searchState.results.notSearchedOnlineOnly ?? 0) > 0}
+      {translator.translate('notes.search.onlineOnly', {
+        count: searchState.results.notSearchedOnlineOnly ?? 0,
+      })}
+    {/if}
   </p>
-  {#if searchState.kind === 'done' && matchCount > 0}
+  {#if searchState.kind === 'done' && matchCount === 0 && searchState.results.documents.length > 0}
+    <ul class="results" aria-label={translator.translate('folderSearch.results.label')}>
+      {#each searchState.results.documents as document (document.location.canonicalKey)}
+        <li>
+          <button
+            class="match"
+            title={document.location.displayPath}
+            onclick={() => openMatch(document.location.displayPath)}>{document.location.fileName}</button
+          >
+        </li>
+      {/each}
+    </ul>
+  {:else if searchState.kind === 'done' && matchCount > 0}
     <ul class="results" aria-label={translator.translate('folderSearch.results.label')}>
       {#each searchState.results.documents as document (document.location.canonicalKey)}
         <li>
@@ -188,6 +243,12 @@
     color: var(--color-text-secondary);
     font-size: var(--text-size-small);
     font-weight: 600;
+  }
+
+  .hint {
+    margin: var(--space-1) 0 0;
+    color: var(--color-text-secondary);
+    font-size: var(--text-size-small);
   }
 
   .search-row {
