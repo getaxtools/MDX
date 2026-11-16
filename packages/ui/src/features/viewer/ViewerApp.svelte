@@ -640,6 +640,9 @@
         {wordsThisSession}
         selectedWords={editedDocument ? selectedWords : 0}
         onShowWordGoal={() => void controller.execute({ kind: 'showWordGoal' })}
+        injectionCheck={snapshot.injectionCheck}
+        onShowInjectionCheck={() =>
+          void controller.execute({ kind: 'showSidebarView', sidebarView: 'promptInjection' })}
         onResetZoom={() => void controller.execute({ kind: 'resetZoom' })}
         onReopenWithEncoding={(encoding: string | undefined) =>
           void controller.execute(

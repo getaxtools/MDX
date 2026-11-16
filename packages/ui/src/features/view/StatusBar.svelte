@@ -13,6 +13,8 @@
   } from '../encodings/reopenEncodings';
   import type { RenderedActiveDocument } from '../viewer/ViewerController';
   import type { ControlWheelButton } from './ControlWheelButton';
+  import InjectionCheckBadge from '../prompt-injection/InjectionCheckBadge.svelte';
+  import type { InjectionCheckView } from '../prompt-injection/InjectionCheckActions';
 
   interface Props {
     document: RenderedActiveDocument | undefined;
@@ -33,6 +35,9 @@
     onShowWordGoal?: () => void;
     onResetZoom: () => void;
     onReopenWithEncoding?: (encoding: string | undefined) => void;
+    /** The prompt injection check of the shown document; the badge shows once it has finished. */
+    injectionCheck?: InjectionCheckView | undefined;
+    onShowInjectionCheck?: () => void;
   }
 
   const {
@@ -50,6 +55,8 @@
     onShowWordGoal = () => undefined,
     onResetZoom,
     onReopenWithEncoding = () => undefined,
+    injectionCheck,
+    onShowInjectionCheck = () => undefined,
   }: Props = $props();
 
   let encodingMenuRequest: ContextMenuRequest | undefined = $state();
@@ -107,6 +114,9 @@
     {#each details as detail (detail)}
       <span>{detail}</span>
     {/each}
+    {#if document && injectionCheck}
+      <InjectionCheckBadge check={injectionCheck} {translator} onShow={onShowInjectionCheck} />
+    {/if}
     {#if document}
       <button class="words" title={sessionTooltip} aria-haspopup="dialog" onclick={onShowWordGoal}>
         {#if progress}

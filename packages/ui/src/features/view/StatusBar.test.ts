@@ -176,4 +176,40 @@ describe('StatusBar', () => {
     expect(words.title).toBe('35 words added this session');
     expect(screen.getByRole('status').textContent.trim()).toBe('Word goal reached.');
   });
+
+  it('shows the prompt injection badge only once the shown document was checked, and opens the panel', async () => {
+    const onShowInjectionCheck = vi.fn();
+    render(StatusBar, {
+      document: savedDocument,
+      zoomPercent: 100,
+      isSourceView: false,
+      translator: createTranslator(),
+      onResetZoom: vi.fn(),
+      injectionCheck: {
+        documentKey: savedDocument.canonicalKey,
+        status: 'checked',
+        result: {
+          rulesetVersion: '1.0.0',
+          findings: [],
+          isAgentFile: true,
+          ignoredCount: 0,
+          isPartial: false,
+        },
+        ignoredFindings: [],
+        isCharactersOnly: false,
+        findingRanges: [],
+      },
+      onShowInjectionCheck,
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /^No findings/ }));
+
+    expect(onShowInjectionCheck).toHaveBeenCalledOnce();
+  });
+
+  it('shows no prompt injection badge before a check', () => {
+    renderStatusBar(savedDocument);
+
+    expect(screen.queryByRole('button', { name: /findings/ })).toBeNull();
+  });
 });

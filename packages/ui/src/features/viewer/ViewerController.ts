@@ -13,6 +13,7 @@ import {
   type ViewerSession,
   type ViewerState,
   type InjectionFinding,
+  InjectionIgnoreList,
   type WorkspaceKindId,
   type WorkspaceRegistry,
   parseFavouritesFile,
@@ -454,7 +455,11 @@ export class ViewerController {
     } else if (command.kind === 'revealInjectionFinding') this.revealInjectionFinding(command.finding);
     else if (command.kind === 'ignoreInjectionFinding')
       this.injectionChecks.ignore(command.finding, command.scope);
-    else this.injectionChecks.showAgain(command.finding);
+    else if (command.kind === 'showInjectionFindingAgain') this.injectionChecks.showAgain(command.finding);
+    else {
+      this.dependencies.session.updateInjectionIgnoreList(() => InjectionIgnoreList.empty());
+      this.showNotice('promptInjection.settings.ignoredReset');
+    }
   }
 
   /** The editor selects the finding; otherwise the source view opens with the finding outlined. */

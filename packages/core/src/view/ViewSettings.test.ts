@@ -46,6 +46,7 @@ describe('view settings', () => {
       isNoteDeletionConfirmed: true,
       isNoteLinkUpdateConfirmed: true,
       isShowingHiddenCharacters: false,
+      automaticInjectionCheck: 'agentContext',
     });
   });
 
@@ -95,6 +96,7 @@ describe('view settings', () => {
       isNoteDeletionConfirmed: false,
       isNoteLinkUpdateConfirmed: false,
       isShowingHiddenCharacters: true,
+      automaticInjectionCheck: 'off',
     };
 
     expect(parseViewSettings(saved)).toEqual(saved);
@@ -275,6 +277,16 @@ describe('view settings', () => {
     expect(parseViewSettings({ isShowingHiddenCharacters: true }).isShowingHiddenCharacters).toBe(true);
     expect(parseViewSettings({ isShowingHiddenCharacters: 'yes' }).isShowingHiddenCharacters).toBe(false);
     expect(parseViewSettings({}).isShowingHiddenCharacters).toBe(false);
+  });
+
+  it('reads the automatic prompt injection check, falling back to agent files for unknown values', () => {
+    expect(parseViewSettings({ automaticInjectionCheck: 'allDocuments' }).automaticInjectionCheck).toBe(
+      'allDocuments',
+    );
+    expect(parseViewSettings({ automaticInjectionCheck: 'off' }).automaticInjectionCheck).toBe('off');
+    expect(parseViewSettings({ automaticInjectionCheck: 'always' }).automaticInjectionCheck).toBe(
+      'agentContext',
+    );
   });
 
   it('remembers the prompt injection panel as the side bar view', () => {

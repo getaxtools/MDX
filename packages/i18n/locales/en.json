@@ -1044,5 +1044,21 @@
   "promptInjection.finding.showAgainLabel": "Show again: {rule} on line {line, number}",
   "promptInjection.activityBar.label": "Prompt injection check",
   "promptInjection.hiddenCharacters.toggle": "Show Hidden Characters",
-  "promptInjection.hiddenCharacters.panelToggle": "Show hidden characters"
+  "promptInjection.hiddenCharacters.panelToggle": "Show hidden characters",
+  "settings.section.promptInjection": "Prompt injection check",
+  "promptInjection.settings.automatic.label": "Check automatically",
+  "promptInjection.settings.automatic.description": "Which documents are checked as soon as they are shown. The result appears only as a badge in the status bar.",
+  "promptInjection.settings.automatic.off": "Off",
+  "promptInjection.settings.automatic.agentContext": "Agent files, remote files and spec projects",
+  "promptInjection.settings.automatic.allDocuments": "All documents",
+  "promptInjection.settings.hiddenCharacters.description": "Draws invisible, control and direction characters as labelled markers in the editor, the preview and the source view.",
+  "promptInjection.settings.resetIgnored.label": "Ignored findings",
+  "promptInjection.settings.resetIgnored.description": "Findings you chose to ignore stay hidden in their documents. Reset shows them all again.",
+  "promptInjection.settings.resetIgnored.button": "Reset ignored findings",
+  "promptInjection.settings.ignoredReset": "Ignored prompt injection findings are shown again.",
+  "promptInjection.badge.count": "{count, plural, one {# finding} other {# findings}}",
+  "promptInjection.badge.none": "No findings",
+  "promptInjection.badge.label": "{count, plural, one {# finding} other {# findings}}, highest {severity}. Show the prompt injection check",
+  "promptInjection.badge.noneLabel": "No findings. Show the prompt injection check",
+  "promptInjection.badge.highFound": "This document has High prompt injection findings."
 }

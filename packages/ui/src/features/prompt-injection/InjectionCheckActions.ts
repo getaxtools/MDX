@@ -16,6 +16,7 @@ import { isUntitledLocation, type OpenedDocument } from '@mdx/platform';
 import { isCheckedForCharactersOnly } from './checkInjectionText';
 import { findingEnd } from './findingEnd';
 import type { InjectionChecker } from './InjectionChecker';
+import { shouldCheckAutomatically } from './shouldCheckAutomatically';
 
 /** How long typing pauses, with the findings panel open, before the document is checked again. */
 export const RECHECK_DELAY_MS = 500;
@@ -33,6 +34,8 @@ export interface InjectionCheckView {
   readonly isCharactersOnly: boolean;
   /** The listed findings by line and column, for the editor to underline. */
   readonly findingRanges: readonly EditorTextRange[];
+  /** Set only the first time a document's check finds High findings, for one polite announcement. */
+  readonly isFirstHighResult?: boolean;
 }
 
 /** A finding's place, by offsets for the source view and by lines and columns for the editor. */
@@ -101,6 +104,9 @@ export class InjectionCheckActions {
   private current: DocumentCheck | undefined;
   private pendingRecheck: ReturnType<typeof setTimeout> | undefined;
   private lastFiltered: FilteredCheck | undefined;
+  /** Documents whose High findings were announced once already in this session. */
+  private readonly announcedDocumentKeys = new Set<string>();
+  private announcedCheck: DocumentCheck | undefined;
 
   constructor(private readonly dependencies: InjectionCheckDependencies) {}
 
@@ -126,9 +132,9 @@ export class InjectionCheckActions {
     this.pendingRecheck = setTimeout(() => void this.checkShownDocument(), RECHECK_DELAY_MS);
   }
 
-  /** The panel was opened: a document not checked yet is checked now. */
+  /** The panel was opened or the setting changed: a document they now cover is checked if it was not yet. */
   viewChanged(): void {
-    if (!this.shown || !this.isPanelShown()) return;
+    if (!this.shown || !this.isCheckedWhenShown()) return;
     if (this.current?.documentKey !== this.shown.documentKey) void this.checkShownDocument();
   }
 
@@ -191,6 +197,7 @@ export class InjectionCheckActions {
       ignoredFindings: filtered?.ignoredFindings ?? [],
       isCharactersOnly: check.checked ? isCheckedForCharactersOnly(check.checked.text) : false,
       findingRanges,
+      ...(this.announcedCheck === check ? { isFirstHighResult: true } : {}),
     };
   }
 
@@ -198,9 +205,12 @@ export class InjectionCheckActions {
     this.forget();
   }
 
-  /** An open panel checks each document it is shown with. */
+  /** An open panel checks each document it is shown with; the setting decides for the others. */
   private isCheckedWhenShown(): boolean {
-    return this.isPanelShown();
+    const shown = this.shown;
+    if (!shown) return false;
+    const setting = this.dependencies.session.currentState().viewSettings.automaticInjectionCheck;
+    return this.isPanelShown() || shouldCheckAutomatically(shown, setting);
   }
 
   private isPanelShown(): boolean {
@@ -210,7 +220,8 @@ export class InjectionCheckActions {
   private checkAfterPaint(): void {
     const documentKey = this.shown?.documentKey;
     this.dependencies.afterPaint(() => {
-      if (this.shown?.documentKey === documentKey) void this.checkShownDocument();
+      if (this.shown?.documentKey === documentKey && this.isCheckedWhenShown())
+        void this.checkShownDocument();
     });
   }
 
@@ -239,7 +250,17 @@ export class InjectionCheckActions {
       outcome === 'failed'
         ? { documentKey: check.documentKey, status: 'failed' }
         : { documentKey: check.documentKey, status: 'checked', checked: { text, result: outcome } };
+    this.rememberFirstHighResult(this.current);
     this.dependencies.onChange();
+  }
+
+  private rememberFirstHighResult(check: DocumentCheck): void {
+    const hasHigh = this.filteredCheckOf(check).filtered?.result.findings.some(
+      (finding) => finding.severity === 'high',
+    );
+    if (!hasHigh || this.announcedDocumentKeys.has(check.documentKey)) return;
+    this.announcedDocumentKeys.add(check.documentKey);
+    this.announcedCheck = check;
   }
 
   private filteredCheckOf(check: DocumentCheck): FilteredCheck {

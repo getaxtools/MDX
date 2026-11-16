@@ -10,6 +10,7 @@ import {
   toggleSidebarView,
   zoomIn,
   zoomOut,
+  type AutomaticInjectionCheck,
   type ExplorerSection,
   type KindSwitcher,
   type LanguagePreference,
@@ -50,7 +51,8 @@ export type ViewCommand =
   | { readonly kind: 'toggleSlashMenuInSource' }
   | { readonly kind: 'toggleNoteDeletionConfirmation' }
   | { readonly kind: 'toggleNoteLinkUpdateConfirmation' }
-  | { readonly kind: 'toggleHiddenCharacters' };
+  | { readonly kind: 'toggleHiddenCharacters' }
+  | { readonly kind: 'setAutomaticInjectionCheck'; readonly check: AutomaticInjectionCheck };
 
 type ViewCommandHandlers = {
   readonly [Kind in ViewCommand['kind']]: (
@@ -106,6 +108,7 @@ const VIEW_COMMAND_HANDLERS: ViewCommandHandlers = {
     ...settings,
     isNoteLinkUpdateConfirmed: !settings.isNoteLinkUpdateConfirmed,
   }),
+  setAutomaticInjectionCheck: (settings, { check }) => ({ ...settings, automaticInjectionCheck: check }),
   toggleHiddenCharacters: (settings) => ({
     ...settings,
     isShowingHiddenCharacters: !settings.isShowingHiddenCharacters,

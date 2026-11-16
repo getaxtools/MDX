@@ -35,6 +35,7 @@ describe('view commands', () => {
       isNoteDeletionConfirmed: true,
       isNoteLinkUpdateConfirmed: true,
       isShowingHiddenCharacters: false,
+      automaticInjectionCheck: 'agentContext',
     });
     expect(applyViewCommand(withoutSidebar, { kind: 'resetZoom' }).zoomPercent).toBe(100);
     expect(applyViewCommand(withoutSidebar, { kind: 'zoomOut' }).zoomPercent).toBe(100);

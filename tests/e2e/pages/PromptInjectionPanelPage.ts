@@ -24,6 +24,26 @@ export class PromptInjectionPanelPage {
     await this.panel().waitForDisplayed();
   }
 
+  /** The status bar badge; it exists only once the shown document has been checked. */
+  badge(): ChainablePromiseElement {
+    return this.browser.$('footer .injection-badge');
+  }
+
+  async badgeName(): Promise<string> {
+    return (await this.badge().getAttribute('aria-label')) ?? '';
+  }
+
+  async ignoreFinding(ruleTitle: string, line: number): Promise<void> {
+    const name = translator.translate('promptInjection.finding.ignoreLabel', { rule: ruleTitle, line });
+    const button = await this.panel().$(`button[aria-label="${name}"]`).getElement();
+    await this.browser.execute((target) => target.click(), button);
+  }
+
+  async waitForIgnoredCount(count: number): Promise<void> {
+    const text = translator.translate('promptInjection.panel.ignoredCount', { count });
+    await this.panel().$(`span=${text}`).waitForExist();
+  }
+
   async toggleHiddenCharactersFromCommandPalette(): Promise<void> {
     const commandName = translator.translate('promptInjection.hiddenCharacters.toggle');
     await this.mainWindow.searchInCommandPalette(`>${commandName}`);

@@ -54,6 +54,7 @@ export interface ViewSettings {
   readonly isNoteLinkUpdateConfirmed: boolean;
   /** Invisible, control, direction and variation characters are drawn as labelled markers. */
   readonly isShowingHiddenCharacters: boolean;
+  readonly automaticInjectionCheck: AutomaticInjectionCheck;
 }
 
 export const THEME_PREFERENCES: readonly ThemePreference[] = [
@@ -134,6 +135,7 @@ export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
   isNoteDeletionConfirmed: true,
   isNoteLinkUpdateConfirmed: true,
   isShowingHiddenCharacters: false,
+  automaticInjectionCheck: 'agentContext',
 };
 
 export function zoomIn(settings: ViewSettings): ViewSettings {
@@ -268,6 +270,7 @@ type FeatureSettings = KindSwitcherSettings &
     | 'isNoteDeletionConfirmed'
     | 'isNoteLinkUpdateConfirmed'
     | 'isShowingHiddenCharacters'
+    | 'automaticInjectionCheck'
   >;
 
 /** The settings of the control wheel, editing, notes and the prompt injection check. */
@@ -305,8 +308,15 @@ function parseNoteQuestionSettings(
 
 function parseInjectionCheckSettings(
   saved: Record<string, unknown>,
-): Pick<ViewSettings, 'isShowingHiddenCharacters'> {
-  return { isShowingHiddenCharacters: saved.isShowingHiddenCharacters === true };
+): Pick<ViewSettings, 'isShowingHiddenCharacters' | 'automaticInjectionCheck'> {
+  return {
+    isShowingHiddenCharacters: saved.isShowingHiddenCharacters === true,
+    automaticInjectionCheck: oneOf(
+      AUTOMATIC_INJECTION_CHECKS,
+      saved.automaticInjectionCheck,
+      DEFAULT_VIEW_SETTINGS.automaticInjectionCheck,
+    ),
+  };
 }
 
 function parseEditingSettings(

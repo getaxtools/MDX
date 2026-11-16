@@ -1,4 +1,5 @@
 import {
+  AUTOMATIC_INJECTION_CHECKS,
   isSidebarViewShown,
   KIND_SWITCHERS,
   READING_WIDTHS,
@@ -15,13 +16,15 @@ import {
 import { SUPPORTED_LOCALES, directionOf, isKnownLocale, type MessageKey, type Translator } from '@mdx/i18n';
 import type { ViewerCommand } from '../viewer/viewerCommands';
 
-export type SettingSection = 'appearance' | 'language' | 'layout' | 'editing' | 'workspaceKinds' | 'keyboard';
+export type SettingSection =
+  'appearance' | 'language' | 'layout' | 'editing' | 'promptInjection' | 'workspaceKinds' | 'keyboard';
 
 export const SETTING_SECTIONS: readonly SettingSection[] = [
   'appearance',
   'language',
   'layout',
   'editing',
+  'promptInjection',
   'workspaceKinds',
   'keyboard',
 ];
@@ -274,6 +277,46 @@ const EDITING_SETTINGS: readonly SettingDefinition[] = [
   },
 ];
 
+const automaticInjectionCheckSetting: ChoiceSetting = {
+  id: 'automaticInjectionCheck',
+  kind: 'choice',
+  section: 'promptInjection',
+  labelKey: 'promptInjection.settings.automatic.label',
+  descriptionKey: 'promptInjection.settings.automatic.description',
+  choices: (translator) =>
+    AUTOMATIC_INJECTION_CHECKS.map((check) => ({
+      value: check,
+      label: translator.translate(`promptInjection.settings.automatic.${check}`),
+    })),
+  valueIn: (settings) => settings.automaticInjectionCheck,
+  commandFor: (value) => {
+    const check = AUTOMATIC_INJECTION_CHECKS.find((choice) => choice === value);
+    return check ? { kind: 'setAutomaticInjectionCheck', check } : undefined;
+  },
+};
+
+const PROMPT_INJECTION_SETTINGS: readonly SettingDefinition[] = [
+  automaticInjectionCheckSetting,
+  {
+    id: 'hiddenCharacters',
+    kind: 'toggle',
+    section: 'promptInjection',
+    labelKey: 'promptInjection.hiddenCharacters.panelToggle',
+    descriptionKey: 'promptInjection.settings.hiddenCharacters.description',
+    isOnIn: (settings) => settings.isShowingHiddenCharacters,
+    toggleCommand: { kind: 'toggleHiddenCharacters' },
+  },
+  {
+    id: 'resetIgnoredFindings',
+    kind: 'action',
+    section: 'promptInjection',
+    labelKey: 'promptInjection.settings.resetIgnored.label',
+    descriptionKey: 'promptInjection.settings.resetIgnored.description',
+    buttonLabelKey: 'promptInjection.settings.resetIgnored.button',
+    command: { kind: 'resetInjectionIgnoreList' },
+  },
+];
+
 const KEYBOARD_SETTINGS: readonly SettingDefinition[] = [
   {
     id: 'controlWheelShortcut',
@@ -346,6 +389,7 @@ export const SETTING_DEFINITIONS: readonly SettingDefinition[] = [
     (settings) => settings.isPreviewBesideEditor,
   ),
   ...EDITING_SETTINGS,
+  ...PROMPT_INJECTION_SETTINGS,
   ...WORKSPACE_KIND_SETTINGS,
   ...KEYBOARD_SETTINGS,
 ];
