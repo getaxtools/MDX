@@ -8,6 +8,8 @@ export interface RichTextLabels {
   /** What a collapsed front matter chip says, such as "3 properties". */
   properties(count: number): string;
   diagram(type: string): string;
+  /** The name of a task checkbox whose item has no text. */
+  task(): string;
 }
 
 /** A callout's look, one of the preview's five, and the title it shows. */

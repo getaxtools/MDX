@@ -1,4 +1,3 @@
-import type { syntaxTree } from '@codemirror/language';
 import {
   DiagramWidget,
   FormulaWidget,
@@ -9,8 +8,7 @@ import {
 import { lineCountOf } from './renderedWidgets';
 import type { RichTextBlock, RichTextBlockProvider } from './richTextProviders';
 import { richTextRenderingFacet } from './richTextRendering';
-
-type SyntaxNode = ReturnType<ReturnType<typeof syntaxTree>['resolveInner']>;
+import type { SyntaxNode } from '../syntax/syntaxNode';
 
 /** The preview's limits: larger tables and longer lines and formulas stay Markdown text. */
 export const MAX_RENDERED_TABLE_CELLS = 2_000;

@@ -1,11 +1,9 @@
-import type { syntaxTree } from '@codemirror/language';
 import { Decoration } from '@codemirror/view';
 import { CalloutTitleWidget } from './blockWidgets';
 import { decorate, decorateLines, isRevealed, type MarkupContext } from './markupContext';
 import { CALLOUT_CLASS } from './richTextClasses';
 import { richTextRenderingFacet, type CalloutPresentation } from './richTextRendering';
-
-type SyntaxNode = ReturnType<ReturnType<typeof syntaxTree>['resolveInner']>;
+import type { SyntaxNode } from '../syntax/syntaxNode';
 
 /** The preview's callout marker: `[!type]`, an optional fold sign, then an optional title. */
 const CALLOUT_MARKER = /^\[!([a-z][\w-]*)\][+-]?(?:[ \t]+(.*?))?[ \t]*$/i;

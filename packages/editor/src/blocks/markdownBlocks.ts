@@ -1,8 +1,8 @@
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import type { EditorState, Text } from '@codemirror/state';
+import type { SyntaxNode } from '../syntax/syntaxNode';
 
 // @lezer/common is not a direct dependency, so the node type comes from the tree CodeMirror returns.
-type SyntaxNode = ReturnType<ReturnType<typeof syntaxTree>['resolveInner']>;
 
 export type BlockKind =
   | 'paragraph'

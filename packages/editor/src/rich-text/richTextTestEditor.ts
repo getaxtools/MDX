@@ -24,6 +24,7 @@ export function fakeRichTextRendering(overrides: Partial<RichTextRendering> = {}
       table: (rows, columns) => `Table, ${String(rows)} rows, ${String(columns)} columns`,
       properties: (count) => `${String(count)} properties`,
       diagram: (type) => `Diagram, ${type}`,
+      task: () => 'Task',
     },
     ...overrides,
   };

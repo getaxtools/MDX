@@ -1,9 +1,7 @@
-import type { syntaxTree } from '@codemirror/language';
 import { Facet, type EditorState, type Range } from '@codemirror/state';
 import type { Decoration, WidgetType } from '@codemirror/view';
 import type { VisibleRange } from './markupContext';
-
-type SyntaxNode = ReturnType<ReturnType<typeof syntaxTree>['resolveInner']>;
+import type { SyntaxNode } from '../syntax/syntaxNode';
 
 /** A block of the document a block provider may show as a widget. */
 export interface RichTextBlock {

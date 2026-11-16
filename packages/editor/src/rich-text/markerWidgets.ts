@@ -1,4 +1,5 @@
 import { WidgetType, type EditorView } from '@codemirror/view';
+import { renderingOf } from './renderedWidgets';
 import { BULLET_CLASS, TASK_CHECKBOX_CLASS } from './richTextClasses';
 
 /** The preview's disc, circle and square for the first, second and deeper bullet lists. */
@@ -47,7 +48,13 @@ export class TaskCheckboxWidget extends WidgetType {
     checkbox.setAttribute('aria-checked', String(this.isChecked));
     checkbox.setAttribute('tabindex', '-1');
     if (this.labelId !== undefined) checkbox.setAttribute('aria-labelledby', this.labelId);
+    else this.nameWithoutText(checkbox, view);
     return checkbox;
+  }
+
+  private nameWithoutText(checkbox: HTMLElement, view: EditorView): void {
+    const name = renderingOf(view)?.labels.task();
+    if (name !== undefined) checkbox.setAttribute('aria-label', name);
   }
 
   /** The editor handles clicks on it, so a click toggles the task instead of moving the caret. */

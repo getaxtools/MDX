@@ -1,4 +1,3 @@
-import type { syntaxTree } from '@codemirror/language';
 import { Decoration } from '@codemirror/view';
 import { FormulaWidget, ImageWidget, RuleWidget } from './blockWidgets';
 import { MAX_RENDERED_FORMULA_LENGTH } from './builtInBlockProviders';
@@ -12,8 +11,7 @@ import {
   headingClassOf,
 } from './richTextClasses';
 import { richTextRenderingFacet } from './richTextRendering';
-
-type SyntaxNode = ReturnType<ReturnType<typeof syntaxTree>['resolveInner']>;
+import type { SyntaxNode } from '../syntax/syntaxNode';
 
 export type NodeDecorator = (node: SyntaxNode, context: MarkupContext) => void;
 
@@ -109,7 +107,7 @@ function hasRendering(context: MarkupContext): boolean {
 /** `[text](address)` and `[text][label]` show only the styled text. */
 export function decorateLink(node: SyntaxNode, context: MarkupContext): void {
   const [opening, closing] = node.getChildren('LinkMark');
-  if (!opening || !closing || !hasLinkTarget(node)) return;
+  if (!opening || !closing || !hasLinkTarget(context.state, node)) return;
   decorate(context, LINK_TEXT, { from: opening.to, to: closing.from });
   if (isRevealed(context, node.from, node.to)) return;
   hide(context, node.from, opening.to);
@@ -126,7 +124,7 @@ export function decorateAutolink(node: SyntaxNode, context: MarkupContext): void
 }
 
 export function decorateBareUrl(node: SyntaxNode, context: MarkupContext): void {
-  if (isBareUrl(node)) decorate(context, LINK_TEXT, node);
+  if (isBareUrl(context.state, node)) decorate(context, LINK_TEXT, node);
 }
 
 /** `\*` shows the character without its backslash. */

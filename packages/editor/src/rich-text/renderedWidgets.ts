@@ -27,8 +27,10 @@ export function settleRenderedHtml(container: HTMLElement, view: EditorView): vo
     if (!link) return;
     // The webview must never navigate away from the app.
     event.preventDefault();
-    const address = link.getAttribute('href');
-    if (event.ctrlKey && address !== null) view.state.facet(linkOpener)?.(address);
+    const href = link.getAttribute('href');
+    // Already the preview's href; the angle brackets keep it one destination when it is read again.
+    if (event.ctrlKey && href !== null)
+      view.state.facet(linkOpener)?.({ destination: `<${href}>`, form: 'destination' });
   });
 }
 

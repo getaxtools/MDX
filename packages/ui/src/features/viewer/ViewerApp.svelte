@@ -17,7 +17,7 @@
     noteNameOf,
     notesSettingsOf,
   } from '@mdx/core';
-  import type { SectionAction, SourceEditor } from '@mdx/editor';
+  import type { SectionAction, SourceEditor, WrittenLink } from '@mdx/editor';
   import type { Translator } from '@mdx/i18n';
   import type { CodeHighlighter, OutlineEntry, RichBlockRenderer } from '@mdx/renderer';
   import { untrack } from 'svelte';
@@ -243,8 +243,8 @@
     headingRequest = { entry, number: (headingRequest?.number ?? 0) + 1 };
   }
 
-  function openEditorLink(address: string) {
-    openLinkFromEditor(address, editedDocument?.outline ?? [], {
+  function openEditorLink(link: WrittenLink) {
+    openLinkFromEditor(link, editedDocument?.outline ?? [], {
       openLink: (link) => void controller.openLink(link),
       goToHeading,
     });

@@ -1,5 +1,5 @@
 import { ViewerSession, type Typography } from '@mdx/core';
-import type { SourceEditor } from '@mdx/editor';
+import type { SourceEditor, WrittenLink } from '@mdx/editor';
 import { createTranslator } from '@mdx/i18n';
 import {
   InMemoryAppState,
@@ -35,7 +35,7 @@ function renderPane() {
 
 interface RichTextPaneOptions {
   readonly typography?: Typography;
-  readonly onOpenLink?: (address: string) => void;
+  readonly onOpenLink?: (link: WrittenLink) => void;
 }
 
 /** Opens the pane in Rich text, through the editor's own switch, with the caret on a zero-based line. */
@@ -65,7 +65,8 @@ async function renderRichText(text: string, caretLine: number, options: RichText
 
 const LINKS_PATH = 'C:\\Docs\\Links.md';
 const NOTES_PATH = 'C:\\Docs\\Notes.md';
-const LINKS_TEXT = 'See [the notes](Notes.md) or [the site](https://example.com).\n\nEnd';
+const LINKS_TEXT =
+  'See [the notes](Notes.md), [the site](https://example.com) or [log in](https://аpple.com/login).\n\nEnd';
 
 /** The pane in Rich text, its links opened through the app's link activation for the open Links.md. */
 async function renderPaneOpeningLinks() {
@@ -86,8 +87,8 @@ async function renderPaneOpeningLinks() {
   await controller.start();
   let latestSnapshot: ViewerSnapshot | undefined;
   controller.subscribe((snapshot) => (latestSnapshot = snapshot));
-  const onOpenLink = (address: string) =>
-    openLinkFromEditor(address, [], {
+  const onOpenLink = (link: WrittenLink) =>
+    openLinkFromEditor(link, [], {
       openLink: (link) => void controller.openLink(link),
       goToHeading: () => undefined,
     });
@@ -270,6 +271,14 @@ describe('SourceEditorPane', () => {
 
       expect(snapshot()?.externalLinkRequest).toBe('https://example.com');
       expect(links.openedExternalLinks).toEqual([]);
+    });
+
+    it('the confirmation names the address as the preview links it', async () => {
+      const { textBox, snapshot } = await renderPaneOpeningLinks();
+
+      await fireEvent.mouseDown(within(textBox).getByText('log in'), { ctrlKey: true, button: 0 });
+
+      expect(snapshot()?.externalLinkRequest).toBe('https://xn--pple-43d.com/login');
     });
 
     it('plain click places the caret', async () => {

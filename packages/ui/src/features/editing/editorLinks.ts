@@ -1,4 +1,5 @@
-import { linkKindOf, type OutlineEntry } from '@mdx/renderer';
+import type { WrittenLink } from '@mdx/editor';
+import { linkKindOf, previewLinkHref, type OutlineEntry } from '@mdx/renderer';
 import type { DocumentLink } from '../document-view/DocumentLink';
 import { linkedHeadingIds } from '../document-view/findLinkedHeading';
 
@@ -7,12 +8,16 @@ export type EditorLinkTarget =
   | { readonly kind: 'document' | 'external'; readonly link: DocumentLink }
   | { readonly kind: 'heading'; readonly fragment: string };
 
-/** Classifies an address with the preview's own rules, so the editor opens exactly what the preview would. */
-export function editorLinkTarget(address: string): EditorLinkTarget | undefined {
-  const kind = linkKindOf(address);
-  if (kind === 'anchor') return { kind: 'heading', fragment: address.slice(1) };
-  if (kind === undefined) return undefined;
-  return { kind, link: { kind, href: address } };
+/**
+ * Turns a link as written into the href the preview gives it and classifies that href with the
+ * preview's rules, so the editor opens exactly what the preview would.
+ */
+export function editorLinkTarget(written: WrittenLink): EditorLinkTarget | undefined {
+  const href = previewLinkHref(written);
+  const kind = href === undefined ? undefined : linkKindOf(href);
+  if (href === undefined || kind === undefined) return undefined;
+  if (kind === 'anchor') return { kind: 'heading', fragment: href.slice(1) };
+  return { kind, link: { kind, href } };
 }
 
 export interface EditorLinkActions {
@@ -22,11 +27,11 @@ export interface EditorLinkActions {
 
 /** Opens a link from the editor where the preview's link goes: a document, the browser after asking, or a heading. */
 export function openLinkFromEditor(
-  address: string,
+  written: WrittenLink,
   outline: readonly OutlineEntry[],
   actions: EditorLinkActions,
 ): void {
-  const target = editorLinkTarget(address);
+  const target = editorLinkTarget(written);
   if (target?.kind !== 'heading') {
     if (target) actions.openLink(target.link);
     return;

@@ -5,7 +5,7 @@ import { ensureSyntaxTree } from '@codemirror/language';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createSourceEditor, type SourceEditor, type SourceEditorOptions } from '../createSourceEditor';
 import { markdownSyntax } from '../syntax/markdownSyntax';
-import { linkAddressAt } from './linkTargets';
+import { linkAt, type WrittenLink } from './linkTargets';
 
 let editor: SourceEditor | undefined;
 
@@ -29,10 +29,10 @@ function openRichText(text: string, options: Partial<SourceEditorOptions> = {}) 
   return { editor, view, onOpenLink };
 }
 
-function addressAt(text: string, word: string): string | undefined {
+function linkAtWord(text: string, word: string): WrittenLink | undefined {
   const state = EditorState.create({ doc: text, extensions: [markdownSyntax()] });
   ensureSyntaxTree(state, text.length, 1000);
-  return linkAddressAt(state, text.indexOf(word));
+  return linkAt(state, text.indexOf(word));
 }
 
 function ctrlClick(element: Element | null | undefined): void {
@@ -54,18 +54,37 @@ describe('opening links from Rich text', () => {
 
     ctrlClick(view.contentDOM.querySelector('.cm-rich-link'));
 
-    expect(onOpenLink).toHaveBeenCalledWith('guide.md');
+    expect(onOpenLink).toHaveBeenCalledWith({ destination: 'guide.md', form: 'destination' });
     expect(view.state.selection.ranges).toHaveLength(1);
     expect(view.state.selection.main.head).toBe(view.state.doc.length);
   });
 
-  it('Open Link opens the link at the caret', () => {
+  it('Ctrl+click while an input method composes opens nothing', () => {
+    const { view, onOpenLink } = openRichText('Read [the guide](guide.md) first.\n\nEnd');
+    view.dispatch({ selection: EditorSelection.cursor(view.state.doc.length) });
+
+    // The click goes on to CodeMirror, which measures text positions that jsdom does not lay out.
+    Object.defineProperty(Range.prototype, 'getClientRects', { configurable: true, value: () => [] });
+    Object.defineProperty(Range.prototype, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => new DOMRect(0, 0, 0, 0),
+    });
+
+    view.contentDOM.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+    ctrlClick(view.contentDOM.querySelector('.cm-rich-link'));
+    Reflect.deleteProperty(Range.prototype, 'getClientRects');
+    Reflect.deleteProperty(Range.prototype, 'getBoundingClientRect');
+
+    expect(onOpenLink).not.toHaveBeenCalled();
+  });
+
+  it('Open Link opens the link at the caret, its destination as written', () => {
     const { editor: opened, view, onOpenLink } = openRichText('Read [the guide](<my guide.md>) first.');
     view.dispatch({ selection: EditorSelection.cursor('Read [the'.length) });
 
     opened.run('openLink');
 
-    expect(onOpenLink).toHaveBeenCalledWith('my guide.md');
+    expect(onOpenLink).toHaveBeenCalledWith({ destination: '<my guide.md>', form: 'destination' });
   });
 
   it('reports whether the caret is in a link, in Rich text only', () => {
@@ -82,31 +101,50 @@ describe('opening links from Rich text', () => {
     expect(onCaretInLinkChange.mock.calls).toEqual([[true], [false], [true], [false]]);
   });
 
-  it('a reference link opens the address of its definition', () => {
+  it('a reference link opens the destination of its definition', () => {
     const text =
-      'See [the plan][Next Steps] and [the plan again][].\n\n[next   steps]: plan.md\n[the plan again]: <again.md>';
+      'See [the plan][Next Steps], [the plan again][] and [guide].\n\n[next   steps]: plan.md\n[the plan again]: <again.md>\n[GUIDE]: guide.md';
 
-    expect(addressAt(text, 'plan]')).toBe('plan.md');
-    expect(addressAt(text, 'again]')).toBe('again.md');
+    expect(linkAtWord(text, 'plan]')).toEqual({ destination: 'plan.md', form: 'destination' });
+    expect(linkAtWord(text, 'again]')).toEqual({ destination: '<again.md>', form: 'destination' });
+    expect(linkAtWord(text, 'guide]')).toEqual({ destination: 'guide.md', form: 'destination' });
   });
 
-  it('autolinks and bare addresses open as the preview links them', () => {
-    const text = 'Mail <someone@example.com>, visit www.example.com or <https://example.com/a>.';
+  it('autolinks and bare addresses are given in the form the preview links them from', () => {
+    const text =
+      'Mail <someone@example.com>, visit https://medium.com/@author or <https://example.com/a>, not www.example.com.';
 
-    expect(addressAt(text, 'someone')).toBe('mailto:someone@example.com');
-    expect(addressAt(text, 'www.')).toBe('http://www.example.com');
-    expect(addressAt(text, 'https')).toBe('https://example.com/a');
+    expect(linkAtWord(text, 'someone')).toEqual({ destination: 'someone@example.com', form: 'autolink' });
+    expect(linkAtWord(text, 'medium')).toEqual({ destination: 'https://medium.com/@author', form: 'text' });
+    expect(linkAtWord(text, 'www.')).toBeUndefined();
+    expect(linkAtWord(text, 'example.com/a')).toEqual({
+      destination: 'https://example.com/a',
+      form: 'autolink',
+    });
   });
 
-  it('an escaped character in an address opens without its backslash', () => {
-    expect(addressAt('A [file](my\\_notes.md).', 'file')).toBe('my_notes.md');
+  it('a destination keeps its escapes and entities for the app to read as the preview does', () => {
+    expect(linkAtWord('A [file](caf&eacute;\\_notes.md).', 'file')?.destination).toBe(
+      'caf&eacute;\\_notes.md',
+    );
   });
 
-  it('text outside links and a lone bracketed word have no address', () => {
-    const text = 'Press [Enter] in ![a picture](picture.png).';
+  it('text outside links, an undefined reference and a footnote have no link', () => {
+    const text = 'Press [Enter] in ![a picture](picture.png) and [^1].\n\n[^1]: A note.';
 
-    expect(addressAt(text, 'Press')).toBeUndefined();
-    expect(addressAt(text, 'Enter')).toBeUndefined();
-    expect(addressAt(text, 'picture]')).toBeUndefined();
+    expect(linkAtWord(text, 'Press')).toBeUndefined();
+    expect(linkAtWord(text, 'Enter')).toBeUndefined();
+    expect(linkAtWord(text, 'picture]')).toBeUndefined();
+    expect(linkAtWord(text, '^1]')).toBeUndefined();
+  });
+
+  it('a defined shortcut reference is styled as a link, an undefined one keeps its brackets', () => {
+    const { view } = openRichText('See [guide] and [nothing].\n\n[guide]: guide.md\n\nEnd');
+    view.dispatch({ selection: EditorSelection.cursor(view.state.doc.length) });
+
+    const firstLine = view.contentDOM.querySelector('.cm-line');
+
+    expect(firstLine?.textContent).toBe('See guide and [nothing].');
+    expect(firstLine?.querySelector('.cm-rich-link')?.textContent).toBe('guide');
   });
 });

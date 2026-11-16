@@ -6,7 +6,7 @@
   import ContextMenu from '../../components/ContextMenu.svelte';
   import { isContextMenuKey, type ContextMenuRequest } from '../../components/ContextMenuItem';
   import { editorMenuItems, type EditorMenuChoice } from './blockMenu';
-  import type { SourceEditor, WikiLinkSuggester } from '@mdx/editor';
+  import type { SourceEditor, WikiLinkSuggester, WrittenLink } from '@mdx/editor';
   import type { Translator } from '@mdx/i18n';
   import { untrack } from 'svelte';
   import type { EditorRequest } from './editingCommands';
@@ -33,8 +33,8 @@
     /** Suggests notes after `[[` in a note of a Notes workspace. */
     wikiLinks?: WikiLinkSuggester | undefined;
     onChange: (text: string) => void;
-    /** Opens a link's address the way the preview opens links. */
-    onOpenLink?: (address: string) => void;
+    /** Opens a link, as written, the way the preview opens links. */
+    onOpenLink?: (link: WrittenLink) => void;
     onCaretInLinkChange?: (isCaretInLink: boolean) => void;
     onScroll?: (scrollRatio: number) => void;
     /** Called once the editor has loaded, for example to keep a preview beside it in step. */
@@ -125,7 +125,7 @@
         ...(onPastePicture ? { onPastePicture } : {}),
         onCursorCountChange: (count) => onCursorCountChange(count),
         onSelectedTextChange: (selectedText) => onSelectedTextChange(selectedText),
-        onOpenLink: (address) => onOpenLink(address),
+        onOpenLink: (link) => onOpenLink(link),
         onCaretInLinkChange: reportCaretInLink,
         typography: untrack(() => typography),
         snippets: untrack(() => editorSnippets),

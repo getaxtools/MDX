@@ -45,7 +45,7 @@ import { editorTheme, markdownHighlightStyle } from './editorTheme';
 import { markdownSyntax } from './syntax/markdownSyntax';
 import { isComposing } from './rich-text/compositionHold';
 import { linkOpener, openLinkAtCaret } from './rich-text/linkOpening';
-import { isInLink } from './rich-text/linkTargets';
+import { isInLink, type WrittenLink } from './rich-text/linkTargets';
 import { richTextProvidersFacet, type RichTextProviders } from './rich-text/richTextProviders';
 import { richTextRenderingFacet, type RichTextRendering } from './rich-text/richTextRendering';
 import {
@@ -93,8 +93,8 @@ export interface SourceEditorOptions {
   readonly editingMode?: EditingMode;
   /** Called after the editor switched to another mode. */
   readonly onEditingModeChange?: (mode: EditingMode) => void;
-  /** Opens a link's address, written as in the document, the way the preview opens links. */
-  readonly onOpenLink?: (address: string) => void;
+  /** Opens a link, given as written in the document, the way the preview opens links. */
+  readonly onOpenLink?: (link: WrittenLink) => void;
   /** Whether the caret is in a link in Rich text, reported when that changes, so Open Link can be offered. */
   readonly onCaretInLinkChange?: (isCaretInLink: boolean) => void;
   /** The Document style, whose fonts Rich text uses. */

@@ -1,4 +1,3 @@
-import type { syntaxTree } from '@codemirror/language';
 import { Decoration } from '@codemirror/view';
 import { decorateCallout } from './calloutDecorator';
 import { decorate, decorateLines, hide, isRevealed, type MarkupContext } from './markupContext';
@@ -10,8 +9,7 @@ import {
   QUOTE_CLASS,
   quoteDepthClassOf,
 } from './richTextClasses';
-
-type SyntaxNode = ReturnType<ReturnType<typeof syntaxTree>['resolveInner']>;
+import type { SyntaxNode } from '../syntax/syntaxNode';
 
 const BULLET_STYLES = 3;
 const BULLETS = Array.from({ length: BULLET_STYLES }, (_, index) =>

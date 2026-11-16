@@ -39,3 +39,4 @@ export {
   type RichBlockRenderOptions,
 } from './rich-blocks/createRichBlockRenderer';
 export type { NotesRendering } from './plugins/wikiLinksPlugin';
+export { previewLinkHref, type WrittenLink, type WrittenLinkForm } from './links/previewLinkHref';

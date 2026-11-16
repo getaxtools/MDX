@@ -33,28 +33,42 @@ export function toggleTasksAtCaret(view: EditorView): boolean {
   return true;
 }
 
+/** Every task marker on a line a selection range covers, each line once. */
 function taskMarkersOnSelectedLines(state: EditorState): number[] {
-  const lineStarts = new Set(state.selection.ranges.map((range) => state.doc.lineAt(range.head).from));
-  const markers: number[] = [];
+  const markers = new Set<number>();
   const tree = syntaxTree(state);
-  for (const lineStart of lineStarts) {
-    const line = state.doc.lineAt(lineStart);
+  for (const range of state.selection.ranges) {
+    const from = state.doc.lineAt(range.from).from;
+    const to = state.doc.lineAt(range.to).to;
     tree.iterate({
-      from: line.from,
-      to: line.to,
+      from,
+      to,
       enter: (node) => {
-        if (node.name === 'TaskMarker' && node.from >= line.from) markers.push(node.from);
+        if (node.name === 'TaskMarker' && node.from >= from) markers.add(node.from);
       },
     });
   }
-  return markers;
+  return [...markers].sort((first, second) => first - second);
 }
 
-/** A click on a task's checkbox toggles it and leaves the caret where it was. */
-export function toggleClickedTask(event: MouseEvent, view: EditorView): boolean {
-  if (event.button !== MAIN_BUTTON || isComposing(view) || !(event.target instanceof Element)) return false;
+function clickedCheckbox(event: MouseEvent, view: EditorView): Element | undefined {
+  if (event.button !== MAIN_BUTTON || !(event.target instanceof Element)) return undefined;
   const checkbox = event.target.closest(`.${TASK_CHECKBOX_CLASS}`);
-  if (!checkbox || !view.contentDOM.contains(checkbox)) return false;
+  return checkbox && view.contentDOM.contains(checkbox) ? checkbox : undefined;
+}
+
+/** Pressing on a checkbox leaves the caret where it was; the click that follows toggles the task. */
+export function keepCaretOnCheckbox(event: MouseEvent, view: EditorView): boolean {
+  return clickedCheckbox(event, view) !== undefined;
+}
+
+/**
+ * A click on a task's checkbox toggles it. Assistive technology activates the checkbox with a click
+ * alone, so the toggle happens on the click rather than on the press.
+ */
+export function toggleClickedTask(event: MouseEvent, view: EditorView): boolean {
+  const checkbox = clickedCheckbox(event, view);
+  if (!checkbox || isComposing(view)) return false;
   const spec = taskToggle(view.state, view.posAtDOM(checkbox));
   if (!spec) return false;
   view.dispatch(spec);

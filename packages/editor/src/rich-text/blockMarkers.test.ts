@@ -1,6 +1,7 @@
 import { EditorSelection } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { parseWholeDocument } from './parseWholeDocument';
+import { openRichTextEditor } from './richTextTestEditor';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createSourceEditor, type SourceEditor } from '../createSourceEditor';
 
@@ -36,6 +37,12 @@ function pressCtrlEnter(view: EditorView, init: KeyboardEventInit = {}): void {
   view.contentDOM.dispatchEvent(
     new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true, ...init }),
   );
+}
+
+/** A pointer click: the press, then the click. */
+function clickCheckbox(checkbox: HTMLElement | undefined): void {
+  checkbox?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
+  checkbox?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
 }
 
 function checkboxes(view: EditorView): HTMLElement[] {
@@ -112,10 +119,43 @@ describe('Rich text list, quote and task markers', () => {
     placeCaretAtEnd(view);
     const selectionBefore = view.state.selection;
 
-    checkboxes(view)[0]?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+    clickCheckbox(checkboxes(view)[0]);
 
     expect(view.state.doc.toString()).toBe('- [x] Pay rent\n\nEnd');
     expect(view.state.selection.eq(selectionBefore)).toBe(true);
+  });
+
+  it('a click alone toggles once, as assistive technology sends it', () => {
+    const { view } = openRichText('- [ ] Pay rent\n\nEnd');
+    placeCaretAtEnd(view);
+
+    checkboxes(view)[0]?.dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+    );
+
+    expect(view.state.doc.toString()).toBe('- [x] Pay rent\n\nEnd');
+  });
+
+  it('Ctrl+Enter toggles every task line in the selection as one undo step', () => {
+    const { view } = openRichText('- [ ] One\n- [x] Two\n- [ ] Three\n\nEnd');
+    view.dispatch({ selection: EditorSelection.single(3, '- [ ] One\n- [x] Tw'.length) });
+
+    pressCtrlEnter(view);
+    const toggled = view.state.doc.toString();
+    editor?.run('undo');
+
+    expect(toggled).toBe('- [x] One\n- [ ] Two\n- [ ] Three\n\nEnd');
+    expect(view.state.doc.toString()).toBe('- [ ] One\n- [x] Two\n- [ ] Three\n\nEnd');
+  });
+
+  it('a task without text has a checkbox named Task', () => {
+    const opened = openRichTextEditor('- [ ] \n\nEnd');
+
+    const checkbox = opened.view.contentDOM.querySelector('[role="checkbox"]');
+
+    expect(checkbox?.getAttribute('aria-label')).toBe('Task');
+    expect(checkbox?.hasAttribute('aria-labelledby')).toBe(false);
+    opened.close();
   });
 
   it('one undo puts a tick back', () => {
@@ -123,7 +163,7 @@ describe('Rich text list, quote and task markers', () => {
     placeCaretAtEnd(view);
     view.dispatch({ changes: { from: view.state.doc.length, insert: '!' }, userEvent: 'input.type' });
 
-    checkboxes(view)[0]?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+    clickCheckbox(checkboxes(view)[0]);
     editor?.run('undo');
 
     expect(view.state.doc.toString()).toBe('- [ ] Pay rent\n\nEnd!');

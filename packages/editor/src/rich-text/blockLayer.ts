@@ -9,8 +9,7 @@ import {
   type RichTextBlock,
   type RichTextBlockProvider,
 } from './richTextProviders';
-
-type SyntaxNode = ReturnType<ReturnType<typeof syntaxTree>['resolveInner']>;
+import type { SyntaxNode } from '../syntax/syntaxNode';
 
 interface Span {
   readonly from: number;
