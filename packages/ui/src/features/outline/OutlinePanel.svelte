@@ -1,8 +1,9 @@
 <script lang="ts">
   import type { SectionAction } from '@mdx/editor';
-  import type { Translator } from '@mdx/i18n';
-  import type { OutlineEntry } from '@mdx/renderer';
+  import type { MessageKey, Translator } from '@mdx/i18n';
+  import type { OutlineEntry, OutlineRole } from '@mdx/renderer';
   import { logicalArrowKey } from '../../components/textDirection';
+  import { hasRoles, markedHeadingId, shownOutlineEntries } from './outlineRoles';
 
   interface Props {
     /** Undefined while no document is open. */
@@ -33,27 +34,47 @@
     onChangeSection(entry, action);
   }
 
+  const ROLE_KEYS: Readonly<Record<OutlineRole, MessageKey>> = {
+    deltaSection: 'specViewer.outline.role.deltaSection',
+    requirement: 'specViewer.outline.role.requirement',
+    scenario: 'specViewer.outline.role.scenario',
+  };
   const INDENT_PER_LEVEL_REM = 0.75;
-  const shallowestLevel = $derived(Math.min(...(outline ?? []).map((entry) => entry.level)));
+  let isRequirementsOnly = $state(false);
+  const isSpecOutline = $derived(hasRoles(outline ?? []));
+  const shownEntries = $derived(shownOutlineEntries(outline ?? [], isSpecOutline && isRequirementsOnly));
+  const markedId = $derived(
+    markedHeadingId(outline ?? [], currentHeadingId, isSpecOutline && isRequirementsOnly),
+  );
+  const shallowestLevel = $derived(Math.min(...shownEntries.map((entry) => entry.level)));
 </script>
 
 <nav class="outline" data-focus-region aria-labelledby="outline-heading">
   <h2 id="outline-heading">{translator.translate('outline.title')}</h2>
+  {#if isSpecOutline}
+    <label class="filter">
+      <input type="checkbox" bind:checked={isRequirementsOnly} />
+      {translator.translate('specViewer.outline.requirementsOnly')}
+    </label>
+  {/if}
   {#if outline === undefined}
     <p class="empty-state">{translator.translate('outline.noDocument')}</p>
   {:else if outline.length === 0}
     <p class="empty-state">{translator.translate('outline.emptyState')}</p>
   {:else}
     <ul>
-      {#each outline as entry (entry.id)}
+      {#each shownEntries as entry (entry.id)}
         <li style:padding-inline-start="{(entry.level - shallowestLevel) * INDENT_PER_LEVEL_REM}rem">
           <button
             title={entry.text}
-            aria-current={entry.id === currentHeadingId ? 'location' : undefined}
+            aria-current={entry.id === markedId ? 'location' : undefined}
             aria-keyshortcuts="Alt+Shift+ArrowUp Alt+Shift+ArrowDown Alt+Shift+ArrowLeft Alt+Shift+ArrowRight"
             onclick={() => onSelectHeading(entry)}
             onkeydown={(event) => changeSectionWithKeys(event, entry)}
           >
+            {#if entry.role}<span class="role" aria-hidden="true"
+                >{translator.translate(ROLE_KEYS[entry.role])}</span
+              >{/if}
             {entry.text}
           </button>
         </li>
@@ -63,6 +84,23 @@
 </nav>
 
 <style>
+  .filter {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin: 0 var(--space-2) var(--space-2);
+    font-size: var(--text-size-small);
+  }
+
+  .role {
+    margin-inline-end: 0.4em;
+    padding: 0 0.3em;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-small);
+    color: var(--color-text-secondary);
+    font-size: 0.8em;
+  }
+
   .outline {
     min-height: 0;
     padding: var(--space-2);

@@ -88,3 +88,70 @@ export function dashboardRowsOf(dashboard: ShownDashboard, translator: Translato
     };
   });
 }
+
+export interface FeatureRow {
+  readonly name: string;
+  readonly folder: string;
+  readonly number: string;
+  readonly status: string;
+  readonly tasks: string;
+  readonly clarifications: string;
+  readonly isCurrent: boolean;
+}
+
+/** One row per feature: its number, status, task completion and open clarifications. */
+export function featureRowsOf(dashboard: ShownDashboard, translator: Translator): FeatureRow[] {
+  return dashboard.project.features.map((feature) => {
+    const progress = feature.progress;
+    return {
+      name: feature.name,
+      folder: feature.folder,
+      number: feature.number === undefined ? (feature.timestamp ?? '') : (feature.name.split('-')[0] ?? ''),
+      status: feature.status ?? '',
+      tasks:
+        progress && progress.total > 0
+          ? translator.translate('specViewer.change.progress', {
+              current: progress.done,
+              total: progress.total,
+            })
+          : translator.translate('specViewer.dashboard.noTaskCount'),
+      clarifications: String(feature.clarifications.length),
+      isCurrent: feature.isCurrent,
+    };
+  });
+}
+
+export interface FolderSpecRow {
+  readonly name: string;
+  readonly kind: string;
+  /** The documents not written yet, such as "Design". */
+  readonly missing: string;
+  readonly tasks: string;
+}
+
+/** One row per spec of a requirements, design and tasks folder. */
+export function folderSpecRowsOf(dashboard: ShownDashboard, translator: Translator): FolderSpecRow[] {
+  return dashboard.project.folderSpecs.map((spec) => {
+    const progress = spec.progress;
+    const missing = [
+      spec.requirements === undefined ? translator.translate('specViewer.document.requirements') : undefined,
+      spec.design === undefined ? translator.translate('specViewer.document.design') : undefined,
+      spec.tasks === undefined ? translator.translate('specViewer.document.tasks') : undefined,
+    ].filter((name) => name !== undefined);
+    return {
+      name: spec.name,
+      kind: translator.translate(
+        spec.isBugfix ? 'specViewer.folderSpec.bugfix' : 'specViewer.folderSpec.feature',
+      ),
+      missing:
+        missing.length === 0 ? translator.translate('specViewer.dashboard.noProblems') : missing.join(', '),
+      tasks:
+        progress && progress.total > 0
+          ? translator.translate('specViewer.change.progress', {
+              current: progress.done,
+              total: progress.total,
+            })
+          : translator.translate('specViewer.dashboard.noTaskCount'),
+    };
+  });
+}

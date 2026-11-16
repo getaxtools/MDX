@@ -16,6 +16,8 @@ const MAX_CONFIGURATION_FILE_BYTES: u64 = 64 * 1024;
 const MAX_CONFIGURATION_TEXT_BYTES: usize = 4 * 1024 * 1024;
 const CONFIGURATION_EXTENSIONS: [&str; 3] = ["yaml", "yml", "json"];
 const NEVER_ENTERED_FOLDERS: [&str; 3] = ["node_modules", ".git", "target"];
+const GIT_FOLDER: &str = ".git";
+const GIT_HEAD_FILE: &str = "HEAD";
 
 /// Where spec, plan and decision documents live in the layouts the spec viewer reads.
 pub const SPEC_LOCATIONS: [&str; 10] = [
@@ -103,6 +105,7 @@ fn scan_granted_project_within(
     let start: Vec<PatternState<'_>> = patterns.iter().map(ScanPattern::start).collect();
     let mut scan = ProjectScan::new(access, limits);
     scan.walk(&ScanPlace::root(root_location.path()), &start);
+    scan.add_git_head(&root_location.path());
     Ok(SpecProjectManifest {
         root: root_location,
         folders: scan.folders,
@@ -254,6 +257,29 @@ impl<'access> ProjectScan<'access> {
         self.links.push(ManifestLink {
             path: link.relative.clone(),
             is_followed,
+        });
+    }
+
+    /// The branch a feature-numbered project is on, read from a plain `.git` folder of the root.
+    /// A worktree's `.git` file points elsewhere and is not followed.
+    fn add_git_head(&mut self, root: &Path) {
+        let git = root.join(GIT_FOLDER);
+        let is_git_folder = fs::symlink_metadata(&git).is_ok_and(|metadata| metadata.is_dir());
+        let head = git.join(GIT_HEAD_FILE);
+        let Ok(metadata) = fs::symlink_metadata(&head) else {
+            return;
+        };
+        if !is_git_folder || !metadata.is_file() || metadata.len() > MAX_CONFIGURATION_FILE_BYTES {
+            return;
+        }
+        let Ok(bytes) = fs::read(&head) else {
+            return;
+        };
+        self.files.push(ManifestFile {
+            path: format!("{GIT_FOLDER}/{GIT_HEAD_FILE}"),
+            size_bytes: metadata.len(),
+            modified_at_ms: modified_at_ms(&metadata),
+            text: Some(decode_document_bytes(&bytes).text),
         });
     }
 
@@ -616,6 +642,40 @@ pub(super) mod tests {
             }]
         );
         assert_eq!(file_paths(&manifest), vec!["openspec/specs/tabs/spec.md"]);
+    }
+
+    #[test]
+    fn reads_the_branch_from_the_git_folder_of_the_root() {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir(root.path().join(".git")).unwrap();
+        fs::write(
+            root.path().join(".git").join("HEAD"),
+            "ref: refs/heads/002-sharing\n",
+        )
+        .unwrap();
+
+        let manifest = scan(root.path());
+
+        let head = manifest
+            .files
+            .iter()
+            .find(|file| file.path == ".git/HEAD")
+            .unwrap();
+        assert_eq!(head.text.as_deref(), Some("ref: refs/heads/002-sharing\n"));
+    }
+
+    #[test]
+    fn ignores_the_git_file_of_a_worktree() {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(
+            root.path().join(".git"),
+            "gitdir: C:/elsewhere/.git/worktrees/a\n",
+        )
+        .unwrap();
+
+        let manifest = scan(root.path());
+
+        assert!(manifest.files.is_empty());
     }
 
     #[test]

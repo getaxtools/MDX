@@ -15,6 +15,14 @@ export interface OpenSpecChangeCommand {
   readonly changeFolder: string;
 }
 
+/** Opens the page of a feature of a feature-numbered project in a tab. */
+export interface OpenSpecFeatureCommand {
+  readonly kind: 'openSpecFeature';
+  readonly rootKey: string;
+  /** The feature folder relative to the root. */
+  readonly featureFolder: string;
+}
+
 /** Opens the document of a structural finding at the heading that holds its line. */
 export interface OpenSpecFindingCommand {
   readonly kind: 'openSpecFinding';
@@ -23,13 +31,28 @@ export interface OpenSpecFindingCommand {
   readonly line?: number | undefined;
 }
 
+/** Opens "Spec after this change" for one capability a change touches. */
+export interface OpenSpecPreviewCommand {
+  readonly kind: 'openSpecPreview';
+  readonly rootKey: string;
+  readonly changeFolder: string;
+  readonly capability: string;
+}
+
 /** Commands of the Spec viewer kind, sent by its sidebar and pages. */
-export type SpecViewerCommand = OpenSpecDashboardCommand | OpenSpecChangeCommand | OpenSpecFindingCommand;
+export type SpecViewerCommand =
+  | OpenSpecDashboardCommand
+  | OpenSpecChangeCommand
+  | OpenSpecFeatureCommand
+  | OpenSpecFindingCommand
+  | OpenSpecPreviewCommand;
 
 const SPEC_VIEWER_COMMAND_KINDS: ReadonlySet<string> = new Set([
   'openSpecDashboard',
   'openSpecChange',
+  'openSpecFeature',
   'openSpecFinding',
+  'openSpecPreview',
 ]);
 
 export function isSpecViewerCommand(command: { readonly kind: string }): command is SpecViewerCommand {

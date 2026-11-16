@@ -54,16 +54,26 @@ function pageWith(findings: readonly StructuralFinding[]): ShownChangePage {
 function renderPage(findings: readonly StructuralFinding[]) {
   const onOpenDocument = vi.fn<(documentPath: string) => void>();
   const onOpenFinding = vi.fn<(documentPath: string, line: number | undefined) => void>();
+  const onOpenPreview = vi.fn<(capability: string) => void>();
   render(SpecChangePage, {
     page: pageWith(findings),
     translator: createTranslator(),
     onOpenDocument,
     onOpenFinding,
+    onOpenPreview,
   });
-  return { onOpenDocument, onOpenFinding };
+  return { onOpenDocument, onOpenFinding, onOpenPreview };
 }
 
 describe('SpecChangePage', () => {
+  it('offers the spec after this change for each capability it touches', async () => {
+    const { onOpenPreview } = renderPage([]);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Spec after this change: tabs' }));
+
+    expect(onOpenPreview).toHaveBeenCalledWith('tabs');
+  });
+
   it('shows the creation day, the schema and the documents, marking a design not written', async () => {
     const { onOpenDocument } = renderPage([]);
 

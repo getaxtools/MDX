@@ -8,9 +8,16 @@
     translator: Translator;
     onOpenDocument: (documentPath: string) => void;
     onOpenFinding: (documentPath: string, line: number | undefined) => void;
+    onOpenPreview?: (capability: string) => void;
   }
 
-  const { page, translator, onOpenDocument, onOpenFinding }: Props = $props();
+  const {
+    page,
+    translator,
+    onOpenDocument,
+    onOpenFinding,
+    onOpenPreview = () => undefined,
+  }: Props = $props();
 
   interface DocumentEntry {
     readonly label: string;
@@ -55,7 +62,9 @@
   </li>
 {/snippet}
 
-<article class="change-page" aria-labelledby="spec-change-heading">
+<!-- Focusable so keyboard users can scroll a long page. -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<article tabindex="0" class="change-page" aria-labelledby="spec-change-heading">
   <h1 id="spec-change-heading">{change.name}</h1>
   <dl>
     <dt>{translator.translate('specViewer.changePage.created')}</dt>
@@ -84,6 +93,18 @@
       {#each change.otherDocuments ?? [] as other (other.path)}
         <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a snippet is not a value -->
         {@render documentItem({ label: other.name, path: other.path })}
+      {/each}
+    </ul>
+  {/if}
+  {#if change.documents.deltas.length > 0}
+    <h2>{translator.translate('specViewer.preview.heading')}</h2>
+    <ul class="documents">
+      {#each change.documents.deltas as delta (delta.path)}
+        <li>
+          <button class="link" onclick={() => onOpenPreview(delta.name)}>
+            {translator.translate('specViewer.preview.open', { name: delta.name })}
+          </button>
+        </li>
       {/each}
     </ul>
   {/if}

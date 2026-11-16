@@ -17,6 +17,7 @@
     onOpenDocument: (documentPath: string) => void;
     onOpenDashboard?: (rootKey: string, folder: string) => void;
     onOpenChange?: (rootKey: string, changeFolder: string) => void;
+    onOpenFeature?: (rootKey: string, featureFolder: string) => void;
     activeDocumentKey?: string | undefined;
   }
 
@@ -29,6 +30,7 @@
     onOpenDocument,
     onOpenDashboard = () => undefined,
     onOpenChange = () => undefined,
+    onOpenFeature = () => undefined,
     activeDocumentKey,
   }: Props = $props();
 
@@ -56,6 +58,7 @@
   function chooseRow(node: SpecTreeNode) {
     if (node.dashboard) onOpenDashboard(node.dashboard.rootKey, node.dashboard.folder);
     else if (node.changePage) onOpenChange(node.changePage.rootKey, node.changePage.changeFolder);
+    else if (node.featurePage) onOpenFeature(node.featurePage.rootKey, node.featurePage.featureFolder);
     else if (node.documentPath !== undefined) onOpenDocument(node.documentPath);
     else if (node.children.length > 0) toggleRow(node);
   }

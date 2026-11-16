@@ -102,4 +102,24 @@ describe('a Spec viewer workspace', () => {
       .waitForExist();
     expect(await findAccessibilityViolations(app.browser)).toEqual([]);
   });
+
+  it('previews the spec after a change and labels the delta sections of the delta', async () => {
+    await (await mainWindow.treeItem(SECTION_TITLE, 'add-pins')).click();
+    await mainWindow.waitForActiveTab('Change: add-pins');
+
+    await app.browser.$('button=Spec after this change: tabs').click();
+
+    await mainWindow.waitForActiveTab('After add-pins: tabs');
+    const added = app.browser.$(
+      './/li[contains(normalize-space(.), "Pin tabs") and .//span[normalize-space(.)="Added"]]',
+    );
+    await added.waitForExist();
+    expect(await findAccessibilityViolations(app.browser)).toEqual([]);
+
+    await mainWindow.activateTab('Change: add-pins');
+    await app.browser.$('button=Spec delta: tabs').click();
+    await mainWindow.waitForActiveTab('spec.md');
+    await app.browser.$('section.mdx-spec-delta-added[aria-label="Added"]').waitForExist();
+    expect(await findAccessibilityViolations(app.browser)).toEqual([]);
+  });
 });

@@ -366,3 +366,12 @@ export {
 export { isAgentFileLocation } from './prompt-injection/isAgentFileLocation';
 export { isTooLargeForRichText, MAX_RICH_TEXT_DOCUMENT_BYTES } from './documents/richTextSizeLimit';
 export { topLevelYamlValue } from './spec-projects/yaml/readTopLevelYamlEntries';
+export type { FeatureSummary, ProjectReport } from './spec-projects/overview/featureSummaries';
+export type { ClarificationMarker, FeatureDocuments } from './spec-projects/feature-numbered/featureDetails';
+export {
+  readFeatureTasks,
+  type FeatureTask,
+  type FeatureTasks,
+  type TaskGroupProgress,
+} from './spec-projects/feature-numbered/readFeatureTasks';
+export type { DecisionRecordSummary, FolderSpecSummary } from './spec-projects/overview/folderSpecSummaries';

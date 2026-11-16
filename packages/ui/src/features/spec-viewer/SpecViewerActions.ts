@@ -77,6 +77,14 @@ export class SpecViewerActions {
     return { root: manifest.root, isIncomplete: manifest.isIncomplete, projects, findingsByChange };
   }
 
+  /** Reads a file of a scanned folder, such as a delta to preview; undefined when it cannot be read. */
+  readProjectText(folderPath: string, relativePath: string): Promise<string | undefined> {
+    return this.dependencies.specProjects
+      .readProjectFile(folderPath, relativePath)
+      .then((document) => document.text)
+      .catch(() => undefined);
+  }
+
   /** Reads each file of a scan once, however many views need it. */
   private cachedReaderFor(folderPath: string): ProjectTextReader {
     const texts = new Map<string, Promise<string | undefined>>();

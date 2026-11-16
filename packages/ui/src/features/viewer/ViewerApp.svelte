@@ -51,6 +51,9 @@
   import { shownDashboardOf } from '../spec-viewer/specDashboard';
   import SpecChangePage from '../spec-viewer/SpecChangePage.svelte';
   import { shownChangePageOf } from '../spec-viewer/specChangePage';
+  import SpecPreviewPage from '../spec-viewer/SpecPreviewPage.svelte';
+  import SpecFeaturePage from '../spec-viewer/SpecFeaturePage.svelte';
+  import { shownFeaturePageOf } from '../spec-viewer/specFeaturePage';
   import AboutDialog from '../about/AboutDialog.svelte';
   import type { AppInfo } from '../about/AppInfo';
   import type { ThirdPartyLicensesLoader } from '../about/ThirdPartyLicenses';
@@ -180,6 +183,10 @@
   const activeKey = $derived(activeTab?.location.canonicalKey);
   const shownDashboard = $derived(shownDashboardOf(snapshot?.specProjects, activeTab?.location));
   const shownChangePage = $derived(shownChangePageOf(snapshot?.specProjects, activeTab?.location));
+  const shownFeaturePage = $derived(shownFeaturePageOf(snapshot?.specProjects, activeTab?.location));
+  const shownPreview = $derived(
+    activeTab ? snapshot?.specPreviews?.get(activeTab.location.canonicalKey) : undefined,
+  );
   let headingRequest: HeadingRequest | undefined = $state();
   let cursorCount = $state(1);
   let isCaretInLink = $state(false);
@@ -568,6 +575,12 @@
                   rootKey: shownDashboard.scanned.root.canonicalKey,
                   changeFolder,
                 })}
+              onOpenFeature={(featureFolder: string) =>
+                void controller.execute({
+                  kind: 'openSpecFeature',
+                  rootKey: shownDashboard.scanned.root.canonicalKey,
+                  featureFolder,
+                })}
             />
           {:else if shownChangePage}
             <SpecChangePage
@@ -576,7 +589,24 @@
               onOpenDocument={(documentPath: string) => void controller.openDocuments([documentPath])}
               onOpenFinding={(documentPath: string, line: number | undefined) =>
                 void controller.execute({ kind: 'openSpecFinding', documentPath, line })}
+              onOpenPreview={(capability: string) =>
+                void controller.execute({
+                  kind: 'openSpecPreview',
+                  rootKey: shownChangePage.scanned.root.canonicalKey,
+                  changeFolder: shownChangePage.change.folder,
+                  capability,
+                })}
             />
+          {:else if shownFeaturePage}
+            <SpecFeaturePage
+              page={shownFeaturePage}
+              {translator}
+              onOpenDocument={(documentPath: string) => void controller.openDocuments([documentPath])}
+              onOpenFinding={(documentPath: string, line: number | undefined) =>
+                void controller.execute({ kind: 'openSpecFinding', documentPath, line })}
+            />
+          {:else if shownPreview}
+            <SpecPreviewPage preview={shownPreview} {translator} />
           {:else if editedDocument}
             {#key editedDocument.canonicalKey}
               <EditingLayout

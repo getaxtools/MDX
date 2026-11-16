@@ -7,6 +7,18 @@ import {
 } from '../detection/detectSpecProjects';
 import { ProjectFiles } from '../detection/ProjectFiles';
 import { countTaskProgress, type TaskProgress } from '../tasks/countTaskProgress';
+import {
+  featureDocumentsToRead,
+  featureNumberedPartsOf,
+  type FeatureSummary,
+  type ProjectReport,
+} from './featureSummaries';
+import {
+  folderLayoutDocumentsToRead,
+  folderLayoutPartsOf,
+  type DecisionRecordSummary,
+  type FolderSpecSummary,
+} from './folderSpecSummaries';
 import { CHANGE_METADATA_FILE, readChangeMetadata } from '../change-based/readChangeMetadata';
 
 /** A document of a project, by its path relative to the scanned root. */
@@ -54,6 +66,14 @@ export interface SpecProjectSummary {
   readonly archivedChanges: readonly ChangeSummary[];
   readonly agentInstructions: readonly ProjectDocument[];
   readonly linkedFolders: readonly SpecProjectLink[];
+  /** For a feature-numbered project: its features in number then time order. */
+  readonly features: readonly FeatureSummary[];
+  readonly constitution?: string | undefined;
+  /** Other documents under the marker folder, such as bug reports and assessments. */
+  readonly reports: readonly ProjectReport[];
+  /** The specs of a requirements, design and tasks folder. */
+  readonly folderSpecs: readonly FolderSpecSummary[];
+  readonly decisionRecords: readonly DecisionRecordSummary[];
 }
 
 const CHANGE_BASED_FOLDER = 'openspec';
@@ -178,8 +198,8 @@ function linkedFoldersOf(manifest: SpecProjectManifest, projectFolder: string): 
 }
 
 /**
- * The spec projects of a scanned root as the sidebar and dashboard show them. `taskTexts` holds the tasks
- * documents read so far, by path relative to the root; a change whose tasks were not read has no progress yet.
+ * The spec projects of a scanned root as the sidebar and dashboard show them. `taskTexts` holds the tasks and
+ * feature documents read so far, by path relative to the root; one not read yet adds no progress or status.
  */
 export function specProjectsOverview(
   manifest: SpecProjectManifest,
@@ -215,14 +235,18 @@ function summaryOf(
     ...(hasChanges ? changesOf(reading) : { activeChanges: [], archivedChanges: [] }),
     agentInstructions: agentInstructionsOf(files, project.folder),
     linkedFolders: linkedFoldersOf(manifest, project.folder),
+    ...featureNumberedPartsOf({ manifest, project, files, documentTexts: taskTexts }),
+    ...folderLayoutPartsOf(project, files, taskTexts),
   };
 }
 
-/** The tasks documents of the active changes, which the overview needs read to show progress. */
+/** The documents the overview needs read: the tasks of active changes and the documents of features. */
 export function activeTaskDocumentsOf(projects: readonly SpecProjectSummary[]): string[] {
-  return projects.flatMap((project) =>
-    project.activeChanges.flatMap((change) => change.documents.tasks ?? []),
-  );
+  return projects.flatMap((project) => [
+    ...project.activeChanges.flatMap((change) => change.documents.tasks ?? []),
+    ...featureDocumentsToRead(project.features),
+    ...folderLayoutDocumentsToRead(project),
+  ]);
 }
 
 export type ChangeStatus = 'noTasks' | 'notStarted' | 'inProgress' | 'tasksComplete' | 'archived';

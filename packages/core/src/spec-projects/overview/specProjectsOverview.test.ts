@@ -176,3 +176,72 @@ describe('changeStatusOf', () => {
     expect(changeStatusOf(summary)).toBe(status);
   });
 });
+
+describe('feature-numbered projects', () => {
+  const files = [
+    '.specify/memory/constitution.md',
+    '.specify/templates/spec-template.md',
+    '.specify/bugs/login/report.md',
+    'specs/001-photo-albums/spec.md',
+    'specs/001-photo-albums/tasks.md',
+    'specs/002-sharing/spec.md',
+    'specs/002-sharing/plan.md',
+    'specs/002-sharing/contracts/api.yaml',
+  ].map((path) => ({ path, sizeBytes: 1, modifiedAtMs: 1, text: null }));
+  const featureFile = {
+    path: '.specify/feature.json',
+    sizeBytes: 1,
+    modifiedAtMs: 1,
+    text: '{"feature": "002-sharing"}',
+  };
+  const texts = new Map([
+    [
+      'specs/001-photo-albums/spec.md',
+      '**Status**: Draft\n[NEEDS CLARIFICATION: a]\n[NEEDS CLARIFICATION: b]',
+    ],
+    ['specs/001-photo-albums/tasks.md', '## Phase 1: Setup\n- [X] T010 [P] [US1] A\n- [ ] T011 [US1] B'],
+  ]);
+
+  function featuresOf(withFeatureFile: boolean) {
+    const manifest = manifestOf([], { files: withFeatureFile ? [...files, featureFile] : files });
+    return specProjectsOverview(manifest, texts)[0]?.features ?? [];
+  }
+
+  it('lists features with their status and the current one', () => {
+    const features = featuresOf(true);
+
+    expect(features.map((feature) => [feature.name, feature.isCurrent, feature.status])).toEqual([
+      ['001-photo-albums', false, 'Draft'],
+      ['002-sharing', true, undefined],
+    ]);
+  });
+
+  it('counts clarifications and task progress per story, and lists contracts', () => {
+    const [first, second] = featuresOf(false);
+
+    expect(first?.clarifications).toHaveLength(2);
+    expect(first?.tasks?.stories).toEqual([{ name: 'US1', done: 1, total: 2 }]);
+    expect(first?.progress).toEqual({ done: 1, total: 2 });
+    expect(second?.documents.contracts).toEqual(['specs/002-sharing/contracts/api.yaml']);
+  });
+
+  it('lists the constitution and other reports, but not the templates', () => {
+    const [project] = specProjectsOverview(manifestOf([], { files }), texts);
+
+    expect(project?.constitution).toBe('.specify/memory/constitution.md');
+    expect(project?.reports).toEqual([
+      { name: 'bugs/login/report.md', path: '.specify/bugs/login/report.md' },
+    ]);
+  });
+
+  it('reads the feature documents for their status and clarifications', () => {
+    const [project] = specProjectsOverview(manifestOf([], { files }));
+
+    expect(activeTaskDocumentsOf(project ? [project] : [])).toEqual([
+      'specs/001-photo-albums/spec.md',
+      'specs/001-photo-albums/tasks.md',
+      'specs/002-sharing/spec.md',
+      'specs/002-sharing/plan.md',
+    ]);
+  });
+});

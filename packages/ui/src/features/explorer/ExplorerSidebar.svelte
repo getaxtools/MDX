@@ -161,6 +161,8 @@
           onCommand({ kind: 'openSpecDashboard', rootKey, folder })}
         onOpenChange={(rootKey: string, changeFolder: string) =>
           onCommand({ kind: 'openSpecChange', rootKey, changeFolder })}
+        onOpenFeature={(rootKey: string, featureFolder: string) =>
+          onCommand({ kind: 'openSpecFeature', rootKey, featureFolder })}
         {activeDocumentKey}
       />
     {:else}

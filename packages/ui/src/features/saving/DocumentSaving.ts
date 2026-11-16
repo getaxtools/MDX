@@ -1,5 +1,5 @@
 import { renameWordGoal, type ViewerSession } from '@mdx/core';
-import { DocumentOpenError, isUntitledLocation, type DocumentLocation } from '@mdx/platform';
+import { DocumentOpenError, isUntitledLocation, isViewLocation, type DocumentLocation } from '@mdx/platform';
 import type { DocumentEditing } from '../editing/DocumentEditing';
 import { applyTabCommand, type TabCommand } from '../tabs/tabCommands';
 
@@ -57,7 +57,7 @@ export class DocumentSaving {
 
   async saveActiveAs(): Promise<void> {
     const location = this.session.currentState().tabStrip.activeTab()?.location;
-    if (location) await this.saveAs(location);
+    if (location && !isViewLocation(location)) await this.saveAs(location);
   }
 
   async saveAll(): Promise<void> {

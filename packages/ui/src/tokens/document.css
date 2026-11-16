@@ -410,3 +410,43 @@
     color: MarkText;
   }
 }
+
+/* Delta sections of a spec: a coloured edge, and a label in words so colour is never the only signal. */
+.rendered-document .mdx-spec-delta {
+  margin-block: 1em;
+  padding-inline-start: 0.9em;
+  border-inline-start: 3px solid var(--spec-delta-colour, var(--color-border-strong));
+}
+
+.rendered-document .mdx-spec-delta-added {
+  --spec-delta-colour: var(--color-alert-tip);
+}
+
+.rendered-document .mdx-spec-delta-modified {
+  --spec-delta-colour: var(--color-alert-note);
+}
+
+.rendered-document .mdx-spec-delta-removed {
+  --spec-delta-colour: var(--color-alert-caution);
+}
+
+.rendered-document .mdx-spec-delta-renamed {
+  --spec-delta-colour: var(--color-alert-important);
+}
+
+.rendered-document .mdx-spec-label {
+  display: inline-block;
+  margin-inline-end: 0.4em;
+  padding: 0 0.4em;
+  border: 1px solid var(--spec-delta-colour, var(--color-border-strong));
+  border-radius: var(--radius-xsmall);
+  font-size: 0.75em;
+  vertical-align: middle;
+}
+
+@media (forced-colors: active) {
+  .rendered-document .mdx-spec-delta,
+  .rendered-document .mdx-spec-label {
+    border-color: CanvasText;
+  }
+}

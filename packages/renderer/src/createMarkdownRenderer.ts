@@ -19,6 +19,11 @@ import { mathPlugin } from './plugins/mathPlugin';
 import { sourceLinesPlugin, type SourceLinesEnvironment } from './plugins/sourceLinesPlugin';
 import { taskListPlugin } from './plugins/taskListPlugin';
 import {
+  specStructurePlugin,
+  type SpecStructureEnvironment,
+  type SpecStructureRendering,
+} from './plugins/specStructurePlugin';
+import {
   createHtmlSanitizer,
   type BrowserWindow,
   type ResourceUrlResolver,
@@ -46,6 +51,8 @@ export interface RenderOptions {
   readonly includeSourceLines?: boolean;
   /** Wiki-links and tags for this note; replaces the renderer-wide resolution. */
   readonly notes?: NotesRendering;
+  /** Marks requirements, scenarios and delta sections, for the documents of a spec project. */
+  readonly specStructure?: SpecStructureRendering;
 }
 
 export interface MarkdownRenderer {
@@ -66,9 +73,12 @@ export function createMarkdownRenderer({
   return {
     render(source, options = {}) {
       const { frontMatter, body } = splitFrontMatter(source);
-      const environment: CountedOutlineEnvironment & SourceLinesEnvironment & NotesEnvironment =
-        outlineEnvironmentFor(source, body);
+      const environment: CountedOutlineEnvironment &
+        SourceLinesEnvironment &
+        NotesEnvironment &
+        SpecStructureEnvironment = outlineEnvironmentFor(source, body);
       if (options.notes) environment.notes = options.notes;
+      if (options.specStructure) environment.specStructure = options.specStructure;
       const shouldMarkSourceLines = options.includeSourceLines === true;
       if (shouldMarkSourceLines) environment.sourceLineOffset = environment.outlineLineOffset;
       const html = sanitizeHtml(
@@ -106,6 +116,7 @@ export function createMarkdownParser(alertTitles: AlertTitles): MarkdownParser {
       .use(taskListPlugin)
       .use(mathPlugin)
       .use(headingAnchorsPlugin)
+      .use(specStructurePlugin)
       .use(sourceLinesPlugin)
   );
 }

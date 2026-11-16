@@ -100,8 +100,9 @@ import { NotesLocationActions, isNotesLocationCommand } from '../notes-location/
 import { NotesActions, isNotesCommand, type NotesCommand, type NotesView } from '../notes/NotesActions';
 import { NotesIndexActions, type NoteBacklinks } from '../notes/NotesIndexActions';
 import { SpecViewerActions, type SpecProjectsView } from '../spec-viewer/SpecViewerActions';
-import { dashboardLocationOf } from '../spec-viewer/specDashboard';
-import { changePageLocationOf } from '../spec-viewer/specChangePage';
+import { specStructureFor } from '../spec-viewer/specDocumentRendering';
+import type { SpecPreview } from '../spec-viewer/specPreview';
+import { specPreviewFor, viewLocationFor } from '../spec-viewer/specViewLocations';
 import {
   isRefusedInReadOnlyWorkspace,
   isSpecViewerCommand,
@@ -242,6 +243,8 @@ export interface ViewerSnapshot {
   readonly notes?: NotesView;
   /** The spec projects, shown in place of Folders in a Spec viewer workspace. */
   readonly specProjects?: SpecProjectsView;
+  /** The "Spec after this change" previews open in tabs, by tab key. */
+  readonly specPreviews?: ReadonlyMap<string, SpecPreview>;
 }
 
 export interface WorkspacesView {
@@ -337,6 +340,7 @@ export class ViewerController {
   private readonly notesIndexActions: NotesIndexActions | undefined;
   private readonly specViewerActions: SpecViewerActions | undefined;
   private shownSpecFoldersKey: string | undefined;
+  private readonly specPreviews = new Map<string, SpecPreview>();
   private pendingWorkspaceFile: PendingWorkspaceFile | undefined;
   private noticeActions: readonly NoticeAction[] = [];
   private findRequest = 0;
@@ -570,23 +574,21 @@ export class ViewerController {
   }
 
   private async runSpecViewerCommand(command: SpecViewerCommand): Promise<void> {
+    const { session, renderer, translator } = this.dependencies;
     if (command.kind === 'openSpecFinding') {
       await this.openDocumentAtLine(command.documentPath, command.line);
       return;
     }
-    const { session, translator } = this.dependencies;
-    const scanned = this.specViewerActions
-      ?.view()
-      ?.roots?.find((root) => root.root.canonicalKey === command.rootKey);
-    if (command.kind === 'openSpecDashboard') {
-      const project = scanned?.projects.find((candidate) => candidate.folder === command.folder);
-      if (project) session.openView(dashboardLocationOf(command.rootKey, project, translator));
+    if (command.kind !== 'openSpecPreview') {
+      const location = viewLocationFor(this.specViewerActions?.view(), command, translator);
+      if (location) session.openView(location);
       return;
     }
-    const change = scanned?.projects
-      .flatMap((project) => project.activeChanges)
-      .find((candidate) => candidate.folder === command.changeFolder);
-    if (change) session.openView(changePageLocationOf(command.rootKey, change, translator));
+    const actions = this.specViewerActions;
+    const opened = actions ? await specPreviewFor(command, { actions, renderer, translator }) : undefined;
+    if (!opened) return;
+    this.specPreviews.set(opened.location.canonicalKey, opened.preview);
+    session.openView(opened.location);
   }
 
   /** Opens a document at the heading that holds a line, as the viewer shows headings, not lines. */
@@ -939,6 +941,12 @@ export class ViewerController {
       number: (this.linkedHeadingRequest?.number ?? 0) + 1,
     };
     this.publish(this.composeSnapshot(this.snapshot.notice));
+  }
+
+  private specRenderingFor(location: DocumentLocation): Pick<RenderOptions, 'specStructure'> {
+    if (!this.isSpecViewerShown()) return {};
+    const specStructure = specStructureFor(location, this.dependencies.translator);
+    return specStructure ? { specStructure } : {};
   }
 
   private notesRenderingFor(location: DocumentLocation): Pick<RenderOptions, 'notes'> {
@@ -1621,6 +1629,7 @@ export class ViewerController {
       resolveResourceUrl: this.resourceResolverFor(document.location),
       includeSourceLines: shouldMarkSourceLines,
       ...this.notesRenderingFor(document.location),
+      ...this.specRenderingFor(document.location),
     });
     return {
       canonicalKey: document.location.canonicalKey,
@@ -1722,9 +1731,10 @@ export class ViewerController {
     return this.dependencies.session.currentState().tabStrip.activeTab()?.location;
   }
 
-  private specProjectsPart(): Pick<ViewerSnapshot, 'specProjects'> {
+  private specProjectsPart(): Pick<ViewerSnapshot, 'specProjects' | 'specPreviews'> {
     const specProjects = this.specViewerActions?.view();
-    return specProjects ? { specProjects } : {};
+    const previews = this.specPreviews.size > 0 ? { specPreviews: this.specPreviews } : {};
+    return specProjects ? { specProjects, ...previews } : previews;
   }
 
   /** Either the missing folder's path or, while the folder is there, its note tree. */

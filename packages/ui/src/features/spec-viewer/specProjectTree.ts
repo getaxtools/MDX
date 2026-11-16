@@ -1,5 +1,8 @@
 import type {
   ChangeSummary,
+  DecisionRecordSummary,
+  FeatureSummary,
+  FolderSpecSummary,
   ProjectDocument,
   SpecLayoutKind,
   SpecProjectSummary,
@@ -7,6 +10,7 @@ import type {
 } from '@mdx/core';
 import type { MessageKey, Translator } from '@mdx/i18n';
 import type { DocumentLocation, SpecProjectLink } from '@mdx/platform';
+import { featureDocumentEntries } from './featureDocumentList';
 
 /** The spec projects found in one folder of the workspace. */
 export interface ScannedSpecRoot {
@@ -29,6 +33,8 @@ export interface SpecTreeNode {
   readonly isUnavailable?: boolean | undefined;
   /** The project whose dashboard the row opens. */
   readonly dashboard?: { readonly rootKey: string; readonly folder: string } | undefined;
+  /** The feature whose page the row opens. */
+  readonly featurePage?: { readonly rootKey: string; readonly featureFolder: string } | undefined;
   /** The active change whose page the row opens. */
   readonly changePage?: { readonly rootKey: string; readonly changeFolder: string } | undefined;
   readonly isInitiallyExpanded: boolean;
@@ -167,44 +173,152 @@ function linkNode(context: TreeContext, link: SpecProjectLink): SpecTreeNode {
   };
 }
 
-function projectGroups(context: TreeContext, project: SpecProjectSummary): SpecTreeNode[] {
-  const label = context.translator.translate('specViewer.sidebar.dashboard');
-  const groups: SpecTreeNode[] = [
+function featureNode(context: TreeContext, feature: FeatureSummary): SpecTreeNode {
+  const { translator } = context;
+  const progress = feature.progress;
+  const progressText =
+    progress &&
+    translator.translate('specViewer.change.progress', { current: progress.done, total: progress.total });
+  const currentText = feature.isCurrent ? translator.translate('specViewer.feature.currentBadge') : undefined;
+  const documents = featureDocumentEntries(feature.documents, translator).flatMap((entry) =>
+    entry.path === undefined ? [] : [documentNode(context, entry.label, entry.path)],
+  );
+  return {
+    id: `${context.idPrefix}|${feature.folder}`,
+    label: feature.name,
+    accessibleName: feature.isCurrent
+      ? translator.translate('specViewer.feature.current', { name: feature.name })
+      : feature.name,
+    detail: [currentText, progressText].filter(Boolean).join(' - ') || undefined,
+    featurePage: { rootKey: context.root.canonicalKey, featureFolder: feature.folder },
+    isInitiallyExpanded: false,
+    children: documents,
+  };
+}
+
+function folderSpecNode(context: TreeContext, spec: FolderSpecSummary): SpecTreeNode {
+  const { translator } = context;
+  const named = (key: MessageKey, path: string | undefined) =>
+    path === undefined ? [] : [documentNode(context, translator.translate(key), path)];
+  const progress = spec.progress;
+  return {
+    id: `${context.idPrefix}|${spec.folder}`,
+    label: spec.name,
+    accessibleName: spec.isBugfix
+      ? translator.translate('specViewer.folderSpec.bugfixName', { name: spec.name })
+      : spec.name,
+    detail:
+      progress &&
+      translator.translate('specViewer.change.progress', { current: progress.done, total: progress.total }),
+    isInitiallyExpanded: false,
+    children: [
+      ...named(
+        spec.isBugfix ? 'specViewer.document.bugfix' : 'specViewer.document.requirements',
+        spec.requirements,
+      ),
+      ...named('specViewer.document.design', spec.design),
+      ...named('specViewer.document.tasks', spec.tasks),
+    ],
+  };
+}
+
+function decisionRecordNode(context: TreeContext, record: DecisionRecordSummary): SpecTreeNode {
+  const label = `${record.number} ${record.title ?? record.path.split('/').at(-1) ?? ''}`;
+  const node = documentNode(context, label, record.path);
+  return record.status === undefined
+    ? node
+    : { ...node, detail: record.status, accessibleName: `${label}, ${record.status}` };
+}
+
+function featureNumberedNodes(context: TreeContext, project: SpecProjectSummary): SpecTreeNode[] {
+  const constitution = project.constitution;
+  if (constitution === undefined) return [];
+  return [
+    documentNode(context, context.translator.translate('specViewer.sidebar.constitution'), constitution),
+  ];
+}
+
+interface GroupSpec {
+  readonly titleKey: MessageKey;
+  readonly children: readonly SpecTreeNode[];
+  readonly isInitiallyExpanded?: boolean;
+}
+
+function layoutGroupSpecsOf(context: TreeContext, project: SpecProjectSummary): GroupSpec[] {
+  return [
     {
-      id: `${context.idPrefix}|dashboard`,
-      label,
-      accessibleName: label,
-      dashboard: { rootKey: context.root.canonicalKey, folder: project.folder },
-      isInitiallyExpanded: false,
-      children: [],
+      titleKey: 'specViewer.group.features',
+      children: project.features.map((feature) => featureNode(context, feature)),
+      isInitiallyExpanded: true,
+    },
+    {
+      titleKey: 'specViewer.group.reports',
+      children: project.reports.map((report) => documentNode(context, report.name, report.path)),
+    },
+    {
+      titleKey: 'specViewer.group.folderSpecs',
+      children: project.folderSpecs.map((spec) => folderSpecNode(context, spec)),
+      isInitiallyExpanded: true,
+    },
+    {
+      titleKey: 'specViewer.group.decisionRecords',
+      children: project.decisionRecords.map((record) => decisionRecordNode(context, record)),
     },
   ];
-  const add = (key: MessageKey, children: readonly SpecTreeNode[], isInitiallyExpanded = false) => {
-    if (children.length > 0)
-      groups.push(groupNode(context, { titleKey: key, children, isInitiallyExpanded }));
+}
+
+function changeAndOtherGroupSpecsOf(context: TreeContext, project: SpecProjectSummary): GroupSpec[] {
+  return [
+    {
+      titleKey: 'specViewer.group.capabilities',
+      children: project.capabilities.map((capability) =>
+        documentNode(context, capability.name, capability.path),
+      ),
+    },
+    {
+      titleKey: 'specViewer.group.changes',
+      children: project.activeChanges.map((change) => changeNode(context, change)),
+      isInitiallyExpanded: true,
+    },
+    {
+      titleKey: 'specViewer.group.archive',
+      children: project.archivedChanges.map((change) => changeNode(context, change)),
+    },
+    {
+      titleKey: 'specViewer.group.agentInstructions',
+      children: project.agentInstructions.map((file) => agentFileNode(context, file, project.folder)),
+    },
+    {
+      titleKey: 'specViewer.group.linkedFolders',
+      children: project.linkedFolders.map((link) => linkNode(context, link)),
+    },
+  ];
+}
+
+function groupSpecsOf(context: TreeContext, project: SpecProjectSummary): GroupSpec[] {
+  return [...layoutGroupSpecsOf(context, project), ...changeAndOtherGroupSpecsOf(context, project)];
+}
+
+function projectGroups(context: TreeContext, project: SpecProjectSummary): SpecTreeNode[] {
+  const label = context.translator.translate('specViewer.sidebar.dashboard');
+  const dashboard: SpecTreeNode = {
+    id: `${context.idPrefix}|dashboard`,
+    label,
+    accessibleName: label,
+    dashboard: { rootKey: context.root.canonicalKey, folder: project.folder },
+    isInitiallyExpanded: false,
+    children: [],
   };
-  add(
-    'specViewer.group.capabilities',
-    project.capabilities.map((capability) => documentNode(context, capability.name, capability.path)),
-  );
-  add(
-    'specViewer.group.changes',
-    project.activeChanges.map((change) => changeNode(context, change)),
-    true,
-  );
-  add(
-    'specViewer.group.archive',
-    project.archivedChanges.map((change) => changeNode(context, change)),
-  );
-  add(
-    'specViewer.group.agentInstructions',
-    project.agentInstructions.map((file) => agentFileNode(context, file, project.folder)),
-  );
-  add(
-    'specViewer.group.linkedFolders',
-    project.linkedFolders.map((link) => linkNode(context, link)),
-  );
-  return groups;
+  const groups = groupSpecsOf(context, project)
+    .filter((group) => group.children.length > 0)
+    .map((group) =>
+      groupNode(context, {
+        titleKey: group.titleKey,
+        children: group.children,
+        isInitiallyExpanded: group.isInitiallyExpanded ?? false,
+      }),
+    );
+  return [dashboard, ...featureNumberedNodes(context, project), ...groups];
 }
 
 function projectNode(

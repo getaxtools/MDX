@@ -16,16 +16,23 @@ const ALL_KINDS_BUILT = workspaceKindsFor({ allowsPlannedKindPreview: true });
 const PROJECT = 'C:\\Projects\\shop';
 const SPEC_PATH = 'C:\\Projects\\shop\\openspec\\specs\\tabs\\spec.md';
 
-async function startWithSpecProjects(documents: Readonly<Record<string, string>> = {}) {
-  const specProjects = new InMemorySpecProjects({
+function defaultSpecProjects(): InMemorySpecProjects {
+  return new InMemorySpecProjects({
     [PROJECT]: {
       files: { 'openspec/specs/tabs/spec.md': '# tabs', 'openspec/changes/add-pins/tasks.md': '- [x] 1.1' },
     },
   });
+}
+
+async function startWithSpecProjects(
+  documents: Readonly<Record<string, string>> = {},
+  specProjects: InMemorySpecProjects = defaultSpecProjects(),
+) {
+  const documentFiles = new InMemoryDocumentFiles(documents);
   const folders = new InMemoryFolders();
   let nextId = 0;
   const session = new ViewerSession({
-    documentFiles: new InMemoryDocumentFiles(documents),
+    documentFiles,
     appState: new InMemoryAppState(),
     workspaceStore: new InMemoryWorkspaceStore(),
     kindRegistry: ALL_KINDS_BUILT,
@@ -53,7 +60,7 @@ async function startWithSpecProjects(documents: Readonly<Record<string, string>>
     if (!latest) throw new Error('no snapshot published');
     return latest;
   };
-  return { controller, folders, specProjects, snapshot };
+  return { controller, folders, specProjects, snapshot, documentFiles };
 }
 
 async function settled(): Promise<void> {
@@ -114,6 +121,77 @@ describe('a Spec viewer workspace', () => {
     expect(snapshot().linkedHeadingRequest?.fragment).toBe(
       snapshot().activeDocument?.outline.find((entry) => entry.text === 'Requirement: Pin tabs')?.id,
     );
+  });
+
+  it('labels the delta sections of a spec delta it shows', async () => {
+    const deltaPath = 'C:\\Projects\\shop\\openspec\\changes\\add-pins\\specs\\tabs\\spec.md';
+    const { controller, snapshot } = await startWithSpecProjects({
+      [deltaPath]: '## ADDED Requirements\n\n### Requirement: Pin tabs\nThe viewer SHALL pin.\n',
+    });
+    await controller.execute({ kind: 'createWorkspace', name: 'Plans', kindId: 'specViewer' });
+
+    await controller.openDocuments([deltaPath]);
+
+    const page = new DOMParser().parseFromString(snapshot().activeDocument?.html ?? '', 'text/html');
+    expect(page.querySelector('section.mdx-spec-delta-added')?.getAttribute('aria-label')).toBe('Added');
+    expect(snapshot().activeDocument?.outline.map((entry) => entry.role)).toEqual([
+      'deltaSection',
+      'requirement',
+    ]);
+  });
+
+  it('opens the spec after a change in a tab that Save and recent files leave alone', async () => {
+    const specProjects = new InMemorySpecProjects({
+      [PROJECT]: {
+        files: {
+          'openspec/specs/tabs/spec.md': '## Purpose\nTabs.\n\n## Requirements\n',
+          'openspec/changes/add-pins/specs/tabs/spec.md':
+            '## ADDED Requirements\n\n### Requirement: Pin\nIt SHALL pin.\n\n#### Scenario: P\n- **WHEN** a\n- **THEN** b\n',
+        },
+      },
+    });
+    const { controller, folders, snapshot, documentFiles } = await startWithSpecProjects({}, specProjects);
+    await controller.execute({ kind: 'createWorkspace', name: 'Plans', kindId: 'specViewer' });
+    folders.pickedFolder = PROJECT;
+    await controller.execute({ kind: 'openFolder' });
+    await settled();
+    const rootKey = snapshot().specProjects?.roots?.[0]?.root.canonicalKey ?? '';
+
+    await controller.execute({
+      kind: 'openSpecPreview',
+      rootKey,
+      changeFolder: 'openspec/changes/add-pins',
+      capability: 'tabs',
+    });
+    await controller.execute({ kind: 'saveDocument' });
+    await controller.execute({ kind: 'saveDocumentAs' });
+
+    const activeTab = snapshot().viewer.tabStrip.activeTab();
+    expect(activeTab?.location.fileName).toBe('After add-pins: tabs');
+    expect(snapshot().specPreviews?.get(activeTab?.location.canonicalKey ?? '')?.application.outcome).toBe(
+      'applied',
+    );
+    expect(snapshot().viewer.recentFiles.entries()).toEqual([]);
+    expect(documentFiles.savedDocuments).toEqual([]);
+    expect(documentFiles.savedSources).toEqual([]);
+  });
+
+  it('opens the page of a feature in a tab', async () => {
+    const specProjects = new InMemorySpecProjects({
+      [PROJECT]: {
+        files: { '.specify/memory/constitution.md': '# C', 'specs/001-albums/spec.md': '# Albums' },
+      },
+    });
+    const { controller, folders, snapshot } = await startWithSpecProjects({}, specProjects);
+    await controller.execute({ kind: 'createWorkspace', name: 'Plans', kindId: 'specViewer' });
+    folders.pickedFolder = PROJECT;
+    await controller.execute({ kind: 'openFolder' });
+    await settled();
+    const rootKey = snapshot().specProjects?.roots?.[0]?.root.canonicalKey ?? '';
+
+    await controller.execute({ kind: 'openSpecFeature', rootKey, featureFolder: 'specs/001-albums' });
+
+    expect(snapshot().viewer.tabStrip.activeTab()?.location.fileName).toBe('Feature: 001-albums');
   });
 
   it('does not scan the folders of a Markdown viewer workspace', async () => {
