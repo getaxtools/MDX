@@ -2,7 +2,11 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AGENT_INSTRUCTION_LOCATIONS, isAgentInstructionFile } from './agentInstructionLocations';
+import {
+  AGENT_INSTRUCTION_LOCATIONS,
+  isAgentInstructionFile,
+  MAX_NESTED_INSTRUCTION_LEVELS,
+} from './agentInstructionLocations';
 
 const temporaryFolders: string[] = [];
 
@@ -48,6 +52,19 @@ describe('agent instruction locations', () => {
     const detected = filesBelow(folder).filter(isAgentInstructionFile);
 
     expect(detected).toEqual([...examplePaths].sort());
+  });
+
+  it(`finds a nested project instruction file up to ${String(MAX_NESTED_INSTRUCTION_LEVELS)} levels down, not deeper`, () => {
+    const projectFileName = AGENT_INSTRUCTION_LOCATIONS[0] ?? '';
+    const folder = projectFolderWith([
+      `packages/api/${projectFileName}`,
+      `a/b/c/d/${projectFileName}`,
+      `a/b/c/d/e/${projectFileName}`,
+    ]);
+
+    const detected = filesBelow(folder).filter(isAgentInstructionFile);
+
+    expect(detected).toEqual([`a/b/c/d/${projectFileName}`, `packages/api/${projectFileName}`]);
   });
 
   it('does not detect other files next to them', () => {
