@@ -1,6 +1,8 @@
 import { listen } from '@tauri-apps/api/event';
 import type {
   Backlink,
+  LinkUpdatePlan,
+  NoteMoveInLocation,
   NoteChanges,
   NoteHeading,
   NoteSearchResults,
@@ -50,6 +52,10 @@ export class TauriNotesIndex implements NotesIndexPort {
 
   suggestions(locationId: string, typed: string, fromNote: string): Promise<NoteSuggestion[]> {
     return tauriCommands.noteSuggestions(locationId, typed, fromNote);
+  }
+
+  planLinkUpdates(locationId: string, moved: NoteMoveInLocation): Promise<LinkUpdatePlan> {
+    return tauriCommands.planNoteLinkUpdates(locationId, moved);
   }
 
   async refreshIndex(locationId: string): Promise<void> {

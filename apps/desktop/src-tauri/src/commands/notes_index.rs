@@ -6,8 +6,8 @@ use crate::commands::documents::run_blocking;
 use crate::commands::notes::allowed_root;
 use crate::documents::{DocumentAccessList, DocumentError};
 use crate::notes_index::{
-    Backlink, ExcludedPaths, IndexEvent, NoteChange, NoteHeading, NoteSearchResults,
-    NoteSuggestion, NotesIndexes, NotesLocationToShow, TagCount,
+    Backlink, ExcludedPaths, IndexEvent, LinkUpdatePlan, NoteChange, NoteHeading, NoteMove,
+    NoteSearchResults, NoteSuggestion, NotesIndexes, NotesLocationToShow, TagCount,
 };
 use crate::storage::WorkspaceId;
 
@@ -174,8 +174,22 @@ pub async fn note_headings(
     run_blocking(move || shown_answer(indexes.headings(&location_id, &target, &from_note))).await?
 }
 
+/// The link edits a rename or move of a note needs in the notes linking to it, planned after the
+/// note moved; nothing is written.
+#[tauri::command]
+pub async fn plan_note_link_updates(
+    location_id: String,
+    moved: NoteMove,
+    indexes: State<'_, Arc<NotesIndexes>>,
+) -> Result<LinkUpdatePlan, DocumentError> {
+    validated_note_path(&moved.from)?;
+    validated_note_path(&moved.to)?;
+    let indexes = Arc::clone(&indexes);
+    run_blocking(move || shown_answer(indexes.link_updates(&location_id, &moved))).await?
+}
+
 /// A note's path inside the location, with forward slashes, that never climbs out of it.
-fn validated_note_path(path: &str) -> Result<(), DocumentError> {
+pub(crate) fn validated_note_path(path: &str) -> Result<(), DocumentError> {
     let is_valid = !path.is_empty()
         && path.chars().count() <= MAX_NOTE_PATH_CHARACTERS
         && !path.contains(['\\', ':', '\0'])

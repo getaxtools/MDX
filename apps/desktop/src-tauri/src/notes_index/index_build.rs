@@ -35,6 +35,11 @@ pub struct ListedNote {
 pub trait NoteFolder {
     fn list_notes(&self) -> Result<Vec<ListedNote>, IndexError>;
     fn read_note(&self, path: &str) -> Result<String, IndexError>;
+
+    /// The note's bytes as they are on disk, for changes that must keep every other byte.
+    fn read_note_bytes(&self, path: &str) -> Result<Vec<u8>, IndexError> {
+        self.read_note(path).map(String::into_bytes)
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -265,11 +270,14 @@ impl NoteFolder for DiskNoteFolder {
     }
 
     fn read_note(&self, path: &str) -> Result<String, IndexError> {
+        Ok(decode_document_bytes(&self.read_note_bytes(path)?).text)
+    }
+
+    fn read_note_bytes(&self, path: &str) -> Result<Vec<u8>, IndexError> {
         if self.excluded.contains(path) {
             return Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied).into());
         }
-        let bytes = fs::read(self.root.join(path))?;
-        Ok(decode_document_bytes(&bytes).text)
+        Ok(fs::read(self.root.join(path))?)
     }
 }
 

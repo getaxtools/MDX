@@ -16,9 +16,9 @@ const MARKDOWN_EXTENSIONS: [&str; 5] = [".md", ".markdown", ".mdown", ".mkd", ".
 
 /// A note the index knows, by its path inside the location and the other names it answers to.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct KnownNote {
-    path: String,
-    aliases: Vec<String>,
+pub(super) struct KnownNote {
+    pub path: String,
+    pub aliases: Vec<String>,
 }
 
 /// A link to a note from another note, with the line it is on.
@@ -136,7 +136,10 @@ fn links_naming(
 }
 
 /// The notes a link target may mean: those with that name or alias, with all their aliases.
-fn notes_named(connection: &Connection, key: &str) -> Result<Vec<KnownNote>, IndexError> {
+pub(super) fn notes_named(
+    connection: &Connection,
+    key: &str,
+) -> Result<Vec<KnownNote>, IndexError> {
     let mut statement = connection.prepare(
         "SELECT notes.path, aliases.alias FROM notes
          LEFT JOIN aliases ON aliases.note_id = notes.id
@@ -329,7 +332,11 @@ fn sql_limit(limit: usize) -> i64 {
 }
 /// The renderer's rule: name or alias ignoring case, or the end of the path; then the nearest folder,
 /// then the shortest path.
-fn resolve_wiki_link(target: &str, from_note: &str, notes: &[KnownNote]) -> Option<String> {
+pub(super) fn resolve_wiki_link(
+    target: &str,
+    from_note: &str,
+    notes: &[KnownNote],
+) -> Option<String> {
     let wanted = without_markdown_extension(target.trim()).to_lowercase();
     if wanted.is_empty() {
         return Some(from_note.to_owned());
@@ -362,7 +369,7 @@ fn matches_target(note: &KnownNote, wanted: &str) -> bool {
 }
 
 /// A relative Markdown link, from the linking note's folder, as a path inside the location.
-fn resolve_markdown_link(from_note: &str, target: &str) -> Option<String> {
+pub(super) fn resolve_markdown_link(from_note: &str, target: &str) -> Option<String> {
     let mut parts: Vec<&str> = folder_of(from_note);
     let target = target.replace('\\', "/");
     for part in target.split('/') {
@@ -385,13 +392,13 @@ fn line_of(folder: &dyn NoteFolder, path: &str, line: usize) -> String {
         .unwrap_or_default()
 }
 
-fn folder_of(path: &str) -> Vec<&str> {
+pub(super) fn folder_of(path: &str) -> Vec<&str> {
     let mut parts: Vec<&str> = path.split('/').collect();
     parts.pop();
     parts
 }
 
-fn shared_depth(first: &[&str], second: &[&str]) -> usize {
+pub(super) fn shared_depth(first: &[&str], second: &[&str]) -> usize {
     first
         .iter()
         .zip(second)
@@ -399,11 +406,11 @@ fn shared_depth(first: &[&str], second: &[&str]) -> usize {
         .count()
 }
 
-fn name_of(path: &str) -> &str {
+pub(super) fn name_of(path: &str) -> &str {
     without_markdown_extension(path.rsplit('/').next().unwrap_or(path))
 }
 
-fn without_markdown_extension(path: &str) -> &str {
+pub(super) fn without_markdown_extension(path: &str) -> &str {
     MARKDOWN_EXTENSIONS
         .iter()
         .find_map(|extension| {

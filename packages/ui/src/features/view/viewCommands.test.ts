@@ -32,6 +32,7 @@ describe('view commands', () => {
       isSlashMenuInRichText: true,
       isSlashMenuInSource: false,
       isNoteDeletionConfirmed: true,
+      isNoteLinkUpdateConfirmed: true,
     });
     expect(applyViewCommand(withoutSidebar, { kind: 'resetZoom' }).zoomPercent).toBe(100);
     expect(applyViewCommand(withoutSidebar, { kind: 'zoomOut' }).zoomPercent).toBe(100);
@@ -121,5 +122,14 @@ describe('view commands', () => {
     expect(
       applyViewCommand(withButton, { kind: 'toggleWheelButtonInStatusBar' }).isWheelButtonInStatusBar,
     ).toBe(false);
+  });
+
+  it('asks before updating note links until asking is turned off', () => {
+    const withoutAsking = applyViewCommand(DEFAULT_VIEW_SETTINGS, {
+      kind: 'toggleNoteLinkUpdateConfirmation',
+    });
+
+    expect(DEFAULT_VIEW_SETTINGS.isNoteLinkUpdateConfirmed).toBe(true);
+    expect(withoutAsking.isNoteLinkUpdateConfirmed).toBe(false);
   });
 });

@@ -15,12 +15,19 @@ import {
   type DocumentLocation,
   type FolderListing,
   type NoteFilesPort,
+  type NotesIndexPort,
   type NotesIndexStatus,
   type TagCount,
   type NoteTrashEntry,
 } from '@mdx/platform';
 import type { NotesRendering } from '@mdx/renderer';
 import type { NoticeAction } from '../viewer/ViewerController';
+import {
+  NOTE_LINK_UPDATE_COMMAND_KINDS,
+  NoteLinkUpdateActions,
+  type NoteLinkUpdateCommand,
+  type NoteLinkUpdatePreview,
+} from './NoteLinkUpdateActions';
 import { NOTE_TRASH_COMMAND_KINDS, NoteTrashActions, type NoteTrashCommand } from './NoteTrashActions';
 import {
   NOTE_TEMPLATE_COMMAND_KINDS,
@@ -33,7 +40,8 @@ export type NotesCommand =
   | { readonly kind: 'renameNote'; readonly note: DocumentLocation; readonly name: string }
   | { readonly kind: 'moveNote'; readonly note: DocumentLocation; readonly into: string }
   | NoteTrashCommand
-  | NoteTemplateCommand;
+  | NoteTemplateCommand
+  | NoteLinkUpdateCommand;
 
 const NOTES_COMMAND_KINDS: ReadonlySet<string> = new Set([
   'createNote',
@@ -41,9 +49,11 @@ const NOTES_COMMAND_KINDS: ReadonlySet<string> = new Set([
   'moveNote',
   ...NOTE_TRASH_COMMAND_KINDS,
   ...NOTE_TEMPLATE_COMMAND_KINDS,
+  ...NOTE_LINK_UPDATE_COMMAND_KINDS,
 ]);
 const TEMPLATE_COMMAND_KINDS: ReadonlySet<string> = new Set(NOTE_TEMPLATE_COMMAND_KINDS);
 const TRASH_COMMAND_KINDS: ReadonlySet<string> = new Set(NOTE_TRASH_COMMAND_KINDS);
+const LINK_UPDATE_COMMAND_KINDS: ReadonlySet<string> = new Set(NOTE_LINK_UPDATE_COMMAND_KINDS);
 
 export function isNotesCommand(command: { readonly kind: string }): command is NotesCommand {
   return NOTES_COMMAND_KINDS.has(command.kind);
@@ -55,6 +65,10 @@ function isTrashCommand(command: NotesCommand): command is NoteTrashCommand {
 
 function isTemplateCommand(command: NotesCommand): command is NoteTemplateCommand {
   return TEMPLATE_COMMAND_KINDS.has(command.kind);
+}
+
+function isLinkUpdateCommand(command: NotesCommand): command is NoteLinkUpdateCommand {
+  return LINK_UPDATE_COMMAND_KINDS.has(command.kind);
 }
 
 /** The note tree of the shown Notes workspace. */
@@ -70,13 +84,19 @@ export interface NotesView {
   readonly tags?: readonly TagCount[];
   /** The names of the templates, once New Note from Template was chosen. */
   readonly templates?: readonly string[];
+  /** The link changes a rename or move would make, while the user is asked about them. */
+  readonly linkUpdates?: NoteLinkUpdatePreview;
 }
 
 export interface NotesActionsDependencies {
   readonly session: ViewerSession;
   readonly noteFiles: NoteFilesPort;
+  /** Plans the link updates after a rename or move; without it links are left as they are. */
+  readonly notesIndex?: NotesIndexPort;
   readonly translator: Translator;
   readonly unsavedKeys: () => ReadonlySet<string>;
+  /** Whether the index of the shown notes has been built since it was shown. */
+  readonly isIndexComplete: () => boolean;
   /** Opens a new note ready for typing. */
   readonly openForEditing: (path: string) => Promise<void>;
   readonly showNotice: (
@@ -86,6 +106,8 @@ export interface NotesActionsDependencies {
   ) => void;
   readonly showTrashDialog: () => void;
   readonly showTemplateDialog: () => void;
+  readonly showLinkUpdatesDialog: () => void;
+  readonly closeLinkUpdatesDialog: () => void;
   readonly now: () => Date;
   readonly openDocument: (path: string) => Promise<void>;
   readonly onChange: () => void;
@@ -96,6 +118,7 @@ export class NotesActions {
   private revision = 0;
   private readonly trash: NoteTrashActions;
   private readonly templates: NoteTemplateActions;
+  private readonly linkUpdates: NoteLinkUpdateActions;
   private noteList:
     | { readonly location: string; readonly revision: number; readonly notes: readonly NoteEntry[] }
     | undefined;
@@ -103,6 +126,7 @@ export class NotesActions {
   constructor(private readonly dependencies: NotesActionsDependencies) {
     this.trash = new NoteTrashActions({ ...dependencies, onNotesChanged: () => this.changed() });
     this.templates = new NoteTemplateActions({ ...dependencies, onNotesChanged: () => this.changed() });
+    this.linkUpdates = new NoteLinkUpdateActions({ ...dependencies, onNotesChanged: () => this.changed() });
   }
 
   view(): NotesView | undefined {
@@ -110,11 +134,13 @@ export class NotesActions {
     if (locationPath === undefined) return undefined;
     const trash = this.trash.shownEntries(locationPath);
     const templates = this.templates.templates();
+    const linkUpdates = this.linkUpdates.preview();
     return {
       locationPath,
       revision: this.revision,
       ...(trash ? { trash } : {}),
       ...(templates ? { templates } : {}),
+      ...(linkUpdates ? { linkUpdates } : {}),
     };
   }
 
@@ -189,6 +215,10 @@ export class NotesActions {
       await this.templates.run(command, location);
       return;
     }
+    if (isLinkUpdateCommand(command)) {
+      await this.linkUpdates.run(command);
+      return;
+    }
     if (command.kind === 'createNote') {
       await this.create(location, command.parent, command.name);
       return;
@@ -196,7 +226,7 @@ export class NotesActions {
     if (this.isRefusedForUnsavedChanges(command.note)) return;
     const { noteFiles } = this.dependencies;
     const note = command.note.displayPath;
-    await this.relocate(command.note, () =>
+    await this.relocate(command.note, location, () =>
       command.kind === 'renameNote'
         ? noteFiles.renameNote({ location, note, name: command.name })
         : noteFiles.moveNote({ location, note, into: command.into }),
@@ -213,14 +243,22 @@ export class NotesActions {
     }
   }
 
-  private async relocate(note: DocumentLocation, move: () => Promise<DocumentLocation>): Promise<void> {
+  private async relocate(
+    note: DocumentLocation,
+    location: string,
+    move: () => Promise<DocumentLocation>,
+  ): Promise<void> {
+    let moved: DocumentLocation;
     try {
-      const moved = await move();
-      this.dependencies.session.followMovedNote({ from: note, to: moved });
-      this.changed();
+      moved = await move();
     } catch (error) {
       this.showRefusal(error, noteNameOf(note.fileName));
+      return;
     }
+    this.dependencies.session.followMovedNote({ from: note, to: moved });
+    this.changed();
+    if (moved.canonicalKey !== note.canonicalKey || moved.displayPath !== note.displayPath)
+      await this.linkUpdates.offerAfterMove({ from: note, to: moved }, location);
   }
 
   /** Edits are kept by the note's path, so a note with unsaved changes is saved before it moves. */

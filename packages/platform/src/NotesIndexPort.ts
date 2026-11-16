@@ -1,4 +1,5 @@
 import type { LineMatch } from './FolderPort';
+import type { LinkUpdatePlan, NoteMoveInLocation } from './NoteLinkUpdates';
 
 /** A section of a note holding every word searched for. */
 export interface NoteSearchHit {
@@ -95,6 +96,11 @@ export interface NotesIndexPort {
   suggestions(locationId: string, typed: string, fromNote: string): Promise<NoteSuggestion[]>;
   /** The headings of the note a wiki-link target means from a note; an empty target is that note. */
   headings(locationId: string, target: string, fromNote: string): Promise<NoteHeading[]>;
+  /**
+   * The link targets to change in the notes linking to a note that was just renamed or moved, as
+   * they would be read now; nothing is written.
+   */
+  planLinkUpdates(locationId: string, moved: NoteMoveInLocation): Promise<LinkUpdatePlan>;
   /** Reconciles the shown index again, for a location that reports no changes. */
   refreshIndex(locationId: string): Promise<void>;
   onIndexStatus(listener: (status: NotesIndexStatus) => void): () => void;

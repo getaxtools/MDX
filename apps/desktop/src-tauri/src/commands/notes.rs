@@ -3,9 +3,15 @@ use std::sync::Arc;
 use tauri::State;
 
 use crate::commands::documents::{run_blocking, validated_path};
+use crate::commands::notes_index::validated_note_path;
 use crate::commands::notes_location::now_ms;
 use crate::documents::{DocumentAccessList, DocumentError, DocumentLocation, locate_document};
-use crate::notes::{self, NotesRoot, TrashEntry};
+use crate::notes::{self, AppliedLinkUpdates, NotesRoot, TrashEntry};
+use crate::notes_index::{
+    MAX_LINK_EDITS_PER_NOTE, MAX_LINK_TARGET_BYTES, MAX_LINK_UPDATE_NOTES, NoteLinkEdits,
+};
+
+const CONTENT_HASH_LENGTH: usize = 64;
 
 /// Makes an empty note in the location, a folder in it, or under a note as its child.
 #[tauri::command]
@@ -122,6 +128,54 @@ pub async fn empty_note_trash(
     run_blocking(move || notes::empty_trash(&allowed_root(&location, &access)?)).await?
 }
 
+/// Changes the planned link targets in notes of the location after a rename or move, and returns
+/// the edits that undo it; a note changed since the plan is left as it is.
+#[tauri::command]
+pub async fn apply_note_link_updates(
+    location: String,
+    updates: Vec<NoteLinkEdits>,
+    access: State<'_, Arc<DocumentAccessList>>,
+) -> Result<AppliedLinkUpdates, DocumentError> {
+    validated_link_updates(&updates)?;
+    let access = Arc::clone(&access);
+    run_blocking(move || {
+        Ok(notes::apply_link_updates(
+            &allowed_root(&location, &access)?,
+            &updates,
+        ))
+    })
+    .await?
+}
+
+/// Checks the shape of the edits before any note is read: paths inside the location with `/`
+/// between their parts and no `..`, a SHA-256 in hex for each note, at most as many notes and edits
+/// as a plan holds, and targets of at most 4,096 bytes without a line break. Writing then also
+/// refuses any path that is not a Markdown note inside the location or that is in a dot folder.
+fn validated_link_updates(updates: &[NoteLinkEdits]) -> Result<(), DocumentError> {
+    if updates.len() > MAX_LINK_UPDATE_NOTES {
+        return Err(DocumentError::InvalidRequest);
+    }
+    for note in updates {
+        validated_note_path(&note.path)?;
+        validated_note_path(&note.path_once_undone)?;
+        let is_hash = note.content_hash.len() == CONTENT_HASH_LENGTH
+            && note
+                .content_hash
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit());
+        let are_edits_link_targets = note.edits.len() <= MAX_LINK_EDITS_PER_NOTE
+            && note.edits.iter().all(|edit| {
+                [&edit.before, &edit.after].iter().all(|target| {
+                    target.len() <= MAX_LINK_TARGET_BYTES && !target.contains(['\n', '\r'])
+                })
+            });
+        if !is_hash || !are_edits_link_targets {
+            return Err(DocumentError::InvalidRequest);
+        }
+    }
+    Ok(())
+}
+
 /// The Notes location, which the window must have been granted when the workspace was shown.
 pub(crate) fn allowed_root(
     location: &str,
@@ -159,6 +213,45 @@ mod tests {
         let root = allowed_root(&folder.path().to_string_lossy(), &access).unwrap();
 
         assert_eq!(root.folder(), dunce::canonicalize(folder.path()).unwrap());
+    }
+
+    fn link_update(path: &str, after: &str) -> NoteLinkEdits {
+        NoteLinkEdits {
+            path: path.to_owned(),
+            path_once_undone: path.to_owned(),
+            content_hash: "a".repeat(CONTENT_HASH_LENGTH),
+            edits: vec![crate::notes_index::LinkEdit {
+                start: 2,
+                end: 7,
+                before: "Draft".to_owned(),
+                after: after.to_owned(),
+            }],
+        }
+    }
+
+    #[test]
+    fn link_updates_that_are_not_link_targets_inside_the_location_are_refused() {
+        let too_long = "a".repeat(MAX_LINK_TARGET_BYTES + 1);
+        let mut not_a_hash = link_update("Inbox.md", "Plan");
+        not_a_hash.content_hash = "not a hash".to_owned();
+
+        for updates in [
+            vec![link_update("../Inbox.md", "Plan")],
+            vec![link_update(r"C:\Inbox.md", "Plan")],
+            vec![link_update("Inbox.md", "Plan]]\n# Injected")],
+            vec![link_update("Inbox.md", &too_long)],
+            vec![not_a_hash],
+            vec![link_update("Inbox.md", "Plan"); MAX_LINK_UPDATE_NOTES + 1],
+        ] {
+            assert_eq!(
+                validated_link_updates(&updates),
+                Err(DocumentError::InvalidRequest)
+            );
+        }
+        assert_eq!(
+            validated_link_updates(&[link_update("Projects/Inbox.md", "Plan")]),
+            Ok(())
+        );
     }
 
     #[test]

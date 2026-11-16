@@ -53,6 +53,24 @@ describe('TauriNoteFiles', () => {
     ]);
   });
 
+  it('applies link updates through apply_note_link_updates', async () => {
+    const applied = { updatedNotes: 1, updatedLinks: 1, notUpdated: [], undo: [] };
+    const calls = mockCommand(() => applied);
+    const updates = [
+      {
+        path: 'Inbox.md',
+        pathOnceUndone: 'Inbox.md',
+        contentHash: 'a'.repeat(64),
+        edits: [{ start: 2, end: 7, before: 'Draft', after: 'Plan' }],
+      },
+    ];
+
+    const result = await new TauriNoteFiles().applyLinkUpdates({ location: LOCATION, updates });
+
+    expect(result).toEqual(applied);
+    expect(calls).toEqual([{ command: 'apply_note_link_updates', args: { location: LOCATION, updates } }]);
+  });
+
   it('lists a folder of the location through list_folder_contents', async () => {
     const listing = { folders: [], documents: [] };
     const calls = mockCommand(() => listing);

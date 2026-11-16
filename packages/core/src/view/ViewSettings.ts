@@ -45,6 +45,8 @@ export interface ViewSettings {
   readonly isSlashMenuInSource: boolean;
   /** Deleting a note asks first; the note goes to the Notes trash either way. */
   readonly isNoteDeletionConfirmed: boolean;
+  /** Renaming or moving a note shows the link changes it needs before making them; Undo works either way. */
+  readonly isNoteLinkUpdateConfirmed: boolean;
 }
 
 export const THEME_PREFERENCES: readonly ThemePreference[] = [
@@ -114,6 +116,7 @@ export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
   isSlashMenuInRichText: true,
   isSlashMenuInSource: false,
   isNoteDeletionConfirmed: true,
+  isNoteLinkUpdateConfirmed: true,
 };
 
 export function zoomIn(settings: ViewSettings): ViewSettings {
@@ -237,7 +240,7 @@ export function parseViewSettings(saved: unknown): ViewSettings {
     editorSharePercent: parseEditorShare(editorSharePercent),
     ...parseKindSwitcherSettings(saved as Record<string, unknown>),
     ...parseSlashMenuSettings(saved as Record<string, unknown>),
-    isNoteDeletionConfirmed: (saved as Record<string, unknown>).isNoteDeletionConfirmed !== false,
+    ...parseNoteQuestionSettings(saved as Record<string, unknown>),
   };
 }
 
@@ -252,6 +255,15 @@ function parseKindSwitcherSettings(saved: Record<string, unknown>): KindSwitcher
     wheelDock: oneOf(WHEEL_DOCKS, saved.wheelDock, DEFAULT_VIEW_SETTINGS.wheelDock),
     isWheelOpenedAtPointer: saved.isWheelOpenedAtPointer === true,
     isWheelButtonInStatusBar: saved.isWheelButtonInStatusBar === true,
+  };
+}
+
+function parseNoteQuestionSettings(
+  saved: Record<string, unknown>,
+): Pick<ViewSettings, 'isNoteDeletionConfirmed' | 'isNoteLinkUpdateConfirmed'> {
+  return {
+    isNoteDeletionConfirmed: saved.isNoteDeletionConfirmed !== false,
+    isNoteLinkUpdateConfirmed: saved.isNoteLinkUpdateConfirmed !== false,
   };
 }
 

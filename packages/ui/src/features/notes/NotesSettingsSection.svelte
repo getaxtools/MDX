@@ -13,11 +13,13 @@
     folder: string;
     settings: NotesSettings;
     isDeletionConfirmed: boolean;
+    isLinkUpdateConfirmed: boolean;
     translator: Translator;
     onCommand: (command: ViewerCommand) => void;
   }
 
-  const { folder, settings, isDeletionConfirmed, translator, onCommand }: Props = $props();
+  const { folder, settings, isDeletionConfirmed, isLinkUpdateConfirmed, translator, onCommand }: Props =
+    $props();
 
   type TextField = 'dailyFolder' | 'dailyNameFormat' | 'templatesFolder' | 'dailyTemplate';
 
@@ -159,6 +161,21 @@
     </label>
     <p id="settings-notes-confirm-deletion-description" class="description">
       {translator.translate('settings.notes.confirmDeletionDescription')}
+    </p>
+  </div>
+  <div class="setting">
+    <label class="toggle">
+      <input
+        id="settings-notes-confirm-link-updates"
+        type="checkbox"
+        aria-describedby="settings-notes-confirm-link-updates-description"
+        checked={isLinkUpdateConfirmed}
+        onchange={() => onCommand({ kind: 'toggleNoteLinkUpdateConfirmation' })}
+      />
+      {translator.translate('settings.notes.confirmLinkUpdates')}
+    </label>
+    <p id="settings-notes-confirm-link-updates-description" class="description">
+      {translator.translate('settings.notes.confirmLinkUpdatesDescription')}
     </p>
   </div>
 </section>

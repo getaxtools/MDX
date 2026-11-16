@@ -48,7 +48,8 @@ export type ViewCommand =
   | { readonly kind: 'toggleWheelButtonInStatusBar' }
   | { readonly kind: 'toggleSlashMenuInRichText' }
   | { readonly kind: 'toggleSlashMenuInSource' }
-  | { readonly kind: 'toggleNoteDeletionConfirmation' };
+  | { readonly kind: 'toggleNoteDeletionConfirmation' }
+  | { readonly kind: 'toggleNoteLinkUpdateConfirmation' };
 
 type ViewCommandHandlers = {
   readonly [Kind in ViewCommand['kind']]: (
@@ -99,6 +100,10 @@ const VIEW_COMMAND_HANDLERS: ViewCommandHandlers = {
   toggleNoteDeletionConfirmation: (settings) => ({
     ...settings,
     isNoteDeletionConfirmed: !settings.isNoteDeletionConfirmed,
+  }),
+  toggleNoteLinkUpdateConfirmation: (settings) => ({
+    ...settings,
+    isNoteLinkUpdateConfirmed: !settings.isNoteLinkUpdateConfirmed,
   }),
 };
 

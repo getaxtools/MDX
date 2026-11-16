@@ -232,6 +232,7 @@ export type ViewerDialog =
   | 'wordGoal'
   | 'noteTrash'
   | 'noteFromTemplate'
+  | 'noteLinkUpdates'
   | WorkspaceDialog;
 
 const DIALOGS_BY_COMMAND: Partial<Record<ViewerCommand['kind'], ViewerDialog>> = {
@@ -337,8 +338,10 @@ export class ViewerController {
     return new NotesActions({
       session,
       noteFiles,
+      ...(this.dependencies.notesIndex ? { notesIndex: this.dependencies.notesIndex } : {}),
       translator: this.dependencies.translator,
       unsavedKeys: () => this.editing.unsavedKeys(),
+      isIndexComplete: () => this.notesIndexActions?.isIndexComplete() ?? false,
       openForEditing: async (path) => {
         await this.openDocument(path);
         this.editingActions.startEditingActiveDocument();
@@ -350,6 +353,15 @@ export class ViewerController {
       },
       showTemplateDialog: () => {
         this.openDialog = 'noteFromTemplate';
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+      },
+      showLinkUpdatesDialog: () => {
+        this.openDialog = 'noteLinkUpdates';
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+      },
+      closeLinkUpdatesDialog: () => {
+        if (this.openDialog !== 'noteLinkUpdates') return;
+        this.openDialog = undefined;
         this.publish(this.composeSnapshot(this.snapshot.notice));
       },
       now: this.dependencies.now ?? (() => new Date()),

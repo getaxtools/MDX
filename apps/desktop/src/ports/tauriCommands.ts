@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
+  AppliedLinkUpdates,
   Backlink,
   DocumentLocation,
   EditedDocumentSave,
@@ -7,12 +8,15 @@ import type {
   FolderListing,
   FolderSearchResults,
   KnownFolders,
+  LinkUpdatePlan,
+  LinkUpdatesToApply,
   LocationAvailability,
   NotesFolderInspection,
   NoteCreation,
   NoteDeletion,
   NoteInFolder,
   NoteMove,
+  NoteMoveInLocation,
   NoteRename,
   NoteRestore,
   NoteSearchResults,
@@ -103,6 +107,8 @@ export const tauriCommands = {
   listNoteTrash: (location: string) => invoke<NoteTrashEntry[]>('list_note_trash', { location }),
   restoreNote: (restore: NoteRestore) => invoke<DocumentLocation>('restore_note', { ...restore }),
   emptyNoteTrash: (location: string) => invoke<number>('empty_note_trash', { location }),
+  applyNoteLinkUpdates: ({ location, updates }: LinkUpdatesToApply) =>
+    invoke<AppliedLinkUpdates>('apply_note_link_updates', { location, updates }),
   showNotesIndex: (location: ShownNotesIndex) => invoke<null>('show_notes_index', { location }),
   hideNotesIndex: () => invoke<null>('hide_notes_index'),
   clearNotesIndexes: () => invoke<number>('clear_notes_indexes'),
@@ -114,6 +120,8 @@ export const tauriCommands = {
     invoke<NoteHeading[]>('note_headings', { locationId, target, fromNote }),
   noteSuggestions: (locationId: string, typed: string, fromNote: string) =>
     invoke<NoteSuggestion[]>('note_suggestions', { locationId, typed, fromNote }),
+  planNoteLinkUpdates: (locationId: string, moved: NoteMoveInLocation) =>
+    invoke<LinkUpdatePlan>('plan_note_link_updates', { locationId, moved }),
   searchNotes: (locationId: string, query: string) =>
     invoke<NoteSearchResults>('search_notes', { locationId, query }),
   deleteWorkspace: (workspaceId: string) => invoke<null>('delete_workspace', { workspaceId }),

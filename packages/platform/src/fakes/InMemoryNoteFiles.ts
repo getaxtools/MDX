@@ -11,6 +11,13 @@ import type {
   NoteRestore,
   NoteTrashEntry,
 } from '../NoteFilesPort';
+import type {
+  AppliedLinkUpdates,
+  LinkEdit,
+  LinkUpdatesToApply,
+  NoteLinkEdits,
+  NotUpdatedNote,
+} from '../NoteLinkUpdates';
 import { InMemoryDocumentFiles } from './InMemoryDocumentFiles';
 
 const NOTE_EXTENSION = /\.(md|markdown|mdown|mkd|mdx)$/i;
@@ -44,6 +51,13 @@ export class InMemoryNoteFiles implements NoteFilesPort {
       this.notes.set(keyOf(path), path);
       this.texts.set(keyOf(path), text);
     }
+  }
+
+  /** A stand-in for the SHA-256 the app uses: any change to the text changes it. */
+  static contentHashOf(text: string): string {
+    let hash = FNV_OFFSET_BASIS;
+    for (const byte of new TextEncoder().encode(text)) hash = Math.imul(hash ^ byte, FNV_PRIME) >>> 0;
+    return `${hash.toString(HEX_RADIX)}-${String(text.length)}`;
   }
 
   textOf(path: string): string | undefined {
@@ -183,6 +197,33 @@ export class InMemoryNoteFiles implements NoteFilesPort {
     return Promise.resolve(removed);
   }
 
+  applyLinkUpdates({ location, updates }: LinkUpdatesToApply): Promise<AppliedLinkUpdates> {
+    const notUpdated: NotUpdatedNote[] = [];
+    const undo: NoteLinkEdits[] = [];
+    let updatedLinks = 0;
+    for (const note of updates) {
+      const path = `${location}\\${note.path.replaceAll('/', '\\')}`;
+      const text = this.textOf(path);
+      const edited =
+        text !== undefined && InMemoryNoteFiles.contentHashOf(text) === note.contentHash
+          ? textWithEdits(text, note.edits)
+          : undefined;
+      if (!edited) {
+        notUpdated.push({ path: note.path, reason: 'changedSincePlanned' });
+        continue;
+      }
+      this.texts.set(keyOf(path), edited.text);
+      updatedLinks += note.edits.length;
+      undo.push({
+        path: note.pathOnceUndone,
+        pathOnceUndone: note.path,
+        contentHash: InMemoryNoteFiles.contentHashOf(edited.text),
+        edits: edited.undo,
+      });
+    }
+    return Promise.resolve({ updatedNotes: undo.length, updatedLinks, notUpdated, undo });
+  }
+
   private freePlaceFor(original: string): string {
     const folder = parentOf(original);
     const extension = NOTE_EXTENSION.exec(original)?.[0] ?? '.md';
@@ -230,15 +271,65 @@ export class InMemoryNoteFiles implements NoteFilesPort {
     const targetChildren = childrenFolderOf(target);
     this.notes.delete(keyOf(note));
     this.notes.set(keyOf(target), target);
+    this.moveText(note, target);
     for (const map of [this.folders, this.notes]) {
       for (const path of [...map.values()].filter((path) => isInside(path, children))) {
         map.delete(keyOf(path));
         const moved = `${targetChildren}${path.slice(children.length)}`;
         map.set(keyOf(moved), moved);
+        this.moveText(path, moved);
       }
     }
     return locationOf(target);
   }
+
+  private moveText(from: string, to: string): void {
+    const text = this.texts.get(keyOf(from));
+    if (text === undefined) return;
+    this.texts.delete(keyOf(from));
+    this.texts.set(keyOf(to), text);
+  }
+}
+
+const FNV_OFFSET_BASIS = 0x811c9dc5;
+const FNV_PRIME = 0x01000193;
+const HEX_RADIX = 16;
+
+/** The text with the edits made on its UTF-8 bytes, as the app makes them, and the edits undoing them. */
+function textWithEdits(
+  text: string,
+  edits: readonly LinkEdit[],
+): { readonly text: string; readonly undo: LinkEdit[] } | undefined {
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(text);
+  const decoder = new TextDecoder();
+  const parts: Uint8Array[] = [];
+  const undo: LinkEdit[] = [];
+  let copiedUpTo = 0;
+  let editedLength = 0;
+  for (const edit of edits) {
+    if (edit.start < copiedUpTo || decoder.decode(bytes.slice(edit.start, edit.end)) !== edit.before)
+      return undefined;
+    const unchanged = bytes.slice(copiedUpTo, edit.start);
+    const replacement = encoder.encode(edit.after);
+    parts.push(unchanged, replacement);
+    const start = editedLength + unchanged.length;
+    editedLength = start + replacement.length;
+    undo.push({ start, end: editedLength, before: edit.after, after: edit.before });
+    copiedUpTo = edit.end;
+  }
+  parts.push(bytes.slice(copiedUpTo));
+  return { text: decoder.decode(concatenated(parts)), undo };
+}
+
+function concatenated(parts: readonly Uint8Array[]): Uint8Array {
+  const joined = new Uint8Array(parts.reduce((length, part) => length + part.length, 0));
+  let offset = 0;
+  for (const part of parts) {
+    joined.set(part, offset);
+    offset += part.length;
+  }
+  return joined;
 }
 
 function refuse(failure: DocumentOpenFailure): never {

@@ -12,6 +12,7 @@ use super::index_build::{BuildProgress, DiskNoteFolder, NoteChange, reconcile_in
 use super::index_store::{
     IndexError, IndexOpening, NotesIndex, index_file_path, remove_index_files_in,
 };
+use super::link_updates::{LinkUpdatePlan, NoteMove, plan_link_updates};
 use super::note_links::{
     Backlink, NoteHeading, NoteSuggestion, TagCount, backlinks_of, headings_of_link_target,
     suggest_notes, tag_counts,
@@ -208,6 +209,17 @@ impl NotesIndexes {
     ) -> Result<Option<Vec<NoteHeading>>, IndexError> {
         self.read(location_id, |connection, _| {
             headings_of_link_target(connection, target, from_note)
+        })
+    }
+
+    /// The link edits a rename or move needs, planned after the note moved on disk.
+    pub fn link_updates(
+        &self,
+        location_id: &str,
+        moved: &NoteMove,
+    ) -> Result<Option<LinkUpdatePlan>, IndexError> {
+        self.read(location_id, |connection, folder| {
+            plan_link_updates(connection, folder, moved)
         })
     }
 

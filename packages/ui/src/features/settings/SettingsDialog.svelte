@@ -217,6 +217,7 @@
       folder={notesFolder}
       settings={notesSettings ?? DEFAULT_NOTES_SETTINGS}
       isDeletionConfirmed={settings.isNoteDeletionConfirmed}
+      isLinkUpdateConfirmed={settings.isNoteLinkUpdateConfirmed}
       {translator}
       {onCommand}
     />

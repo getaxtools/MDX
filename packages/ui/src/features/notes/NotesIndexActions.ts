@@ -35,6 +35,7 @@ export class NotesIndexActions {
   private shownLocation: NotesLocation | undefined;
   private shownExcludedPaths: readonly string[] = [];
   private latestStatus: NotesIndexStatus | undefined;
+  private hasBeenBuilt = false;
   private tagList: readonly TagCount[] | undefined;
   private shownBacklinks: NoteBacklinks | undefined;
   private backlinksDocument: DocumentLocation | undefined;
@@ -46,6 +47,7 @@ export class NotesIndexActions {
     const stopStatus = notesIndex.onIndexStatus((status) => {
       if (status.locationId !== this.shownLocation?.locationId) return;
       this.latestStatus = status;
+      if (!status.isBuilding) this.hasBeenBuilt = true;
       this.dependencies.onChange();
       if (!status.isBuilding) void this.refreshFromIndex();
     });
@@ -76,6 +78,7 @@ export class NotesIndexActions {
     this.shownLocation = location;
     this.shownExcludedPaths = excludedPaths;
     this.latestStatus = undefined;
+    this.hasBeenBuilt = false;
     this.tagList = undefined;
     this.shownBacklinks = undefined;
     const { notesIndex } = this.dependencies;
@@ -96,6 +99,7 @@ export class NotesIndexActions {
   async clearAll(): Promise<void> {
     this.shownLocation = undefined;
     this.latestStatus = undefined;
+    this.hasBeenBuilt = false;
     this.tagList = undefined;
     this.shownBacklinks = undefined;
     await this.dependencies.notesIndex.clearAll();
@@ -103,6 +107,11 @@ export class NotesIndexActions {
 
   status(): NotesIndexStatus | undefined {
     return this.latestStatus;
+  }
+
+  /** Whether the shown index has been brought up to date at least once since it was shown. */
+  isIndexComplete(): boolean {
+    return this.hasBeenBuilt;
   }
 
   tags(): readonly TagCount[] | undefined {

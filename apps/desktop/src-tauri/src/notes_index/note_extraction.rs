@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{Event, LinkType, Options, Parser, Tag, TagEnd};
 use sha2::{Digest, Sha256};
 
 use super::front_matter::{FrontMatter, read_front_matter};
@@ -48,6 +48,9 @@ pub struct NoteLink {
     pub target: String,
     pub heading: Option<String>,
     pub line: usize,
+    /// The bytes of the target as written, before any `#heading` or `|text`, when they can be
+    /// changed in place; `None` for a reference-style link or one written with escapes.
+    pub target_bytes: Option<Range<usize>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,6 +100,14 @@ struct ParsedBody {
     tasks: Vec<NoteTask>,
     code: Vec<Range<usize>>,
     open_heading: Option<(u8, usize, String)>,
+    open_link: Option<OpenLink>,
+}
+
+/// A Markdown link to a note being read: which link it is, and where its text ends so far.
+struct OpenLink {
+    index: usize,
+    is_inline: bool,
+    text_end: usize,
 }
 
 /// A note's text with where its lines start.
@@ -123,6 +134,11 @@ fn parse_body(note: &NoteText<'_>, body_start: usize) -> ParsedBody {
 impl ParsedBody {
     fn take(&mut self, event: Event<'_>, range: Range<usize>, note: &NoteText<'_>) {
         let lines = note.lines;
+        if let Some(link) = self.open_link.as_mut()
+            && !matches!(event, Event::End(TagEnd::Link))
+        {
+            link.text_end = link.text_end.max(range.end);
+        }
         match event {
             Event::Start(Tag::Heading { level, .. }) => {
                 self.open_heading = Some((level as u8, range.start, String::new()));
@@ -133,15 +149,38 @@ impl ParsedBody {
                 self.add_heading_text(&code);
             }
             Event::End(TagEnd::Heading(_)) => self.close_heading(lines),
-            Event::Start(Tag::Link { dest_url, .. }) if is_note_address(&dest_url) => {
+            Event::Start(Tag::Link {
+                dest_url,
+                link_type,
+                ..
+            }) if is_note_address(&dest_url) => {
+                self.open_link = Some(OpenLink {
+                    index: self.links.len(),
+                    is_inline: link_type == LinkType::Inline,
+                    text_end: range.start + 1,
+                });
                 self.links
                     .push(markdown_link(&dest_url, lines.line_of(range.start)));
             }
+            Event::End(TagEnd::Link) => self.close_link(note.text, range.end),
             Event::Start(Tag::CodeBlock(_)) => self.code.push(range),
             Event::TaskListMarker(is_done) => {
                 self.tasks.push(task_at(note.text, &range, is_done, lines));
             }
             _ => {}
+        }
+    }
+
+    fn close_link(&mut self, text: &str, link_end: usize) {
+        let Some(open) = self.open_link.take() else {
+            return;
+        };
+        let Some(link) = self.links.get_mut(open.index) else {
+            return;
+        };
+        if open.is_inline {
+            link.target_bytes = inline_destination(text, open.text_end, link_end)
+                .and_then(|destination| markdown_target_bytes(text, destination, &link.target));
         }
     }
 
@@ -183,7 +222,55 @@ fn markdown_link(address: &str, line: usize) -> NoteLink {
         target: decoded.into_owned(),
         heading,
         line,
+        target_bytes: None,
     }
+}
+
+/// The destination of `[text](destination "title")`, read from the `](` after the link text.
+fn inline_destination(text: &str, text_end: usize, link_end: usize) -> Option<Range<usize>> {
+    let source = text.get(text_end..link_end)?;
+    let after_opening = source.strip_prefix("](")?;
+    let start = text_end + 2 + (after_opening.len() - after_opening.trim_start().len());
+    let rest = text.get(start..link_end)?;
+    if let Some(inside) = rest.strip_prefix('<') {
+        let length = inside.find(['>', '\n'])?;
+        return Some(start + 1..start + 1 + length);
+    }
+    Some(start..start + bare_destination_length(rest))
+}
+
+/// A destination without angle brackets ends at a space or at a `)` that closes no `(` inside it.
+fn bare_destination_length(rest: &str) -> usize {
+    let mut depth = 0_usize;
+    let mut characters = rest.char_indices();
+    while let Some((index, character)) = characters.next() {
+        match character {
+            '\\' => {
+                characters.next();
+            }
+            '(' => depth += 1,
+            ')' if depth == 0 => return index,
+            ')' => depth -= 1,
+            _ if character.is_whitespace() || character.is_control() => return index,
+            _ => {}
+        }
+    }
+    rest.len()
+}
+
+/// The path part of a destination, before any `#anchor`; only when it reads as the parser read it,
+/// so a destination with escapes or entities is never changed by guess.
+fn markdown_target_bytes(
+    text: &str,
+    destination: Range<usize>,
+    parsed_target: &str,
+) -> Option<Range<usize>> {
+    let written = text.get(destination.clone())?;
+    if markdown_link(written, 0).target != parsed_target {
+        return None;
+    }
+    let path_length = written.find('#').unwrap_or(written.len());
+    (path_length > 0).then(|| destination.start..destination.start + path_length)
 }
 
 fn task_at(text: &str, marker: &Range<usize>, is_done: bool, lines: &LineStarts) -> NoteTask {
@@ -228,7 +315,7 @@ fn sections_of(text: &str, starts: &[usize]) -> Vec<NoteSection> {
         .collect()
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
+pub fn sha256_hex(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
         .iter()
         .map(|byte| format!("{byte:02x}"))
@@ -241,6 +328,8 @@ fn scan_wiki_links(text: &str, skipped: &[Range<usize>], lines: &LineStarts) -> 
         .filter_map(|span| {
             let inner = text.get(span.inner.clone())?;
             let (target, heading) = wiki_link_parts(inner)?;
+            let target_bytes = wiki_target_bytes(inner)
+                .map(|part| span.inner.start + part.start..span.inner.start + part.end);
             let is_embed =
                 span.outer.start > 0 && text.as_bytes().get(span.outer.start - 1) == Some(&b'!');
             Some(NoteLink {
@@ -252,9 +341,21 @@ fn scan_wiki_links(text: &str, skipped: &[Range<usize>], lines: &LineStarts) -> 
                 target,
                 heading,
                 line: lines.line_of(span.outer.start),
+                target_bytes,
             })
         })
         .collect()
+}
+
+/// The note part of `Note#Heading|text`, without the spaces around it; none for `#Heading` alone.
+fn wiki_target_bytes(inner: &str) -> Option<Range<usize>> {
+    let destination_end = inner.find('|').unwrap_or(inner.len());
+    let destination = inner.get(..destination_end)?;
+    let target_end = destination.find('#').unwrap_or(destination_end);
+    let target = destination.get(..target_end)?;
+    let start = target.len() - target.trim_start().len();
+    let end = target.trim_end().len();
+    (start < end).then_some(start..end)
 }
 
 fn wiki_link_ranges(text: &str) -> Vec<Range<usize>> {
@@ -346,17 +447,17 @@ fn is_inside_any(position: usize, ranges: &[Range<usize>]) -> bool {
 }
 
 /// Where each line starts, to turn byte offsets into line numbers.
-struct LineStarts(Vec<usize>);
+pub struct LineStarts(Vec<usize>);
 
 impl LineStarts {
-    fn of(text: &str) -> Self {
+    pub fn of(text: &str) -> Self {
         let starts = std::iter::once(0)
             .chain(text.match_indices('\n').map(|(index, _)| index + 1))
             .collect();
         Self(starts)
     }
 
-    fn line_of(&self, offset: usize) -> usize {
+    pub fn line_of(&self, offset: usize) -> usize {
         match self.0.binary_search(&offset) {
             Ok(line) => line,
             Err(next_line) => next_line.saturating_sub(1),
@@ -387,6 +488,55 @@ mod tests {
             ]
         );
         assert_eq!(note.links.first().map(|link| link.line), Some(0));
+    }
+
+    fn written_targets(text: &str) -> Vec<Option<&str>> {
+        extract_note(text)
+            .links
+            .into_iter()
+            .map(|link| link.target_bytes.and_then(|bytes| text.get(bytes)))
+            .collect()
+    }
+
+    #[test]
+    fn a_wiki_link_target_is_found_without_its_heading_text_or_spaces() {
+        let text = "[[ Plan#Goals|the plan ]], ![[Draft.md]], [[#Top]] and [[Projects/Plan|p]]\n";
+
+        assert_eq!(
+            written_targets(text),
+            vec![Some("Plan"), Some("Draft.md"), None, Some("Projects/Plan")]
+        );
+    }
+
+    #[test]
+    fn a_markdown_link_target_is_found_without_its_anchor() {
+        let text = "[a](Next%20Plan.md#goals) [b](<My Plan.md> \"title\") [c\nd](../Plan.md)\n";
+
+        assert_eq!(
+            written_targets(text),
+            vec![
+                Some("Next%20Plan.md"),
+                Some("My Plan.md"),
+                Some("../Plan.md")
+            ]
+        );
+    }
+
+    #[test]
+    fn link_text_with_brackets_and_code_does_not_hide_the_target() {
+        let text = "[the \\] `[x](y)` *plan*](Plan.md) and [](Draft.md)\n";
+
+        assert_eq!(
+            written_targets(text),
+            vec![Some("Plan.md"), Some("Draft.md")]
+        );
+    }
+
+    #[test]
+    fn reference_links_and_escaped_targets_cannot_be_changed_in_place() {
+        let text = "[plan][p] and [draft](Dr\\_aft.md)\n\n[p]: Plan.md\n";
+
+        assert_eq!(written_targets(text), vec![None, None]);
     }
 
     #[test]

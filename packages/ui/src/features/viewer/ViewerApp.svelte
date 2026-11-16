@@ -47,6 +47,7 @@
   import NoteTrashDialog from '../notes/NoteTrashDialog.svelte';
   import NoteBacklinks from '../notes/NoteBacklinks.svelte';
   import NoteFromTemplateDialog from '../notes/NoteFromTemplateDialog.svelte';
+  import NoteLinkUpdatesDialog from '../notes/NoteLinkUpdatesDialog.svelte';
   import { workspaceNameOf } from '../workspaces/workspaceCommands';
   import { recentWorkspaceLinks } from '../workspaces/recentWorkspaceLinks';
   import { SessionWordCounts } from '../word-goals/SessionWordCounts';
@@ -616,6 +617,13 @@
       {translator}
       onCommand={(command: ViewerCommand) => void controller.execute(command)}
       onClose={() => controller.closeDialog()}
+    />
+  {:else if snapshot.openDialog === 'noteLinkUpdates' && snapshot.notes?.linkUpdates}
+    <NoteLinkUpdatesDialog
+      preview={snapshot.notes.linkUpdates}
+      {translator}
+      onCommand={(command: ViewerCommand) => void controller.execute(command)}
+      onClose={() => void controller.execute({ kind: 'skipNoteLinkUpdates' })}
     />
   {:else if snapshot.openDialog === 'keyboardShortcuts'}
     <KeyboardShortcutsDialog {translator} {shortcuts} onClose={() => controller.closeDialog()} />

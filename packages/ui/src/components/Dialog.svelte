@@ -6,9 +6,11 @@
     closeLabel: string;
     onClose: () => void;
     children: Snippet;
+    /** More controls for the fixed footer, shown before the close button. */
+    footer?: Snippet;
   }
 
-  const { title, closeLabel, onClose, children }: Props = $props();
+  const { title, closeLabel, onClose, children, footer }: Props = $props();
 
   let closeButton: HTMLButtonElement | undefined = $state();
 
@@ -35,6 +37,7 @@
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <div class="content" role="region" aria-labelledby="dialog-title" tabindex="0">{@render children()}</div>
     <div class="actions">
+      {@render footer?.()}
       <button bind:this={closeButton} onclick={onClose}>{closeLabel}</button>
     </div>
   </div>
@@ -78,7 +81,10 @@
 
   .actions {
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     justify-content: flex-end;
+    gap: var(--space-2);
     margin-top: var(--space-4);
   }
 

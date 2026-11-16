@@ -9,8 +9,10 @@ import type {
   ShownNotesIndex,
   TagCount,
 } from '../NotesIndexPort';
+import type { LinkUpdatePlan, NoteMoveInLocation } from '../NoteLinkUpdates';
 
 const NO_RESULTS: NoteSearchResults = { hits: [], isIncomplete: false, notSearchedOnlineOnly: 0 };
+const NO_LINK_UPDATES: LinkUpdatePlan = { notes: [], notUpdated: [] };
 
 /** Records which index is shown; searches answer with `results`, and tests send status by hand. */
 export class InMemoryNotesIndex implements NotesIndexPort {
@@ -25,6 +27,9 @@ export class InMemoryNotesIndex implements NotesIndexPort {
   /** Headings by the link target typed, ignoring case. */
   readonly headingsByTarget = new Map<string, NoteHeading[]>();
   readonly suggestionRequests: { readonly typed: string; readonly fromNote: string }[] = [];
+  /** The plans to answer with, by the path the note was moved from. */
+  readonly linkUpdatePlans = new Map<string, LinkUpdatePlan>();
+  readonly plannedMoves: NoteMoveInLocation[] = [];
   private readonly listeners = new Set<(status: NotesIndexStatus) => void>();
   private readonly changeListeners = new Set<(changes: NoteChanges) => void>();
 
@@ -72,6 +77,11 @@ export class InMemoryNotesIndex implements NotesIndexPort {
 
   headings(_locationId: string, target: string): Promise<NoteHeading[]> {
     return Promise.resolve(this.headingsByTarget.get(target.toLowerCase()) ?? []);
+  }
+
+  planLinkUpdates(_locationId: string, moved: NoteMoveInLocation): Promise<LinkUpdatePlan> {
+    this.plannedMoves.push(moved);
+    return Promise.resolve(this.linkUpdatePlans.get(moved.from) ?? NO_LINK_UPDATES);
   }
 
   refreshIndex(locationId: string): Promise<void> {

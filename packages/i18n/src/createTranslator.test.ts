@@ -36,6 +36,10 @@ const SAMPLE_VALUES = {
   folder: 'Projects › Work',
   date: 'Nov 14, 2026, 9:30 AM',
   indexed: 120,
+  links: 3,
+  notes: 2,
+  notUpdated: 1,
+  indexing: 'yes',
 };
 
 describe('createTranslator', () => {

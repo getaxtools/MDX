@@ -1,6 +1,8 @@
 import type {
+  AppliedLinkUpdates,
   DocumentLocation,
   FolderListing,
+  LinkUpdatesToApply,
   NoteCreation,
   NoteDeletion,
   NoteFilesPort,
@@ -84,5 +86,13 @@ export class TauriNoteFiles implements NoteFilesPort {
 
   emptyTrash(location: string): Promise<number> {
     return tauriCommands.emptyNoteTrash(location);
+  }
+
+  async applyLinkUpdates(updates: LinkUpdatesToApply): Promise<AppliedLinkUpdates> {
+    try {
+      return await tauriCommands.applyNoteLinkUpdates(updates);
+    } catch (error) {
+      throw documentOpenErrorOf(error, updates.location);
+    }
   }
 }

@@ -86,6 +86,18 @@ export type {
   NotesIndexStatus,
 } from './NotesIndexPort';
 export type {
+  AppliedLinkUpdates,
+  ChangedLine,
+  LinkEdit,
+  LinkUpdatePlan,
+  LinkUpdatesToApply,
+  NoteLinkEdits,
+  NoteLinkUpdates,
+  NoteMoveInLocation,
+  NotUpdatedNote,
+  NotUpdatedReason,
+} from './NoteLinkUpdates';
+export type {
   NoteCreation,
   NoteDeletion,
   NoteFilesPort,

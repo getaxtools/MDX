@@ -1,5 +1,6 @@
 import type { DocumentLocation } from './DocumentLocation';
 import type { FolderListing } from './FolderPort';
+import type { AppliedLinkUpdates, LinkUpdatesToApply } from './NoteLinkUpdates';
 
 export interface NoteCreation {
   readonly location: string;
@@ -74,4 +75,9 @@ export interface NoteFilesPort {
   restoreNote(restore: NoteRestore): Promise<DocumentLocation>;
   /** Removes the trash entries for good; resolves with how many there were. */
   emptyTrash(location: string): Promise<number>;
+  /**
+   * Changes only the planned link targets of each note; a note changed since the plan is left as it
+   * is and reported. Resolves with the edits that undo the change.
+   */
+  applyLinkUpdates(updates: LinkUpdatesToApply): Promise<AppliedLinkUpdates>;
 }

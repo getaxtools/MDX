@@ -43,6 +43,7 @@ describe('view settings', () => {
       isSlashMenuInRichText: true,
       isSlashMenuInSource: false,
       isNoteDeletionConfirmed: true,
+      isNoteLinkUpdateConfirmed: true,
     });
   });
 
@@ -89,6 +90,7 @@ describe('view settings', () => {
       isSlashMenuInRichText: false,
       isSlashMenuInSource: true,
       isNoteDeletionConfirmed: false,
+      isNoteLinkUpdateConfirmed: false,
     };
 
     expect(parseViewSettings(saved)).toEqual(saved);

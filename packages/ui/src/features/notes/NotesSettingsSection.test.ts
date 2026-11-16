@@ -11,6 +11,7 @@ function renderSection() {
     folder: 'E:\\Journal',
     settings: DEFAULT_NOTES_SETTINGS,
     isDeletionConfirmed: true,
+    isLinkUpdateConfirmed: true,
     translator: createTranslator(),
     onCommand,
   });
@@ -81,5 +82,17 @@ describe('NotesSettingsSection', () => {
     expect(onCommand).not.toHaveBeenCalled();
     expect(field.getAttribute('aria-invalid')).toBe('true');
     expect(screen.getByRole('alert').textContent).toContain('up to 100 lines');
+  });
+
+  it('turns asking before updating links off', async () => {
+    const { onCommand } = renderSection();
+    const toggle = screen.getByRole('checkbox', {
+      name: 'Ask before updating links to a renamed or moved note',
+    });
+
+    await fireEvent.click(toggle);
+
+    expect(toggle.getAttribute('aria-describedby')).toBe('settings-notes-confirm-link-updates-description');
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'toggleNoteLinkUpdateConfirmation' });
   });
 });
