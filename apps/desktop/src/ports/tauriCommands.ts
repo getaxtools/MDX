@@ -30,6 +30,7 @@ import type {
   SaveSource,
   StoredWorkspace,
   ShownNotesIndex,
+  SpecProjectManifest,
   TagCount,
   TextSearchOptions,
   ViewMenuState,
@@ -124,6 +125,10 @@ export const tauriCommands = {
     invoke<LinkUpdatePlan>('plan_note_link_updates', { locationId, moved }),
   searchNotes: (locationId: string, query: string) =>
     invoke<NoteSearchResults>('search_notes', { locationId, query }),
+  scanSpecProject: (root: string, additionalLocations: readonly string[]) =>
+    invoke<SpecProjectManifest>('scan_spec_project', { root, additionalLocations }),
+  readSpecProjectFile: (root: string, relativePath: string) =>
+    invoke<OpenedDocument>('read_spec_project_file', { root, relativePath }),
   deleteWorkspace: (workspaceId: string) => invoke<null>('delete_workspace', { workspaceId }),
   saveWorkspaceList: (workspaceId: string, listName: string, valueJson: string) =>
     invoke<null>('save_workspace_list', { workspaceId, listName, valueJson }),

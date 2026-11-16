@@ -107,3 +107,11 @@ export type {
   NoteRestore,
   NoteTrashEntry,
 } from './NoteFilesPort';
+export {
+  MAX_SCANNED_SPEC_FILES,
+  type SpecProjectFile,
+  type SpecProjectLink,
+  type SpecProjectManifest,
+  type SpecProjectPort,
+} from './SpecProjectPort';
+export { InMemorySpecProjects, type InMemorySpecProject } from './fakes/InMemorySpecProjects';

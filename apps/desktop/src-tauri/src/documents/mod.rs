@@ -13,8 +13,8 @@ pub use document_location::{
     DocumentLocation, canonical_key_of, locate_document, location_of_resolved_path,
 };
 pub use document_reader::{
-    MAX_DOCUMENT_BYTES, OpenedDocument, is_markdown_path, modified_at_ms_of, open_allowed_document,
-    open_allowed_document_as,
+    MAX_DOCUMENT_BYTES, OpenedDocument, is_markdown_path, modified_at_ms, modified_at_ms_of,
+    open_allowed_document, open_allowed_document_as, read_located_text_file,
 };
 pub use document_writer::{
     copy_document, validated_file_name, with_markdown_extension, write_bytes_atomically,

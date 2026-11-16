@@ -70,10 +70,31 @@ fn read_located_document(
     if !metadata.is_file() {
         return Err(DocumentError::NotMarkdown);
     }
-    if metadata.len() > MAX_DOCUMENT_BYTES {
+    decode_located_file(location, &metadata, MAX_DOCUMENT_BYTES, chosen_encoding)
+}
+
+/// Reads a text file already checked for access, refusing it above `max_bytes`; the BOM is noted, not kept in the text.
+pub fn read_located_text_file(
+    location: DocumentLocation,
+    max_bytes: u64,
+) -> Result<OpenedDocument, DocumentError> {
+    let metadata = fs::metadata(location.path())?;
+    if !metadata.is_file() {
+        return Err(DocumentError::InvalidRequest);
+    }
+    decode_located_file(location, &metadata, max_bytes, None)
+}
+
+fn decode_located_file(
+    location: DocumentLocation,
+    metadata: &fs::Metadata,
+    max_bytes: u64,
+    chosen_encoding: Option<&'static Encoding>,
+) -> Result<OpenedDocument, DocumentError> {
+    if metadata.len() > max_bytes {
         return Err(DocumentError::TooLarge);
     }
-    let bytes = fs::read(&path)?;
+    let bytes = fs::read(location.path())?;
     let decoded = match chosen_encoding {
         Some(encoding) => decode_document_bytes_as(&bytes, encoding),
         None => decode_document_bytes(&bytes),
@@ -84,7 +105,7 @@ fn read_located_document(
         encoding: decoded.encoding,
         has_byte_order_mark: decoded.has_byte_order_mark,
         has_decoding_errors: decoded.has_decoding_errors,
-        modified_at_ms: modified_at_ms(&metadata),
+        modified_at_ms: modified_at_ms(metadata),
         location,
     })
 }
@@ -94,7 +115,7 @@ pub fn modified_at_ms_of(path: &Path) -> Result<u64, DocumentError> {
     Ok(modified_at_ms(&fs::metadata(path)?))
 }
 
-fn modified_at_ms(metadata: &fs::Metadata) -> u64 {
+pub fn modified_at_ms(metadata: &fs::Metadata) -> u64 {
     metadata
         .modified()
         .ok()

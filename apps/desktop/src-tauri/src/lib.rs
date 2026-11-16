@@ -11,6 +11,7 @@ mod notes_index;
 mod notes_location;
 mod open_requests;
 mod platform;
+mod spec_projects;
 #[cfg(dev)]
 mod startup_page;
 mod storage;
@@ -137,6 +138,8 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::notes_index::note_suggestions,
         commands::notes_index::note_headings,
         commands::notes_index::plan_note_link_updates,
+        commands::spec_projects::scan_spec_project,
+        commands::spec_projects::read_spec_project_file,
         commands::workspaces::load_workspace_registry,
         commands::workspaces::load_workspace,
         commands::workspaces::save_workspace,
