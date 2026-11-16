@@ -5,7 +5,8 @@ use std::path::{Component, Path, PathBuf};
 use super::ImageKind;
 use crate::documents::{DocumentError, validated_file_name, write_bytes_atomically};
 
-pub const MAX_ATTACHMENT_BYTES: usize = 25 * 1024 * 1024;
+/// A picture larger than the preview shows is not added, so every added picture can be seen.
+pub const MAX_ATTACHMENT_BYTES: usize = crate::document_images::MAX_IMAGE_BYTES;
 /// Gives up rather than trying names forever in a folder full of same-named pictures.
 const MAX_NAME_SUFFIX: u32 = 10_000;
 const DEFAULT_STEM: &str = "image";
@@ -245,7 +246,7 @@ mod tests {
     }
 
     #[test]
-    fn more_than_25_mb_is_refused() {
+    fn a_picture_larger_than_the_preview_shows_is_refused() {
         let folder = tempfile::tempdir().unwrap();
         let mut bytes = PNG.to_vec();
         bytes.resize(MAX_ATTACHMENT_BYTES + 1, 0);

@@ -17,7 +17,17 @@
     noteNameOf,
     notesSettingsOf,
   } from '@mdx/core';
-  import type { FormattingState, SectionAction, SourceEditor, ToolboxAction, WrittenLink } from '@mdx/editor';
+  import type {
+    FormattingState,
+    FormulaEditRequest,
+    FormulaKind,
+    FormulaTarget,
+    FormulaWriteOutcome,
+    SectionAction,
+    SourceEditor,
+    ToolboxAction,
+    WrittenLink,
+  } from '@mdx/editor';
   import type { Translator } from '@mdx/i18n';
   import type { CodeHighlighter, OutlineEntry, RichBlockRenderer } from '@mdx/renderer';
   import { untrack } from 'svelte';
@@ -29,6 +39,9 @@
   import type { ScrollSync } from '../editing/ScrollSync';
   import SourceEditorPane from '../editing/SourceEditorPane.svelte';
   import FormattingToolbar from '../editing/FormattingToolbar.svelte';
+  import EquationEditorHost from '../equation/EquationEditorHost.svelte';
+  import { isRefusalOfTheSource } from '../equation/formulaProblemText';
+  import type { RenderedFormula } from '../document-view/renderedFormulaAt';
   import { openLinkFromEditor } from '../editing/editorLinks';
   import { createRichTextRendering } from '../editing/richTextRendering';
   import PanelResizer from '../../components/PanelResizer.svelte';
@@ -168,6 +181,8 @@
   let cursorCount = $state(1);
   let isCaretInLink = $state(false);
   let editorFormatting: FormattingState | undefined = $state();
+  /** The formula the equation editor is open on, in the document being edited. */
+  let equationEditing: { request: FormulaEditRequest; canonicalKey: string } | undefined = $state();
   let selectedWords = $state(0);
   const sessionWordCounts = new SessionWordCounts();
   const activeWordGoal = $derived(
@@ -186,6 +201,8 @@
   let shownEditor: SourceEditor | undefined;
   /** A heading chosen while the editor was still starting, revealed once it is ready. */
   let pendingEditorLine: number | undefined;
+  /** Edit Formula chosen in the preview, waiting for the editor it opened. */
+  let pendingFormulaEdit: RenderedFormula | undefined;
   /** Kept with its document, so another tab never shows the section of the previous one. */
   let currentHeading: { readonly documentKey?: string; readonly id?: string } = $state({});
   const currentHeadingId = $derived(currentHeading.documentKey === activeKey ? currentHeading.id : undefined);
@@ -244,6 +261,34 @@
     sync.attachEditor(sourceEditor);
     if (sourceEditor && pendingEditorLine !== undefined) sourceEditor.revealLine(pendingEditorLine);
     pendingEditorLine = undefined;
+    if (sourceEditor && pendingFormulaEdit)
+      sourceEditor.editFormulaInOrder(pendingFormulaEdit.index, pendingFormulaEdit.source);
+    pendingFormulaEdit = undefined;
+  }
+
+  /** Edit Formula in the preview opens the document for editing, then the equation editor on that formula. */
+  function editPreviewFormula(formula: RenderedFormula) {
+    if (shownEditor && editedDocument) {
+      shownEditor.editFormulaInOrder(formula.index, formula.source);
+      return;
+    }
+    pendingFormulaEdit = formula;
+    void controller.execute({ kind: 'toggleEditing' });
+  }
+
+  /** The equation editor stays open on a source the editor refused, so the user can correct it. */
+  function insertFormula(
+    target: FormulaTarget,
+    formula: { readonly tex: string; readonly kind: FormulaKind },
+  ): FormulaWriteOutcome {
+    const outcome = shownEditor?.insertFormula(target, formula) ?? 'textChanged';
+    if (!isRefusalOfTheSource(outcome)) equationEditing = undefined;
+    return outcome;
+  }
+
+  function cancelEquation() {
+    equationEditing = undefined;
+    shownEditor?.focus();
   }
 
   /** While editing the caret moves to the heading; otherwise the shown document scrolls to it. */
@@ -561,6 +606,9 @@
                     onOpenLink={openEditorLink}
                     onCaretInLinkChange={(isInLink: boolean) => (isCaretInLink = isInLink)}
                     onFormattingChange={(formatting: FormattingState) => (editorFormatting = formatting)}
+                    onEditFormula={(request: FormulaEditRequest) =>
+                      (equationEditing = { request, canonicalKey: editedDocument.canonicalKey })}
+                    onChoosePictures={() => void controller.addPictureFiles()}
                     snippets={snapshot ? availableSnippets(snapshot.viewer.snippetLibrary) : []}
                     wikiLinks={activeTab ? controller.wikiLinkSuggesterFor(activeTab.location) : undefined}
                     onSelectedTextChange={(selectedText: string) =>
@@ -585,6 +633,7 @@
                     copyAsHtmlRequest={snapshot?.copyAsHtmlRequest}
                     onOpenLink={(link: DocumentLink) => void controller.openLink(link)}
                     onCommand={(command: ViewerCommand) => void controller.execute(command)}
+                    onEditFormula={editPreviewFormula}
                     isOutlineVisible={false}
                     isFavourite={isActiveFavourite}
                     canBeFavourite={!isActiveUntitled}
@@ -624,6 +673,7 @@
               onScroll={(scrollRatio: number) => controller.rememberScrollPosition(scrollRatio)}
               onCurrentHeadingChange={showCurrentHeading}
               onCommand={(command: ViewerCommand) => void controller.execute(command)}
+              onEditFormula={editPreviewFormula}
               isOutlineVisible={isSidebarViewShown(viewSettings, 'outline')}
               isFavourite={isActiveFavourite}
               canBeFavourite={!isActiveUntitled}
@@ -666,6 +716,16 @@
       />
     {/if}
   </div>
+  <EquationEditorHost
+    request={equationEditing && equationEditing.canonicalKey === editedDocument?.canonicalKey
+      ? equationEditing.request
+      : undefined}
+    {translator}
+    previewFormula={(tex: string, isDisplay: boolean) =>
+      richBlocks?.previewFormula(tex, isDisplay) ?? Promise.resolve({ kind: 'unavailable' })}
+    onInsert={insertFormula}
+    onCancel={cancelEquation}
+  />
   {#if snapshot.externalLinkRequest !== undefined}
     <ConfirmDialog
       title={translator.translate('document.openExternalLink.title')}

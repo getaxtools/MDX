@@ -689,7 +689,7 @@ export class ViewerController {
     if (!attachments) return undefined;
     return new DocumentAttachments(session, attachments, {
       isEditing: () => this.editingActions.isActiveDocumentEditing(),
-      insertLinks: (links, point) => this.editingActions.insertPictureLinks(links, point),
+      insertLinks: (links, place) => this.editingActions.insertPictureLinks(links, place),
       notify: (key, values) => this.showNotice(key, values),
       askToSaveFirst: () =>
         this.showNotice('attachments.saveFirst', undefined, [
@@ -701,6 +701,12 @@ export class ViewerController {
   /** Saves a picture pasted into the editor; undefined when it cannot be added. */
   pastePicture(bytes: Uint8Array): Promise<string | undefined> {
     return this.documentAttachments?.pastePicture(bytes) ?? Promise.resolve(undefined);
+  }
+
+  /** The Image button: chosen picture files are copied next to the active document and linked at the caret. */
+  addPictureFiles(): Promise<void> {
+    const filterName = this.dependencies.translator.translate('attachments.pictureFilter');
+    return this.documentAttachments?.addPictureFiles(filterName) ?? Promise.resolve();
   }
 
   async start(): Promise<void> {

@@ -131,6 +131,7 @@ const COMMANDS_BY_MENU_ITEM: Readonly<Record<string, ViewerCommand>> = {
   redo: { kind: 'runEditorCommand', command: 'redo' },
   showReplace: { kind: 'runEditorCommand', command: 'replace' },
   goToLine: { kind: 'runEditorCommand', command: 'goToLine' },
+  insertEquation: { kind: 'runEditorCommand', command: 'insertEquation' },
   showAbout: { kind: 'showAbout' },
   showSettings: { kind: 'showSettings' },
   showNewWorkspace: { kind: 'showNewWorkspace' },

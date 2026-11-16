@@ -131,19 +131,28 @@ export class EditingActions {
     this.callbacks.onChange();
   }
 
-  /** Asks the active document's editor to add picture links near a point. */
-  insertPictureLinks(links: readonly string[], point: { readonly x: number; readonly y: number }): void {
+  /**
+   * Asks a document's editor to add picture links near a point, or at the caret without one; false,
+   * adding nothing, once that document is no longer the active one being edited.
+   */
+  insertPictureLinks(
+    links: readonly string[],
+    {
+      canonicalKey,
+      point,
+    }: { readonly canonicalKey: string; readonly point?: { readonly x: number; readonly y: number } },
+  ): boolean {
     const location = this.activeLocation();
-    if (!location || !this.editing.isEditing(location.canonicalKey)) return;
-    const { canonicalKey } = location;
+    if (location?.canonicalKey !== canonicalKey || !this.editing.isEditing(canonicalKey)) return false;
     this.requests.set(canonicalKey, {
       id: this.nextRequestId(),
       canonicalKey,
       kind: 'insertPictureLinks',
       links,
-      point,
+      ...(point ? { point } : {}),
     });
     this.callbacks.onChange();
+    return true;
   }
 
   /** Asks the active document's editor to select a range, such as a prompt injection finding. */

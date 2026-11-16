@@ -1,5 +1,6 @@
 import { Prec, type Extension } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
+import { editClickedFormula } from '../formulas/formulaRequests';
 import { blockLayer } from './blockLayer';
 import { inlineMarkupLayer } from './inlineMarkupLayer';
 import { openClickedLink } from './linkOpening';
@@ -18,8 +19,10 @@ export function richTextExtensions(): Extension {
     blockLayer,
     Prec.high(keymap.of([{ key: 'Mod-Enter', run: toggleTasksAtCaret }])),
     EditorView.domEventHandlers({
-      mousedown: (event, view) => openClickedLink(event, view) || keepCaretOnCheckbox(event, view),
-      click: (event, view) => toggleClickedTask(event, view),
+      mousedown: (event, view) =>
+        openClickedLink(event, view) || keepCaretOnCheckbox(event, view) || editClickedFormula(event, view),
+      // A click without a press, as assistive technology sends, edits a formula too.
+      click: (event, view) => toggleClickedTask(event, view) || editClickedFormula(event, view),
     }),
   ];
 }

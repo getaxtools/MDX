@@ -13,6 +13,7 @@
   import type { DocumentLink } from './DocumentLink';
   import PropertiesPanel from './PropertiesPanel.svelte';
   import type { PropertyFieldsState } from './PropertyEditing';
+  import { renderedFormulaAt, type RenderedFormula } from './renderedFormulaAt';
   import { untrack, type Snippet } from 'svelte';
   import type { ExportFormat } from '@mdx/platform';
   import { standaloneDocumentHtml } from '../document-export/standaloneDocumentHtml';
@@ -61,6 +62,8 @@
     onScroll?: (scrollRatio: number) => void;
     onCurrentHeadingChange?: (headingId: string | undefined) => void;
     onCommand?: (command: ViewerCommand) => void;
+    /** Edit Formula on a rendered formula; the menu offers it only when this is given. */
+    onEditFormula?: ((formula: RenderedFormula) => void) | undefined;
     isOutlineVisible?: boolean;
     isFavourite?: boolean;
     canBeFavourite?: boolean;
@@ -95,6 +98,7 @@
     onScroll = () => undefined,
     onCurrentHeadingChange = () => undefined,
     onCommand = () => undefined,
+    onEditFormula,
     isOutlineVisible = true,
     isFavourite = false,
     canBeFavourite = true,
@@ -277,8 +281,14 @@
   };
 
   let articleElement: HTMLElement | undefined = $state();
-  let menuRequest: { readonly x: number; readonly y: number; readonly selectedText: string } | undefined =
-    $state();
+  let menuRequest:
+    | {
+        readonly x: number;
+        readonly y: number;
+        readonly selectedText: string;
+        readonly formula: RenderedFormula | undefined;
+      }
+    | undefined = $state();
 
   const menuItems = $derived(
     documentContextMenuItems(
@@ -288,6 +298,7 @@
         isOutlineVisible,
         isFavourite,
         canBeFavourite,
+        isOnFormula: onEditFormula !== undefined && menuRequest?.formula !== undefined,
       },
       translator,
     ),
@@ -298,10 +309,15 @@
     menuRequest = {
       ...contextMenuPosition(event),
       selectedText: globalThis.getSelection()?.toString() ?? '',
+      formula: isSourceView ? undefined : renderedFormulaAt(event.target, articleElement),
     };
   }
 
   function chooseMenuItem(itemId: DocumentMenuItemId) {
+    if (itemId === 'editFormula') {
+      editMenuFormula();
+      return;
+    }
     const command = commandForDocumentMenuItem(itemId);
     if (command) onCommand(command);
     if (itemId === 'copyAsHtml') copyAsHtml();
@@ -309,6 +325,10 @@
       void globalThis.navigator.clipboard.writeText(menuRequest.selectedText);
     if (itemId === 'selectAll' && articleElement)
       globalThis.getSelection()?.selectAllChildren(articleElement);
+  }
+
+  function editMenuFormula() {
+    if (menuRequest?.formula) onEditFormula?.(menuRequest.formula);
   }
 
   function handleClick(event: MouseEvent) {

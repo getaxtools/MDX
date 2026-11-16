@@ -119,4 +119,39 @@ describe('rich block renderer', () => {
       expect(await failingLoad.typesetMath('x', false)).toBeUndefined();
     });
   });
+
+  describe('the equation editor preview', () => {
+    it('typesets with the preview options and sanitizes', async () => {
+      const preview = await withKatex().previewFormula(String.raw`\frac{a}{b}`, true);
+
+      expect(preview.kind).toBe('typeset');
+      expect(preview.kind === 'typeset' && preview.html).toContain('katex-display');
+    });
+
+    it('names the error and the character it is at', async () => {
+      const preview = await withKatex().previewFormula(String.raw`x^{2`, false);
+
+      expect(preview).toMatchObject({ kind: 'error', position: 4 });
+      expect(preview.kind === 'error' && preview.message).toContain("Expected '}'");
+    });
+
+    it('does not follow a link command', async () => {
+      const preview = await withKatex().previewFormula(String.raw`\href{https://example.com}{x}`, false);
+
+      expect(preview.kind === 'typeset' ? preview.html : '').not.toContain('<a');
+    });
+
+    it('says a formula is too long or the typesetter is unavailable', async () => {
+      const failingLoad = createRichBlockRenderer({
+        window,
+        loadMathTypesetter: () => Promise.reject(new Error()),
+      });
+
+      expect(await withKatex().previewFormula('x'.repeat(10_001), false)).toEqual({
+        kind: 'tooLong',
+        limit: 10_000,
+      });
+      expect(await failingLoad.previewFormula('x', false)).toEqual({ kind: 'unavailable' });
+    });
+  });
 });

@@ -3,6 +3,7 @@ export {
   type EditorMenuCommand,
   type EditorTextPosition,
   type EditorTextRange,
+  type FormulaWriteOutcome,
   type SourceEditor,
   type SourceEditorOptions,
 } from './createSourceEditor';
@@ -44,3 +45,6 @@ export type {
   RichTextProviders,
 } from './rich-text/richTextProviders';
 export type { FoundHiddenCharacter, HiddenCharacterFinder } from './hidden-characters/hiddenCharacters';
+export type { FormulaKind, FormulaRefusal, FormulaTarget } from './formulas/formulaInsertion';
+export type { EditedLinesBox, FormulaEditRequest } from './formulas/formulaRequests';
+export { createFormulaField, type FormulaField, type FormulaFieldOptions } from './formulas/formulaField';

@@ -36,6 +36,16 @@ describe('document context menu', () => {
     ]);
   });
 
+  it('offers Edit Formula first when opened on a rendered formula', () => {
+    const items = documentContextMenuItems({ ...previewState, isOnFormula: true }, translator);
+    const withoutFormula = documentContextMenuItems(previewState, translator);
+
+    expect(items[0]?.label).toBe('Edit Formula');
+    expect(items[1]?.hasSeparatorBefore).toBe(true);
+    expect(commandForDocumentMenuItem('editFormula')).toBeUndefined();
+    expect(withoutFormula.some((item) => item.id === 'editFormula')).toBe(false);
+  });
+
   it('names the toggles after what they will do next', () => {
     const items = documentContextMenuItems(
       { ...previewState, isSourceView: true, isOutlineVisible: false, isFavourite: true },

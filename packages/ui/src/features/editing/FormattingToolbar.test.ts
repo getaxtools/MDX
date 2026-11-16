@@ -106,13 +106,34 @@ describe('FormattingToolbar', () => {
     expect(onRun).toHaveBeenCalledWith('heading3');
   });
 
-  it('the Math button starts an inline or a display formula', async () => {
+  it('the Math split button starts a formula of the last kind, or the kind chosen from its menu', async () => {
     const { onRun } = renderToolbar();
 
     await userEvent.click(screen.getByRole('button', { name: 'Math' }));
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Display formula' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Formula kind' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: /^Display formula/ }));
 
-    expect(onRun).toHaveBeenCalledWith('displayMath');
+    expect(onRun.mock.calls).toEqual([['formula'], ['displayMath']]);
+  });
+
+  it('the formula kinds name their shortcuts', async () => {
+    renderToolbar();
+
+    screen.getByRole('button', { name: 'Formula kind' }).focus();
+    await userEvent.keyboard('{ArrowDown}');
+
+    expect(screen.getByRole('menuitem', { name: /^Inline formula/ }).textContent).toContain('Alt+=');
+    expect(screen.getByRole('menuitem', { name: /^Display formula/ }).textContent).toContain('Ctrl+Shift+M');
+  });
+
+  it('the Image button names Ctrl+Shift+I and runs the picture command', async () => {
+    const { onRun } = renderToolbar();
+    const image = screen.getByRole('button', { name: 'Image' });
+
+    await userEvent.click(image);
+
+    expect(image.title).toBe('Image (Ctrl+Shift+I)');
+    expect(onRun).toHaveBeenCalledWith('insertImage');
   });
 
   it('Rich text button reports the mode', async () => {
@@ -140,10 +161,16 @@ describe('FormattingToolbar', () => {
 
   it('More formatting runs the same commands with the same states', async () => {
     layOutToolbarAt(300);
-    const { onRun } = renderToolbar();
+    const { onRun } = renderToolbar({ pressed: ['quote'], headingLevel: 0 });
 
     await userEvent.click(screen.getByRole('button', { name: 'More formatting' }));
     expect(screen.getByRole('menuitem', { name: /^Display formula/ })).toBeTruthy();
+    expect(screen.getByRole('menuitemcheckbox', { name: /^Quote/ }).getAttribute('aria-checked')).toBe(
+      'true',
+    );
+    expect(screen.getByRole('menuitemcheckbox', { name: /^Rich text/ }).getAttribute('aria-checked')).toBe(
+      'true',
+    );
     await userEvent.click(screen.getByRole('menuitem', { name: /^Table/ }));
 
     expect(onRun).toHaveBeenCalledWith('table');

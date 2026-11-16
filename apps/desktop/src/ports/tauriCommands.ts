@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
   AppliedLinkUpdates,
+  AttachmentTarget,
   Backlink,
   DocumentLocation,
   EditedDocumentSave,
@@ -55,6 +56,11 @@ export interface StoredWorkspaceReply {
   readonly lists: Readonly<Record<string, string>>;
   readonly windowSession: string | null;
 }
+
+/** A chosen picture as the backend reports it, its failure as an error code. */
+export type ChosenPictureReply =
+  | { readonly kind: 'saved'; readonly relativePath: string }
+  | { readonly kind: 'failed'; readonly fileName: string; readonly reason: { readonly code: string } };
 
 interface AttachmentRequest {
   readonly documentPath: string;
@@ -146,6 +152,8 @@ export const tauriCommands = {
     invoke<null>('update_menu_shortcuts', { shortcuts }),
   saveAttachment: (request: AttachmentRequest) =>
     invoke<{ relativePath: string }>('save_attachment', { request }),
+  addPictureFiles: (request: AttachmentTarget & { readonly filterName: string }) =>
+    invoke<ChosenPictureReply[]>('add_picture_files', { request }),
   watchDocuments: (paths: readonly string[]) => invoke<null>('watch_documents', { paths }),
   watchFolders: (paths: readonly string[]) => invoke<null>('watch_folders', { paths }),
   resolveDocumentLink: (document: string, href: string) =>

@@ -13,7 +13,7 @@ import {
 } from '@codemirror/commands';
 import { syntaxHighlighting } from '@codemirror/language';
 import { gotoLine, openSearchPanel, search, searchKeymap, selectNextOccurrence } from '@codemirror/search';
-import { Compartment, EditorSelection, EditorState, type Extension } from '@codemirror/state';
+import { Compartment, EditorSelection, EditorState, Prec, type Extension } from '@codemirror/state';
 import {
   crosshairCursor,
   drawSelection,
@@ -24,6 +24,20 @@ import {
   type ViewUpdate,
 } from '@codemirror/view';
 import { nearestLineStart, pictureLinksAt, remotePictureMarkdown } from './attachments/pictureInsertion';
+import { pictureChooserFacet } from './attachments/pictureRequests';
+import {
+  formulaInsertion,
+  type FormulaKind,
+  type FormulaRefusal,
+  type FormulaTarget,
+} from './formulas/formulaInsertion';
+import {
+  editFormulaInOrder,
+  formulaEditorFacet,
+  startDisplayFormulaAfterDollars,
+  startFormula,
+  type FormulaEditRequest,
+} from './formulas/formulaRequests';
 import { blockAction, blockAtCaret, type BlockAction } from './blocks/blockActions';
 import type { BlockKind } from './blocks/markdownBlocks';
 import { sectionChange, type SectionAction } from './blocks/outlineSections';
@@ -74,7 +88,8 @@ export type EditorMenuCommand =
   | 'copyLineUp'
   | 'copyLineDown'
   | 'addNextOccurrence'
-  | 'openLink';
+  | 'openLink'
+  | 'insertEquation';
 
 export interface SourceEditorOptions {
   readonly parent: HTMLElement;
@@ -117,6 +132,10 @@ export interface SourceEditorOptions {
   /** Finds the hidden characters of a line, for Show hidden characters; without it none are drawn. */
   readonly findHiddenCharacters?: HiddenCharacterFinder;
   readonly isShowingHiddenCharacters?: boolean;
+  /** Opens the equation editor; formulas are written back with `insertFormula`. */
+  readonly onEditFormula?: (request: FormulaEditRequest) => void;
+  /** Lets the user choose picture files for the Image button and Ctrl+Shift+I. */
+  readonly onChoosePictures?: () => void;
 }
 
 /** A place in the text by zero-based line and column, in UTF-16 code units from the start of the line. */
@@ -129,6 +148,9 @@ export interface EditorTextRange {
   readonly from: EditorTextPosition;
   readonly to: EditorTextPosition;
 }
+
+/** What became of a formula the equation editor wrote back. */
+export type FormulaWriteOutcome = 'written' | FormulaRefusal;
 
 export interface SourceEditor {
   focus(): void;
@@ -167,6 +189,16 @@ export interface SourceEditor {
   setTypography(typography: EditorTypography): void;
   /** Runs a Formatting toolbar control on the selection, leaving the focus where it is. */
   runFormatting(action: ToolboxAction): void;
+  /**
+   * Writes the equation editor's formula at its target as one undo step and focuses the editor, or
+   * says why it was not written; a refusal about the source leaves the focus where it is.
+   */
+  insertFormula(
+    target: FormulaTarget,
+    formula: { readonly tex: string; readonly kind: FormulaKind },
+  ): FormulaWriteOutcome;
+  /** Edit Formula from the preview: opens the equation editor on the formula the preview counted as `index`. */
+  editFormulaInOrder(index: number, source: string): boolean;
   destroy(): void;
 }
 
@@ -215,7 +247,8 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
     run: (command) => commands[command](),
     ...blockEditingOf(view),
     ...slashMenu,
-    ...modeAndFormattingOf(view, followEditingMode),
+    ...editingModeControlOf(view, followEditingMode),
+    ...toolboxEditingOf(view),
     destroy: () => {
       formatting.stop();
       stopReportingScroll();
@@ -224,10 +257,10 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
   };
 }
 
-function modeAndFormattingOf(
+function editingModeControlOf(
   view: EditorView,
   followEditingMode: () => void,
-): Pick<SourceEditor, 'editingMode' | 'setEditingMode' | 'setTypography' | 'runFormatting'> {
+): Pick<SourceEditor, 'editingMode' | 'setEditingMode' | 'setTypography'> {
   return {
     editingMode: () => editingModeOf(view.state),
     setEditingMode: (mode) => {
@@ -235,7 +268,6 @@ function modeAndFormattingOf(
       followEditingMode();
     },
     setTypography: (typography) => setTypography(view, typography),
-    runFormatting: (action) => runToolboxAction(view, action),
   };
 }
 
@@ -251,7 +283,39 @@ function startingExtensions(
     editingModeExtension(mode, options.onEditingModeChange),
     typographyExtension(options.typography ?? DEFAULT_EDITOR_TYPOGRAPHY),
     editorExtensions(options),
+    appDialogExtensions(options),
   ];
+}
+
+/** The app's equation editor, which `$$` then Enter also opens, and its picture chooser. */
+function appDialogExtensions({ onEditFormula, onChoosePictures }: SourceEditorOptions): Extension {
+  return [
+    onEditFormula ? formulaEditorFacet.of(onEditFormula) : [],
+    onEditFormula ? Prec.highest(keymap.of([{ key: 'Enter', run: startDisplayFormulaAfterDollars }])) : [],
+    onChoosePictures ? pictureChooserFacet.of(onChoosePictures) : [],
+  ];
+}
+
+function toolboxEditingOf(
+  view: EditorView,
+): Pick<SourceEditor, 'runFormatting' | 'insertFormula' | 'editFormulaInOrder'> {
+  return {
+    runFormatting: (action) => runToolboxAction(view, action),
+    insertFormula: (target, formula) => insertFormula(view, target, formula),
+    editFormulaInOrder: (index, source) => editFormulaInOrder(view, index, source),
+  };
+}
+
+function insertFormula(
+  view: EditorView,
+  target: FormulaTarget,
+  formula: { readonly tex: string; readonly kind: FormulaKind },
+): FormulaWriteOutcome {
+  const insertion = formulaInsertion(view.state, target, formula);
+  if (insertion.outcome === 'written') view.dispatch(insertion.spec);
+  const outcome = insertion.outcome === 'written' ? 'written' : insertion.refusal;
+  if (outcome === 'written' || outcome === 'textChanged') view.focus();
+  return outcome;
 }
 
 /** Reports the formatting at the selection once per frame while the selection or the text changes. */
@@ -426,6 +490,7 @@ function menuCommandsOf(view: EditorView): Readonly<Record<EditorMenuCommand, ()
     copyLineDown: () => copyLineDown(view),
     addNextOccurrence: () => selectNextOccurrence(view),
     openLink: () => openLinkAtCaret(view),
+    insertEquation: () => startFormula(undefined)(view),
   };
 }
 

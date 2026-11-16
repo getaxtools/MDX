@@ -34,7 +34,7 @@ describe('the Formatting toolbar', () => {
     await toolbar.waitForDisplayed();
     expect(await findAccessibilityViolations(app.browser)).toEqual([]);
 
-    await toolbar.$('button[aria-label="Bold"]').click();
+    await mainWindow.pressWithPointer(toolbar.$('button[aria-label="Bold"]'));
     await mainWindow.pressShortcut('Ctrl+S');
 
     await mainWindow.waitForSavedTab(DOCUMENT);

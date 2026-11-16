@@ -114,6 +114,8 @@ const EDIT_SEARCH_ITEMS: [CommandItem; 4] = [
 
 const COPY_AS_HTML_ITEM: CommandItem = ("copyAsHtml", "menu.edit.copyAsHtml", None);
 
+const EDIT_INSERT_ITEMS: [CommandItem; 1] = [("insertEquation", "menu.edit.insertMath", None)];
+
 const TOGGLE_EDITING_ITEM: CommandItem =
     ("toggleEditing", "menu.view.toggleEditing", Some("Ctrl+E"));
 
@@ -526,7 +528,13 @@ impl MainMenuBuilder<'_> {
         self.with_items(builder, &EDIT_SEARCH_ITEMS)?
             .separator()
             .item(&self.command_item(PASTE_TABLE_ITEM)?)
+            .item(&self.insert_menu()?)
             .build()
+    }
+
+    fn insert_menu(&self) -> tauri::Result<Submenu<Wry>> {
+        let builder = SubmenuBuilder::new(self.app, self.labels.label("menu.edit.insert"));
+        self.with_items(builder, &EDIT_INSERT_ITEMS)?.build()
     }
 
     fn view_menu(&mut self) -> tauri::Result<Submenu<Wry>> {
@@ -697,6 +705,7 @@ mod tests {
             .chain(&WORKSPACE_ITEMS)
             .chain(&EDIT_HISTORY_ITEMS)
             .chain(&EDIT_SEARCH_ITEMS)
+            .chain(&EDIT_INSERT_ITEMS)
             .chain(&[
                 PASTE_TABLE_ITEM,
                 COPY_AS_HTML_ITEM,

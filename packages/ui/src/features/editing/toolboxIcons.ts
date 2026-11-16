@@ -2,7 +2,7 @@ import type { ToolboxAction } from '@mdx/editor';
 
 /** Stroke paths on a 24 by 24 grid, drawn in the document toolbar's hand-drawn style. */
 export const TOOLBOX_ICONS: Readonly<
-  Partial<Record<ToolboxAction | 'heading' | 'math' | 'richText' | 'more', readonly string[]>>
+  Partial<Record<ToolboxAction | 'heading' | 'math' | 'mathChoices' | 'richText' | 'more', readonly string[]>>
 > = {
   heading: ['M5 5v14', 'M13 5v14', 'M5 12h8', 'M16 19h4', 'M18 19v-7l-2 1.5'],
   bold: ['M7 5h6a3.5 3.5 0 0 1 0 7H7z', 'M7 12h7a3.5 3.5 0 0 1 0 7H7z'],
@@ -24,7 +24,9 @@ export const TOOLBOX_ICONS: Readonly<
   codeBlock: ['M4 5h16v14H4z', 'M9 10l-2 2 2 2', 'M15 10l2 2-2 2'],
   table: ['M4 5h16v14H4z', 'M4 10h16', 'M4 15h16', 'M10 5v14'],
   horizontalRule: ['M4 12h16', 'M8 7h8', 'M8 17h8'],
+  insertImage: ['M4 5h16v14H4z', 'M4 16l5-5 4 4 2-2 5 5', 'M15 9h.01'],
   math: ['M17 5H7l5 7-5 7h10'],
+  mathChoices: ['M9 10l3 3 3-3'],
   richText: ['M5 19l4-12 4 12', 'M6.5 15h5', 'M15 11h5', 'M15 15h5', 'M15 19h5'],
   more: ['M6 12h.01', 'M12 12h.01', 'M18 12h.01'],
 };

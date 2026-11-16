@@ -35,9 +35,11 @@ export { readFrontMatterProperties, type DocumentProperty } from './front-matter
 export {
   createRichBlockRenderer,
   type MathTypesetter,
+  type FormulaPreview,
   type RichBlockRenderer,
   type RichBlockRenderOptions,
 } from './rich-blocks/createRichBlockRenderer';
 export type { NotesRendering } from './plugins/wikiLinksPlugin';
 export { previewLinkHref, type WrittenLink, type WrittenLinkForm } from './links/previewLinkHref';
 export { collectDocumentStructure } from './structure/collectDocumentStructure';
+export { MATH_DISPLAY_CLASS, MATH_INLINE_CLASS } from './plugins/mathPlugin';

@@ -76,4 +76,30 @@ describe('ContextMenu', () => {
 
     expect(onChoose).toHaveBeenCalledWith('pin');
   });
+
+  it('an item that turns something on or off is a checkbox that reports its state', async () => {
+    const onChoose = vi.fn();
+    render(ContextMenu, {
+      label: 'Formatting',
+      items: [
+        { id: 'bold', label: 'Bold', isChecked: true },
+        { id: 'italic', label: 'Italic', isChecked: false },
+        { id: 'table', label: 'Table' },
+      ],
+      position: { x: 0, y: 0 },
+      onChoose,
+      onClose: vi.fn(),
+    });
+
+    const bold = screen.getByRole('menuitemcheckbox', { name: 'Bold' });
+    const italic = screen.getByRole('menuitemcheckbox', { name: 'Italic' });
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}');
+
+    expect(bold.getAttribute('aria-checked')).toBe('true');
+    expect(italic.getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByRole('menuitem', { name: 'Table' }).hasAttribute('aria-checked')).toBe(false);
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Table' }));
+    await userEvent.keyboard('{ArrowDown}{Enter}');
+    expect(onChoose).toHaveBeenCalledWith('bold');
+  });
 });

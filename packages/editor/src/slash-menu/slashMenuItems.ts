@@ -1,4 +1,5 @@
 import { EditorSelection, type EditorState, type TransactionSpec } from '@codemirror/state';
+import type { EditorView } from '@codemirror/view';
 import { documentStyleOf } from '../formatting/documentStyle';
 import { prefixFor } from '../formatting/lineFormatting';
 
@@ -171,6 +172,14 @@ export const BUILT_IN_SLASH_ITEMS: readonly SlashMenuItem[] = ITEM_SPECS.map((sp
   aliases: spec.aliases,
   insert: (state, range) => insertItem(state, range, spec),
 }));
+
+/** Writes an insert menu item's Markdown over the main selection, as the toolbox does. */
+export function insertMenuItemAtSelection(view: EditorView, itemId: string): void {
+  const item = BUILT_IN_SLASH_ITEMS.find((candidate) => candidate.id === itemId);
+  if (!item) return;
+  const { from, to } = view.state.selection.main;
+  view.dispatch(item.insert(view.state, { from, to }), { userEvent: 'input.format', scrollIntoView: true });
+}
 
 /** A block after text on the same line goes on the next line, and the text stays. */
 function insertItem(state: EditorState, range: SlashTextRange, spec: ItemSpec): TransactionSpec {

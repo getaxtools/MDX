@@ -77,8 +77,18 @@
     {#if item.hasSeparatorBefore}
       <div class="separator" role="separator"></div>
     {/if}
-    <button role="menuitem" tabindex="-1" disabled={item.isDisabled} onclick={() => choose(item.id)}>
-      <span>{item.label}</span>
+    <button
+      role={item.isChecked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+      aria-checked={item.isChecked}
+      tabindex="-1"
+      disabled={item.isDisabled}
+      onclick={() => choose(item.id)}
+    >
+      <span class="label">
+        {#if item.isChecked !== undefined}
+          <svg class="check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.5 3.5L13 4.5" /></svg>
+        {/if}{item.label}
+      </span>
       {#if item.shortcut}
         <span class="shortcut" aria-hidden="true">{item.shortcut}</span>
       {/if}
@@ -126,6 +136,28 @@
 
   button:disabled {
     color: var(--color-text-tertiary);
+  }
+
+  .label {
+    display: inline-flex;
+    gap: var(--space-2);
+    align-items: center;
+  }
+
+  .check {
+    flex: none;
+    width: 1rem;
+    height: 1rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    visibility: hidden;
+  }
+
+  button[aria-checked='true'] .check {
+    visibility: visible;
   }
 
   .shortcut {

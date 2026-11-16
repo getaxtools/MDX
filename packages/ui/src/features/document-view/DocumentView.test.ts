@@ -296,7 +296,11 @@ describe('DocumentView', () => {
     const renderInto = vi.fn<RichBlockRenderer['renderInto']>(() => Promise.resolve());
 
     renderDocument('<p><span class="mdx-math-inline">x</span></p>', {
-      richBlocks: { renderInto, typesetMath: () => Promise.resolve(undefined) },
+      richBlocks: {
+        renderInto,
+        typesetMath: () => Promise.resolve(undefined),
+        previewFormula: () => Promise.resolve({ kind: 'unavailable' }),
+      },
     });
 
     await vi.waitFor(() => expect(renderInto).toHaveBeenCalled());
@@ -307,7 +311,11 @@ describe('DocumentView', () => {
     const renderInto = vi.fn(() => Promise.resolve());
 
     renderDocument('<p>x</p>', {
-      richBlocks: { renderInto, typesetMath: () => Promise.resolve(undefined) },
+      richBlocks: {
+        renderInto,
+        typesetMath: () => Promise.resolve(undefined),
+        previewFormula: () => Promise.resolve({ kind: 'unavailable' }),
+      },
       isSourceView: true,
     });
 

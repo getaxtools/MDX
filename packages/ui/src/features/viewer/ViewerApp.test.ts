@@ -2,6 +2,7 @@ import { ViewerSession, WorkspaceKindsState, type WorkspaceKind } from '@mdx/cor
 import { createTranslator } from '@mdx/i18n';
 import {
   InMemoryAppState,
+  InMemoryAttachments,
   InMemoryDocumentFiles,
   InMemoryDocumentLinks,
   InMemoryDocumentRequests,
@@ -20,7 +21,11 @@ const LAZY_LOAD_WAIT = { timeout: 10_000 };
 const GUIDE = 'C:\\Docs\\Guide.md';
 const NOTES = 'C:\\Docs\\Notes.md';
 
-async function renderViewer(startupPaths: string[] = [], files: Readonly<Record<string, string>> = {}) {
+async function renderViewer(
+  startupPaths: string[] = [],
+  files: Readonly<Record<string, string>> = {},
+  attachments?: InMemoryAttachments,
+) {
   const requests = new InMemoryDocumentRequests(startupPaths);
   const translator = createTranslator();
   const links = new InMemoryDocumentLinks();
@@ -39,6 +44,7 @@ async function renderViewer(startupPaths: string[] = [], files: Readonly<Record<
     renderer: createMarkdownRenderer({ window }),
     translator,
     links,
+    ...(attachments ? { attachments } : {}),
   });
   await controller.start();
   render(ViewerApp, {
@@ -326,6 +332,80 @@ describe('ViewerApp', () => {
       expect(
         await screen.findByText('Large.md is larger than 1 MB, so it is edited in Source mode.'),
       ).toBeTruthy();
+    });
+
+    it('the Image button copies the chosen pictures and links them at the caret', async () => {
+      const attachments = new InMemoryAttachments();
+      attachments.pictureChoice = ['C:\\Pictures\\chart.png'];
+      const { controller } = await renderViewer([GUIDE], {}, attachments);
+      await screen.findByRole('heading', { name: 'Guide' });
+      await editedTextBox('Guide.md');
+      const updateEditedText = vi.spyOn(controller, 'updateEditedText');
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Image' }));
+
+      await vi.waitFor(() =>
+        expect(updateEditedText).toHaveBeenLastCalledWith(
+          GUIDE.toLowerCase(),
+          expect.stringContaining('![chart](assets/chart.png)'),
+        ),
+      );
+      expect(attachments.pictureDialogFilters).toEqual(['Pictures']);
+    });
+
+    it('Untitled document asks to save first', async () => {
+      const attachments = new InMemoryAttachments();
+      attachments.pictureChoice = ['C:\\Pictures\\chart.png'];
+      await renderViewer([], {}, attachments);
+      await userEvent.click(await screen.findByRole('button', { name: 'New Document' }));
+      await screen.findByRole('textbox', { name: 'Source of Untitled-1.md' }, EDITOR_WAIT);
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Image' }));
+
+      expect(
+        await screen.findByText('Save the document first, so the picture can be copied next to it.'),
+      ).toBeTruthy();
+      expect(attachments.pictureDialogFilters).toEqual([]);
+    });
+
+    it('Edit Formula in the preview opens the document for editing with the equation editor on it', async () => {
+      const AREA = 'C:\\Docs\\Area.md';
+      await renderViewer([AREA], { [AREA]: 'Area $a$ and $x^2$ here.' });
+      await screen.findByRole('tab', { name: 'Area.md', selected: true });
+      const formula = await vi.waitFor(() => {
+        const shown = [...document.querySelectorAll('.mdx-math-inline')].at(1);
+        return shown ?? Promise.reject(new Error('The preview has no formula yet'));
+      });
+
+      await fireEvent.contextMenu(formula);
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Edit Formula' }));
+
+      const dialog = await screen.findByRole('dialog', { name: 'Equation' }, EDITOR_WAIT);
+      expect(within(dialog).getByRole('textbox', { name: 'TeX source' }).textContent).toBe('x^2');
+      expect(screen.getByRole('textbox', { name: 'Source of Area.md' })).toBeTruthy();
+    });
+
+    it('click on a rendered formula edits it', async () => {
+      const AREA = 'C:\\Docs\\Area.md';
+      const { controller } = await renderViewer([AREA], { [AREA]: 'Area $x^2$ here.' });
+      await screen.findByRole('tab', { name: 'Area.md', selected: true });
+      const textBox = await editedTextBox('Area.md');
+      const formula = await vi.waitFor(
+        () => within(textBox).getByRole('img', { name: 'Formula x^2' }),
+        EDITOR_WAIT,
+      );
+      const updateEditedText = vi.spyOn(controller, 'updateEditedText');
+
+      await fireEvent.mouseDown(formula, { button: 0 });
+      const dialog = await screen.findByRole('dialog', { name: 'Equation' }, EDITOR_WAIT);
+      const source = within(dialog).getByRole('textbox', { name: 'TeX source' });
+      await userEvent.keyboard('{Backspace}3');
+      await vi.waitFor(() => expect(source.textContent).toBe('x^3'));
+      await userEvent.keyboard('{Enter}');
+
+      expect(screen.queryByRole('dialog', { name: 'Equation' })).toBeNull();
+      expect(updateEditedText).toHaveBeenLastCalledWith(AREA.toLowerCase(), 'Area $x^3$ here.');
+      expect(textBox.contains(document.activeElement)).toBe(true);
     });
   });
 

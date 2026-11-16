@@ -42,14 +42,28 @@ export class MainWindowPage {
   /** Presses a shortcut such as `Ctrl+Shift+Tab` in the focused part of the window. */
   async pressShortcut(shortcut: string): Promise<void> {
     // The embedded driver drops modifier state for special keys such as Tab, so dispatch the same
-    // synthetic events it would send, with the modifiers set.
-    await this.browser.execute((keyboardEvent) => {
-      const target = document.activeElement ?? document.body;
-      target.dispatchEvent(
-        new KeyboardEvent('keydown', { ...keyboardEvent, bubbles: true, cancelable: true }),
-      );
-      target.dispatchEvent(new KeyboardEvent('keyup', { ...keyboardEvent, bubbles: true, cancelable: true }));
-    }, keyboardEventFor(shortcut));
+    // synthetic events it would send, with the modifiers set. The editor tells Ctrl+Shift+letter keys
+    // by their key code, which a synthetic event can only be given by redefining it.
+    await this.browser.execute(
+      (keyboardEvent, keyCode) => {
+        const target = document.activeElement ?? document.body;
+        for (const type of ['keydown', 'keyup']) {
+          const event = new KeyboardEvent(type, { ...keyboardEvent, bubbles: true, cancelable: true });
+          if (keyCode !== 0) Object.defineProperty(event, 'keyCode', { get: () => keyCode });
+          target.dispatchEvent(event);
+        }
+      },
+      keyboardEventFor(shortcut),
+      letterKeyCodeOf(shortcut),
+    );
+  }
+
+  /** Types into the focused text field the way an input method inserts text. */
+  async typeInFocusedField(text: string): Promise<void> {
+    await this.browser.execute((typedText) => {
+      // eslint-disable-next-line @typescript-eslint/no-deprecated -- still the only way to insert text as an input method does
+      document.execCommand('insertText', false, typedText);
+    }, text);
   }
 
   /** The rendered heading, looked up again on every try because opening documents re-renders it. */
@@ -334,6 +348,29 @@ export class MainWindowPage {
     );
   }
 
+  /**
+   * Presses and releases the mouse on the middle of an element, as a pointer does. The embedded
+   * driver's click sends no press and then focuses the element itself, which hides what a control
+   * does on the press, such as keeping the editor's focus or placing its caret.
+   */
+  async pressWithPointer(element: ChainablePromiseElement): Promise<void> {
+    await this.browser.execute(
+      (target) => {
+        const bounds = target.getBoundingClientRect();
+        const pointer = {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          clientX: bounds.left + bounds.width / 2,
+          clientY: bounds.top + bounds.height / 2,
+        };
+        for (const type of ['mousedown', 'mouseup', 'click'])
+          target.dispatchEvent(new MouseEvent(type, pointer));
+      },
+      await element.getElement(),
+    );
+  }
+
   /** Double-clicks an element; the embedded driver has no double-click of its own. */
   async doubleClick(element: ChainablePromiseElement): Promise<void> {
     await this.browser.execute(
@@ -529,6 +566,12 @@ function keyboardEventFor(shortcut: string): KeyboardEventInit {
     shiftKey: hasShift,
     altKey: parts.includes('Alt'),
   };
+}
+
+/** The key code of a letter key, as the browser reports it whatever the case; 0 for other keys. */
+function letterKeyCodeOf(shortcut: string): number {
+  const key = shortcut.split('+').at(-1) ?? '';
+  return /^[a-z]$/i.test(key) ? key.toUpperCase().charCodeAt(0) : 0;
 }
 
 /** `KeyboardEvent.key` is a space character for the space bar and lower case for unshifted letters. */

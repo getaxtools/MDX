@@ -1,13 +1,20 @@
 import { ViewerSession } from '@mdx/core';
-import { InMemoryAppState, InMemoryAttachments, InMemoryDocumentFiles } from '@mdx/platform';
+import {
+  InMemoryAppState,
+  InMemoryAttachments,
+  InMemoryDocumentFiles,
+  type ChosenPicture,
+} from '@mdx/platform';
 import { describe, expect, it, vi } from 'vitest';
-import { DocumentAttachments, type AttachmentCallbacks } from './DocumentAttachments';
+import { DocumentAttachments, type AttachmentCallbacks, type LinkPlace } from './DocumentAttachments';
 
 const GUIDE = 'C:\\Docs\\Guide.md';
+const NOTES = 'C:\\Docs\\Notes.md';
+const GUIDE_KEY = GUIDE.toLowerCase();
 
 async function attachmentsFor({ isUntitled = false, isEditing = true } = {}) {
   const session = new ViewerSession({
-    documentFiles: new InMemoryDocumentFiles({ [GUIDE]: '# Guide' }),
+    documentFiles: new InMemoryDocumentFiles({ [GUIDE]: '# Guide', [NOTES]: '# Notes' }),
     appState: new InMemoryAppState(),
     now: () => 0,
   });
@@ -16,12 +23,28 @@ async function attachmentsFor({ isUntitled = false, isEditing = true } = {}) {
   const port = new InMemoryAttachments();
   const callbacks: AttachmentCallbacks = {
     isEditing: () => isEditing,
-    insertLinks: vi.fn(),
+    // Like the app, links go in only while their document is still the active one.
+    insertLinks: vi.fn(
+      (_links: readonly string[], place: LinkPlace) =>
+        session.currentState().tabStrip.activeTab()?.location.canonicalKey === place.canonicalKey,
+    ),
     notify: vi.fn(),
     askToSaveFirst: vi.fn(),
   };
   const attachments = new DocumentAttachments(session, port, callbacks);
-  return { attachments, port, callbacks };
+  return { attachments, port, callbacks, session };
+}
+
+/** A picture dialog that stays open until the test closes it with the pictures it returns. */
+function holdPictureDialog(port: InMemoryAttachments) {
+  let close: (chosen: readonly ChosenPicture[]) => void = () => undefined;
+  const show = vi.spyOn(port, 'addPictureFiles').mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        close = resolve;
+      }),
+  );
+  return { show, close: (chosen: readonly ChosenPicture[]) => close(chosen) };
 }
 
 describe('DocumentAttachments', () => {
@@ -40,7 +63,7 @@ describe('DocumentAttachments', () => {
     ]);
     expect(callbacks.insertLinks).toHaveBeenCalledWith(
       ['![team photo](assets/team%20photo.png)', '![b](assets/b.jpg)'],
-      { x: 10, y: 20 },
+      { canonicalKey: GUIDE_KEY, point: { x: 10, y: 20 } },
     );
   });
 
@@ -62,14 +85,17 @@ describe('DocumentAttachments', () => {
     expect(port.saved).toEqual([]);
   });
 
-  it('refused file is named in the message and the others are still added', async () => {
+  it('refused file is named in a message saying why, and the others are still added', async () => {
     const { attachments, port, callbacks } = await attachmentsFor();
     port.refusedNames.add('tool.png');
 
     await attachments.addDroppedPictures({ paths: ['C:\\tool.png', 'C:\\ok.png'], x: 0, y: 0 });
 
-    expect(callbacks.notify).toHaveBeenCalledWith('attachments.failed', { path: 'tool.png' });
-    expect(callbacks.insertLinks).toHaveBeenCalledWith(['![ok](assets/ok.png)'], { x: 0, y: 0 });
+    expect(callbacks.notify).toHaveBeenCalledWith('errors.document.notAnImage', { path: 'tool.png' });
+    expect(callbacks.insertLinks).toHaveBeenCalledWith(['![ok](assets/ok.png)'], {
+      canonicalKey: GUIDE_KEY,
+      point: { x: 0, y: 0 },
+    });
   });
 
   it('pasted image bytes go through the port under the document name and time', async () => {
@@ -92,5 +118,93 @@ describe('DocumentAttachments', () => {
     stop();
 
     expect(port.saved).toHaveLength(1);
+  });
+
+  it('returned links of chosen pictures are inserted at the caret', async () => {
+    const { attachments, port, callbacks } = await attachmentsFor();
+    port.pictureChoice = ['C:\\Pictures\\chart.png', 'C:\\Pictures\\map.webp'];
+
+    await attachments.addPictureFiles('Pictures');
+
+    expect(port.pictureDialogFilters).toEqual(['Pictures']);
+    expect(callbacks.insertLinks).toHaveBeenCalledWith(
+      ['![chart](assets/chart.png)', '![map](assets/map.webp)'],
+      { canonicalKey: GUIDE_KEY },
+    );
+  });
+
+  it('a chosen file that is not a picture is named and the others are linked', async () => {
+    const { attachments, port, callbacks } = await attachmentsFor();
+    port.pictureChoice = ['C:\\notes.txt', 'C:\\ok.png'];
+    port.refusedNames.add('notes.txt');
+
+    await attachments.addPictureFiles('Pictures');
+
+    expect(callbacks.notify).toHaveBeenCalledWith('errors.document.notAnImage', { path: 'notes.txt' });
+    expect(callbacks.insertLinks).toHaveBeenCalledWith(['![ok](assets/ok.png)'], {
+      canonicalKey: GUIDE_KEY,
+    });
+  });
+
+  it('a picture larger than the preview shows says so', async () => {
+    const { attachments, port, callbacks } = await attachmentsFor();
+    vi.spyOn(port, 'addPictureFiles').mockResolvedValue([
+      { kind: 'failed', fileName: 'poster.png', reason: 'tooLarge' },
+    ]);
+
+    await attachments.addPictureFiles('Pictures');
+
+    expect(callbacks.notify).toHaveBeenCalledWith('attachments.tooLarge', { path: 'poster.png' });
+    expect(callbacks.insertLinks).not.toHaveBeenCalled();
+  });
+
+  it('an Untitled document asks to save first and shows no picture dialog', async () => {
+    const { attachments, port, callbacks } = await attachmentsFor({ isUntitled: true });
+    port.pictureChoice = ['C:\\Pictures\\chart.png'];
+
+    await attachments.addPictureFiles('Pictures');
+
+    expect(callbacks.askToSaveFirst).toHaveBeenCalledOnce();
+    expect(port.pictureDialogFilters).toEqual([]);
+    expect(port.saved).toEqual([]);
+  });
+
+  it('a cancelled picture dialog inserts nothing', async () => {
+    const { attachments, callbacks } = await attachmentsFor();
+
+    await attachments.addPictureFiles('Pictures');
+
+    expect(callbacks.insertLinks).not.toHaveBeenCalled();
+  });
+
+  it('switching tabs while the picture dialog is open adds no link to the other document', async () => {
+    const { attachments, port, callbacks, session } = await attachmentsFor();
+    const dialog = holdPictureDialog(port);
+
+    const adding = attachments.addPictureFiles('Pictures');
+    await session.openDocument(NOTES);
+    dialog.close([{ kind: 'saved', relativePath: 'assets/chart.png' }]);
+    await adding;
+
+    expect(callbacks.insertLinks).toHaveBeenCalledWith(['![chart](assets/chart.png)'], {
+      canonicalKey: GUIDE_KEY,
+    });
+    expect(callbacks.insertLinks).toHaveLastReturnedWith(false);
+    expect(callbacks.notify).toHaveBeenCalledWith('attachments.linksNotAdded', { fileName: 'Guide.md' });
+  });
+
+  it('a second Image press while the picture dialog is open does nothing', async () => {
+    const { attachments, port } = await attachmentsFor();
+    const dialog = holdPictureDialog(port);
+
+    const first = attachments.addPictureFiles('Pictures');
+    await attachments.addPictureFiles('Pictures');
+    dialog.close([]);
+    await first;
+    const afterTheDialogClosed = attachments.addPictureFiles('Pictures');
+    dialog.close([]);
+    await afterTheDialogClosed;
+
+    expect(dialog.show).toHaveBeenCalledTimes(2);
   });
 });

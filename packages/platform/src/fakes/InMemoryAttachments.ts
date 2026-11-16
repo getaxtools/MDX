@@ -1,4 +1,10 @@
-import type { AttachmentPort, AttachmentTarget, ImagesDrop, ImagesDropListener } from '../AttachmentPort';
+import type {
+  AttachmentPort,
+  AttachmentTarget,
+  ChosenPicture,
+  ImagesDrop,
+  ImagesDropListener,
+} from '../AttachmentPort';
 import { DocumentOpenError } from '../DocumentOpenError';
 
 export interface SavedAttachmentRecord {
@@ -11,6 +17,10 @@ export interface SavedAttachmentRecord {
 export class InMemoryAttachments implements AttachmentPort {
   readonly saved: SavedAttachmentRecord[] = [];
   readonly refusedNames = new Set<string>();
+  /** The files the picture dialog returns; empty, as when it is cancelled, until a test sets them. */
+  pictureChoice: readonly string[] = [];
+  /** The filter name each picture dialog was shown with. */
+  readonly pictureDialogFilters: string[] = [];
   private readonly listeners = new Set<ImagesDropListener>();
 
   saveDroppedImage(target: AttachmentTarget, path: string): Promise<string> {
@@ -19,6 +29,19 @@ export class InMemoryAttachments implements AttachmentPort {
 
   savePastedImage(target: AttachmentTarget, picture: { name: string; bytes: Uint8Array }): Promise<string> {
     return this.save(target, picture.name, picture.bytes);
+  }
+
+  /** Copies the pictures named in `pictureChoice`, as if the user had chosen them in the dialog. */
+  async addPictureFiles(target: AttachmentTarget, filterName: string): Promise<readonly ChosenPicture[]> {
+    this.pictureDialogFilters.push(filterName);
+    return Promise.all(
+      this.pictureChoice.map((path) =>
+        this.save(target, fileNameOf(path)).then(
+          (relativePath): ChosenPicture => ({ kind: 'saved', relativePath }),
+          (): ChosenPicture => ({ kind: 'failed', fileName: fileNameOf(path), reason: 'notAnImage' }),
+        ),
+      ),
+    );
   }
 
   onImagesDropped(listener: ImagesDropListener): () => void {

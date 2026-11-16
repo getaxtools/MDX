@@ -46,7 +46,7 @@ describe('blocks in Rich text', () => {
     workspace.remove();
   });
 
-  it('a formula renders and shows its source when the caret enters', async () => {
+  it('a formula renders, and a click shows its source and opens the equation editor on it', async () => {
     app = await DesktopApp.launch({ workspace, documentFileNames: [FORMULA_DOCUMENT] });
     mainWindow = new MainWindowPage(app.browser);
     await mainWindow.waitForDocumentHeading('Formula');
@@ -55,11 +55,18 @@ describe('blocks in Rich text', () => {
     await formula.waitForDisplayed();
     expect(await findAccessibilityViolations(app.browser)).toEqual([]);
 
-    await formula.click();
+    await mainWindow.pressWithPointer(formula);
 
     await formula.waitForExist({ reverse: true });
-    expect(await app.browser.$('[role="textbox"]').getText()).toContain('$$');
+    expect(await app.browser.$('[role="textbox"][aria-label^="Source of"]').getText()).toContain('$$');
+    const equation = app.browser.$('[role="dialog"][aria-labelledby="equation-dialog-title"]');
+    await equation.waitForDisplayed();
+    expect(await app.browser.$('[role="textbox"][aria-label="TeX source"]').getText()).toBe('E = mc^2');
     expect(await findAccessibilityViolations(app.browser)).toEqual([]);
+    await mainWindow.pressShortcut('Escape');
+    await equation.waitForExist({ reverse: true });
+    expect((await mainWindow.editorState()).hasFocus).toBe(true);
+    await mainWindow.waitForSavedTab(FORMULA_DOCUMENT);
   });
 
   it('moving through callouts, a table and front matter leaves no unsaved changes', async () => {

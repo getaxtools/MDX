@@ -16,11 +16,17 @@ export type EditorAction =
   | 'quote'
   | 'codeBlock'
   | 'horizontalRule'
+  | 'insertImage'
+  | 'inlineMath'
+  | 'displayMath'
   | 'moveBlockUp'
   | 'moveBlockDown';
 
-/** What a Formatting toolbar control does: an editing key's action, or an insert that has no key. */
-export type ToolboxAction = EditorAction | 'paragraph' | 'table' | 'inlineMath' | 'displayMath';
+/**
+ * What a Formatting toolbar control does: an editing key's action, or one without a key; `formula`
+ * starts a formula of the kind the user chose last.
+ */
+export type ToolboxAction = EditorAction | 'paragraph' | 'table' | 'formula';
 
 export interface EditorShortcut {
   readonly action: EditorAction;
@@ -63,6 +69,9 @@ export const EDITOR_SHORTCUTS: readonly EditorShortcut[] = [
   { action: 'quote', key: 'Mod-Shift-.', combination: ['ctrl', 'shift', '.'] },
   { action: 'codeBlock', key: 'Mod-Shift-c', combination: ['ctrl', 'shift', 'C'] },
   { action: 'horizontalRule', key: 'Mod-Shift--', combination: ['ctrl', 'shift', '-'] },
+  { action: 'insertImage', key: 'Mod-Shift-i', combination: ['ctrl', 'shift', 'I'] },
+  { action: 'inlineMath', key: 'Alt-=', combination: ['alt', '='] },
+  { action: 'displayMath', key: 'Mod-Shift-m', combination: ['ctrl', 'shift', 'M'] },
   { action: 'moveBlockUp', key: 'Alt-Shift-ArrowUp', combination: ['alt', 'shift', 'ArrowUp'] },
   { action: 'moveBlockDown', key: 'Alt-Shift-ArrowDown', combination: ['alt', 'shift', 'ArrowDown'] },
 ];

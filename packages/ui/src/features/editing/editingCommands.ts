@@ -40,7 +40,7 @@ export type EditorRequest =
       readonly canonicalKey: string;
       readonly kind: 'insertPictureLinks';
       readonly links: readonly string[];
-      readonly point: { readonly x: number; readonly y: number };
+      readonly point?: { readonly x: number; readonly y: number };
     }
   | {
       readonly id: number;

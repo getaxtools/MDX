@@ -122,15 +122,19 @@
     if (control.kind === 'button') return translator.translate(control.labelKey);
     if (control.kind === 'headingMenu') return headingMenuLabel(formatting, translator);
     return translator.translate(
-      control.kind === 'mathMenu' ? 'editor.toolbox.math' : 'editor.toolbox.richText',
+      control.kind === 'mathMenu' ? 'editor.toolbox.mathChoices' : 'editor.toolbox.richText',
     );
   }
 
   function iconOf(control: ToolboxControl): readonly string[] {
     if (control.kind === 'button') return TOOLBOX_ICONS[control.action] ?? [];
     if (control.kind === 'headingMenu') return TOOLBOX_ICONS.heading ?? [];
-    return (control.kind === 'mathMenu' ? TOOLBOX_ICONS.math : TOOLBOX_ICONS.richText) ?? [];
+    return (control.kind === 'mathMenu' ? TOOLBOX_ICONS.mathChoices : TOOLBOX_ICONS.richText) ?? [];
   }
+
+  const overflowItems = $derived(
+    overflowMenuItems(hiddenGroups, translator, { formatting, isRichText: editingMode === 'richText' }),
+  );
 
   /** Groups move into More formatting from the right when the toolbar is narrower than all of them. */
   $effect(() => {
@@ -197,6 +201,7 @@
             control.kind === 'headingMenu' ? headingMenuItems(translator) : mathMenuItems(translator)}
           <button
             data-toolbox-control
+            data-toolbox-split={control.kind === 'mathMenu' ? '' : undefined}
             tabindex={index === focusIndex ? 0 : -1}
             aria-label={labelOf(control)}
             title={labelOf(control)}
@@ -226,9 +231,8 @@
       aria-haspopup="menu"
       onmousedown={keepEditorFocus}
       onfocus={() => (focusIndex = shownGroups.flat().length)}
-      onclick={(event: MouseEvent) => openMenu(event, overflowMenuItems(hiddenGroups, translator))}
-      onkeydown={(event: KeyboardEvent) =>
-        openMenuWithDown(event, overflowMenuItems(hiddenGroups, translator))}
+      onclick={(event: MouseEvent) => openMenu(event, overflowItems)}
+      onkeydown={(event: KeyboardEvent) => openMenuWithDown(event, overflowItems)}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true">
         {#each TOOLBOX_ICONS.more ?? [] as path (path)}<path d={path} />{/each}
@@ -278,6 +282,11 @@
     border-radius: var(--radius-small);
     background: none;
     color: var(--color-text);
+  }
+
+  button[data-toolbox-split] {
+    width: 1rem;
+    margin-inline-start: calc(-1 * var(--space-1));
   }
 
   button:hover {

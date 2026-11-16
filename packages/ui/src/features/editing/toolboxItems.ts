@@ -5,7 +5,10 @@ import type { ContextMenuItem } from '../../components/ContextMenuItem';
 import { describeCombination } from '../shortcuts/describeCombination';
 import { tooltipWithShortcut } from '../shortcuts/commandShortcuts';
 
-/** A button of the Formatting toolbar, a menu button, or the Rich text switch. */
+/**
+ * A button of the Formatting toolbar, a menu button, or the Rich text switch. The Math split button
+ * is the `formula` button, which starts a formula of the kind chosen last, and the `mathMenu` beside it.
+ */
 export type ToolboxControl =
   | { readonly kind: 'button'; readonly action: ToolboxAction; readonly labelKey: MessageKey }
   | { readonly kind: 'headingMenu' }
@@ -38,6 +41,8 @@ export const TOOLBOX_GROUPS: readonly (readonly ToolboxControl[])[] = [
     button('codeBlock', 'editor.action.codeBlock'),
     button('table', 'editor.toolbox.table'),
     button('horizontalRule', 'editor.action.horizontalRule'),
+    button('insertImage', 'editor.action.insertImage'),
+    button('formula', 'editor.toolbox.math'),
     { kind: 'mathMenu' },
   ],
   [{ kind: 'richText' }],
@@ -120,20 +125,28 @@ export function headingMenuItems(translator: Translator): ContextMenuItem<Toolbo
 }
 
 export function mathMenuItems(translator: Translator): ContextMenuItem<ToolboxAction>[] {
-  return [
-    { id: 'inlineMath', label: translator.translate('editor.toolbox.inlineMath') },
-    { id: 'displayMath', label: translator.translate('editor.toolbox.displayMath') },
-  ];
+  return (['inlineMath', 'displayMath'] as const).map((action) => ({
+    id: action,
+    label: translator.translate(`editor.action.${action}`),
+    shortcut: shortcutOf(action, translator),
+  }));
 }
 
-/** More formatting offers the hidden groups' commands with the same names and shortcuts. */
+/** What More formatting needs to show the same states as the buttons it stands in for. */
+export interface ToolboxStates {
+  readonly formatting: FormattingState | undefined;
+  readonly isRichText: boolean;
+}
+
+/** More formatting offers the hidden groups' commands with the same names, states and shortcuts. */
 export function overflowMenuItems(
   hiddenGroups: readonly (readonly ToolboxControl[])[],
   translator: Translator,
+  states: ToolboxStates,
 ): ContextMenuItem<ToolboxAction | 'richText'>[] {
   return hiddenGroups.flatMap((group, index) =>
     group.flatMap((control, position) => {
-      const items = itemsOf(control, translator);
+      const items = itemsOf(control, translator, states);
       return items.map((item, itemIndex) => ({
         ...item,
         hasSeparatorBefore: index > 0 && position === 0 && itemIndex === 0,
@@ -145,12 +158,15 @@ export function overflowMenuItems(
 function itemsOf(
   control: ToolboxControl,
   translator: Translator,
+  { formatting, isRichText }: ToolboxStates,
 ): ContextMenuItem<ToolboxAction | 'richText'>[] {
   if (control.kind === 'button') {
-    const shortcut = shortcutOf(control.action, translator);
-    return [{ id: control.action, label: translator.translate(control.labelKey), shortcut }];
+    const { action } = control;
+    const shortcut = shortcutOf(action, translator);
+    const isChecked = isPressable(action) ? isPressed(action, formatting) : undefined;
+    return [{ id: action, label: translator.translate(control.labelKey), shortcut, isChecked }];
   }
   if (control.kind === 'headingMenu') return headingMenuItems(translator);
   if (control.kind === 'mathMenu') return mathMenuItems(translator);
-  return [{ id: 'richText', label: translator.translate('editor.toolbox.richText') }];
+  return [{ id: 'richText', label: translator.translate('editor.toolbox.richText'), isChecked: isRichText }];
 }

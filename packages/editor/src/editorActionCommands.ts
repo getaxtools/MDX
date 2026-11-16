@@ -1,10 +1,12 @@
 import type { StateCommand } from '@codemirror/state';
 import type { Command } from '@codemirror/view';
+import { choosePictureFiles } from './attachments/pictureRequests';
 import { moveBlockCommand } from './blocks/moveBlocks';
 import { HEADING_LEVELS, type EditorAction } from './editorShortcuts';
 import { insertCodeBlock, insertHorizontalRule, insertLink } from './formatting/insertBlocks';
 import { toggleHeading, toggleLinePrefix } from './formatting/lineFormatting';
 import { toggleInlineFormat } from './formatting/inlineFormatting';
+import { startFormula } from './formulas/formulaRequests';
 
 /** What each editing key does in the source editor. */
 export const EDITOR_ACTION_COMMANDS: Readonly<Record<EditorAction, Command>> = {
@@ -20,6 +22,9 @@ export const EDITOR_ACTION_COMMANDS: Readonly<Record<EditorAction, Command>> = {
   quote: toggleLinePrefix('quote'),
   codeBlock: insertCodeBlock,
   horizontalRule: insertHorizontalRule,
+  insertImage: choosePictureFiles,
+  inlineMath: startFormula('inline'),
+  displayMath: startFormula('display'),
   moveBlockUp: moveBlockCommand('up'),
   moveBlockDown: moveBlockCommand('down'),
 };

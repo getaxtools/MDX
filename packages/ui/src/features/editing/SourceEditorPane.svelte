@@ -9,6 +9,7 @@
   import type {
     EditorTextRange,
     FormattingState,
+    FormulaEditRequest,
     RichTextRendering,
     SourceEditor,
     SlashMenuSettings,
@@ -55,6 +56,10 @@
     onCaretInLinkChange?: (isCaretInLink: boolean) => void;
     /** The formatting at the selection, for the Formatting toolbar. */
     onFormattingChange?: (formatting: FormattingState) => void;
+    /** Opens the equation editor; without it, formula keys insert an empty formula. */
+    onEditFormula?: (request: FormulaEditRequest) => void;
+    /** The Image button and Ctrl+Shift+I: choose picture files to copy and link. */
+    onChoosePictures?: () => void;
     onScroll?: (scrollRatio: number) => void;
     /** Called once the editor has loaded, for example to keep a preview beside it in step. */
     onReady?: (editor: SourceEditor | undefined) => void;
@@ -82,6 +87,8 @@
     onOpenLink = () => undefined,
     onCaretInLinkChange = () => undefined,
     onFormattingChange = () => undefined,
+    onEditFormula,
+    onChoosePictures,
     scrollRatio = 0,
     onScroll = () => undefined,
     onReady = () => undefined,
@@ -148,6 +155,8 @@
       onOpenLink: (link: WrittenLink) => onOpenLink(link),
       onCaretInLinkChange: reportCaretInLink,
       onFormattingChange: (formatting: FormattingState) => onFormattingChange(formatting),
+      ...(onEditFormula ? { onEditFormula: (request: FormulaEditRequest) => onEditFormula(request) } : {}),
+      ...(onChoosePictures ? { onChoosePictures: () => onChoosePictures() } : {}),
       typography,
       ...(richTextRendering ? { richTextRendering } : {}),
       snippets: editorSnippets,

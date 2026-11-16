@@ -94,6 +94,7 @@ fn with_startup_page_protocol(builder: Builder<Wry>) -> Builder<Wry> {
 fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
     builder.invoke_handler(tauri::generate_handler![
         commands::attachments::save_attachment,
+        commands::attachments::add_picture_files,
         commands::documents::open_document,
         commands::documents::pick_documents,
         commands::documents::check_path_statuses,
