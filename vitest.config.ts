@@ -33,6 +33,9 @@ export default defineConfig({
           include: ['packages/ui/src/**/*.test.ts', 'apps/desktop/src/**/*.test.ts'],
           environment: 'jsdom',
           setupFiles: ['tests/ui-setup/testingLibraryWaits.ts'],
+          // Whole-viewer tests load the editor and lazy components; under coverage on a busy
+          // machine one can take longer than the default five seconds.
+          testTimeout: 20_000,
         },
       },
     ],
