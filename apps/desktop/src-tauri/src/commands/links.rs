@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
 use percent_encoding::percent_decode_str;
@@ -57,18 +57,29 @@ fn linked_path(document: &Path, href: &str) -> Option<PathBuf> {
     let without_suffix = href.split(['?', '#']).next().unwrap_or_default();
     let decoded = percent_decode_str(without_suffix).decode_utf8().ok()?;
     let relative = Path::new(decoded.as_ref());
-    if decoded.is_empty() || relative.is_absolute() || relative.has_root() {
+    // `C:notes.md` is neither absolute nor rooted, yet joining it replaces the document's folder.
+    let has_drive = relative
+        .components()
+        .any(|component| matches!(component, Component::Prefix(_)));
+    if decoded.is_empty() || relative.is_absolute() || relative.has_root() || has_drive {
         return None;
     }
     Some(document.parent()?.join(relative))
 }
 
+/// Only addresses as the preview writes them, percent-encoded plain ASCII: Windows hands the address
+/// to the browser or mail program on a command line, where spaces and quotes start new arguments.
 fn is_external_link(url: &str) -> bool {
     url.chars().count() <= MAX_LINK_CHARACTERS
+        && url.chars().all(is_safe_address_character)
         && EXTERNAL_SCHEMES.iter().any(|scheme| {
             url.get(..scheme.len())
                 .is_some_and(|prefix| prefix.eq_ignore_ascii_case(scheme))
         })
+}
+
+fn is_safe_address_character(character: char) -> bool {
+    character.is_ascii_graphic() && !matches!(character, '"' | '<' | '>' | '`' | '\\')
 }
 
 #[cfg(test)]
@@ -145,5 +156,31 @@ mod tests {
         assert!(!is_external_link("file:///C:/Windows/system.ini"));
         assert!(!is_external_link("javascript:alert(1)"));
         assert!(!is_external_link("ms-settings:privacy"));
+    }
+
+    #[test]
+    fn refuses_external_links_with_spaces_quotes_or_control_characters() {
+        assert!(!is_external_link(r#"https://a.com/" -new-window "C:/x"#));
+        assert!(!is_external_link(r#"mailto:a@b.com?x=" /a "C:\secret.txt"#));
+        assert!(!is_external_link("https://a.com/\tx"));
+        assert!(!is_external_link("https://a.com/\u{202E}gpj.md"));
+        assert!(!is_external_link("https://\u{430}pple.com/login"));
+        assert!(!is_external_link("https://a.com/<script>"));
+        assert!(is_external_link(
+            "https://a.com/%22%20-new-window%20%22C:/x"
+        ));
+        assert!(is_external_link("https://xn--pple-43d.com/login"));
+    }
+
+    #[test]
+    fn refuses_a_drive_relative_link() {
+        let document = Path::new(r"C:\docs\guide.md");
+
+        assert_eq!(linked_path(document, "C%3Anotes.md"), None);
+        assert_eq!(linked_path(document, "D:notes.md"), None);
+        assert_eq!(
+            linked_path(document, "notes.md"),
+            Some(PathBuf::from(r"C:\docs\notes.md"))
+        );
     }
 }
