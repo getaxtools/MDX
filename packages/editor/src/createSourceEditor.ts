@@ -10,7 +10,6 @@ import {
   selectAll,
   undo,
 } from '@codemirror/commands';
-import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { syntaxHighlighting } from '@codemirror/language';
 import { gotoLine, openSearchPanel, search, searchKeymap, selectNextOccurrence } from '@codemirror/search';
 import { Compartment, EditorSelection, EditorState, type Extension } from '@codemirror/state';
@@ -27,6 +26,12 @@ import { nearestLineStart, pictureLinksAt, remotePictureMarkdown } from './attac
 import { blockAction, blockAtCaret, type BlockAction } from './blocks/blockActions';
 import type { BlockKind } from './blocks/markdownBlocks';
 import { sectionChange, type SectionAction } from './blocks/outlineSections';
+import {
+  DEFAULT_EDITING_MODE,
+  editingModeOf,
+  editingModeSwitch,
+  type EditingMode,
+} from './editing-mode/editingMode';
 import { EDITOR_ACTION_COMMANDS } from './editorActionCommands';
 import { editorCompletions } from './slash-menu/slashMenu';
 import { wikiLinkCompletions, type WikiLinkSuggester } from './wiki-links/wikiLinkCompletions';
@@ -35,6 +40,7 @@ import { snippetMenuProvider, type EditorSnippet } from './snippets/snippetMenu'
 import { selectNextCell, selectPreviousCell } from './tables/tableNavigation';
 import { EDITOR_SHORTCUTS } from './editorShortcuts';
 import { editorTheme, markdownHighlightStyle } from './editorTheme';
+import { markdownSyntax } from './syntax/markdownSyntax';
 
 export type EditorMenuCommand =
   | 'undo'
@@ -69,6 +75,10 @@ export interface SourceEditorOptions {
   readonly snippets?: readonly EditorSnippet[];
   /** Suggests notes after `[[` and their headings after `#`, in a note of a Notes workspace. */
   readonly wikiLinks?: WikiLinkSuggester;
+  /** Rich text or Source; Source when not given. */
+  readonly editingMode?: EditingMode;
+  /** Called after the editor switched to another mode. */
+  readonly onEditingModeChange?: (mode: EditingMode) => void;
 }
 
 export interface SourceEditor {
@@ -96,6 +106,9 @@ export interface SourceEditor {
   runBlockAction(action: BlockAction): void;
   /** Adds picture links on their own lines at the line start nearest to a point, or at the caret. */
   insertPictureLinks(links: readonly string[], point?: { readonly x: number; readonly y: number }): void;
+  editingMode(): EditingMode;
+  /** Switches between Rich text and Source without changing the text, the selection or the undo history. */
+  setEditingMode(mode: EditingMode): void;
   destroy(): void;
 }
 
@@ -114,14 +127,47 @@ const BRACKETS_CLOSED_AUTOMATICALLY = ['(', '[', '{', '"', '`'];
 
 export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
   const slashMenuSwitch = new Compartment();
+  const modeSwitch = editingModeSwitch(
+    options.editingMode ?? DEFAULT_EDITING_MODE,
+    options.onEditingModeChange,
+  );
   const view = new EditorView({
     parent: options.parent,
     state: EditorState.create({
       doc: options.text,
-      extensions: [slashMenuSwitch.of(initialSlashMenu(options)), editorExtensions(options)],
+      extensions: [
+        slashMenuSwitch.of(initialSlashMenu(options)),
+        modeSwitch.extension,
+        editorExtensions(options),
+      ],
     }),
   });
   const commands = menuCommandsOf(view);
+  const { stopReportingScroll, ...scrolling } = scrollingOf(view, options);
+  return {
+    focus: () => view.focus(),
+    text: () => view.state.doc.toString(),
+    ...scrolling,
+    revealLine: (line) => revealLine(view, line),
+    replaceText: (text) => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } }),
+    run: (command) => commands[command](),
+    ...blockEditingOf(view),
+    ...slashMenuControlOf(view, slashMenuSwitch, options),
+    editingMode: () => editingModeOf(view.state),
+    setEditingMode: (mode) => modeSwitch.switchTo(view, mode),
+    destroy: () => {
+      stopReportingScroll();
+      view.destroy();
+    },
+  };
+}
+
+function scrollingOf(
+  view: EditorView,
+  options: SourceEditorOptions,
+): Pick<SourceEditor, 'scrollToRatio' | 'topLine' | 'scrollToLine'> & {
+  readonly stopReportingScroll: () => void;
+} {
   const scroller = view.scrollDOM;
   const scrollableHeight = () => Math.max(scroller.scrollHeight - scroller.clientHeight, 0);
   const reportScroll = () => {
@@ -130,8 +176,6 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
   };
   scroller.addEventListener('scroll', reportScroll);
   return {
-    focus: () => view.focus(),
-    text: () => view.state.doc.toString(),
     scrollToRatio: (scrollRatio) => {
       scroller.scrollTop = scrollRatio * scrollableHeight();
     },
@@ -139,15 +183,7 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
     scrollToLine: (line) => {
       scroller.scrollTop = scrollTopForLine(view, line);
     },
-    revealLine: (line) => revealLine(view, line),
-    replaceText: (text) => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } }),
-    run: (command) => commands[command](),
-    ...blockEditingOf(view),
-    ...slashMenuControlOf(view, slashMenuSwitch, options),
-    destroy: () => {
-      scroller.removeEventListener('scroll', reportScroll);
-      view.destroy();
-    },
+    stopReportingScroll: () => scroller.removeEventListener('scroll', reportScroll),
   };
 }
 
@@ -270,7 +306,7 @@ function editorExtensions(options: SourceEditorOptions): Extension[] {
     ...multipleCursors(),
     snippetFields(),
     EditorView.lineWrapping,
-    markdown({ base: markdownLanguage }),
+    markdownSyntax(),
     closeBrackets(),
     EditorState.languageData.of(() => [{ closeBrackets: { brackets: BRACKETS_CLOSED_AUTOMATICALLY } }]),
     search({ top: true }),

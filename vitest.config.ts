@@ -18,6 +18,15 @@ export default defineConfig({
       },
       { test: { name: 'editor', include: ['packages/editor/src/**/*.test.ts'], environment: 'jsdom' } },
       {
+        test: {
+          name: 'freeze-compat',
+          include: ['tests/freeze-compat/**/*.test.ts'],
+          environment: 'jsdom',
+          // Runs before each test file's imports; every file runs in a worker of its own.
+          setupFiles: ['tests/freeze-compat/freezePrototype.ts'],
+        },
+      },
+      {
         plugins: [svelte(), svelteTesting()],
         test: {
           name: 'ui',

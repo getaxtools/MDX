@@ -1,9 +1,9 @@
 import { CompletionContext } from '@codemirror/autocomplete';
-import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { EditorSelection, EditorState } from '@codemirror/state';
 import { describe, expect, it } from 'vitest';
 import { slashCompletions, type SlashMenuProvider } from './slashMenu';
 import { BUILT_IN_SLASH_ITEMS, type SlashMenuItem } from './slashMenuItems';
+import { markdownSyntax } from '../syntax/markdownSyntax';
 
 /** The caret goes where `|` is. */
 function stateWithCaret(textWithCaret: string): EditorState {
@@ -11,7 +11,7 @@ function stateWithCaret(textWithCaret: string): EditorState {
   return EditorState.create({
     doc: textWithCaret.slice(0, caret) + textWithCaret.slice(caret + 1),
     selection: EditorSelection.cursor(caret),
-    extensions: [markdown({ base: markdownLanguage })],
+    extensions: [markdownSyntax()],
   });
 }
 

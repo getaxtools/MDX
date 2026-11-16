@@ -1,8 +1,8 @@
-import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { EditorSelection, EditorState } from '@codemirror/state';
 import { describe, expect, it } from 'vitest';
 import { tableAt } from './tableCells';
 import { selectNextCell, selectPreviousCell } from './tableNavigation';
+import { markdownSyntax } from '../syntax/markdownSyntax';
 
 const TABLE = '| Name | Notes \\| more |\n|---|---|\n| a |  |\n| short |';
 
@@ -10,7 +10,7 @@ function stateAt(doc: string, position: number, head = position): EditorState {
   return EditorState.create({
     doc,
     selection: EditorSelection.single(position, head),
-    extensions: [markdown({ base: markdownLanguage })],
+    extensions: [markdownSyntax()],
   });
 }
 

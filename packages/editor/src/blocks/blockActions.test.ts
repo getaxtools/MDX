@@ -1,13 +1,13 @@
-import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { EditorSelection, EditorState } from '@codemirror/state';
 import { describe, expect, it } from 'vitest';
 import { blockAction, type BlockAction } from './blockActions';
+import { markdownSyntax } from '../syntax/markdownSyntax';
 
 function applied(doc: string, caret: number, action: BlockAction): string {
   const state = EditorState.create({
     doc,
     selection: EditorSelection.cursor(caret),
-    extensions: [markdown({ base: markdownLanguage })],
+    extensions: [markdownSyntax()],
   });
   const spec = blockAction(state, action);
   return spec ? state.update(spec).state.doc.toString() : doc;

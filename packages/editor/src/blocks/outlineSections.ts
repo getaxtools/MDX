@@ -1,6 +1,6 @@
-import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { ensureSyntaxTree } from '@codemirror/language';
 import { EditorSelection, EditorState, type TransactionSpec } from '@codemirror/state';
+import { markdownSyntax } from '../syntax/markdownSyntax';
 
 export type SectionAction = 'moveUp' | 'moveDown' | 'promote' | 'demote';
 
@@ -51,7 +51,7 @@ export function changeSectionInText(
   headingLine: number,
   action: SectionAction,
 ): SectionTextChange {
-  const state = EditorState.create({ doc: text, extensions: [markdown({ base: markdownLanguage })] });
+  const state = EditorState.create({ doc: text, extensions: [markdownSyntax()] });
   const change = sectionChange(state, headingLine, action);
   if (change.outcome === 'refused') return change;
   return { outcome: 'changed', text: state.update(change.spec).state.doc.toString() };

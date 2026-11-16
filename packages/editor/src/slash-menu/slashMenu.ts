@@ -121,7 +121,7 @@ function isSlashAllowedAt(state: EditorState, slashPosition: number): boolean {
   const line = state.doc.lineAt(slashPosition);
   const before = state.sliceDoc(line.from, slashPosition);
   if (before !== '' && !/[ \t]$/.test(before)) return false;
-  if (slashPosition < frontMatterEndOf(state.doc)) return false;
+  if (slashPosition < frontMatterEndOf(state)) return false;
   if (isInsideMath(state, slashPosition)) return false;
   for (
     let node: ReturnType<typeof syntaxTree>['topNode'] | null = syntaxTree(state).resolveInner(

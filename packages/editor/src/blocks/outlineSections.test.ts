@@ -1,10 +1,10 @@
-import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { EditorState } from '@codemirror/state';
 import { describe, expect, it } from 'vitest';
 import { sectionChange, sectionsOf, type SectionAction } from './outlineSections';
+import { markdownSyntax } from '../syntax/markdownSyntax';
 
 function stateOf(doc: string): EditorState {
-  return EditorState.create({ doc, extensions: [markdown({ base: markdownLanguage })] });
+  return EditorState.create({ doc, extensions: [markdownSyntax()] });
 }
 
 function changed(doc: string, headingLine: number, action: SectionAction): string {

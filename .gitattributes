@@ -4,5 +4,6 @@
 *.ico binary
 *.icns binary
 
+tests/fixtures/byte-exact/** -text
 tests/fixtures/encodings/** -text
 tests/fixtures/unicode/** -text

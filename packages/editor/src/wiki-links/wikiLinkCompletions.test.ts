@@ -1,9 +1,9 @@
 import { CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
-import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { EditorSelection, EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { describe, expect, it } from 'vitest';
 import { wikiLinkCompletions, type WikiLinkNote, type WikiLinkSuggester } from './wikiLinkCompletions';
+import { markdownSyntax } from '../syntax/markdownSyntax';
 
 const NOTES: readonly WikiLinkNote[] = [
   { name: 'Plan', target: 'Plan', folder: '', alias: null },
@@ -41,7 +41,7 @@ function viewWithCaret(textWithCaret: string): EditorView {
     state: EditorState.create({
       doc: textWithCaret.slice(0, caret) + textWithCaret.slice(caret + 1),
       selection: EditorSelection.cursor(caret),
-      extensions: [markdown({ base: markdownLanguage })],
+      extensions: [markdownSyntax()],
     }),
   });
 }
