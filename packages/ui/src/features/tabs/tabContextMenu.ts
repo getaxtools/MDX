@@ -1,6 +1,6 @@
 import type { Tab } from '@mdx/core';
 import type { Translator } from '@mdx/i18n';
-import { isUntitledLocation, type DocumentLocation } from '@mdx/platform';
+import { hasFile, type DocumentLocation } from '@mdx/platform';
 import type { ContextMenuItem } from '../../components/ContextMenuItem';
 import {
   commandForPathMenuItem,
@@ -41,7 +41,7 @@ export function tabContextMenuItems(
       label: translator.translate('tabs.closeToTheRight'),
       isDisabled: index === tabCount - 1,
     },
-    ...(isUntitledLocation(tab.location) ? [] : pathMenuItems(translator)),
+    ...(hasFile(tab.location) ? pathMenuItems(translator) : []),
     tab.isPinned
       ? { id: 'unpin', label: translator.translate('tabs.unpin'), hasSeparatorBefore: true }
       : { id: 'pin', label: translator.translate('tabs.pin'), hasSeparatorBefore: true },

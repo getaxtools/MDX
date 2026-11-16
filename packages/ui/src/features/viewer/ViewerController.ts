@@ -25,6 +25,7 @@ import type { WikiLinkSuggester } from '@mdx/editor';
 import type { MessageKey, Translator } from '@mdx/i18n';
 import {
   DocumentOpenError,
+  hasFile,
   isUntitledLocation,
   type AppMenuPort,
   type DesktopShellPort,
@@ -681,7 +682,7 @@ export class ViewerController {
   private async reopenActiveDocumentWithEncoding(encoding: string | undefined): Promise<void> {
     const { session } = this.dependencies;
     const location = session.currentState().tabStrip.activeTab()?.location;
-    if (!location || isUntitledLocation(location)) return;
+    if (!location || !hasFile(location)) return;
     try {
       await session.reopenWithEncoding(location.canonicalKey, encoding);
     } catch {
@@ -764,7 +765,7 @@ export class ViewerController {
     }
     const { links, session } = this.dependencies;
     const activeLocation = session.currentState().tabStrip.activeTab()?.location;
-    if (!activeLocation || isUntitledLocation(activeLocation)) return;
+    if (!activeLocation || !hasFile(activeLocation)) return;
     if (link.kind === 'unresolvedNote') {
       this.notesActions?.offerNoteFor(link.href, activeLocation);
       return;
@@ -1056,7 +1057,7 @@ export class ViewerController {
     const { tabStrip, favourites, recentFiles, explorerFolders } = session.currentState();
     const entries = [...tabStrip.tabs(), ...favourites.favourites(), ...recentFiles.entries()];
     const locations = [...entries.map((entry) => entry.location), ...explorerFolders.folders()].filter(
-      (location) => !isUntitledLocation(location),
+      (location) => hasFile(location),
     );
     const locationKeys = JSON.stringify(locations.map((location) => location.canonicalKey));
     if (!isForced && locationKeys === this.checkedLocationKeys) return;
@@ -1144,7 +1145,7 @@ export class ViewerController {
   private async reloadActiveDocument(): Promise<void> {
     const { session, translator } = this.dependencies;
     const location = session.currentState().tabStrip.activeTab()?.location;
-    if (!location || isUntitledLocation(location)) return;
+    if (!location || !hasFile(location)) return;
     const { canonicalKey } = location;
     if (!this.editing.hasUnsavedChanges(canonicalKey)) {
       await this.editingActions.reloadFromDisk(canonicalKey);
@@ -1309,7 +1310,7 @@ export class ViewerController {
 
   private toggleActiveFavourite(): void {
     const activeTab = this.dependencies.session.currentState().tabStrip.activeTab();
-    if (!activeTab || isUntitledLocation(activeTab.location)) return;
+    if (!activeTab || !hasFile(activeTab.location)) return;
     this.dependencies.session.updateFavourites((favourites) => favourites.toggle(activeTab.location, 'file'));
   }
 

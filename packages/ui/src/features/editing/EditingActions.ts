@@ -5,7 +5,7 @@ import {
   type SectionAction,
   type SectionRefusal,
 } from '@mdx/editor';
-import { isUntitledLocation, type DocumentLocation } from '@mdx/platform';
+import { hasFile, type DocumentLocation } from '@mdx/platform';
 import type { DocumentEditing } from './DocumentEditing';
 import type { EditorRequest } from './editingCommands';
 
@@ -155,7 +155,7 @@ export class EditingActions {
     const location = this.session.openedDocument(canonicalKey)?.location;
     if (!location) return;
     this.editing.discardChanges(canonicalKey);
-    if (!isUntitledLocation(location)) await this.session.reloadDocuments([location.displayPath]);
+    if (hasFile(location)) await this.session.reloadDocuments([location.displayPath]);
     this.replaceEditorText(canonicalKey);
   }
 

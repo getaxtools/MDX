@@ -9,7 +9,10 @@ export type {
 } from './DocumentFilePort';
 export {
   isSameDocument,
+  hasFile,
   isUntitledLocation,
+  isViewLocation,
+  viewLocation,
   untitledLocation,
   type DocumentLocation,
 } from './DocumentLocation';

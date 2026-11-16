@@ -1,4 +1,4 @@
-import { isUntitledLocation } from '@mdx/platform';
+import { hasFile } from '@mdx/platform';
 import type { DocumentLocation } from '@mdx/platform';
 import { ExplorerFolders } from '../explorer/ExplorerFolders';
 import { FavouritesList, type Favourite, type FavouriteGroup } from '../favourites/FavouritesList';
@@ -79,7 +79,7 @@ export function toPersistedAppState(
   return {
     ...(appVersion === undefined ? {} : { savedByAppVersion: appVersion }),
     schemaVersion: APP_STATE_SCHEMA_VERSION,
-    tabs: withoutUntitledTabs(tabStrip.toSnapshot()),
+    tabs: withFileTabsOnly(tabStrip.toSnapshot()),
     recentFiles: recentFiles.entries(),
     favourites: favourites.favourites(),
     favouriteGroups: favourites.groups(),
@@ -92,9 +92,9 @@ export function toPersistedAppState(
   };
 }
 
-/** Documents that were never saved exist only in memory, so they cannot be reopened later. */
-function withoutUntitledTabs({ tabs, activeKey }: TabStripSnapshot): TabStripSnapshot {
-  const savedTabs = tabs.filter((tab) => !isUntitledLocation(tab.location));
+/** Unsaved documents and views of the app exist only in memory, so they are not reopened later. */
+function withFileTabsOnly({ tabs, activeKey }: TabStripSnapshot): TabStripSnapshot {
+  const savedTabs = tabs.filter((tab) => hasFile(tab.location));
   const isActiveTabSaved = savedTabs.some((tab) => tab.location.canonicalKey === activeKey);
   return activeKey !== undefined && isActiveTabSaved ? { tabs: savedTabs, activeKey } : { tabs: savedTabs };
 }

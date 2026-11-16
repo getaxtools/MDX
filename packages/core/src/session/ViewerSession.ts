@@ -1,5 +1,6 @@
 import {
   DocumentOpenError,
+  isViewLocation,
   untitledLocation,
   type AppStatePort,
   type DocumentFilePort,
@@ -278,6 +279,11 @@ export class ViewerSession {
     return document;
   }
 
+  /** Opens or focuses a tab that shows a view of the app; it reads nothing and stays out of recent files. */
+  openView(location: DocumentLocation): void {
+    this.replaceState({ ...this.state, tabStrip: this.state.tabStrip.openOrFocus(location) });
+  }
+
   /** Opens text that has no file yet, such as a converted table, in a new tab named by `nameFor`. */
   openUntitledDocument(text: string, nameFor: (number: number) => string): OpenedDocument {
     this.untitledCount += 1;
@@ -348,6 +354,7 @@ export class ViewerSession {
   async loadActiveDocument(): Promise<OpenedDocument | undefined> {
     const activeTab = this.state.tabStrip.activeTab();
     if (!activeTab) return undefined;
+    if (isViewLocation(activeTab.location)) return undefined;
     const { canonicalKey, displayPath } = activeTab.location;
     return (
       this.untitledDocuments.get(canonicalKey) ??
@@ -360,7 +367,7 @@ export class ViewerSession {
   async reloadDocuments(displayPaths: readonly string[]): Promise<void> {
     const changedTabs = this.state.tabStrip
       .tabs()
-      .filter((tab) => displayPaths.includes(tab.location.displayPath));
+      .filter((tab) => !isViewLocation(tab.location) && displayPaths.includes(tab.location.displayPath));
     if (changedTabs.length === 0) return;
     for (const { location } of changedTabs) {
       try {
