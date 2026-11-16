@@ -300,3 +300,12 @@ export {
   type StructuralFinding,
   type StructuralRule,
 } from './spec-projects/change-based/structuralFindings';
+export {
+  applyDelta,
+  type ChangedRequirement,
+  type DeltaApplication,
+  type DeltaApplicationInput,
+  type SkippedOperation,
+  type SpecAfterChange,
+} from './spec-projects/change-based/applyDelta';
+export { type DeltaRefusal, type DeltaRefusalReason } from './spec-projects/change-based/deltaRefusals';
