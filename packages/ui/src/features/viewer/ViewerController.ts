@@ -18,6 +18,7 @@ import {
   toFavouritesFile,
   notesLocationOf,
   notesSettingsOf,
+  type FrontMatterEdit,
 } from '@mdx/core';
 import type { WikiLinkSuggester } from '@mdx/editor';
 import type { MessageKey, Translator } from '@mdx/i18n';
@@ -54,6 +55,11 @@ import {
 import type { MarkdownRenderer, OutlineEntry, RenderOptions } from '@mdx/renderer';
 import { applyWorkspaceKindCommand, type WorkspaceKindCommand } from '../control-wheel/workspaceKindCommands';
 import type { DocumentLink } from '../document-view/DocumentLink';
+import {
+  PropertyEditing,
+  propertiesEditabilityOf,
+  type PropertiesEditability,
+} from '../document-view/PropertyEditing';
 import { DocumentAttachments } from '../editing/DocumentAttachments';
 import { DocumentEditing } from '../editing/DocumentEditing';
 import type { FindQuery } from '../find/findTextRanges';
@@ -146,6 +152,8 @@ export interface RenderedActiveDocument {
   readonly lineEnding: LineEnding;
   readonly scrollRatio: number;
   readonly frontMatter?: string;
+  /** Present for a note of the shown Notes workspace that has front matter. */
+  readonly propertiesEditability?: PropertiesEditability;
   /** The text shown, which is the edited text while the document has unsaved changes. */
   readonly source: string;
 }
@@ -180,6 +188,8 @@ export interface ViewerSnapshot {
   readonly isActiveDocumentEditing?: boolean;
   /** Open documents whose edited text is not saved yet. */
   readonly unsavedDocumentKeys: ReadonlySet<string>;
+  /** The note whose property is being written, whose fields wait without asking for a save. */
+  readonly propertySavingKey?: string;
   readonly editorRequest?: EditorRequest;
   /** Absent while the earlier state file stands in for the workspace store. */
   readonly workspaces?: WorkspacesView;
@@ -292,6 +302,7 @@ export class ViewerController {
   private readonly folderRefresh: FolderRefresh;
   private readonly explorerFolderActions: ExplorerFolderActions;
   private readonly saving: DocumentSaving;
+  private readonly propertyEditing: PropertyEditing;
   private readonly editing = new DocumentEditing();
   private readonly editingActions: EditingActions;
   private readonly navigation: DocumentNavigation;
@@ -312,6 +323,7 @@ export class ViewerController {
       },
       onConflict: (location) => this.showChangedOnDiskNotice(location, 'editing.conflict.message'),
     });
+    this.propertyEditing = this.createPropertyEditing();
     this.liveReload = dependencies.watcher
       ? new LiveReload(dependencies.watcher, dependencies.session, (changedKeys) => {
           this.refreshPathStatuses({ isForced: true });
@@ -330,6 +342,16 @@ export class ViewerController {
     this.notesLocationActions = this.createNotesLocationActions();
     this.notesActions = this.createNotesActions();
     this.notesIndexActions = this.createNotesIndexActions();
+  }
+
+  private createPropertyEditing(): PropertyEditing {
+    return new PropertyEditing({
+      session: this.dependencies.session,
+      editing: this.editing,
+      saving: this.saving,
+      editingActions: this.editingActions,
+      isNote: (location) => this.notesActions?.isNote(location) ?? false,
+    });
   }
 
   private createNotesActions(): NotesActions | undefined {
@@ -832,6 +854,8 @@ export class ViewerController {
       if (refusal) this.showNotice(`outline.section.refused.${refusal}`);
     },
     reloadActiveDocument: () => this.reloadActiveDocument(),
+    editProperty: ({ canonicalKey, edit }) => this.editProperty(canonicalKey, edit),
+    editPropertiesInNote: () => this.editingActions.editActiveDocumentFromStart(),
     reloadFromDisk: ({ canonicalKey }) => this.editingActions.reloadFromDisk(canonicalKey),
     overwriteChangesOnDisk: ({ canonicalKey }) => this.saving.overwriteChangesOnDisk(canonicalKey),
     print: () => {
@@ -1377,7 +1401,35 @@ export class ViewerController {
       source: text,
       scrollRatio: this.dependencies.session.currentState().tabStrip.activeTab()?.scrollRatio ?? 0,
       ...(frontMatter === undefined ? {} : { frontMatter }),
+      ...this.propertiesEditabilityPart(document.location, text, frontMatter),
     };
+  }
+
+  private propertiesEditabilityPart(
+    location: DocumentLocation,
+    text: string,
+    frontMatter: string | undefined,
+  ): Pick<RenderedActiveDocument, 'propertiesEditability'> {
+    if (frontMatter === undefined || isUntitledLocation(location) || !this.notesActions?.isNote(location)) {
+      return {};
+    }
+    return { propertiesEditability: propertiesEditabilityOf(text, frontMatter) };
+  }
+
+  private propertySavingPart(): Pick<ViewerSnapshot, 'propertySavingKey'> {
+    const propertySavingKey = this.propertyEditing.noteBeingSaved();
+    return propertySavingKey === undefined ? {} : { propertySavingKey };
+  }
+
+  private async editProperty(canonicalKey: string, edit: FrontMatterEdit): Promise<void> {
+    const outcome = await this.propertyEditing.editProperty(canonicalKey, edit);
+    this.publish(this.composeSnapshot(this.snapshot.notice));
+    const fileName = this.dependencies.session.openedDocument(canonicalKey)?.location.fileName ?? '';
+    if (outcome === 'refusedUnsavedChanges') {
+      this.showNotice('document.properties.refused.unsavedChanges', { name: fileName });
+    } else if (outcome === 'refusedCannotEdit') {
+      this.showNotice('document.properties.refused.cannotEdit', { name: fileName });
+    }
   }
 
   private composeSnapshot(notice: string | undefined): ViewerSnapshot {
@@ -1386,6 +1438,7 @@ export class ViewerController {
       pathStatuses: this.pathStatuses,
       folderRevisions: this.folderRefresh.revisionsByFolder(),
       unsavedDocumentKeys: this.editing.unsavedKeys(),
+      ...this.propertySavingPart(),
       ...(this.editingActions.isActiveDocumentEditing() ? { isActiveDocumentEditing: true } : {}),
       ...this.editorRequestPart(),
       ...(this.activeDocument ? { activeDocument: this.activeDocument } : {}),

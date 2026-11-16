@@ -140,6 +140,7 @@
     handledRequestId = request.id;
     if (request.kind === 'command') editor.run(request.command);
     else if (request.kind === 'changeSection') editor.changeSection(request.line, request.action);
+    else if (request.kind === 'revealLine') editor.revealLine(request.line);
     else if (request.kind === 'insertPictureLinks') editor.insertPictureLinks(request.links, request.point);
     else if (request.kind === 'insertSnippet')
       editor.insertSnippet(snippetExpander(request.body, { fileName, locale: translator.locale }));

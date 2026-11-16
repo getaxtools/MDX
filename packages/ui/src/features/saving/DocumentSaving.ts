@@ -72,6 +72,14 @@ export class DocumentSaving {
     if (location) await this.saveEdited(location, { shouldOverwriteChangesOnDisk: true });
   }
 
+  /**
+   * Saves a document's unsaved changes over its file the way Save does; false when they were not saved,
+   * and then they stay unsaved so a conflict is answered as for typed text.
+   */
+  async saveUnsavedChanges(location: DocumentLocation): Promise<boolean> {
+    return (await this.saveEdited(location)) !== undefined;
+  }
+
   runTabCommand(command: TabCommand): void {
     const closingLocations = this.unsavedLocationsClosedBy(command);
     if (closingLocations.length === 0) {

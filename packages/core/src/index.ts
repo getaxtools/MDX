@@ -195,6 +195,7 @@ export {
   type FrontMatterEdit,
   type FrontMatterEditResult,
 } from './front-matter/editFrontMatter';
+export { readEditableFrontMatter, type EditableProperty } from './front-matter/readEditableFrontMatter';
 export {
   MAX_WORKSPACE_NAME_LENGTH,
   WORKSPACE_COLOURS,

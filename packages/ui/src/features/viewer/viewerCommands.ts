@@ -16,6 +16,7 @@ import type { WorkspaceCommand } from '../workspaces/workspaceCommands';
 import type { NotesLocationCommand } from '../notes-location/NotesLocationActions';
 import type { NotesCommand } from '../notes/NotesActions';
 import type { NotesLinkCommand } from '../notes/NotesIndexActions';
+import type { PropertyCommand } from '../document-view/propertyCommands';
 import type { ViewCommand } from '../view/viewCommands';
 
 export type ViewerCommand =
@@ -38,6 +39,7 @@ export type ViewerCommand =
   | NotesLocationCommand
   | NotesCommand
   | NotesLinkCommand
+  | PropertyCommand
   | { readonly kind: 'toggleFullScreen' }
   | { readonly kind: 'toggleControlWheel' }
   | { readonly kind: 'showWorkspaceKindSettings' }

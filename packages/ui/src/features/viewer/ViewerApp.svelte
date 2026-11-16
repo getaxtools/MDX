@@ -37,6 +37,7 @@
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
   import type { DocumentLink } from '../document-view/DocumentLink';
   import DocumentView from '../document-view/DocumentView.svelte';
+  import { propertyFieldsStateOf } from '../document-view/PropertyEditing';
   import { isUntitledLocation, type TextSearchOptions } from '@mdx/platform';
   import KeyboardShortcutsDialog from '../help/KeyboardShortcutsDialog.svelte';
   import WordGoalDialog from '../word-goals/WordGoalDialog.svelte';
@@ -512,6 +513,13 @@
                     isOutlineVisible={false}
                     isFavourite={isActiveFavourite}
                     canBeFavourite={!isActiveUntitled}
+                    propertyFieldsState={snapshot
+                      ? propertyFieldsStateOf(
+                          editedDocument.canonicalKey,
+                          snapshot.unsavedDocumentKeys,
+                          snapshot.propertySavingKey,
+                        )
+                      : 'editable'}
                   />
                 {/snippet}
               </EditingLayout>
@@ -542,6 +550,11 @@
               isOutlineVisible={isSidebarViewShown(viewSettings, 'outline')}
               isFavourite={isActiveFavourite}
               canBeFavourite={!isActiveUntitled}
+              propertyFieldsState={propertyFieldsStateOf(
+                activeTab.location.canonicalKey,
+                snapshot.unsavedDocumentKeys,
+                snapshot.propertySavingKey,
+              )}
             />
           {/if}
         </div>

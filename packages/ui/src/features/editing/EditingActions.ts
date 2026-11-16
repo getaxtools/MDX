@@ -47,6 +47,30 @@ export class EditingActions {
     this.callbacks.onChange();
   }
 
+  /** Opens the active document in the editor with the caret on its first line, where front matter is. */
+  editActiveDocumentFromStart(): void {
+    const location = this.activeLocation();
+    if (!location) return;
+    const { canonicalKey } = location;
+    if (this.editing.isEditing(canonicalKey)) {
+      this.requests.set(canonicalKey, {
+        id: this.nextRequestId(),
+        canonicalKey,
+        kind: 'revealLine',
+        line: 0,
+      });
+    } else {
+      this.session.updateTabs((tabStrip) => tabStrip.updateScrollRatio(canonicalKey, 0));
+      this.editing.toggleEditing(canonicalKey);
+    }
+    this.callbacks.onChange();
+  }
+
+  /** Shows a document's current text in its open editor, after it was changed outside the editor. */
+  showCurrentTextInEditor(canonicalKey: string): void {
+    if (this.editing.isEditing(canonicalKey)) this.replaceEditorText(canonicalKey);
+  }
+
   toggleActiveDocument(): void {
     const location = this.activeLocation();
     if (!location) return;
@@ -166,7 +190,9 @@ export class EditingActions {
   }
 
   private replaceEditorText(canonicalKey: string): void {
-    const text = withUnixLineBreaks(this.session.openedDocument(canonicalKey)?.text ?? '');
+    const text =
+      this.editing.editedTextOf(canonicalKey) ??
+      withUnixLineBreaks(this.session.openedDocument(canonicalKey)?.text ?? '');
     this.requests.set(canonicalKey, { id: this.nextRequestId(), canonicalKey, kind: 'replaceText', text });
     this.callbacks.onChange();
   }

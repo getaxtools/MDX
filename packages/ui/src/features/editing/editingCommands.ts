@@ -42,6 +42,12 @@ export type EditorRequest =
   | {
       readonly id: number;
       readonly canonicalKey: string;
+      readonly kind: 'revealLine';
+      readonly line: number;
+    }
+  | {
+      readonly id: number;
+      readonly canonicalKey: string;
       readonly kind: 'changeSection';
       readonly line: number;
       readonly action: SectionAction;

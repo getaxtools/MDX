@@ -12,6 +12,7 @@
   import type { HeadingRequest } from '../outline/HeadingRequest';
   import type { DocumentLink } from './DocumentLink';
   import PropertiesPanel from './PropertiesPanel.svelte';
+  import type { PropertyFieldsState } from './PropertyEditing';
   import { untrack, type Snippet } from 'svelte';
   import type { ExportFormat } from '@mdx/platform';
   import { standaloneDocumentHtml } from '../document-export/standaloneDocumentHtml';
@@ -61,6 +62,8 @@
     shouldRestoreScroll?: boolean;
     /** Shown below the document, such as the notes linking to a note. */
     footer?: Snippet | undefined;
+    /** Whether the properties fields take changes now; see `PropertyFieldsState`. */
+    propertyFieldsState?: PropertyFieldsState;
   }
 
   const {
@@ -89,6 +92,7 @@
     canBeFavourite = true,
     shouldRestoreScroll = true,
     footer,
+    propertyFieldsState = 'editable',
   }: Props = $props();
 
   const SCROLL_REPORT_DELAY_MS = 250;
@@ -329,7 +333,14 @@
     />
   {/if}
   {#if document?.frontMatter !== undefined}
-    <PropertiesPanel frontMatter={document.frontMatter} {translator} />
+    <PropertiesPanel
+      frontMatter={document.frontMatter}
+      canonicalKey={document.canonicalKey}
+      editability={document.propertiesEditability}
+      fieldsState={propertyFieldsState}
+      {translator}
+      {onCommand}
+    />
   {/if}
   {#if document}
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->

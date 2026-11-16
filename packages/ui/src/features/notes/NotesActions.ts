@@ -155,6 +155,12 @@ export class NotesActions {
     this.noteList = { location, revision, notes };
   }
 
+  /** Whether a document is a note of the shown Notes workspace. */
+  isNote(document: DocumentLocation): boolean {
+    const location = this.locationPath();
+    return location !== undefined && isInsideFolder(document.displayPath, location);
+  }
+
   /** How a note of the shown workspace renders its wiki-links; undefined for any other document. */
   renderingFor(document: DocumentLocation): NotesRendering | undefined {
     const location = this.locationPath();
