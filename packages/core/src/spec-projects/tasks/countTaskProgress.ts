@@ -11,21 +11,26 @@ export interface TaskProgress {
   readonly total: number;
 }
 
-// A list item under any marker and indent, then a checkbox of at most one character; `- [A](url)` is a link.
-const TASK_LINE = /^\s*(?:[-*+]|\d{1,9}[.)])\s+\[([^\]]*)\](?=\s|$)(.*)$/;
-const LINE_BREAK = /\r\n|\r|\n/;
+// A list item under any marker and indent, then a checkbox holding at most one character. A box with a
+// mark may not be followed by `(` or `[`, so link bullets such as `- [A](url)` are not tasks.
+const LIST_ITEM_START = /^\s*(?:[-*+]|\d{1,9}[.)])\s*\[/;
+const MARKED_BOX_END = /^\s*([^\]\s]?)\s*\](?![([])/;
+const BLANK_BOX_END = /^\s+\]/;
 
 function taskOf(line: string, lineNumber: number): TaskItem | undefined {
-  const match = TASK_LINE.exec(line);
-  if (!match) return undefined;
-  const marker = (match[1] ?? '').trim();
-  if (marker.length > 1) return undefined;
-  return { lineNumber, isDone: marker === 'x' || marker === 'X', description: (match[2] ?? '').trim() };
+  const start = LIST_ITEM_START.exec(line);
+  if (!start) return undefined;
+  const afterBracket = line.slice(start[0].length);
+  const box = MARKED_BOX_END.exec(afterBracket) ?? BLANK_BOX_END.exec(afterBracket);
+  if (!box) return undefined;
+  const marker = box[1] ?? '';
+  const description = afterBracket.slice(box[0].length).trim();
+  return { lineNumber, isDone: marker.toLowerCase() === 'x', description };
 }
 
-/** The checkbox list items of a tasks document, in order. */
+/** The checkbox list items of a tasks document, in order; lines end at `\n` only, as the tasks tool reads them. */
 export function readTasks(text: string): TaskItem[] {
-  return text.split(LINE_BREAK).flatMap((line, index) => taskOf(line, index + 1) ?? []);
+  return text.split('\n').flatMap((line, index) => taskOf(line, index + 1) ?? []);
 }
 
 /** Every checkbox counts as a task; only `x` or `X` counts as done, so `[~]` and `[-]` stay open. */

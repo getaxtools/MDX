@@ -16,6 +16,8 @@ describe('countTaskProgress', () => {
     ['a plus marker', '+ [ ] 1.1'],
     ['a star marker', '* [ ] 1.1'],
     ['an indented item', '    - [ ] 1.1'],
+    ['a checkbox right after the marker', '-[ ] 1.1'],
+    ['a blank box followed by a link', '- [ ](https://example.com)'],
   ])('counts %s as an open task', (_, line) => {
     expect(countTaskProgress(line)).toEqual({ done: 0, total: 1 });
   });
@@ -24,14 +26,18 @@ describe('countTaskProgress', () => {
     ['a link bullet', '- [A](https://example.com)'],
     ['a long bracket text', '- [Read me] first'],
     ['a line without a list marker', '[x] 1.1'],
-    ['a checkbox without a space after the marker', '-[x] 1.1'],
+    ['a reference link bullet', '- [1][notes]'],
     ['a heading', '## [x] Done'],
   ])('does not count %s', (_, line) => {
     expect(countTaskProgress(line)).toEqual({ done: 0, total: 0 });
   });
 
-  it('reads Windows and old Mac line breaks', () => {
-    expect(countTaskProgress('- [x] a\r\n- [ ] b\r- [X] c')).toEqual({ done: 2, total: 3 });
+  it('reads Windows line breaks', () => {
+    expect(countTaskProgress('- [x] a\r\n- [ ] b\r\n- [X] c\r\n')).toEqual({ done: 2, total: 3 });
+  });
+
+  it('counts a done task written without a space before its text', () => {
+    expect(countTaskProgress('- [x]done')).toEqual({ done: 1, total: 1 });
   });
 
   it('keeps each task line number and description', () => {
