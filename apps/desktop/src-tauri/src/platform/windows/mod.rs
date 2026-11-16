@@ -1,5 +1,9 @@
+mod recycle_bin;
+
 use std::fs::Metadata;
 use std::os::windows::fs::MetadataExt;
+
+pub use recycle_bin::{has_recycle_bin, move_to_recycle_bin};
 
 const ERROR_SEM_TIMEOUT: i32 = 121;
 const ERROR_BAD_NETPATH: i32 = 53;
@@ -8,6 +12,8 @@ const ERROR_BAD_NET_NAME: i32 = 67;
 const ERROR_NO_NETWORK: i32 = 1222;
 const ERROR_NETWORK_UNREACHABLE: i32 = 1231;
 const ERROR_HOST_UNREACHABLE: i32 = 1232;
+const ERROR_SHARING_VIOLATION: i32 = 32;
+const ERROR_LOCK_VIOLATION: i32 = 33;
 
 const FILE_ATTRIBUTE_OFFLINE: u32 = 0x0000_1000;
 const FILE_ATTRIBUTE_RECALL_ON_OPEN: u32 = 0x0004_0000;
@@ -28,6 +34,11 @@ pub fn is_network_error_code(code: i32) -> bool {
     )
 }
 
+/// Another program holds the file open without sharing it, or has locked part of it.
+pub fn is_locked_error_code(code: i32) -> bool {
+    matches!(code, ERROR_SHARING_VIOLATION | ERROR_LOCK_VIOLATION)
+}
+
 pub fn is_cloud_only(metadata: &Metadata) -> bool {
     metadata.file_attributes() & CLOUD_ONLY_ATTRIBUTES != 0
 }
@@ -41,6 +52,13 @@ mod tests {
         assert!(is_network_error_code(ERROR_BAD_NETPATH));
         assert!(is_network_error_code(ERROR_NETWORK_UNREACHABLE));
         assert!(!is_network_error_code(2));
+    }
+
+    #[test]
+    fn recognizes_locked_file_error_codes() {
+        assert!(is_locked_error_code(ERROR_SHARING_VIOLATION));
+        assert!(is_locked_error_code(ERROR_LOCK_VIOLATION));
+        assert!(!is_locked_error_code(ERROR_BAD_NETPATH));
     }
 
     #[test]

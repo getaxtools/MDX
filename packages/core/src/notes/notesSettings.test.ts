@@ -26,7 +26,7 @@ function workspaceWith(kindData: unknown): StoredWorkspace {
 const THURSDAY = new Date(2026, 10, 12, 9, 5);
 
 describe('notes settings', () => {
-  it('a workspace without settings uses Daily, YYYY-MM-DD and Templates', () => {
+  it('a workspace without settings uses Daily, YYYY-MM-DD, Templates and Attachments', () => {
     expect(notesSettingsOf(workspaceWith({ location: {} }))).toEqual(DEFAULT_NOTES_SETTINGS);
   });
 
@@ -36,6 +36,7 @@ describe('notes settings', () => {
       dailyFolder: 'Journal/Days',
       dailyNameFormat: 'dddd D MMMM',
       templatesFolder: 'Meta',
+      attachmentsFolder: 'Media/Pictures',
       dailyTemplate: 'Day',
       excludedPaths: ['Private', 'Journal/Diary.md'],
     };
@@ -53,6 +54,7 @@ describe('notes settings', () => {
           dailyFolder: '../Outside',
           dailyNameFormat: 'YYYY:MM',
           templatesFolder: '.hidden',
+          attachmentsFolder: 'C:/Pictures',
           excludedPaths: '../Outside',
         },
       }),

@@ -14,6 +14,7 @@ pub mod live_reload;
 pub mod notes;
 pub mod notes_index;
 pub mod notes_location;
+pub mod notes_move;
 pub mod spec_project_link;
 pub mod spec_projects;
 pub mod window;

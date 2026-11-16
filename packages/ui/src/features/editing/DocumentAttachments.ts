@@ -1,4 +1,12 @@
-import { attachmentFolderFor, imageMarkdown, pastedImageName, type ViewerSession } from '@mdx/core';
+import {
+  attachmentFolderFor,
+  imageMarkdown,
+  isInsideFolder,
+  notesLocationOf,
+  notesSettingsOf,
+  pastedImageName,
+  type ViewerSession,
+} from '@mdx/core';
 import type { MessageKey } from '@mdx/i18n';
 import {
   DocumentOpenError,
@@ -131,6 +139,23 @@ export class DocumentAttachments {
       this.callbacks.notify('attachments.notEditing');
       return undefined;
     }
+    return this.notesTargetFor(location) ?? this.folderTargetFor(location);
+  }
+
+  /** A note of the shown Notes workspace keeps its pictures in the attachments folder of its notes folder. */
+  private notesTargetFor(location: DocumentLocation): DocumentTarget | undefined {
+    const shown = this.session.shownWorkspace();
+    const notesFolder = shown ? notesLocationOf(shown) : undefined;
+    if (!notesFolder || !isInsideFolder(location.displayPath, notesFolder.path)) return undefined;
+    const target: AttachmentTarget = {
+      documentPath: location.displayPath,
+      attachmentFolder: notesSettingsOf(shown).attachmentsFolder,
+      notesFolder: notesFolder.path,
+    };
+    return { target, location };
+  }
+
+  private folderTargetFor(location: DocumentLocation): DocumentTarget {
     const kinds = this.session.currentState().workspaceKinds;
     const attachmentFolder = attachmentFolderFor(kinds.kinds(), kinds.activeKindId());
     return { target: { documentPath: location.displayPath, attachmentFolder }, location };

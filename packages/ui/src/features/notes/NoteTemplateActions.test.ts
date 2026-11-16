@@ -114,6 +114,7 @@ describe('daily notes and templates', () => {
       dailyFolder: 'Journal/Days',
       dailyNameFormat: 'dddd D MMMM',
       templatesFolder: 'Templates',
+      attachmentsFolder: 'Attachments',
       excludedPaths: [],
     };
     documentFiles.write('E:\\Journal\\Journal\\Days\\Thursday 12 November.md', '');

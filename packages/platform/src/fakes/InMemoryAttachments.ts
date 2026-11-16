@@ -56,8 +56,15 @@ export class InMemoryAttachments implements AttachmentPort {
   private save(target: AttachmentTarget, fileName: string, bytes?: Uint8Array): Promise<string> {
     if (this.refusedNames.has(fileName)) return Promise.reject(new DocumentOpenError('notAnImage', fileName));
     this.saved.push({ target, fileName, ...(bytes ? { bytes } : {}) });
-    return Promise.resolve(`${target.attachmentFolder}/${fileName}`);
+    return Promise.resolve(`${upwardFromNote(target)}${target.attachmentFolder}/${fileName}`);
   }
+}
+
+/** `../` for each folder between the notes folder and the note, as the desktop app links. */
+function upwardFromNote({ documentPath, notesFolder }: AttachmentTarget): string {
+  if (notesFolder === undefined) return '';
+  const inside = documentPath.slice(notesFolder.length + 1).split(/[\\/]/);
+  return '../'.repeat(Math.max(inside.length - 1, 0));
 }
 
 function fileNameOf(path: string): string {

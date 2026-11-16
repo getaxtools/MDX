@@ -45,6 +45,26 @@ describe('SettingsDialog', () => {
       });
     });
 
+    it('Change Location is reached by keyboard after Open in File Explorer', async () => {
+      const onCommand = vi.fn();
+      render(SettingsDialog, {
+        settings: DEFAULT_VIEW_SETTINGS,
+        dataFolder: DATA_FOLDER,
+        notesFolder: 'C:\\Users\\Ana\\Documents\\MDX Notes',
+        translator: createTranslator(),
+        onCommand,
+        onClose: vi.fn(),
+      });
+      const section = screen.getByRole('region', { name: 'Notes' });
+      within(section).getByRole('button', { name: 'Open in File Explorer' }).focus();
+
+      await userEvent.tab();
+      await userEvent.keyboard('{Enter}');
+
+      expect(document.activeElement?.textContent.trim()).toBe('Change Location…');
+      expect(onCommand).toHaveBeenCalledWith({ kind: 'changeNotesLocation' });
+    });
+
     it('has no Notes section outside a Notes workspace', () => {
       renderSettings();
 

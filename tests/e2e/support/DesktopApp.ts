@@ -19,6 +19,8 @@ const APP_EXIT_TIMEOUT_MS = 10_000;
 export interface LaunchOptions {
   readonly workspace: TestWorkspace;
   readonly documentFileNames?: readonly string[];
+  /** Extra settings the debug build reads, such as the folder its folder picker answers with. */
+  readonly environment?: Readonly<Record<string, string>>;
 }
 
 export class DesktopApp {
@@ -28,7 +30,11 @@ export class DesktopApp {
     private readonly driverPort: number,
   ) {}
 
-  static async launch({ workspace, documentFileNames = [] }: LaunchOptions): Promise<DesktopApp> {
+  static async launch({
+    workspace,
+    documentFileNames = [],
+    environment = {},
+  }: LaunchOptions): Promise<DesktopApp> {
     const driverPort = await findFreePort();
     const appProcess = spawn(UI_TEST_APP_PATH, documentPaths(workspace, documentFileNames), {
       env: {
@@ -36,6 +42,7 @@ export class DesktopApp {
         MDX_DATA_DIR: workspace.profileFolder,
         MDX_DOCUMENTS_DIR: workspace.homeDocumentsFolder,
         TAURI_WEBDRIVER_PORT: String(driverPort),
+        ...environment,
       },
       stdio: 'ignore',
       windowsHide: true,

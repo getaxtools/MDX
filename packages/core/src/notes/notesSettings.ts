@@ -2,13 +2,15 @@ import type { StoredWorkspace } from '@mdx/platform';
 import { formatDate } from '../dates/formatDate';
 import { isRecord } from '../session/savedValues';
 
-/** Where a Notes workspace keeps its daily notes and templates, inside its folder. */
+/** Where a Notes workspace keeps its daily notes, templates and attachments, inside its folder. */
 export interface NotesSettings {
   /** A folder inside the location, with `/` between its parts. */
   readonly dailyFolder: string;
   /** How a daily note is named, with `YYYY`, `MM`, `DD` and the other date tokens. */
   readonly dailyNameFormat: string;
   readonly templatesFolder: string;
+  /** Where pasted and dropped pictures are saved, inside the location. */
+  readonly attachmentsFolder: string;
   /** The name of the template in the templates folder that a new daily note starts from. */
   readonly dailyTemplate?: string;
   /** Folders and notes inside the location that search, backlinks, link suggestions and tags leave out. */
@@ -19,6 +21,7 @@ export const DEFAULT_NOTES_SETTINGS: NotesSettings = {
   dailyFolder: 'Daily',
   dailyNameFormat: 'YYYY-MM-DD',
   templatesFolder: 'Templates',
+  attachmentsFolder: 'Attachments',
   excludedPaths: [],
 };
 
@@ -37,6 +40,7 @@ export function notesSettingsOf(workspace: StoredWorkspace | undefined): NotesSe
       ? saved.dailyNameFormat
       : DEFAULT_NOTES_SETTINGS.dailyNameFormat,
     templatesFolder: validFolderOr(saved.templatesFolder, DEFAULT_NOTES_SETTINGS.templatesFolder),
+    attachmentsFolder: validFolderOr(saved.attachmentsFolder, DEFAULT_NOTES_SETTINGS.attachmentsFolder),
     excludedPaths: savedExcludedPaths(saved.excludedPaths),
     ...(isValidNoteName(dailyTemplate) ? { dailyTemplate } : {}),
   };

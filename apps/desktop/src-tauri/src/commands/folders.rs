@@ -12,6 +12,8 @@ use crate::documents::{
 };
 
 const MAX_LISTED_ENTRIES_PER_KIND: usize = 1_000;
+/// UI tests answer the folder picker with this folder, since WebDriver cannot reach the native dialog.
+const PICKED_FOLDER_OVERRIDE_VARIABLE: &str = "MDX_PICKED_FOLDER";
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize)]
 pub struct FolderListing {
@@ -27,17 +29,29 @@ pub async fn pick_folder(
 ) -> Result<Option<DocumentLocation>, DocumentError> {
     let access = Arc::clone(&access);
     tauri::async_runtime::spawn_blocking(move || {
-        let Some(picked) = app.dialog().file().blocking_pick_folder() else {
+        let Some(folder) = picked_folder(&app)? else {
             return Ok(None);
         };
-        let folder = picked
-            .into_path()
-            .map_err(|_| DocumentError::InvalidRequest)?;
         access.grant_folder(&folder)?;
         locate_document(&folder).map(Some)
     })
     .await
     .map_err(|_| DocumentError::Unreadable)?
+}
+
+fn picked_folder(app: &AppHandle) -> Result<Option<std::path::PathBuf>, DocumentError> {
+    if cfg!(debug_assertions)
+        && let Some(folder) = std::env::var_os(PICKED_FOLDER_OVERRIDE_VARIABLE)
+    {
+        return Ok(Some(folder.into()));
+    }
+    let Some(picked) = app.dialog().file().blocking_pick_folder() else {
+        return Ok(None);
+    };
+    picked
+        .into_path()
+        .map(Some)
+        .map_err(|_| DocumentError::InvalidRequest)
 }
 
 /// Lists the subfolders and Markdown documents directly inside a folder the user has chosen.

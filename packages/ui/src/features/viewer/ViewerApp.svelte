@@ -69,6 +69,7 @@
   import { isWorkspaceDialog } from '../workspaces/WorkspaceActions';
   import WorkspaceButton from '../workspaces/WorkspaceButton.svelte';
   import NotesLocationMissing from '../notes-location/NotesLocationMissing.svelte';
+  import NotesMoveDialog from '../notes-location/NotesMoveDialog.svelte';
   import NoteTrashDialog from '../notes/NoteTrashDialog.svelte';
   import NoteBacklinks from '../notes/NoteBacklinks.svelte';
   import NoteFromTemplateDialog from '../notes/NoteFromTemplateDialog.svelte';
@@ -659,6 +660,7 @@
                     onChoosePictures={() => void controller.addPictureFiles()}
                     snippets={snapshot ? availableSnippets(snapshot.viewer.snippetLibrary) : []}
                     wikiLinks={activeTab ? controller.wikiLinkSuggesterFor(activeTab.location) : undefined}
+                    isReadOnly={snapshot?.isActiveDocumentReadOnly ?? false}
                     onSelectedTextChange={(selectedText: string) =>
                       (selectedWords = selectedText === '' ? 0 : measureDocument(selectedText).words)}
                     onReady={(sourceEditor: SourceEditor | undefined) => attachEditor(sync, sourceEditor)}
@@ -750,6 +752,7 @@
         wordGoal={activeWordGoal}
         {wordsThisSession}
         selectedWords={editedDocument ? selectedWords : 0}
+        statusMessage={snapshot.notesMoveStatus}
         onShowWordGoal={() => void controller.execute({ kind: 'showWordGoal' })}
         injectionCheck={snapshot.injectionCheck}
         onShowInjectionCheck={() =>
@@ -898,6 +901,13 @@
         onClosed={() => (isControlWheelFading = false)}
       />
     {/await}
+  {/if}
+  {#if snapshot.notesMoveDialog}
+    <NotesMoveDialog
+      dialog={snapshot.notesMoveDialog}
+      {translator}
+      onCommand={(command: ViewerCommand) => void controller.execute(command)}
+    />
   {/if}
   {#if snapshot.openDialog === 'clearAllData'}
     <ConfirmDialog

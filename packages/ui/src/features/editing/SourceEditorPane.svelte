@@ -50,6 +50,8 @@
     isShowingHiddenCharacters?: boolean;
     /** Ranges to underline, such as prompt injection findings. */
     markedRanges?: readonly EditorTextRange[];
+    /** Typing is refused, as while the notes folder is being moved. */
+    isReadOnly?: boolean;
     onChange: (text: string) => void;
     /** Opens a link, as written, the way the preview opens links. */
     onOpenLink?: (link: WrittenLink) => void;
@@ -83,6 +85,7 @@
     wikiLinks,
     isShowingHiddenCharacters = false,
     markedRanges = [],
+    isReadOnly = false,
     onChange,
     onOpenLink = () => undefined,
     onCaretInLinkChange = () => undefined,
@@ -163,6 +166,7 @@
       ...(wikiLinks ? { wikiLinks } : {}),
       findHiddenCharacters: (lineText: string) => listHiddenCharacters(lineText),
       isShowingHiddenCharacters,
+      isReadOnly,
     }));
   }
 
@@ -213,6 +217,10 @@
 
   $effect(() => {
     editor?.markRanges(markedRanges);
+  });
+
+  $effect(() => {
+    editor?.setReadOnly(isReadOnly);
   });
 
   $effect(() => {

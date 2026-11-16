@@ -1,9 +1,10 @@
-import { ViewerSession } from '@mdx/core';
+import { ViewerSession, WorkspaceKindsState, workspaceKindsFor } from '@mdx/core';
 import {
   InMemoryAppState,
   InMemoryAttachments,
   InMemoryDocumentFiles,
   type ChosenPicture,
+  InMemoryWorkspaceStore,
 } from '@mdx/platform';
 import { describe, expect, it, vi } from 'vitest';
 import { DocumentAttachments, type AttachmentCallbacks, type LinkPlace } from './DocumentAttachments';
@@ -206,5 +207,57 @@ describe('DocumentAttachments', () => {
     await afterTheDialogClosed;
 
     expect(dialog.show).toHaveBeenCalledTimes(2);
+  });
+});
+
+const ALL_KINDS_BUILT = workspaceKindsFor({ allowsPlannedKindPreview: true });
+
+describe('DocumentAttachments in a Notes workspace', () => {
+  async function noteAttachments(settings?: Record<string, unknown>) {
+    const notesFolder = 'E:\\Notes';
+    const note = 'E:\\Notes\\Projects\\Plan.md';
+    const session = new ViewerSession({
+      documentFiles: new InMemoryDocumentFiles({ [note]: '# Plan' }),
+      appState: new InMemoryAppState(),
+      workspaceStore: new InMemoryWorkspaceStore(),
+      kindRegistry: ALL_KINDS_BUILT,
+      now: () => 0,
+      createId: () => 'workspace-notes',
+    });
+    await session.restore();
+    session.updateWorkspaceKinds(() =>
+      WorkspaceKindsState.fromSaved(
+        { enabledKindIds: ['markdownViewer', 'notes'], activeKindId: 'markdownViewer' },
+        ALL_KINDS_BUILT,
+      ),
+    );
+    const location = { path: notesFolder, canonicalKey: notesFolder.toLowerCase(), locationId: 'location-1' };
+    await session.createWorkspace({ name: 'Journal', kindId: 'notes', kindData: { location, ...settings } });
+    await session.openDocument(note);
+    const port = new InMemoryAttachments();
+    const callbacks: AttachmentCallbacks = {
+      isEditing: () => true,
+      insertLinks: vi.fn(),
+      notify: vi.fn(),
+      askToSaveFirst: vi.fn(),
+    };
+    return { attachments: new DocumentAttachments(session, port, callbacks), port, notesFolder };
+  }
+
+  it('saves a pasted picture into the Attachments folder of the notes folder, linked from the note', async () => {
+    const { attachments, port, notesFolder } = await noteAttachments();
+
+    const link = await attachments.pastePicture(new Uint8Array([137, 80, 78, 71]));
+
+    expect(port.saved[0]?.target).toMatchObject({ attachmentFolder: 'Attachments', notesFolder });
+    expect(link).toMatch(/^!\[Plan [^\]]+\]\(\.\.\/Attachments\/Plan%20/);
+  });
+
+  it('uses the attachments folder chosen in the settings', async () => {
+    const { attachments, port } = await noteAttachments({ settings: { attachmentsFolder: 'Media' } });
+
+    await attachments.addDroppedPictures({ paths: ['C:\\Pictures\\chart.png'], x: 0, y: 0 });
+
+    expect(port.saved[0]?.target.attachmentFolder).toBe('Media');
   });
 });

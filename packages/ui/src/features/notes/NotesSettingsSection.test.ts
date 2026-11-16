@@ -32,6 +32,19 @@ describe('NotesSettingsSection', () => {
     });
   });
 
+  it('saves a new attachments folder, described by where pictures go', async () => {
+    const { onCommand } = renderSection();
+    const input = screen.getByRole('textbox', { name: 'Attachments folder' });
+
+    await fireEvent.change(input, { target: { value: 'Media/Pictures' } });
+
+    expect(input.getAttribute('aria-describedby')).toBe('settings-notes-attachmentsFolder-description');
+    expect(onCommand).toHaveBeenCalledWith({
+      kind: 'updateNotesSettings',
+      settings: { ...DEFAULT_NOTES_SETTINGS, attachmentsFolder: 'Media/Pictures' },
+    });
+  });
+
   it('a folder outside the notes folder is not saved and says why', async () => {
     const { onCommand } = renderSection();
     const input = screen.getByRole('textbox', { name: 'Daily notes folder' });

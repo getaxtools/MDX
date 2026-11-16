@@ -21,7 +21,8 @@
   const { folder, settings, isDeletionConfirmed, isLinkUpdateConfirmed, translator, onCommand }: Props =
     $props();
 
-  type TextField = 'dailyFolder' | 'dailyNameFormat' | 'templatesFolder' | 'dailyTemplate';
+  type TextField =
+    'dailyFolder' | 'dailyNameFormat' | 'templatesFolder' | 'dailyTemplate' | 'attachmentsFolder';
 
   interface FieldDefinition {
     readonly field: TextField;
@@ -48,6 +49,13 @@
     {
       field: 'templatesFolder',
       labelKey: 'settings.notes.templatesFolder',
+      problemKey: 'settings.notes.invalidFolder',
+      isValid: isValidFolderSetting,
+    },
+    {
+      field: 'attachmentsFolder',
+      labelKey: 'notesLocation.attachments.folder',
+      descriptionKey: 'notesLocation.attachments.folderDescription',
       problemKey: 'settings.notes.invalidFolder',
       isValid: isValidFolderSetting,
     },
@@ -95,13 +103,20 @@
   <div class="setting">
     <span class="label" id="settings-notes-folder-label">{translator.translate('settings.notes.folder')}</span
     >
-    <button
-      class="beside-label"
-      aria-describedby="settings-notes-folder-label settings-notes-folder"
-      onclick={() => onCommand({ kind: 'revealInFileManager', path: folder })}
-    >
-      {translator.translate('settings.notes.openInFileExplorer')}
-    </button>
+    <div class="beside-label folder-actions">
+      <button
+        aria-describedby="settings-notes-folder-label settings-notes-folder"
+        onclick={() => onCommand({ kind: 'revealInFileManager', path: folder })}
+      >
+        {translator.translate('settings.notes.openInFileExplorer')}
+      </button>
+      <button
+        aria-describedby="settings-notes-folder-label settings-notes-folder"
+        onclick={() => onCommand({ kind: 'changeNotesLocation' })}
+      >
+        {translator.translate('notesLocation.move.change')}
+      </button>
+    </div>
     <p id="settings-notes-folder" class="description"><code>{folder}</code></p>
     <p class="description">{translator.translate('settings.notes.description')}</p>
   </div>
@@ -195,6 +210,11 @@
     align-items: center;
     padding: var(--space-2) 0;
     border-bottom: 1px solid var(--color-border);
+  }
+
+  .folder-actions {
+    display: flex;
+    gap: var(--space-2);
   }
 
   .toggle {

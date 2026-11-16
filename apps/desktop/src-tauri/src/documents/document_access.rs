@@ -8,6 +8,8 @@ use super::{DocumentError, DocumentLocation, canonical_key_of, locate_document};
 pub struct DocumentAccessList {
     granted_folder_keys: Mutex<Vec<String>>,
     opened_document_keys: Mutex<HashSet<String>>,
+    /// Notes folders being moved: readable, but nothing in them may be written until the move ends.
+    read_only_folder_keys: Mutex<HashSet<String>>,
 }
 
 impl DocumentAccessList {
@@ -46,6 +48,41 @@ impl DocumentAccessList {
             .any(|folder_key| {
                 folder.canonical_key == *folder_key
                     || is_inside_folder(&folder.canonical_key, folder_key)
+            })
+    }
+
+    /// The folder no longer belongs to the window, as after its notes moved elsewhere.
+    pub fn revoke_folder(&self, folder: &Path) {
+        let key = canonical_key_of(&folder.to_string_lossy());
+        self.granted_folder_keys
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .retain(|granted| *granted != key);
+    }
+
+    pub fn make_folder_read_only(&self, folder: &Path) {
+        self.read_only_folder_keys
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(canonical_key_of(&folder.to_string_lossy()));
+    }
+
+    pub fn make_folder_writable(&self, folder: &Path) {
+        self.read_only_folder_keys
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .remove(&canonical_key_of(&folder.to_string_lossy()));
+    }
+
+    /// The location is a read-only folder or lies inside one.
+    pub fn is_read_only(&self, location: &DocumentLocation) -> bool {
+        self.read_only_folder_keys
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .any(|folder_key| {
+                location.canonical_key == *folder_key
+                    || is_inside_folder(&location.canonical_key, folder_key)
             })
     }
 
@@ -139,6 +176,32 @@ mod tests {
         let root = tree();
 
         assert!(!DocumentAccessList::default().is_allowed(&location(&root, "docs/a.md")));
+    }
+
+    #[test]
+    fn a_read_only_folder_stays_readable_until_it_is_writable_again() {
+        let root = tree();
+        let access = DocumentAccessList::default();
+        access.grant_folder(&root.path().join("docs")).unwrap();
+
+        access.make_folder_read_only(&root.path().join("docs"));
+
+        let note = location(&root, "docs/guides/b.md");
+        assert!(access.is_allowed(&note) && access.is_read_only(&note));
+        assert!(!access.is_read_only(&location(&root, "docs-old/c.md")));
+        access.make_folder_writable(&root.path().join("docs"));
+        assert!(!access.is_read_only(&note));
+    }
+
+    #[test]
+    fn a_revoked_folder_is_no_longer_allowed() {
+        let root = tree();
+        let access = DocumentAccessList::default();
+        access.grant_folder(&root.path().join("docs")).unwrap();
+
+        access.revoke_folder(&locate_document(&root.path().join("docs")).unwrap().path());
+
+        assert!(!access.is_allowed(&location(&root, "docs/a.md")));
     }
 
     #[test]

@@ -244,6 +244,7 @@ export {
   type LocationClaimProblem,
   type NotesLocation,
 } from './notes-location/notesLocation';
+export { formatFileSize, locationMovedInto } from './notes-location/notesMove';
 export {
   detectSpecProjects,
   type ChangeBasedLayout,

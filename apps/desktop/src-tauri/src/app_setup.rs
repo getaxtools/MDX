@@ -1,9 +1,11 @@
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use tauri::{App, AppHandle, Emitter, Manager};
 
 use crate::attachments::DroppedImages;
+use crate::commands::notes_move::NotesMoves;
 use crate::commands::spec_project_link::LinkQuestions;
 use crate::documents::DocumentAccessList;
 use crate::live_reload::{
@@ -19,6 +21,9 @@ use crate::storage::{AppStateStore, PendingWorkspaceExport, WorkspaceDatabase};
 
 const DATA_FOLDER_OVERRIDE_VARIABLE: &str = "MDX_DATA_DIR";
 const NOTES_INDEX_FOLDER_NAME: &str = "notes-index";
+const NOTES_MOVES_FOLDER_NAME: &str = "notes-moves";
+/// UI tests slow a move down, so they can try to type while it runs.
+const MOVE_PAUSE_OVERRIDE_VARIABLE: &str = "MDX_MOVE_FILE_PAUSE_MS";
 
 pub fn initialize(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     let data_folder = data_folder(app)?;
@@ -44,7 +49,25 @@ pub fn initialize(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(start_folder_watcher(app.handle().clone()));
     app.manage(start_spec_project_watcher(app.handle().clone()));
     app.manage(Arc::new(NotesIndexes::new(notes_index_folder(app)?)));
+    app.manage(notes_moves(
+        &data_folder,
+        &app.state::<Arc<DocumentAccessList>>(),
+    ));
     Ok(())
+}
+
+fn notes_moves(data_folder: &std::path::Path, access: &DocumentAccessList) -> Arc<NotesMoves> {
+    let pause_ms = std::env::var(MOVE_PAUSE_OVERRIDE_VARIABLE)
+        .ok()
+        .filter(|_| cfg!(debug_assertions))
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(0);
+    let moves = NotesMoves::new(
+        data_folder.join(NOTES_MOVES_FOLDER_NAME),
+        Duration::from_millis(pause_ms),
+    );
+    moves.keep_unfinished_moves_read_only(access);
+    Arc::new(moves)
 }
 
 fn start_document_watcher(app: AppHandle) -> DocumentWatcher {

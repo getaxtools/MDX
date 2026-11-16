@@ -94,7 +94,7 @@ pub async fn inspect_notes_folder(
     .await?
 }
 
-fn claimable_path(
+pub(crate) fn claimable_path(
     path: &str,
     app: &AppHandle,
     access: &DocumentAccessList,
@@ -110,7 +110,7 @@ fn claimable_path(
     }
 }
 
-fn user_folder(app: &AppHandle) -> Option<PathBuf> {
+pub(crate) fn user_folder(app: &AppHandle) -> Option<PathBuf> {
     app.path()
         .home_dir()
         .ok()

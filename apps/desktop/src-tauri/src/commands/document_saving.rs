@@ -45,6 +45,9 @@ fn save_edited_document(
     if !access.is_allowed(&location) || !access.was_opened(&location) {
         return Err(DocumentError::AccessDenied);
     }
+    if access.is_read_only(&location) {
+        return Err(DocumentError::AccessDenied);
+    }
     let path = location.path();
     if !is_markdown_path(&path) {
         return Err(DocumentError::NotMarkdown);

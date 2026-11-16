@@ -9,10 +9,15 @@ export interface ImagesDrop {
 
 export type ImagesDropListener = (drop: ImagesDrop) => void;
 
-/** Where a picture goes: a folder below the document's folder, such as `assets`. */
+/**
+ * Where a picture goes: a folder below the document's folder, such as `assets`, or, in a Notes
+ * workspace, a folder below its notes folder, such as `Attachments`.
+ */
 export interface AttachmentTarget {
   readonly documentPath: string;
   readonly attachmentFolder: string;
+  /** The notes folder the attachment folder lies in; the link is then relative to the note. */
+  readonly notesFolder?: string;
 }
 
 /** What became of one picture chosen in the picture dialog. */
@@ -21,7 +26,7 @@ export type ChosenPicture =
   | { readonly kind: 'failed'; readonly fileName: string; readonly reason: DocumentOpenFailure };
 
 export interface AttachmentPort {
-  /** Copies a dropped picture next to the document; resolves to its path relative to the document. */
+  /** Copies a dropped picture into the attachment folder; resolves to its path relative to the document. */
   saveDroppedImage(target: AttachmentTarget, path: string): Promise<string>;
   /** Saves pasted picture bytes next to the document under a suggested name. */
   savePastedImage(target: AttachmentTarget, picture: { name: string; bytes: Uint8Array }): Promise<string>;

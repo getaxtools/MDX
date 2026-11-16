@@ -14,6 +14,7 @@ import type { SnippetCommand } from '../snippets/snippetCommands';
 import type { TabCommand } from '../tabs/tabCommands';
 import type { WorkspaceCommand } from '../workspaces/workspaceCommands';
 import type { NotesLocationCommand } from '../notes-location/NotesLocationActions';
+import type { NotesMoveCommand } from '../notes-location/NotesMoveActions';
 import type { NotesCommand } from '../notes/NotesActions';
 import type { NotesLinkCommand } from '../notes/NotesIndexActions';
 import type { PropertyCommand } from '../document-view/propertyCommands';
@@ -39,6 +40,7 @@ export type ViewerCommand =
   | SnippetCommand
   | WorkspaceCommand
   | NotesLocationCommand
+  | NotesMoveCommand
   | NotesCommand
   | NotesLinkCommand
   | PropertyCommand

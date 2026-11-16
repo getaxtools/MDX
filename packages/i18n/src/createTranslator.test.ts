@@ -53,6 +53,15 @@ const SAMPLE_VALUES = {
   rule: 'HTML comment',
   line: 12,
   column: 4,
+  target: 'E:\\Notes',
+  size: '2 MB',
+  required: '2.2 GB',
+  available: '1 GB',
+  done: 600,
+  paths: 'Plan.md, Ideas.md',
+  recycled: 3,
+  expected: 1240,
+  found: 1241,
 };
 
 describe('createTranslator', () => {

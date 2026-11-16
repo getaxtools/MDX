@@ -13,6 +13,12 @@ import type {
   LinkUpdatesToApply,
   LocationAvailability,
   NotesFolderInspection,
+  KeptFiles,
+  NotesMovePlan,
+  NotesMoveRequest,
+  OldCopyRemoval,
+  OldNotesCopy,
+  UnfinishedNotesMove,
   NoteCreation,
   NoteDeletion,
   NoteInFolder,
@@ -68,6 +74,7 @@ export type ChosenPictureReply =
 interface AttachmentRequest {
   readonly documentPath: string;
   readonly attachmentFolder: string;
+  readonly notesFolder?: string;
   readonly suggestedName: string;
   readonly source:
     | { readonly kind: 'droppedFile'; readonly path: string }
@@ -108,6 +115,16 @@ export const tauriCommands = {
     invoke<LocationAvailability>('check_notes_location', { path, locationId }),
   locateNotesLocation: (path: string, locationId: string) =>
     invoke<DocumentLocation | null>('locate_notes_location', { path, locationId }),
+  planNotesMove: (request: NotesMoveRequest) => invoke<NotesMovePlan>('plan_notes_move', { request }),
+  runNotesMove: (locationId: string) => invoke<null>('run_notes_move', { locationId }),
+  stopNotesMove: () => invoke<null>('stop_notes_move'),
+  cancelNotesMove: (locationId: string) => invoke<KeptFiles>('cancel_notes_move', { locationId }),
+  switchNotesMove: (locationId: string) => invoke<DocumentLocation>('switch_notes_move', { locationId }),
+  finishNotesMoveSwitch: (locationId: string) =>
+    invoke<OldNotesCopy>('finish_notes_move_switch', { locationId }),
+  unfinishedNotesMoves: () => invoke<UnfinishedNotesMove[]>('unfinished_notes_moves'),
+  keepOldNotesCopy: (locationId: string) => invoke<null>('keep_old_notes_copy', { locationId }),
+  removeOldNotesCopy: (locationId: string) => invoke<OldCopyRemoval>('remove_old_notes_copy', { locationId }),
   createNote: (creation: NoteCreation) => invoke<DocumentLocation>('create_note', { ...creation }),
   createNoteInFolder: ({ location, folder, name, text }: NoteInFolder) =>
     invoke<DocumentLocation>('create_note_in_folder', { location, note: { folder, name, text } }),
@@ -195,3 +212,4 @@ export const FOLDERS_CHANGED_EVENT = 'folders-changed';
 export const SPEC_PROJECTS_CHANGED_EVENT = 'spec-projects-changed';
 export const NOTES_INDEX_STATUS_EVENT = 'notes-index-status';
 export const NOTES_INDEX_CHANGES_EVENT = 'notes-index-changes';
+export const NOTES_MOVE_PROGRESS_EVENT = 'notes-move-progress';

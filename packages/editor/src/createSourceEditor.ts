@@ -13,7 +13,14 @@ import {
 } from '@codemirror/commands';
 import { syntaxHighlighting } from '@codemirror/language';
 import { gotoLine, openSearchPanel, search, searchKeymap, selectNextOccurrence } from '@codemirror/search';
-import { Compartment, EditorSelection, EditorState, Prec, type Extension } from '@codemirror/state';
+import {
+  Annotation,
+  Compartment,
+  EditorSelection,
+  EditorState,
+  Prec,
+  type Extension,
+} from '@codemirror/state';
 import {
   crosshairCursor,
   drawSelection,
@@ -140,6 +147,8 @@ export interface SourceEditorOptions {
   readonly onEditFormula?: (request: FormulaEditRequest) => void;
   /** Lets the user choose picture files for the Image button and Ctrl+Shift+I. */
   readonly onChoosePictures?: () => void;
+  /** Typing and other changes are refused, as while the notes folder is being moved. */
+  readonly isReadOnly?: boolean;
 }
 
 /** A place in the text by zero-based line and column, in UTF-16 code units from the start of the line. */
@@ -203,6 +212,8 @@ export interface SourceEditor {
   ): FormulaWriteOutcome;
   /** Edit Formula from the preview: opens the equation editor on the formula the preview counted as `index`. */
   editFormulaInOrder(index: number, source: string): boolean;
+  /** Refuses or allows changes; the text can still be read, selected and copied. */
+  setReadOnly(isReadOnly: boolean): void;
   destroy(): void;
 }
 
@@ -227,12 +238,14 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
   const slashMenuSwitch = new Compartment();
   const hiddenCharactersSwitch = new Compartment();
   const formatting = formattingReporter(options);
+  const readOnlySwitch = new Compartment();
   const view = new EditorView({
     parent: options.parent,
     state: EditorState.create({
       doc: options.text,
       extensions: [
         startingExtensions(options, slashMenuSwitch, hiddenCharactersSwitch),
+        readOnlySwitch.of(readOnlyExtension(options.isReadOnly === true)),
         formatting.extension,
       ],
     }),
@@ -247,7 +260,7 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
     revealLine: (line) => revealLine(view, line),
     revealRange: (range) => revealRange(view, range),
     ...hiddenCharacterControlOf(view, hiddenCharactersSwitch, options),
-    replaceText: (text) => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } }),
+    ...readOnlyControlOf(view, readOnlySwitch),
     run: (command) => commands[command](),
     ...blockEditingOf(view),
     ...slashMenu,
@@ -349,6 +362,36 @@ function formattingReporter(options: SourceEditorOptions): {
     stop: () => {
       if (frame !== undefined) globalThis.cancelAnimationFrame(frame);
     },
+  };
+}
+
+/** Marks the app replacing the whole text, as after a reload from disk, which read-only allows. */
+const appReplacement = Annotation.define<boolean>();
+
+/**
+ * CodeMirror's read-only facet stops typing, but commands such as list continuation or bold must
+ * check it themselves; the change filter refuses every change they make as well.
+ */
+function readOnlyExtension(isReadOnly: boolean): Extension {
+  if (!isReadOnly) return EditorState.readOnly.of(false);
+  return [
+    EditorState.readOnly.of(true),
+    EditorState.changeFilter.of((transaction) => transaction.annotation(appReplacement) === true),
+  ];
+}
+
+function readOnlyControlOf(
+  view: EditorView,
+  readOnlySwitch: Compartment,
+): Pick<SourceEditor, 'replaceText' | 'setReadOnly'> {
+  return {
+    replaceText: (text) =>
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: text },
+        annotations: appReplacement.of(true),
+      }),
+    setReadOnly: (isReadOnly) =>
+      view.dispatch({ effects: readOnlySwitch.reconfigure(readOnlyExtension(isReadOnly)) }),
   };
 }
 

@@ -34,6 +34,12 @@ rusqlite = { version = "=0.41.1", features = ["bundled"] }
 pulldown-cmark = { version = "0.13.4", default-features = false }
 sha2 = "0.10.9"
 unicode-normalization = "0.1.25"
+# Free space on the target drive before a Notes folder is moved; a safe wrapper over the OS call.
+fs4 = { version = "=1.1.0", default-features = false, features = ["sync"] }
+
+[target.'cfg(windows)'.dependencies]
+# The Recycle Bin for the old copy of a moved Notes folder; pinned below 5.3.0, which is under two weeks old.
+trash = { version = "=5.2.9", default-features = false, features = ["coinit_apartmentthreaded"] }
 
 [features]
 webdriver = ["dep:tauri-plugin-wdio-webdriver"]

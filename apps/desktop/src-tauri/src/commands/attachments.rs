@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,7 @@ use crate::attachments::{
     save_attachment_bytes,
 };
 use crate::commands::documents::{run_blocking, validated_path};
-use crate::documents::{DocumentAccessList, DocumentError, locate_document};
+use crate::documents::{DocumentAccessList, DocumentError, DocumentLocation, locate_document};
 
 const MAX_FILTER_NAME_CHARACTERS: usize = 200;
 
@@ -26,10 +26,13 @@ pub enum AttachmentSource {
 #[serde(rename_all = "camelCase")]
 pub struct AttachmentRequest {
     document_path: String,
-    /// A folder below the document's folder, such as `assets`.
+    /// A folder below the document's folder, such as `assets`, or below the notes folder.
     attachment_folder: String,
     suggested_name: String,
     source: AttachmentSource,
+    /// A Notes workspace's folder: the attachment folder lies in it, and the link is relative to the note.
+    #[serde(default)]
+    notes_folder: Option<String>,
 }
 
 /// Which document the pictures chosen in the picture dialog are added to.
@@ -171,17 +174,59 @@ fn save_requested_attachment(
     access: &DocumentAccessList,
     dropped: &DroppedImages,
 ) -> Result<SavedAttachmentReply, DocumentError> {
-    let folder = opened_document_folder(&request.document_path, access)?;
+    let location = locate_document(&validated_path(&request.document_path)?)?;
+    if !access.is_allowed(&location)
+        || !access.was_opened(&location)
+        || access.is_read_only(&location)
+    {
+        return Err(DocumentError::AccessDenied);
+    }
+    let document = location.path();
+    let note_folder = document.parent().ok_or(DocumentError::InvalidRequest)?;
+    let base = match &request.notes_folder {
+        Some(notes_folder) => notes_folder_holding(&location, notes_folder, access)?,
+        None => note_folder.to_path_buf(),
+    };
     let bytes = source_bytes(request.source, dropped)?;
     let saved = save_attachment_bytes(
-        &folder,
+        &base,
         &request.attachment_folder,
         &request.suggested_name,
         &bytes,
     )?;
     Ok(SavedAttachmentReply {
-        relative_path: saved.relative_path,
+        relative_path: link_from(note_folder, &base, &saved.relative_path)?,
     })
+}
+
+/// The notes folder must be granted and hold the note, so a picture never lands anywhere else.
+fn notes_folder_holding(
+    note: &DocumentLocation,
+    notes_folder: &str,
+    access: &DocumentAccessList,
+) -> Result<PathBuf, DocumentError> {
+    let folder = locate_document(&validated_path(notes_folder)?)?;
+    let is_inside = note
+        .canonical_key
+        .strip_prefix(&folder.canonical_key)
+        .is_some_and(|rest| rest.starts_with(std::path::MAIN_SEPARATOR));
+    if !access.is_folder_allowed(&folder) || !is_inside {
+        return Err(DocumentError::AccessDenied);
+    }
+    Ok(folder.path())
+}
+
+/// The saved path, relative to `base`, as a link from the note's folder: `../Attachments/a.png`.
+fn link_from(note_folder: &Path, base: &Path, saved: &str) -> Result<String, DocumentError> {
+    let note_folder = dunce::canonicalize(note_folder)?;
+    let base = dunce::canonicalize(base)?;
+    let depth = note_folder
+        .strip_prefix(&base)
+        .map_err(|_| DocumentError::AccessDenied)?
+        .components()
+        .filter(|component| matches!(component, Component::Normal(_)))
+        .count();
+    Ok(format!("{}{saved}", "../".repeat(depth)))
 }
 
 fn source_bytes(
@@ -224,7 +269,108 @@ mod tests {
             attachment_folder: "assets".to_owned(),
             suggested_name: "chart.png".to_owned(),
             source,
+            notes_folder: None,
         }
+    }
+
+    /// A note in `Projects` of a notes folder the window was granted and opened the note from.
+    fn opened_note() -> (tempfile::TempDir, String, DocumentAccessList) {
+        let folder = tempfile::tempdir().unwrap();
+        fs::create_dir(folder.path().join("Projects")).unwrap();
+        let note = folder.path().join("Projects").join("Plan.md");
+        fs::write(&note, "# Plan").unwrap();
+        let access = DocumentAccessList::default();
+        access.grant_folder(folder.path()).unwrap();
+        access.remember_opened(&locate_document(&note).unwrap());
+        (folder, note.to_string_lossy().into_owned(), access)
+    }
+
+    fn pasted_into_notes(note: &str, notes_folder: &Path, bytes: &[u8]) -> AttachmentRequest {
+        AttachmentRequest {
+            attachment_folder: "Attachments".to_owned(),
+            notes_folder: Some(notes_folder.to_string_lossy().into_owned()),
+            ..request(
+                note,
+                AttachmentSource::PastedBytes {
+                    bytes: bytes.to_vec(),
+                },
+            )
+        }
+    }
+
+    #[test]
+    fn the_inserted_link_is_relative_to_the_note() {
+        let (folder, note, access) = opened_note();
+
+        let saved = save_requested_attachment(
+            pasted_into_notes(&note, folder.path(), PNG),
+            &access,
+            &DroppedImages::default(),
+        )
+        .unwrap();
+
+        assert_eq!(saved.relative_path, "../Attachments/chart.png");
+        assert_eq!(
+            fs::read(folder.path().join("Attachments").join("chart.png")).unwrap(),
+            PNG
+        );
+    }
+
+    #[test]
+    fn the_attachments_folder_is_made_only_when_the_first_picture_comes() {
+        let (folder, note, access) = opened_note();
+        assert!(!folder.path().join("Attachments").exists());
+
+        save_requested_attachment(
+            pasted_into_notes(&note, folder.path(), PNG),
+            &access,
+            &DroppedImages::default(),
+        )
+        .unwrap();
+
+        assert!(folder.path().join("Attachments").is_dir());
+    }
+
+    #[test]
+    fn unique_names_never_overwrite_in_the_attachments_folder() {
+        let (folder, note, access) = opened_note();
+        let dropped = DroppedImages::default();
+        let other = b"\x89PNG\r\n\x1a\nanother picture";
+        save_requested_attachment(
+            pasted_into_notes(&note, folder.path(), PNG),
+            &access,
+            &dropped,
+        )
+        .unwrap();
+
+        let second = save_requested_attachment(
+            pasted_into_notes(&note, folder.path(), other),
+            &access,
+            &dropped,
+        )
+        .unwrap();
+
+        assert_eq!(second.relative_path, "../Attachments/chart-2.png");
+        assert_eq!(
+            fs::read(folder.path().join("Attachments").join("chart.png")).unwrap(),
+            PNG
+        );
+    }
+
+    #[test]
+    fn a_notes_folder_that_does_not_hold_the_note_is_refused() {
+        let (_folder, note, access) = opened_note();
+        let elsewhere = tempfile::tempdir().unwrap();
+        access.grant_folder(elsewhere.path()).unwrap();
+
+        let refusal = save_requested_attachment(
+            pasted_into_notes(&note, elsewhere.path(), PNG),
+            &access,
+            &DroppedImages::default(),
+        );
+
+        assert_eq!(refusal, Err(DocumentError::AccessDenied));
+        assert!(!elsewhere.path().join("Attachments").exists());
     }
 
     #[test]

@@ -107,6 +107,25 @@ describe('createSourceEditor', () => {
     expect(preview.defaultPrevented).toBe(false);
   });
 
+  it('refuses Enter and formatting while read-only, and takes them again afterwards', () => {
+    const { parent, onChange, editor: opened } = openEditor('- one');
+    const textBox = parent.querySelector('[contenteditable="true"]') ?? parent;
+    const press = (key: string, ctrlKey = false) =>
+      textBox.dispatchEvent(new KeyboardEvent('keydown', { key, ctrlKey, bubbles: true }));
+    press('End', true);
+
+    opened.setReadOnly(true);
+    press('Enter');
+    press('b', true);
+
+    expect(opened.text()).toBe('- one');
+    expect(onChange).not.toHaveBeenCalled();
+    expect(textBox.getAttribute('aria-readonly')).toBe('true');
+    opened.setReadOnly(false);
+    press('Enter');
+    expect(opened.text()).toBe('- one\n- ');
+  });
+
   it('formats with its own keys and leaves the app keys alone', () => {
     const { parent, editor: opened } = openEditor('word');
     const textBox = parent.querySelector('[contenteditable="true"]') ?? parent;

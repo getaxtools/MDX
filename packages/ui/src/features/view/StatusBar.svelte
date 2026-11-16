@@ -32,6 +32,8 @@
     wordsThisSession?: number;
     /** Words in the selection, shown while text is selected. */
     selectedWords?: number;
+    /** A word on something the app is doing, such as moving the notes folder; also announced. */
+    statusMessage?: string | undefined;
     onShowWordGoal?: () => void;
     onResetZoom: () => void;
     onReopenWithEncoding?: (encoding: string | undefined) => void;
@@ -52,6 +54,7 @@
     wordGoal,
     wordsThisSession = 0,
     selectedWords = 0,
+    statusMessage,
     onShowWordGoal = () => undefined,
     onResetZoom,
     onReopenWithEncoding = () => undefined,
@@ -95,6 +98,7 @@
     [
       cursorCount > 1 ? translator.translate('statusBar.cursors', { count: cursorCount }) : '',
       progress?.isReached ? translator.translate('statusBar.wordGoal.reached') : '',
+      statusMessage ?? '',
     ]
       .filter(Boolean)
       .join(' '),
@@ -111,6 +115,9 @@
   <span class="location" title={location}>{location ?? ''}</span>
   <div class="details">
     <span role="status">{announcement}</span>
+    {#if statusMessage}
+      <span class="status-message" aria-hidden="true">{statusMessage}</span>
+    {/if}
     {#each details as detail (detail)}
       <span>{detail}</span>
     {/each}

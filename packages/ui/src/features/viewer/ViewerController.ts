@@ -20,6 +20,7 @@ import {
   toFavouritesFile,
   notesLocationOf,
   notesSettingsOf,
+  isInsideFolder,
   type FrontMatterEdit,
   type EditingModeSetting,
   DEFAULT_SPEC_SEARCH_FILTER,
@@ -58,6 +59,7 @@ import {
   type SpecProjectPort,
   type NotesFolderInspection,
   type NotesLocationPort,
+  type NotesMovePort,
 } from '@mdx/platform';
 import type { MarkdownRenderer, OutlineEntry, RenderOptions, ResourceUrlResolver } from '@mdx/renderer';
 import { applyWorkspaceKindCommand, type WorkspaceKindCommand } from '../control-wheel/workspaceKindCommands';
@@ -99,6 +101,14 @@ import {
 } from '../workspaces/workspaceCommands';
 import { WorkspaceFileActions, type PendingWorkspaceFile } from '../workspaces/WorkspaceFileActions';
 import { NotesLocationActions, isNotesLocationCommand } from '../notes-location/NotesLocationActions';
+import {
+  NotesMoveActions,
+  isNotesMoveCommand,
+  type NotesMoveCommand,
+  type NotesMoveDialog,
+} from '../notes-location/NotesMoveActions';
+import { notesMoveStatusText } from '../notes-location/notesMoveText';
+import type { MoveNotice } from '../notes-location/moveProblemNotice';
 import { NotesActions, isNotesCommand, type NotesCommand, type NotesView } from '../notes/NotesActions';
 import { NotesIndexActions, type NoteBacklinks } from '../notes/NotesIndexActions';
 import { SpecViewerActions, type SpecProjectsView } from '../spec-viewer/SpecViewerActions';
@@ -129,6 +139,17 @@ import {
 import { commandForMenuItem, type ViewerCommand } from './viewerCommands';
 
 export const STATE_SAVE_DELAY_MS = 500;
+const MOVE_NOTICE_ACTION_LABELS: Readonly<Record<NotesMoveCommand['kind'], MessageKey>> = {
+  changeNotesLocation: 'notesLocation.move.change',
+  startNotesMove: 'notesLocation.move.start',
+  resumeNotesMove: 'notesLocation.move.resume',
+  stopNotesMove: 'notesLocation.move.stop',
+  cancelNotesMove: 'notesLocation.move.cancelMove',
+  postponeNotesMove: 'notesLocation.move.later',
+  keepOldNotesCopy: 'notesLocation.move.keepOldCopy',
+  askToRemoveOldNotesCopy: 'notesLocation.move.removeOldCopy',
+  removeOldNotesCopy: 'notesLocation.move.moveToRecycleBin',
+};
 export const MAX_RECENT_MENU_ENTRIES = 10;
 /** How long typing pauses before the preview beside the editor shows the new text. */
 export const LIVE_PREVIEW_DELAY_MS = 150;
@@ -168,6 +189,7 @@ export interface ViewerControllerDependencies {
   readonly attachments?: AttachmentPort;
   readonly workspaceFiles?: WorkspaceFilePort;
   readonly notesLocations?: NotesLocationPort;
+  readonly notesMoves?: NotesMovePort;
   readonly noteFiles?: NoteFilesPort;
   readonly notesIndex?: NotesIndexPort;
   readonly specProjects?: SpecProjectPort;
@@ -251,6 +273,12 @@ export interface ViewerSnapshot {
   readonly specProjects?: SpecProjectsView;
   /** The "Spec after this change" previews open in tabs, by tab key. */
   readonly specPreviews?: ReadonlyMap<string, SpecPreview>;
+  /** The step of a move of the notes folder that waits for the user. */
+  readonly notesMoveDialog?: NotesMoveDialog;
+  /** The status bar's word on a move of the notes folder, which keeps the notes read-only. */
+  readonly notesMoveStatus?: string;
+  /** The active document is in a notes folder being moved, so the editor refuses typing. */
+  readonly isActiveDocumentReadOnly?: boolean;
 }
 
 export interface WorkspacesView {
@@ -344,6 +372,7 @@ export class ViewerController {
   private readonly workspaceActions: WorkspaceActions;
   private readonly workspaceFileActions: WorkspaceFileActions | undefined;
   private readonly notesLocationActions: NotesLocationActions | undefined;
+  private readonly notesMoveActions: NotesMoveActions | undefined;
   private readonly notesActions: NotesActions | undefined;
   private readonly notesIndexActions: NotesIndexActions | undefined;
   private readonly specViewerActions: SpecViewerActions | undefined;
@@ -415,6 +444,7 @@ export class ViewerController {
     this.workspaceActions = this.createWorkspaceActions();
     this.workspaceFileActions = this.createWorkspaceFileActions();
     this.notesLocationActions = this.createNotesLocationActions();
+    this.notesMoveActions = this.createNotesMoveActions();
     this.notesActions = this.createNotesActions();
     this.notesIndexActions = this.createNotesIndexActions();
     this.specDocumentRenderings = this.createSpecDocumentRenderings();
@@ -576,6 +606,54 @@ export class ViewerController {
         void this.showNotesIndex();
       },
     });
+  }
+
+  private createNotesMoveActions(): NotesMoveActions | undefined {
+    const { session, notesMoves, translator } = this.dependencies;
+    if (!notesMoves) return undefined;
+    return new NotesMoveActions({
+      session,
+      notesMoves,
+      locale: translator.locale,
+      pickFolder: () => this.pickNotesFolder(),
+      showNotice: (notice, actions) => this.showMoveNotice(notice, actions),
+      hasUnsavedNotes: () => this.hasUnsavedNotes(),
+      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+      onSwitched: async () => {
+        await this.notesLocationActions?.check();
+        await this.showNotesIndex();
+        this.refreshPathStatuses({ isForced: true });
+      },
+    });
+  }
+
+  private hasUnsavedNotes(): boolean {
+    const shown = this.dependencies.session.shownWorkspace();
+    const location = shown ? notesLocationOf(shown) : undefined;
+    if (!location) return false;
+    return [...this.editing.unsavedKeys()].some((key) => isInsideFolder(key, location.canonicalKey));
+  }
+
+  private showMoveNotice(notice: MoveNotice, commands: readonly NotesMoveCommand[] = []): void {
+    const { translator } = this.dependencies;
+    const actions = commands.map((command) => ({
+      label: translator.translate(MOVE_NOTICE_ACTION_LABELS[command.kind]),
+      command,
+    }));
+    this.showNotice(notice.key, notice.values, actions);
+  }
+
+  /** Whether a document lies in a notes folder being moved, which nothing may change until it ends. */
+  private isInMovingNotes(canonicalKey: string): boolean {
+    return this.notesMoveActions?.isReadOnly(canonicalKey) ?? false;
+  }
+
+  private refuseWhileNotesMove(): boolean {
+    const shown = this.dependencies.session.shownWorkspace();
+    const location = shown ? notesLocationOf(shown) : undefined;
+    if (!location || !this.isInMovingNotes(location.canonicalKey)) return false;
+    this.showNotice('notesLocation.move.readOnly');
+    return true;
   }
 
   private createNotesIndexActions(): NotesIndexActions | undefined {
@@ -776,6 +854,11 @@ export class ViewerController {
 
   /** Saves a picture pasted into the editor; undefined when it cannot be added. */
   pastePicture(bytes: Uint8Array): Promise<string | undefined> {
+    const active = this.dependencies.session.currentState().tabStrip.activeTab()?.location;
+    if (active && this.isInMovingNotes(active.canonicalKey)) {
+      this.showNotice('notesLocation.move.readOnly');
+      return Promise.resolve(undefined);
+    }
     return this.documentAttachments?.pastePicture(bytes) ?? Promise.resolve(undefined);
   }
 
@@ -800,11 +883,13 @@ export class ViewerController {
     if (this.notesIndexActions) this.stopActions.push(this.notesIndexActions.start());
     if (this.specViewerActions) this.stopActions.push(this.specViewerActions.start());
     if (this.documentAttachments) this.stopActions.push(this.documentAttachments.start());
+    if (this.notesMoveActions) this.stopActions.push(this.notesMoveActions.start());
     await this.openDocuments(await requests.takeStartupDocuments());
     await this.refreshActiveDocument();
     await this.notesLocationActions?.check();
     await this.showNotesIndex();
     this.showSpecProjects();
+    await this.notesMoveActions?.offerUnfinishedMoves();
     await this.offerWorkspaceFiles();
   }
 
@@ -1097,6 +1182,7 @@ export class ViewerController {
    */
   private runFeatureCommand(command: ViewerCommand): Promise<void> | undefined {
     if (isNotesLocationCommand(command)) return this.notesLocationActions?.run(command) ?? Promise.resolve();
+    if (isNotesMoveCommand(command)) return this.runNotesMoveCommand(command);
     if (isNotesCommand(command)) return this.runNotesCommand(command);
     if (isSpecViewerCommand(command)) return this.runSpecViewerCommand(command);
     if (isWorkspaceFileCommand(command)) return this.runWorkspaceFileCommand(command);
@@ -1105,7 +1191,14 @@ export class ViewerController {
     return undefined;
   }
 
+  /** Change Location starts from Settings, which closes so the folder picker and the plan can show. */
+  private async runNotesMoveCommand(command: NotesMoveCommand): Promise<void> {
+    if (command.kind === 'changeNotesLocation') this.openDialog = undefined;
+    await this.notesMoveActions?.run(command);
+  }
+
   private async runNotesCommand(command: NotesCommand): Promise<void> {
+    if (this.refuseWhileNotesMove()) return;
     await this.notesActions?.run(command);
     if (command.kind === 'updateNotesSettings') await this.showNotesIndex();
   }
@@ -1360,6 +1453,7 @@ export class ViewerController {
 
   /** Records the source editor's text for a document; the window shows when it has unsaved changes. */
   updateEditedText(canonicalKey: string, text: string): void {
+    if (this.isInMovingNotes(canonicalKey)) return;
     this.editingActions.updateText(canonicalKey, text);
     this.injectionChecks.textEdited(canonicalKey, text);
     if (this.isPreviewBesideEditor()) this.scheduleLivePreview(text.length);
@@ -1768,6 +1862,10 @@ export class ViewerController {
   }
 
   private async editProperty(canonicalKey: string, edit: FrontMatterEdit): Promise<void> {
+    if (this.isInMovingNotes(canonicalKey)) {
+      this.showNotice('notesLocation.move.readOnly');
+      return;
+    }
     const outcome = await this.propertyEditing.editProperty(canonicalKey, edit);
     this.publish(this.composeSnapshot(this.snapshot.notice));
     const fileName = this.dependencies.session.openedDocument(canonicalKey)?.location.fileName ?? '';
@@ -1801,6 +1899,25 @@ export class ViewerController {
       ...this.notesPart(),
       ...this.specProjectsPart(),
       ...this.injectionCheckPart(),
+      ...this.notesMovePart(),
+    };
+  }
+
+  private notesMovePart(): Pick<
+    ViewerSnapshot,
+    'notesMoveDialog' | 'notesMoveStatus' | 'isActiveDocumentReadOnly'
+  > {
+    const actions = this.notesMoveActions;
+    if (!actions) return {};
+    const dialog = actions.dialogShown();
+    const status = actions.statusShown();
+    const activeKey = this.dependencies.session.currentState().tabStrip.activeTab()?.location.canonicalKey;
+    return {
+      ...(dialog ? { notesMoveDialog: dialog } : {}),
+      ...(status ? { notesMoveStatus: notesMoveStatusText(status, this.dependencies.translator) } : {}),
+      ...(activeKey !== undefined && this.isInMovingNotes(activeKey)
+        ? { isActiveDocumentReadOnly: true }
+        : {}),
     };
   }
 

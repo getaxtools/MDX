@@ -23,7 +23,7 @@ pub async fn create_note(
 ) -> Result<DocumentLocation, DocumentError> {
     let parent = validated_path(&parent)?;
     let access = Arc::clone(&access);
-    run_blocking(move || notes::create_note(&allowed_root(&location, &access)?, &parent, &name))
+    run_blocking(move || notes::create_note(&writable_root(&location, &access)?, &parent, &name))
         .await?
 }
 
@@ -52,7 +52,7 @@ pub async fn create_note_in_folder(
     }
     let access = Arc::clone(&access);
     run_blocking(move || {
-        let root = allowed_root(&location, &access)?;
+        let root = writable_root(&location, &access)?;
         notes::create_note_in_folder(&root, &note.folder, &note.name, &note.text)
     })
     .await?
@@ -67,7 +67,7 @@ pub async fn rename_note(
 ) -> Result<DocumentLocation, DocumentError> {
     let note = validated_path(&note)?;
     let access = Arc::clone(&access);
-    run_blocking(move || notes::rename_note(&allowed_root(&location, &access)?, &note, &name))
+    run_blocking(move || notes::rename_note(&writable_root(&location, &access)?, &note, &name))
         .await?
 }
 
@@ -82,7 +82,8 @@ pub async fn move_note(
     let note = validated_path(&note)?;
     let into = validated_path(&into)?;
     let access = Arc::clone(&access);
-    run_blocking(move || notes::move_note(&allowed_root(&location, &access)?, &note, &into)).await?
+    run_blocking(move || notes::move_note(&writable_root(&location, &access)?, &note, &into))
+        .await?
 }
 
 /// Moves a note and its child notes into the location's trash.
@@ -94,7 +95,7 @@ pub async fn delete_note(
 ) -> Result<TrashEntry, DocumentError> {
     let note = validated_path(&note)?;
     let access = Arc::clone(&access);
-    run_blocking(move || notes::delete_note(&allowed_root(&location, &access)?, &note, now_ms()))
+    run_blocking(move || notes::delete_note(&writable_root(&location, &access)?, &note, now_ms()))
         .await?
 }
 
@@ -115,7 +116,8 @@ pub async fn restore_note(
     access: State<'_, Arc<DocumentAccessList>>,
 ) -> Result<DocumentLocation, DocumentError> {
     let access = Arc::clone(&access);
-    run_blocking(move || notes::restore_note(&allowed_root(&location, &access)?, &entry_id)).await?
+    run_blocking(move || notes::restore_note(&writable_root(&location, &access)?, &entry_id))
+        .await?
 }
 
 /// Removes the trash entries for good and says how many there were.
@@ -125,7 +127,7 @@ pub async fn empty_note_trash(
     access: State<'_, Arc<DocumentAccessList>>,
 ) -> Result<usize, DocumentError> {
     let access = Arc::clone(&access);
-    run_blocking(move || notes::empty_trash(&allowed_root(&location, &access)?)).await?
+    run_blocking(move || notes::empty_trash(&writable_root(&location, &access)?)).await?
 }
 
 /// Changes the planned link targets in notes of the location after a rename or move, and returns
@@ -140,7 +142,7 @@ pub async fn apply_note_link_updates(
     let access = Arc::clone(&access);
     run_blocking(move || {
         Ok(notes::apply_link_updates(
-            &allowed_root(&location, &access)?,
+            &writable_root(&location, &access)?,
             &updates,
         ))
     })
@@ -177,6 +179,15 @@ fn validated_link_updates(updates: &[NoteLinkEdits]) -> Result<(), DocumentError
 }
 
 /// The Notes location, which the window must have been granted when the workspace was shown.
+/// A location the window may change: allowed, and not being moved.
+fn writable_root(location: &str, access: &DocumentAccessList) -> Result<NotesRoot, DocumentError> {
+    let root = allowed_root(location, access)?;
+    if access.is_read_only(&locate_document(root.folder())?) {
+        return Err(DocumentError::AccessDenied);
+    }
+    Ok(root)
+}
+
 pub(crate) fn allowed_root(
     location: &str,
     access: &DocumentAccessList,
@@ -191,6 +202,21 @@ pub(crate) fn allowed_root(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_location_being_moved_refuses_changes_but_stays_readable() {
+        let folder = tempfile::tempdir().unwrap();
+        let access = DocumentAccessList::default();
+        access.grant_folder(folder.path()).unwrap();
+        access.make_folder_read_only(folder.path());
+        let location = folder.path().to_string_lossy();
+
+        assert_eq!(
+            writable_root(&location, &access).err(),
+            Some(DocumentError::AccessDenied)
+        );
+        assert!(allowed_root(&location, &access).is_ok());
+    }
 
     #[test]
     fn a_location_the_window_was_not_granted_is_refused() {

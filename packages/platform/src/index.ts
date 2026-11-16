@@ -79,6 +79,21 @@ export type {
   PreparedNotesLocation,
 } from './NotesLocationPort';
 export { InMemoryNotesLocations } from './fakes/InMemoryNotesLocations';
+export {
+  NotesMoveError,
+  type KeptFiles,
+  type NotesMovePlan,
+  type NotesMovePort,
+  type NotesMoveProblem,
+  type NotesMoveProblemCode,
+  type NotesMoveProgress,
+  type NotesMoveRequest,
+  type NotesMoveState,
+  type OldCopyRemoval,
+  type OldNotesCopy,
+  type UnfinishedNotesMove,
+} from './NotesMovePort';
+export { InMemoryNotesMoves } from './fakes/InMemoryNotesMoves';
 export { InMemoryNoteFiles } from './fakes/InMemoryNoteFiles';
 export { InMemoryNotesIndex } from './fakes/InMemoryNotesIndex';
 export type {
