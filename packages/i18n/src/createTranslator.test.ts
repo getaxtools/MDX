@@ -5,6 +5,10 @@ const MESSAGE_KEY_FORMAT = /^[a-z][a-zA-Z]*(\.[a-z][a-zA-Z0-9]*)+$/;
 const SAMPLE_VALUES = {
   count: 2,
   number: 1,
+  source: 'x^2',
+  rows: 3,
+  columns: 2,
+  type: 'mermaid',
   minutes: 3,
   percent: 125,
   current: 1,

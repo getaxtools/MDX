@@ -52,7 +52,7 @@ import {
   type NotesFolderInspection,
   type NotesLocationPort,
 } from '@mdx/platform';
-import type { MarkdownRenderer, OutlineEntry, RenderOptions } from '@mdx/renderer';
+import type { MarkdownRenderer, OutlineEntry, RenderOptions, ResourceUrlResolver } from '@mdx/renderer';
 import { applyWorkspaceKindCommand, type WorkspaceKindCommand } from '../control-wheel/workspaceKindCommands';
 import type { DocumentLink } from '../document-view/DocumentLink';
 import {
@@ -682,6 +682,22 @@ export class ViewerController {
   /** Sanitized HTML for Markdown that is not a document yet, such as a converted table. */
   renderPreview(markdown: string): string {
     return this.dependencies.renderer.render(markdown, { resolveResourceUrl: () => undefined }).html;
+  }
+
+  /** Sanitized HTML for a block of an open document, its pictures and links resolved as its preview resolves them. */
+  renderDocumentBlock(canonicalKey: string, markdown: string): string {
+    const document = this.dependencies.session.openedDocument(canonicalKey);
+    if (!document) return this.renderPreview(markdown);
+    return this.dependencies.renderer.render(markdown, {
+      resolveResourceUrl: this.resourceResolverFor(document.location),
+      ...this.notesRenderingFor(document.location),
+    }).html;
+  }
+
+  private resourceResolverFor(location: DocumentLocation): ResourceUrlResolver {
+    const { resources } = this.dependencies;
+    return (source) =>
+      isUntitledLocation(location) ? undefined : resources?.imageUrl(location.displayPath, source);
   }
 
   hasUnsavedDocuments(): boolean {
@@ -1380,11 +1396,9 @@ export class ViewerController {
     text: string,
     shouldMarkSourceLines: boolean,
   ): RenderedActiveDocument {
-    const { resources } = this.dependencies;
     const isUntitled = isUntitledLocation(document.location);
     const { html, outline, frontMatter } = this.dependencies.renderer.render(text, {
-      resolveResourceUrl: (source) =>
-        isUntitled ? undefined : resources?.imageUrl(document.location.displayPath, source),
+      resolveResourceUrl: this.resourceResolverFor(document.location),
       includeSourceLines: shouldMarkSourceLines,
       ...this.notesRenderingFor(document.location),
     });

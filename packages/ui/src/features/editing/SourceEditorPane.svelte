@@ -6,7 +6,13 @@
   import ContextMenu from '../../components/ContextMenu.svelte';
   import { isContextMenuKey, type ContextMenuRequest } from '../../components/ContextMenuItem';
   import { editorMenuItems, type EditorMenuChoice } from './blockMenu';
-  import type { SourceEditor, WikiLinkSuggester, WrittenLink } from '@mdx/editor';
+  import type {
+    RichTextRendering,
+    SourceEditor,
+    SourceEditorOptions,
+    WikiLinkSuggester,
+    WrittenLink,
+  } from '@mdx/editor';
   import type { Translator } from '@mdx/i18n';
   import { untrack } from 'svelte';
   import type { EditorRequest } from './editingCommands';
@@ -19,6 +25,8 @@
     zoomPercent: number;
     /** The Document style, whose fonts Rich text uses. */
     typography?: Typography;
+    /** Renders Rich text's widgets as the preview renders this document. */
+    richTextRendering?: RichTextRendering | undefined;
     scrollRatio?: number;
     translator: Translator;
     editorRequest?: EditorRequest | undefined;
@@ -47,6 +55,7 @@
     text,
     zoomPercent,
     typography = 'github',
+    richTextRendering,
     translator,
     editorRequest,
     isSlashMenuEnabled = false,
@@ -107,6 +116,28 @@
   let editor: SourceEditor | undefined = $state();
   let handledRequestId = untrack(() => editorRequest?.id ?? 0);
 
+  /** What the editor starts with; later changes reach it through the effects below. */
+  function editorOptions(parent: HTMLElement): SourceEditorOptions {
+    return untrack(() => ({
+      parent,
+      text,
+      label: translator.translate('editing.editorLabel', { fileName }),
+      phrases: editorPhrases(translator),
+      onChange: (editedText: string) => onChange(editedText),
+      onScroll: (ratio: number) => onScroll(ratio),
+      isSlashMenuEnabled,
+      ...(onPastePicture ? { onPastePicture } : {}),
+      onCursorCountChange: (count: number) => onCursorCountChange(count),
+      onSelectedTextChange: (selectedText: string) => onSelectedTextChange(selectedText),
+      onOpenLink: (link: WrittenLink) => onOpenLink(link),
+      onCaretInLinkChange: reportCaretInLink,
+      typography,
+      ...(richTextRendering ? { richTextRendering } : {}),
+      snippets: editorSnippets,
+      ...(wikiLinks ? { wikiLinks } : {}),
+    }));
+  }
+
   $effect(() => {
     const parent = container;
     if (!parent) return;
@@ -114,23 +145,7 @@
     let created: SourceEditor | undefined;
     void import('@mdx/editor').then(({ createSourceEditor }) => {
       if (isClosed) return;
-      created = createSourceEditor({
-        parent,
-        text: untrack(() => text),
-        label: translator.translate('editing.editorLabel', { fileName }),
-        phrases: editorPhrases(translator),
-        onChange: (editedText) => onChange(editedText),
-        onScroll: (ratio) => onScroll(ratio),
-        isSlashMenuEnabled: untrack(() => isSlashMenuEnabled),
-        ...(onPastePicture ? { onPastePicture } : {}),
-        onCursorCountChange: (count) => onCursorCountChange(count),
-        onSelectedTextChange: (selectedText) => onSelectedTextChange(selectedText),
-        onOpenLink: (link) => onOpenLink(link),
-        onCaretInLinkChange: reportCaretInLink,
-        typography: untrack(() => typography),
-        snippets: untrack(() => editorSnippets),
-        ...untrack(() => (wikiLinks ? { wikiLinks } : {})),
-      });
+      created = createSourceEditor(editorOptions(parent));
       editor = created;
       const startingEditor = created;
       globalThis.requestAnimationFrame(() => {

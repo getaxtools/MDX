@@ -29,6 +29,7 @@
   import type { ScrollSync } from '../editing/ScrollSync';
   import SourceEditorPane from '../editing/SourceEditorPane.svelte';
   import { openLinkFromEditor } from '../editing/editorLinks';
+  import { createRichTextRendering } from '../editing/richTextRendering';
   import PanelResizer from '../../components/PanelResizer.svelte';
   import SettingsDialog from '../settings/SettingsDialog.svelte';
   import StartPage from '../start-page/StartPage.svelte';
@@ -491,6 +492,13 @@
                     text={editedDocument.source}
                     zoomPercent={viewSettings.zoomPercent}
                     typography={viewSettings.typography}
+                    richTextRendering={createRichTextRendering({
+                      documentKey: editedDocument.canonicalKey,
+                      renderMarkdown: (markdown: string) =>
+                        controller.renderDocumentBlock(editedDocument.canonicalKey, markdown),
+                      richBlocks,
+                      translator,
+                    })}
                     scrollRatio={editedDocument.scrollRatio}
                     {translator}
                     editorRequest={snapshot?.editorRequest}

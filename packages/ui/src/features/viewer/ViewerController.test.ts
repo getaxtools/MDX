@@ -381,6 +381,26 @@ describe('ViewerController', () => {
     expect(html).toContain(`src="image://${encodeURIComponent(GUIDE)}/images/diagram.png"`);
   });
 
+  it('renders a block of an open document with its pictures resolved as in its preview', async () => {
+    const documentFiles = new InMemoryDocumentFiles({ [GUIDE]: '# Guide' });
+    const controller = new ViewerController({
+      session: new ViewerSession({ documentFiles, appState: new InMemoryAppState(), now: () => 0 }),
+      requests: new InMemoryDocumentRequests([GUIDE]),
+      renderer: createMarkdownRenderer({ window }),
+      translator: createTranslator(),
+      resources: {
+        imageUrl: (documentPath, source) => `image://${encodeURIComponent(documentPath)}/${source}`,
+      },
+    });
+    await controller.start();
+
+    const html = controller.renderDocumentBlock(GUIDE.toLowerCase(), '![Diagram](images/diagram.png)');
+    const unknown = controller.renderDocumentBlock('c:\\elsewhere.md', '![Diagram](images/diagram.png)');
+
+    expect(html).toContain(`src="image://${encodeURIComponent(GUIDE)}/images/diagram.png"`);
+    expect(unknown).not.toContain('src=');
+  });
+
   it('prints only when a document is open', async () => {
     const printer = { printActiveDocument: vi.fn() };
     const empty = new ViewerController({
