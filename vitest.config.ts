@@ -32,6 +32,7 @@ export default defineConfig({
           name: 'ui',
           include: ['packages/ui/src/**/*.test.ts', 'apps/desktop/src/**/*.test.ts'],
           environment: 'jsdom',
+          setupFiles: ['tests/ui-setup/testingLibraryWaits.ts'],
         },
       },
     ],
