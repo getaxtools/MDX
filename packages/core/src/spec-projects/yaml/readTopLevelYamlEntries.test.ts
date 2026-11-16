@@ -3,7 +3,7 @@ import { readTopLevelYamlEntries, topLevelYamlValue } from './readTopLevelYamlEn
 
 describe('readTopLevelYamlEntries', () => {
   it('reads keys at the first column with their values and lines', () => {
-    const text = '﻿schema: spec-driven\r\ncreated: "2026-11-12"\r\nskip_specs: true # no deltas\r\n';
+    const text = '\uFEFFschema: spec-driven\r\ncreated: "2026-11-12"\r\nskip_specs: true # no deltas\r\n';
 
     expect(readTopLevelYamlEntries(text)).toEqual([
       { key: 'schema', value: 'spec-driven', lineNumber: 1 },

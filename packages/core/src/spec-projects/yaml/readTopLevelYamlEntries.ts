@@ -8,7 +8,7 @@ export interface TopLevelYamlEntry {
 
 const TOP_LEVEL_ENTRY = /^([A-Za-z_][\w.-]*)\s*:(?:\s+(.*))?$/;
 const LINE_BREAK = /\r\n|\r|\n/;
-const BYTE_ORDER_MARK = '﻿';
+const BYTE_ORDER_MARK = '\uFEFF';
 
 function withoutComment(value: string): string {
   if (value.startsWith('"') || value.startsWith("'")) return value;

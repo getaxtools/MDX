@@ -263,3 +263,40 @@ export {
   AGENT_INSTRUCTION_LOCATIONS,
   isAgentInstructionFile,
 } from './spec-projects/agent-files/agentInstructionLocations';
+export {
+  checkChange,
+  deltaSpecFilesOf,
+  type ChangeCheckInput,
+  type DeltaSpecFile,
+} from './spec-projects/change-based/checkChange';
+export { checkMainSpec } from './spec-projects/change-based/checkMainSpec';
+export {
+  parseDeltaSpec,
+  type DeltaOperation,
+  type DeltaSection,
+  type DeltaSpec,
+  type NamedLine,
+  type OrphanedRequirement,
+  type RequirementRename,
+  type UnpairedRename,
+} from './spec-projects/change-based/parseDeltaSpec';
+export { parseMainSpec, type MainSpec, type SpecPurpose } from './spec-projects/change-based/parseMainSpec';
+export {
+  CHANGE_METADATA_FILE,
+  readChangeMetadata,
+  type ChangeMetadata,
+  type ChangeMetadataProblem,
+} from './spec-projects/change-based/readChangeMetadata';
+export {
+  requirementTextOf,
+  scenariosOf,
+  type RequirementBlock,
+  type ScenarioBlock,
+} from './spec-projects/change-based/requirementBlocks';
+export {
+  failsCheck,
+  RULE_SEVERITIES,
+  type FindingSeverity,
+  type StructuralFinding,
+  type StructuralRule,
+} from './spec-projects/change-based/structuralFindings';
