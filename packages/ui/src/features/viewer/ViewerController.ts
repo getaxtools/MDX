@@ -50,6 +50,7 @@ import {
   type WorkspaceFilePort,
   type NoteFilesPort,
   type NotesIndexPort,
+  type SpecProjectPort,
   type NotesFolderInspection,
   type NotesLocationPort,
 } from '@mdx/platform';
@@ -95,6 +96,7 @@ import { WorkspaceFileActions, type PendingWorkspaceFile } from '../workspaces/W
 import { NotesLocationActions, isNotesLocationCommand } from '../notes-location/NotesLocationActions';
 import { NotesActions, isNotesCommand, type NotesCommand, type NotesView } from '../notes/NotesActions';
 import { NotesIndexActions, type NoteBacklinks } from '../notes/NotesIndexActions';
+import { SpecViewerActions, type SpecProjectsView } from '../spec-viewer/SpecViewerActions';
 import { windowTitleFor } from '../workspaces/windowTitle';
 import { recentWorkspaceLinks } from '../workspaces/recentWorkspaceLinks';
 import { applySessionCommand } from './applySessionCommand';
@@ -138,6 +140,7 @@ export interface ViewerControllerDependencies {
   readonly notesLocations?: NotesLocationPort;
   readonly noteFiles?: NoteFilesPort;
   readonly notesIndex?: NotesIndexPort;
+  readonly specProjects?: SpecProjectPort;
   /** The clock for daily notes and templates; the real one unless a test sets it. */
   readonly now?: () => Date;
 }
@@ -202,6 +205,8 @@ export interface ViewerSnapshot {
   readonly missingNotesLocation?: string;
   /** The note tree, shown in place of Folders in a Notes workspace whose folder is there. */
   readonly notes?: NotesView;
+  /** The spec projects, shown in place of Folders in a Spec viewer workspace. */
+  readonly specProjects?: SpecProjectsView;
 }
 
 export interface WorkspacesView {
@@ -285,6 +290,8 @@ export class ViewerController {
   private readonly notesLocationActions: NotesLocationActions | undefined;
   private readonly notesActions: NotesActions | undefined;
   private readonly notesIndexActions: NotesIndexActions | undefined;
+  private readonly specViewerActions: SpecViewerActions | undefined;
+  private shownSpecFoldersKey: string | undefined;
   private pendingWorkspaceFile: PendingWorkspaceFile | undefined;
   private noticeActions: readonly NoticeAction[] = [];
   private findRequest = 0;
@@ -353,6 +360,12 @@ export class ViewerController {
     this.notesLocationActions = this.createNotesLocationActions();
     this.notesActions = this.createNotesActions();
     this.notesIndexActions = this.createNotesIndexActions();
+    this.specViewerActions = dependencies.specProjects
+      ? new SpecViewerActions({
+          specProjects: dependencies.specProjects,
+          onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+        })
+      : undefined;
   }
 
   private createPropertyEditing(): PropertyEditing {
@@ -446,6 +459,23 @@ export class ViewerController {
     return this.notesIndexActions?.windowFocused() ?? Promise.resolve();
   }
 
+  /** A Spec viewer workspace's folders are scanned again only when the workspace or its folders change. */
+  private showSpecProjects(): void {
+    const actions = this.specViewerActions;
+    if (!actions) return;
+    const { session } = this.dependencies;
+    const shown = session.shownWorkspace();
+    const folderPaths = session
+      .currentState()
+      .explorerFolders.folders()
+      .map((folder) => folder.displayPath);
+    const key = shown?.kindId === 'specViewer' ? JSON.stringify([shown.id, folderPaths]) : undefined;
+    if (key === this.shownSpecFoldersKey) return;
+    this.shownSpecFoldersKey = key;
+    if (key === undefined) actions.hide();
+    else void actions.show(folderPaths);
+  }
+
   /** The index follows the shown workspace: a Notes workspace whose folder is there, or none. */
   private async showNotesIndex(): Promise<void> {
     const shown = this.dependencies.session.shownWorkspace();
@@ -534,6 +564,7 @@ export class ViewerController {
     await this.refreshActiveDocument();
     await this.notesLocationActions?.check();
     await this.showNotesIndex();
+    this.showSpecProjects();
   }
 
   private createDocumentAttachments(): DocumentAttachments | undefined {
@@ -573,6 +604,7 @@ export class ViewerController {
     await this.refreshActiveDocument();
     await this.notesLocationActions?.check();
     await this.showNotesIndex();
+    this.showSpecProjects();
     await this.offerWorkspaceFiles();
   }
 
@@ -1310,6 +1342,7 @@ export class ViewerController {
 
   private handleSessionChange(): void {
     this.navigation.recordActiveDocument();
+    this.showSpecProjects();
     this.publish(this.composeSnapshot(this.snapshot.notice));
     this.showViewStateInMenu();
     this.showRecentFilesInMenu();
@@ -1486,6 +1519,7 @@ export class ViewerController {
       ...this.unsavedChangesPart(),
       ...this.workspacesPart(),
       ...this.notesPart(),
+      ...this.specProjectsPart(),
     };
   }
 
@@ -1502,6 +1536,11 @@ export class ViewerController {
   private editedLocation(): DocumentLocation | undefined {
     if (!this.editingActions.isActiveDocumentEditing()) return undefined;
     return this.dependencies.session.currentState().tabStrip.activeTab()?.location;
+  }
+
+  private specProjectsPart(): Pick<ViewerSnapshot, 'specProjects'> {
+    const specProjects = this.specViewerActions?.view();
+    return specProjects ? { specProjects } : {};
   }
 
   /** Either the missing folder's path or, while the folder is there, its note tree. */

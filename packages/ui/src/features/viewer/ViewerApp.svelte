@@ -146,10 +146,12 @@
     };
   });
 
-  /** Documents show in the Markdown viewer, and in a Notes workspace whose notes folder is there. */
+  /** Documents show in the Markdown viewer, in a Notes workspace whose notes folder is there and in a Spec viewer one. */
   const isReadingDocuments = $derived(
     (snapshot?.viewer.workspaceKinds.activeKindId() ?? DEFAULT_WORKSPACE_KIND_ID) ===
-      DEFAULT_WORKSPACE_KIND_ID || snapshot?.notes !== undefined,
+      DEFAULT_WORKSPACE_KIND_ID ||
+      snapshot?.notes !== undefined ||
+      snapshot?.specProjects !== undefined,
   );
   const activeTab = $derived(snapshot?.viewer.tabStrip.activeTab());
   const shownWorkspace = $derived(snapshot?.workspaces?.registry.find(snapshot.workspaces.shownWorkspaceId));
@@ -379,6 +381,7 @@
               onCommand={(command: ViewerCommand) => void controller.execute(command)}
               onListFolder={(folderPath: string) => controller.listFolderContents(folderPath)}
               notes={snapshot.notes}
+              specProjects={snapshot.specProjects}
               isNoteDeletionConfirmed={viewSettings.isNoteDeletionConfirmed}
               onNotesCommand={(command: ViewerCommand) => controller.execute(command)}
               onListNoteFolder={(folderPath: string) => controller.listNoteFolder(folderPath)}

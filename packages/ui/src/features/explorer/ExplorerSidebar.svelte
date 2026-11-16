@@ -8,6 +8,8 @@
   import NotesSection from '../notes/NotesSection.svelte';
   import NoteTagsSection from '../notes/NoteTagsSection.svelte';
   import type { NotesView } from '../notes/NotesActions';
+  import SpecProjectsSection from '../spec-viewer/SpecProjectsSection.svelte';
+  import type { SpecProjectsView } from '../spec-viewer/SpecViewerActions';
   import ExplorerFoldersSection from './ExplorerFoldersSection.svelte';
   import SectionResizer from './SectionResizer.svelte';
 
@@ -30,6 +32,8 @@
     activeDocumentKey?: string | undefined;
     /** In a Notes workspace, the note tree takes the place of Folders. */
     notes?: NotesView | undefined;
+    /** In a Spec viewer workspace, its spec projects take the place of Folders. */
+    specProjects?: SpecProjectsView | undefined;
     isNoteDeletionConfirmed?: boolean;
     onNotesCommand?: (command: ViewerCommand) => Promise<void>;
     onListNoteFolder?: (folderPath: string) => Promise<FolderListing>;
@@ -53,6 +57,7 @@
     onShowFolder = () => () => undefined,
     activeDocumentKey,
     notes,
+    specProjects,
     isNoteDeletionConfirmed = true,
     onNotesCommand = (command) => {
       onCommand(command);
@@ -143,6 +148,16 @@
         {onShowFolder}
         {onOpenDocument}
         onCommand={onNotesCommand}
+      />
+    {:else if specProjects}
+      <SpecProjectsSection
+        roots={specProjects.roots}
+        unreadableFolders={specProjects.unreadableFolders}
+        {translator}
+        isExpanded={isExpanded('folders')}
+        onToggleExpanded={() => toggle('folders')}
+        {onOpenDocument}
+        {activeDocumentKey}
       />
     {:else}
       <ExplorerFoldersSection
