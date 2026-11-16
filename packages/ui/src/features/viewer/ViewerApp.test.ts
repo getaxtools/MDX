@@ -9,6 +9,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import ViewerApp from './ViewerApp.svelte';
 import { ViewerController } from './ViewerController';
 
+/** The control wheel loads on first use, which can take seconds under coverage on a busy machine. */
+const LAZY_LOAD_WAIT = { timeout: 10_000 };
+
 const GUIDE = 'C:\\Docs\\Guide.md';
 const NOTES = 'C:\\Docs\\Notes.md';
 
@@ -268,7 +271,7 @@ describe('ViewerApp', () => {
     expect(screen.queryByRole('dialog', { name: 'Control wheel' })).toBeNull();
 
     await controller.execute({ kind: 'toggleControlWheel' });
-    expect(await screen.findByRole('dialog', { name: 'Control wheel' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'Control wheel' }, LAZY_LOAD_WAIT)).toBeTruthy();
     await userEvent.keyboard('{Escape}');
 
     await vi.waitFor(() => {
@@ -290,7 +293,7 @@ describe('ViewerApp', () => {
     expect(screen.queryByRole('dialog', { name: 'Control wheel' })).toBeNull();
     await userEvent.keyboard('{Control>}{Shift>}J{/Shift}{/Control}');
 
-    expect(await screen.findByRole('dialog', { name: 'Control wheel' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'Control wheel' }, LAZY_LOAD_WAIT)).toBeTruthy();
   });
 
   it('shows the status bar wheel button only when the setting is on, and it opens the wheel', async () => {
@@ -300,7 +303,7 @@ describe('ViewerApp', () => {
     await controller.execute({ kind: 'toggleWheelButtonInStatusBar' });
     await userEvent.click(await screen.findByRole('button', { name: 'Markdown viewer, show control wheel' }));
 
-    expect(await screen.findByRole('dialog', { name: 'Control wheel' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'Control wheel' }, LAZY_LOAD_WAIT)).toBeTruthy();
   });
 
   it('opens the wheel with the kind choices for Choose Workspace Kinds', async () => {
@@ -308,7 +311,7 @@ describe('ViewerApp', () => {
 
     await controller.execute({ kind: 'showWorkspaceKindSettings' });
 
-    expect(await screen.findByRole('dialog', { name: 'Control wheel' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'Control wheel' }, LAZY_LOAD_WAIT)).toBeTruthy();
     expect(await screen.findByRole('dialog', { name: 'Workspace kinds' })).toBeTruthy();
   });
 
@@ -336,7 +339,7 @@ describe('ViewerApp', () => {
     await fireEvent.pointerMove(globalThis.document.body, { clientX: 500, clientY: 400 });
     await controller.execute({ kind: 'toggleControlWheel' });
 
-    const wheel = await screen.findByRole('dialog', { name: 'Control wheel' });
+    const wheel = await screen.findByRole('dialog', { name: 'Control wheel' }, LAZY_LOAD_WAIT);
     expect(wheel.style.left).toBe('400px');
   });
 
@@ -351,7 +354,7 @@ describe('ViewerApp', () => {
       await userEvent.keyboard('{Escape}');
       await controller.execute({ kind: 'toggleControlWheel' });
 
-      await screen.findByRole('dialog', { name: 'Control wheel' });
+      await screen.findByRole('dialog', { name: 'Control wheel' }, LAZY_LOAD_WAIT);
       expect(screen.getAllByRole('menuitemradio').map((item) => item.getAttribute('aria-label'))).toEqual([
         'Markdown viewer',
       ]);
@@ -360,7 +363,7 @@ describe('ViewerApp', () => {
     it("switching in the wheel presses the kind's bar button", async () => {
       const { controller } = await renderViewerWithNotesBuilt();
       await controller.execute({ kind: 'toggleControlWheel' });
-      await screen.findByRole('dialog', { name: 'Control wheel' });
+      await screen.findByRole('dialog', { name: 'Control wheel' }, LAZY_LOAD_WAIT);
 
       await userEvent.keyboard('2');
 
@@ -380,7 +383,7 @@ describe('ViewerApp', () => {
     it('a closing wheel cannot be clicked', async () => {
       const { controller } = await renderViewerWithNotesBuilt();
       await controller.execute({ kind: 'toggleControlWheel' });
-      await screen.findByRole('dialog', { name: 'Control wheel' });
+      await screen.findByRole('dialog', { name: 'Control wheel' }, LAZY_LOAD_WAIT);
       await userEvent.keyboard('{Escape}');
 
       await fireEvent.click(screen.getByRole('menuitemradio', { name: 'Notes', hidden: true }));
@@ -394,7 +397,7 @@ describe('ViewerApp', () => {
     it('the shortcut during the fade opens the same wheel again at once', async () => {
       const { controller } = await renderViewerWithNotesBuilt();
       await controller.execute({ kind: 'toggleControlWheel' });
-      const wheel = await screen.findByRole('dialog', { name: 'Control wheel' });
+      const wheel = await screen.findByRole('dialog', { name: 'Control wheel' }, LAZY_LOAD_WAIT);
       await userEvent.keyboard('{Escape}');
 
       await userEvent.keyboard('{Control>}{Shift>} {/Shift}{/Control}');
