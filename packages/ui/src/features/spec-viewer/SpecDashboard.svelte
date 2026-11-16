@@ -5,10 +5,10 @@
   interface Props {
     dashboard: ShownDashboard;
     translator: Translator;
-    onOpenDocument: (documentPath: string) => void;
+    onOpenChange: (changeFolder: string) => void;
   }
 
-  const { dashboard, translator, onOpenDocument }: Props = $props();
+  const { dashboard, translator, onOpenChange }: Props = $props();
 
   const COLUMN_KEYS: readonly MessageKey[] = [
     'specViewer.dashboard.column.change',
@@ -40,13 +40,7 @@
         {#each rows as row (row.name)}
           <tr>
             <th scope="row">
-              {#if row.documentPath}
-                <button class="link" onclick={() => row.documentPath && onOpenDocument(row.documentPath)}
-                  >{row.name}</button
-                >
-              {:else}
-                {row.name}
-              {/if}
+              <button class="link" onclick={() => onOpenChange(row.changeFolder)}>{row.name}</button>
             </th>
             <td>{row.created}</td>
             <td>{row.tasks}</td>

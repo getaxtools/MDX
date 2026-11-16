@@ -34,6 +34,11 @@ export interface ChangeSummary {
   readonly progress?: TaskProgress | undefined;
   /** The creation day its metadata gives, as `YYYY-MM-DD`. */
   readonly created?: string | undefined;
+  readonly schema?: string | undefined;
+  /** True when the change declares that it has no spec deltas. */
+  readonly isSkippingSpecs?: boolean | undefined;
+  /** Markdown documents in the change folder other than its proposal, design, tasks and deltas. */
+  readonly otherDocuments?: readonly ProjectDocument[] | undefined;
 }
 
 export interface SpecProjectSummary {
@@ -109,14 +114,36 @@ function changeOf(reading: ChangeReading, changesFolder: string, folderName: str
   const documents = documentsOfChange(reading.files, changeFolder, reading.projectFolder);
   const tasksText = documents.tasks === undefined ? undefined : reading.taskTexts.get(documents.tasks);
   const archived = ARCHIVED_CHANGE.exec(folderName);
+  const metadata = readChangeMetadata(reading.files.textOf(`${changeFolder}/${CHANGE_METADATA_FILE}`));
   return {
     name: archived?.[2] ?? folderName,
     folder: joined(reading.projectFolder, changeFolder),
     archivedOn: archived?.[1],
     documents,
     progress: tasksText === undefined ? undefined : countTaskProgress(tasksText),
-    created: readChangeMetadata(reading.files.textOf(`${changeFolder}/${CHANGE_METADATA_FILE}`)).created,
+    created: metadata.created,
+    schema: metadata.schema,
+    isSkippingSpecs: metadata.isSkippingSpecs,
+    otherDocuments: otherDocumentsOf(reading, changeFolder, documents),
   };
+}
+
+function otherDocumentsOf(
+  reading: ChangeReading,
+  changeFolder: string,
+  documents: ChangeDocuments,
+): ProjectDocument[] {
+  const known = new Set([
+    documents.proposal,
+    documents.design,
+    documents.tasks,
+    ...documents.deltas.map((delta) => delta.path),
+  ]);
+  return reading.files
+    .filesBelow(changeFolder)
+    .map((path) => joined(reading.projectFolder, path))
+    .filter((path) => MARKDOWN_FILE.test(path) && !known.has(path))
+    .map((path) => ({ name: path.slice(joined(reading.projectFolder, changeFolder).length + 1), path }));
 }
 
 function changesOf(reading: ChangeReading): Pick<SpecProjectSummary, 'activeChanges' | 'archivedChanges'> {

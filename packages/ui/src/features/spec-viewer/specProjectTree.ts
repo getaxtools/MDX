@@ -29,6 +29,8 @@ export interface SpecTreeNode {
   readonly isUnavailable?: boolean | undefined;
   /** The project whose dashboard the row opens. */
   readonly dashboard?: { readonly rootKey: string; readonly folder: string } | undefined;
+  /** The active change whose page the row opens. */
+  readonly changePage?: { readonly rootKey: string; readonly changeFolder: string } | undefined;
   readonly isInitiallyExpanded: boolean;
   readonly children: readonly SpecTreeNode[];
 }
@@ -132,6 +134,10 @@ function changeNode(context: TreeContext, change: ChangeSummary): SpecTreeNode {
     label: change.name,
     accessibleName: changeAccessibleName(context.translator, change),
     detail: progressText ?? change.archivedOn,
+    changePage:
+      change.archivedOn === undefined
+        ? { rootKey: context.root.canonicalKey, changeFolder: change.folder }
+        : undefined,
     isInitiallyExpanded: false,
     children: changeDocumentNodes(context, change),
   };

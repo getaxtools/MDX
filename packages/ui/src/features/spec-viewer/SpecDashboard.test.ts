@@ -69,7 +69,7 @@ describe('SpecDashboard', () => {
     render(SpecDashboard, {
       dashboard: dashboard(),
       translator: createTranslator(),
-      onOpenDocument: vi.fn(),
+      onOpenChange: vi.fn(),
     });
 
     expect(screen.getByRole('heading', { name: 'Dashboard - shop' })).toBeTruthy();
@@ -80,7 +80,7 @@ describe('SpecDashboard', () => {
     render(SpecDashboard, {
       dashboard: dashboard(),
       translator: createTranslator(),
-      onOpenDocument: vi.fn(),
+      onOpenChange: vi.fn(),
     });
 
     expect(cellsOf('add-search')).toEqual(['', '5 of 5', 'None', 'Tasks complete']);
@@ -90,29 +90,27 @@ describe('SpecDashboard', () => {
     render(SpecDashboard, {
       dashboard: dashboard(),
       translator: createTranslator(),
-      onOpenDocument: vi.fn(),
+      onOpenChange: vi.fn(),
     });
 
     expect(cellsOf('tidy-up')).toEqual(['', 'None', 'None', 'No tasks']);
   });
 
-  it('opens a change from its name with the keyboard', async () => {
-    const onOpenDocument = vi.fn<(documentPath: string) => void>();
-    render(SpecDashboard, { dashboard: dashboard(), translator: createTranslator(), onOpenDocument });
+  it('opens the page of a change from its name with the keyboard', async () => {
+    const onOpenChange = vi.fn<(changeFolder: string) => void>();
+    render(SpecDashboard, { dashboard: dashboard(), translator: createTranslator(), onOpenChange });
 
     screen.getByRole('button', { name: 'add-pins' }).focus();
     await userEvent.keyboard('{Enter}');
 
-    expect(onOpenDocument).toHaveBeenCalledWith(
-      'C:\\Projects\\shop\\openspec\\changes\\add-pins\\proposal.md',
-    );
+    expect(onOpenChange).toHaveBeenCalledWith('openspec/changes/add-pins');
   });
 
   it('says that it checks a subset of the spec tool rules', () => {
     render(SpecDashboard, {
       dashboard: dashboard(),
       translator: createTranslator(),
-      onOpenDocument: vi.fn(),
+      onOpenChange: vi.fn(),
     });
 
     expect(

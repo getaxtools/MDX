@@ -14,8 +14,9 @@ import { ViewerController, type ViewerSnapshot } from '../viewer/ViewerControlle
 
 const ALL_KINDS_BUILT = workspaceKindsFor({ allowsPlannedKindPreview: true });
 const PROJECT = 'C:\\Projects\\shop';
+const SPEC_PATH = 'C:\\Projects\\shop\\openspec\\specs\\tabs\\spec.md';
 
-async function startWithSpecProjects() {
+async function startWithSpecProjects(documents: Readonly<Record<string, string>> = {}) {
   const specProjects = new InMemorySpecProjects({
     [PROJECT]: {
       files: { 'openspec/specs/tabs/spec.md': '# tabs', 'openspec/changes/add-pins/tasks.md': '- [x] 1.1' },
@@ -24,7 +25,7 @@ async function startWithSpecProjects() {
   const folders = new InMemoryFolders();
   let nextId = 0;
   const session = new ViewerSession({
-    documentFiles: new InMemoryDocumentFiles(),
+    documentFiles: new InMemoryDocumentFiles(documents),
     appState: new InMemoryAppState(),
     workspaceStore: new InMemoryWorkspaceStore(),
     kindRegistry: ALL_KINDS_BUILT,
@@ -87,6 +88,32 @@ describe('a Spec viewer workspace', () => {
     expect(activeTab?.location.fileName).toBe('Dashboard - shop');
     expect(activeTab?.location.canonicalKey.startsWith('view:')).toBe(true);
     expect(snapshot().viewer.recentFiles.entries()).toEqual([]);
+  });
+
+  it('opens the page of an active change in a tab', async () => {
+    const { controller, folders, snapshot } = await startWithSpecProjects();
+    await controller.execute({ kind: 'createWorkspace', name: 'Plans', kindId: 'specViewer' });
+    folders.pickedFolder = PROJECT;
+    await controller.execute({ kind: 'openFolder' });
+    await settled();
+    const rootKey = snapshot().specProjects?.roots?.[0]?.root.canonicalKey ?? '';
+
+    await controller.execute({ kind: 'openSpecChange', rootKey, changeFolder: 'openspec/changes/add-pins' });
+
+    expect(snapshot().viewer.tabStrip.activeTab()?.location.fileName).toBe('Change: add-pins');
+  });
+
+  it('opens the document of a finding at the heading that holds its line', async () => {
+    const { controller, snapshot } = await startWithSpecProjects({
+      [SPEC_PATH]: '# tabs\n\n## Requirements\n\n### Requirement: Pin tabs\nText.\n',
+    });
+
+    await controller.execute({ kind: 'openSpecFinding', documentPath: SPEC_PATH, line: 6 });
+
+    expect(snapshot().viewer.tabStrip.activeTab()?.location.displayPath).toBe(SPEC_PATH);
+    expect(snapshot().linkedHeadingRequest?.fragment).toBe(
+      snapshot().activeDocument?.outline.find((entry) => entry.text === 'Requirement: Pin tabs')?.id,
+    );
   });
 
   it('does not scan the folders of a Markdown viewer workspace', async () => {

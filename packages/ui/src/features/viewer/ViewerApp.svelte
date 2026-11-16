@@ -49,6 +49,8 @@
   import StartPage from '../start-page/StartPage.svelte';
   import SpecDashboard from '../spec-viewer/SpecDashboard.svelte';
   import { shownDashboardOf } from '../spec-viewer/specDashboard';
+  import SpecChangePage from '../spec-viewer/SpecChangePage.svelte';
+  import { shownChangePageOf } from '../spec-viewer/specChangePage';
   import AboutDialog from '../about/AboutDialog.svelte';
   import type { AppInfo } from '../about/AppInfo';
   import type { ThirdPartyLicensesLoader } from '../about/ThirdPartyLicenses';
@@ -177,6 +179,7 @@
   );
   const activeKey = $derived(activeTab?.location.canonicalKey);
   const shownDashboard = $derived(shownDashboardOf(snapshot?.specProjects, activeTab?.location));
+  const shownChangePage = $derived(shownChangePageOf(snapshot?.specProjects, activeTab?.location));
   let headingRequest: HeadingRequest | undefined = $state();
   let cursorCount = $state(1);
   let isCaretInLink = $state(false);
@@ -559,7 +562,20 @@
             <SpecDashboard
               dashboard={shownDashboard}
               {translator}
+              onOpenChange={(changeFolder: string) =>
+                void controller.execute({
+                  kind: 'openSpecChange',
+                  rootKey: shownDashboard.scanned.root.canonicalKey,
+                  changeFolder,
+                })}
+            />
+          {:else if shownChangePage}
+            <SpecChangePage
+              page={shownChangePage}
+              {translator}
               onOpenDocument={(documentPath: string) => void controller.openDocuments([documentPath])}
+              onOpenFinding={(documentPath: string, line: number | undefined) =>
+                void controller.execute({ kind: 'openSpecFinding', documentPath, line })}
             />
           {:else if editedDocument}
             {#key editedDocument.canonicalKey}

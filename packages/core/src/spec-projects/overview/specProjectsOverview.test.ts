@@ -61,6 +61,9 @@ describe('specProjectsOverview', () => {
         },
         progress: undefined,
         created: undefined,
+        schema: undefined,
+        isSkippingSpecs: false,
+        otherDocuments: [],
       },
     ]);
     expect(project?.archivedChanges.map((change) => [change.name, change.archivedOn])).toEqual([
@@ -125,6 +128,16 @@ describe('specProjectsOverview', () => {
     ]);
   });
 
+  it('lists the other Markdown documents of a change', () => {
+    const [project] = specProjectsOverview(
+      manifestOf([...PROJECT, 'openspec/changes/add-pins/notes/research.md']),
+    );
+
+    expect(project?.activeChanges[0]?.otherDocuments).toEqual([
+      { name: 'notes/research.md', path: 'openspec/changes/add-pins/notes/research.md' },
+    ]);
+  });
+
   it('reads the creation day from the change metadata', () => {
     const files = [
       ...PROJECT.map((path) => ({ path, sizeBytes: 1, modifiedAtMs: 1, text: null })),
@@ -139,6 +152,7 @@ describe('specProjectsOverview', () => {
     const [project] = specProjectsOverview(manifestOf([], { files }));
 
     expect(project?.activeChanges[0]?.created).toBe('2026-11-12');
+    expect(project?.activeChanges[0]?.schema).toBe('spec-driven');
   });
 });
 

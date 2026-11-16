@@ -84,6 +84,9 @@ export function findingOf(rule: StructuralRule, place: FindingPlace): Structural
 }
 
 /** Whether findings fail a check; with Strict on, warnings fail it too, as the tool's strict mode does. */
-export function failsCheck(findings: readonly StructuralFinding[], isStrict: boolean): boolean {
+export function failsCheck(
+  findings: readonly Pick<StructuralFinding, 'severity'>[],
+  isStrict: boolean,
+): boolean {
   return findings.some((finding) => finding.severity === 'error' || isStrict);
 }

@@ -102,9 +102,22 @@ describe('SpecProjectsSection', () => {
     );
   });
 
-  it('opens a change document from the change row', async () => {
-    const { onOpenDocument } = renderSection([scanned(manifestOf(PROJECT_FILES))]);
-    await userEvent.click(screen.getByRole('treeitem', { name: 'add-pins' }));
+  it('opens the change page from a change row, and a change document once the row is unfolded', async () => {
+    const onOpenChange = vi.fn<(rootKey: string, changeFolder: string) => void>();
+    const onOpenDocument = vi.fn<(documentPath: string) => void>();
+    render(SpecProjectsSection, {
+      roots: [scanned(manifestOf(PROJECT_FILES))],
+      translator: createTranslator(),
+      isExpanded: true,
+      onToggleExpanded: vi.fn(),
+      onOpenDocument,
+      onOpenChange,
+    });
+    const change = screen.getByRole('treeitem', { name: 'add-pins' });
+    change.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(onOpenChange).toHaveBeenCalledWith('c:\\projects\\shop', 'openspec/changes/add-pins');
+    await userEvent.keyboard('{ArrowRight}');
 
     await userEvent.click(screen.getByRole('treeitem', { name: 'Proposal' }));
 

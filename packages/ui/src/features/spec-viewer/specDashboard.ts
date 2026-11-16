@@ -15,8 +15,8 @@ export interface DashboardRow {
   readonly tasks: string;
   readonly problems: string;
   readonly status: string;
-  /** The change's proposal, or its first document, to open from the row. */
-  readonly documentPath?: string | undefined;
+  /** The change folder relative to the root, whose page the row opens. */
+  readonly changeFolder: string;
 }
 
 const DASHBOARD_VIEW = 'spec-dashboard';
@@ -60,12 +60,6 @@ export function shownDashboardOf(
   return undefined;
 }
 
-function fullPathOf(root: DocumentLocation, relativePath: string): string {
-  const separator = root.displayPath.includes('\\') ? '\\' : '/';
-  const base = root.displayPath.endsWith(separator) ? root.displayPath.slice(0, -1) : root.displayPath;
-  return `${base}${separator}${relativePath.split('/').join(separator)}`;
-}
-
 function problemsText(dashboard: ShownDashboard, changeFolder: string, translator: Translator): string {
   const findings = dashboard.scanned.findingsByChange.get(changeFolder) ?? [];
   const errors = findings.filter((finding) => finding.severity === 'error').length;
@@ -77,8 +71,6 @@ function problemsText(dashboard: ShownDashboard, changeFolder: string, translato
 /** One row per active change: its name, creation day, task completion, problem counts and status. */
 export function dashboardRowsOf(dashboard: ShownDashboard, translator: Translator): DashboardRow[] {
   return dashboard.project.activeChanges.map((change) => {
-    const { proposal, design, tasks, deltas } = change.documents;
-    const firstDocument = proposal ?? design ?? tasks ?? deltas[0]?.path;
     const progress = change.progress;
     return {
       name: change.name,
@@ -92,8 +84,7 @@ export function dashboardRowsOf(dashboard: ShownDashboard, translator: Translato
           : translator.translate('specViewer.dashboard.noTaskCount'),
       problems: problemsText(dashboard, change.folder, translator),
       status: translator.translate(STATUS_KEYS[changeStatusOf(change)]),
-      documentPath:
-        firstDocument === undefined ? undefined : fullPathOf(dashboard.scanned.root, firstDocument),
+      changeFolder: change.folder,
     };
   });
 }

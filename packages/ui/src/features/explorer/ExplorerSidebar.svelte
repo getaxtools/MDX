@@ -159,6 +159,8 @@
         {onOpenDocument}
         onOpenDashboard={(rootKey: string, folder: string) =>
           onCommand({ kind: 'openSpecDashboard', rootKey, folder })}
+        onOpenChange={(rootKey: string, changeFolder: string) =>
+          onCommand({ kind: 'openSpecChange', rootKey, changeFolder })}
         {activeDocumentKey}
       />
     {:else}

@@ -7,10 +7,30 @@ export interface OpenSpecDashboardCommand {
   readonly folder: string;
 }
 
-/** Commands of the Spec viewer kind, sent by its sidebar and pages. */
-export type SpecViewerCommand = OpenSpecDashboardCommand;
+/** Opens the page of an active change in a tab. */
+export interface OpenSpecChangeCommand {
+  readonly kind: 'openSpecChange';
+  readonly rootKey: string;
+  /** The change folder relative to the root. */
+  readonly changeFolder: string;
+}
 
-const SPEC_VIEWER_COMMAND_KINDS: ReadonlySet<string> = new Set(['openSpecDashboard']);
+/** Opens the document of a structural finding at the heading that holds its line. */
+export interface OpenSpecFindingCommand {
+  readonly kind: 'openSpecFinding';
+  readonly documentPath: string;
+  /** Counted from 1. */
+  readonly line?: number | undefined;
+}
+
+/** Commands of the Spec viewer kind, sent by its sidebar and pages. */
+export type SpecViewerCommand = OpenSpecDashboardCommand | OpenSpecChangeCommand | OpenSpecFindingCommand;
+
+const SPEC_VIEWER_COMMAND_KINDS: ReadonlySet<string> = new Set([
+  'openSpecDashboard',
+  'openSpecChange',
+  'openSpecFinding',
+]);
 
 export function isSpecViewerCommand(command: { readonly kind: string }): command is SpecViewerCommand {
   return SPEC_VIEWER_COMMAND_KINDS.has(command.kind);

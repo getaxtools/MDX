@@ -101,6 +101,7 @@ import { NotesActions, isNotesCommand, type NotesCommand, type NotesView } from 
 import { NotesIndexActions, type NoteBacklinks } from '../notes/NotesIndexActions';
 import { SpecViewerActions, type SpecProjectsView } from '../spec-viewer/SpecViewerActions';
 import { dashboardLocationOf } from '../spec-viewer/specDashboard';
+import { changePageLocationOf } from '../spec-viewer/specChangePage';
 import { isSpecViewerCommand, type SpecViewerCommand } from '../spec-viewer/specViewerCommands';
 import { windowTitleFor } from '../workspaces/windowTitle';
 import { recentWorkspaceLinks } from '../workspaces/recentWorkspaceLinks';
@@ -564,16 +565,32 @@ export class ViewerController {
     return this.notesIndexActions?.windowFocused() ?? Promise.resolve();
   }
 
-  private runSpecViewerCommand(command: SpecViewerCommand): Promise<void> {
+  private async runSpecViewerCommand(command: SpecViewerCommand): Promise<void> {
+    if (command.kind === 'openSpecFinding') {
+      await this.openDocumentAtLine(command.documentPath, command.line);
+      return;
+    }
+    const { session, translator } = this.dependencies;
     const scanned = this.specViewerActions
       ?.view()
       ?.roots?.find((root) => root.root.canonicalKey === command.rootKey);
-    const project = scanned?.projects.find((candidate) => candidate.folder === command.folder);
-    if (project)
-      this.dependencies.session.openView(
-        dashboardLocationOf(command.rootKey, project, this.dependencies.translator),
-      );
-    return Promise.resolve();
+    if (command.kind === 'openSpecDashboard') {
+      const project = scanned?.projects.find((candidate) => candidate.folder === command.folder);
+      if (project) session.openView(dashboardLocationOf(command.rootKey, project, translator));
+      return;
+    }
+    const change = scanned?.projects
+      .flatMap((project) => project.activeChanges)
+      .find((candidate) => candidate.folder === command.changeFolder);
+    if (change) session.openView(changePageLocationOf(command.rootKey, change, translator));
+  }
+
+  /** Opens a document at the heading that holds a line, as the viewer shows headings, not lines. */
+  private async openDocumentAtLine(documentPath: string, line: number | undefined): Promise<void> {
+    await this.openDocuments([documentPath]);
+    const outline = this.activeDocument?.outline ?? [];
+    const heading = line === undefined ? undefined : outline.filter((entry) => entry.line <= line - 1).at(-1);
+    if (heading) this.revealLinkedHeading(`#${heading.id}`);
   }
 
   /** A Spec viewer workspace's folders are scanned again only when the workspace or its folders change. */
