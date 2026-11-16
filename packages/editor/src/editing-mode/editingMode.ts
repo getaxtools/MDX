@@ -1,5 +1,6 @@
 import { Compartment, Facet, type EditorState, type Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
+import { richTextExtensions } from '../rich-text/richText';
 
 /** Rich text shows the document like the preview with the Markdown where the caret is; Source shows it all. */
 export type EditingMode = 'richText' | 'source';
@@ -15,36 +16,29 @@ export function editingModeOf(state: EditorState): EditingMode {
   return state.facet(editingModeFacet);
 }
 
-/** What Rich text adds to the editor; its layers come with the later Rich text work. */
-function richTextExtensions(): Extension {
-  return [];
-}
+/**
+ * The mode lives in a compartment, so a switch reconfigures the editor without a document change:
+ * the text, the selection, the undo history and the scroll position stay.
+ */
+const editingModeCompartment = new Compartment();
 
 function modeExtensions(mode: EditingMode): Extension {
   return [editingModeFacet.of(mode), mode === 'richText' ? richTextExtensions() : []];
 }
 
-/**
- * The mode lives in a compartment, so a switch reconfigures the editor without a document change:
- * the text, the selection, the undo history and the scroll position stay.
- */
-export function editingModeSwitch(
+export function editingModeExtension(
   initialMode: EditingMode,
   onEditingModeChange?: (mode: EditingMode) => void,
-): {
-  readonly extension: Extension;
-  readonly switchTo: (view: EditorView, mode: EditingMode) => void;
-} {
-  const compartment = new Compartment();
+): Extension {
   const reportChange = EditorView.updateListener.of((update) => {
     const mode = editingModeOf(update.state);
     if (mode !== editingModeOf(update.startState)) onEditingModeChange?.(mode);
   });
-  return {
-    extension: [compartment.of(modeExtensions(initialMode)), reportChange],
-    switchTo: (view, mode) => {
-      if (editingModeOf(view.state) === mode) return;
-      view.dispatch({ effects: compartment.reconfigure(modeExtensions(mode)) });
-    },
-  };
+  return [editingModeCompartment.of(modeExtensions(initialMode)), reportChange];
+}
+
+/** Switches an editor between Rich text and Source without changing the text, the selection or the undo history. */
+export function setEditingMode(view: EditorView, mode: EditingMode): void {
+  if (editingModeOf(view.state) === mode) return;
+  view.dispatch({ effects: editingModeCompartment.reconfigure(modeExtensions(mode)) });
 }

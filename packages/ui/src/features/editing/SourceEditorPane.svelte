@@ -1,11 +1,11 @@
 <script lang="ts">
-  import type { Snippet } from '@mdx/core';
+  import type { Snippet, Typography } from '@mdx/core';
   import type { EditorSnippet } from '@mdx/editor';
   import { snippetExpander } from '../snippets/snippetExpander';
   import type { BlockAction } from '@mdx/editor';
   import ContextMenu from '../../components/ContextMenu.svelte';
   import { isContextMenuKey, type ContextMenuRequest } from '../../components/ContextMenuItem';
-  import { blockMenuItems } from './blockMenu';
+  import { editorMenuItems, type EditorMenuChoice } from './blockMenu';
   import type { SourceEditor, WikiLinkSuggester } from '@mdx/editor';
   import type { Translator } from '@mdx/i18n';
   import { untrack } from 'svelte';
@@ -17,6 +17,8 @@
     fileName: string;
     text: string;
     zoomPercent: number;
+    /** The Document style, whose fonts Rich text uses. */
+    typography?: Typography;
     scrollRatio?: number;
     translator: Translator;
     editorRequest?: EditorRequest | undefined;
@@ -31,6 +33,9 @@
     /** Suggests notes after `[[` in a note of a Notes workspace. */
     wikiLinks?: WikiLinkSuggester | undefined;
     onChange: (text: string) => void;
+    /** Opens a link's address the way the preview opens links. */
+    onOpenLink?: (address: string) => void;
+    onCaretInLinkChange?: (isCaretInLink: boolean) => void;
     onScroll?: (scrollRatio: number) => void;
     /** Called once the editor has loaded, for example to keep a preview beside it in step. */
     onReady?: (editor: SourceEditor | undefined) => void;
@@ -41,6 +46,7 @@
     fileName,
     text,
     zoomPercent,
+    typography = 'github',
     translator,
     editorRequest,
     isSlashMenuEnabled = false,
@@ -50,6 +56,8 @@
     snippets = [],
     wikiLinks,
     onChange,
+    onOpenLink = () => undefined,
+    onCaretInLinkChange = () => undefined,
     scrollRatio = 0,
     onScroll = () => undefined,
     onReady = () => undefined,
@@ -57,6 +65,7 @@
 
   let container: HTMLDivElement | undefined = $state();
   let blockMenuRequest: ContextMenuRequest | undefined = $state();
+  let isCaretInLink = $state(false);
 
   /** Shift+F10 or the Menu key in the editor open the block menu at the caret. */
   function openBlockMenu(event: KeyboardEvent) {
@@ -68,9 +77,19 @@
     blockMenuRequest = { x: block.x, y: block.y };
   }
 
-  function runBlockAction(action: BlockAction) {
+  function chooseEditorMenuItem(choice: EditorMenuChoice) {
     blockMenuRequest = undefined;
+    if (choice === 'openLink') editor?.run('openLink');
+    else runBlockAction(choice);
+  }
+
+  function runBlockAction(action: BlockAction) {
     editor?.runBlockAction(action);
+  }
+
+  function reportCaretInLink(isInLink: boolean) {
+    isCaretInLink = isInLink;
+    onCaretInLinkChange(isInLink);
   }
 
   function closeBlockMenu() {
@@ -106,6 +125,9 @@
         ...(onPastePicture ? { onPastePicture } : {}),
         onCursorCountChange: (count) => onCursorCountChange(count),
         onSelectedTextChange: (selectedText) => onSelectedTextChange(selectedText),
+        onOpenLink: (address) => onOpenLink(address),
+        onCaretInLinkChange: reportCaretInLink,
+        typography: untrack(() => typography),
         snippets: untrack(() => editorSnippets),
         ...untrack(() => (wikiLinks ? { wikiLinks } : {})),
       });
@@ -119,6 +141,7 @@
     });
     return () => {
       isClosed = true;
+      if (untrack(() => isCaretInLink)) reportCaretInLink(false);
       onReady(undefined);
       created?.destroy();
       editor = undefined;
@@ -131,6 +154,10 @@
 
   $effect(() => {
     editor?.setSnippets(editorSnippets);
+  });
+
+  $effect(() => {
+    editor?.setTypography(typography);
   });
 
   $effect(() => {
@@ -159,9 +186,9 @@
 {#if blockMenuRequest}
   <ContextMenu
     label={translator.translate('editor.blockMenu.label')}
-    items={blockMenuItems(translator)}
+    items={editorMenuItems(translator, { isCaretInLink })}
     position={blockMenuRequest}
-    onChoose={runBlockAction}
+    onChoose={chooseEditorMenuItem}
     onClose={closeBlockMenu}
   />
 {/if}

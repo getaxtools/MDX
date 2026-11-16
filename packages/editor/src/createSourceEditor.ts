@@ -6,6 +6,7 @@ import {
   history,
   historyKeymap,
   indentWithTab,
+  insertBlankLine,
   redo,
   selectAll,
   undo,
@@ -28,8 +29,9 @@ import type { BlockKind } from './blocks/markdownBlocks';
 import { sectionChange, type SectionAction } from './blocks/outlineSections';
 import {
   DEFAULT_EDITING_MODE,
+  editingModeExtension,
   editingModeOf,
-  editingModeSwitch,
+  setEditingMode,
   type EditingMode,
 } from './editing-mode/editingMode';
 import { EDITOR_ACTION_COMMANDS } from './editorActionCommands';
@@ -41,6 +43,15 @@ import { selectNextCell, selectPreviousCell } from './tables/tableNavigation';
 import { EDITOR_SHORTCUTS } from './editorShortcuts';
 import { editorTheme, markdownHighlightStyle } from './editorTheme';
 import { markdownSyntax } from './syntax/markdownSyntax';
+import { isComposing } from './rich-text/compositionHold';
+import { linkOpener, openLinkAtCaret } from './rich-text/linkOpening';
+import { isInLink } from './rich-text/linkTargets';
+import {
+  DEFAULT_EDITOR_TYPOGRAPHY,
+  setTypography,
+  typographyExtension,
+  type EditorTypography,
+} from './rich-text/typography';
 
 export type EditorMenuCommand =
   | 'undo'
@@ -51,7 +62,8 @@ export type EditorMenuCommand =
   | 'goToLine'
   | 'copyLineUp'
   | 'copyLineDown'
-  | 'addNextOccurrence';
+  | 'addNextOccurrence'
+  | 'openLink';
 
 export interface SourceEditorOptions {
   readonly parent: HTMLElement;
@@ -79,6 +91,12 @@ export interface SourceEditorOptions {
   readonly editingMode?: EditingMode;
   /** Called after the editor switched to another mode. */
   readonly onEditingModeChange?: (mode: EditingMode) => void;
+  /** Opens a link's address, written as in the document, the way the preview opens links. */
+  readonly onOpenLink?: (address: string) => void;
+  /** Whether the caret is in a link in Rich text, reported when that changes, so Open Link can be offered. */
+  readonly onCaretInLinkChange?: (isCaretInLink: boolean) => void;
+  /** The Document style, whose fonts Rich text uses. */
+  readonly typography?: EditorTypography;
 }
 
 export interface SourceEditor {
@@ -109,6 +127,7 @@ export interface SourceEditor {
   editingMode(): EditingMode;
   /** Switches between Rich text and Source without changing the text, the selection or the undo history. */
   setEditingMode(mode: EditingMode): void;
+  setTypography(typography: EditorTypography): void;
   destroy(): void;
 }
 
@@ -127,17 +146,14 @@ const BRACKETS_CLOSED_AUTOMATICALLY = ['(', '[', '{', '"', '`'];
 
 export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
   const slashMenuSwitch = new Compartment();
-  const modeSwitch = editingModeSwitch(
-    options.editingMode ?? DEFAULT_EDITING_MODE,
-    options.onEditingModeChange,
-  );
   const view = new EditorView({
     parent: options.parent,
     state: EditorState.create({
       doc: options.text,
       extensions: [
         slashMenuSwitch.of(initialSlashMenu(options)),
-        modeSwitch.extension,
+        editingModeExtension(options.editingMode ?? DEFAULT_EDITING_MODE, options.onEditingModeChange),
+        typographyExtension(options.typography ?? DEFAULT_EDITOR_TYPOGRAPHY),
         editorExtensions(options),
       ],
     }),
@@ -154,7 +170,8 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
     ...blockEditingOf(view),
     ...slashMenuControlOf(view, slashMenuSwitch, options),
     editingMode: () => editingModeOf(view.state),
-    setEditingMode: (mode) => modeSwitch.switchTo(view, mode),
+    setEditingMode: (mode) => setEditingMode(view, mode),
+    setTypography: (typography) => setTypography(view, typography),
     destroy: () => {
       stopReportingScroll();
       view.destroy();
@@ -270,6 +287,7 @@ function menuCommandsOf(view: EditorView): Readonly<Record<EditorMenuCommand, ()
     copyLineUp: () => copyLineUp(view),
     copyLineDown: () => copyLineDown(view),
     addNextOccurrence: () => selectNextOccurrence(view),
+    openLink: () => openLinkAtCaret(view),
   };
 }
 
@@ -313,6 +331,7 @@ function editorExtensions(options: SourceEditorOptions): Extension[] {
     syntaxHighlighting(markdownHighlightStyle),
     editorTheme,
     EditorState.phrases.of(options.phrases),
+    options.onOpenLink ? linkOpener.of(options.onOpenLink) : [],
     // An explicit tab stop lets checkers see that the scrolling editor can be reached with the keyboard.
     EditorView.contentAttributes.of({ 'aria-label': options.label, spellcheck: 'false', tabindex: '0' }),
     keymap.of(formattingKeymap()),
@@ -325,7 +344,8 @@ function editorExtensions(options: SourceEditorOptions): Extension[] {
         ...closeBracketsKeymap,
         ...searchKeymap,
         ...historyKeymap,
-        ...defaultKeymap,
+        { key: 'Mod-Enter', run: insertBlankLineUnlessComposing },
+        ...defaultKeymap.filter((binding) => binding.key !== 'Mod-Enter'),
         indentWithTab,
         { key: 'Mod-h', run: openSearchPanel },
         { key: 'Mod-g', run: gotoLine },
@@ -346,6 +366,25 @@ function reportChanges(update: ViewUpdate, options: SourceEditorOptions): void {
       .join('\n');
     options.onSelectedTextChange?.(selectedText);
   }
+  reportCaretInLink(update, options);
+}
+
+function isCaretInLink(state: EditorState): boolean {
+  return editingModeOf(state) === 'richText' && isInLink(state, state.selection.main.head);
+}
+
+function canMoveCaretIntoLink(update: ViewUpdate): boolean {
+  return (
+    update.selectionSet ||
+    update.docChanged ||
+    update.transactions.some((transaction) => transaction.reconfigured)
+  );
+}
+
+function reportCaretInLink(update: ViewUpdate, options: SourceEditorOptions): void {
+  if (!options.onCaretInLinkChange || !canMoveCaretIntoLink(update)) return;
+  const isInLinkNow = isCaretInLink(update.state);
+  if (isInLinkNow !== isCaretInLink(update.startState)) options.onCaretInLinkChange(isInLinkNow);
 }
 
 /**
@@ -405,6 +444,11 @@ function formattingKeymap(): KeyBinding[] {
     run: EDITOR_ACTION_COMMANDS[action],
     preventDefault: true,
   }));
+}
+
+/** An input method may use Ctrl+Enter while it composes, so the key does nothing then. */
+function insertBlankLineUnlessComposing(view: EditorView): boolean {
+  return !isComposing(view) && insertBlankLine(view);
 }
 
 function withoutKeysLeftToTheApp(bindings: readonly KeyBinding[]): KeyBinding[] {

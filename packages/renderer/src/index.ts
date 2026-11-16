@@ -16,6 +16,7 @@ export {
 } from './plugins/alertsPlugin';
 export {
   createHtmlSanitizer,
+  linkKindOf,
   UnsafeSanitizerEnvironmentError,
   type BrowserWindow,
   type HtmlSanitizer,

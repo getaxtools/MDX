@@ -25,3 +25,4 @@ export type { ExpandedSnippetText, SnippetExpander } from './snippets/snippetFie
 export { SNIPPETS_SECTION, type EditorSnippet } from './snippets/snippetMenu';
 export { EDITOR_SHORTCUTS, type EditorAction, type EditorShortcut } from './editorShortcuts';
 export { editingModeFacet, editingModeOf, type EditingMode } from './editing-mode/editingMode';
+export type { EditorTypography } from './rich-text/typography';

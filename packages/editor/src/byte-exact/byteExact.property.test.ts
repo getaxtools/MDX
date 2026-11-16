@@ -1,10 +1,22 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import {
+  cursorCharLeft,
+  cursorCharRight,
+  cursorDocEnd,
+  cursorDocStart,
+  cursorGroupLeft,
+  cursorGroupRight,
+  selectCharLeft,
+  selectCharRight,
+  selectGroupRight,
+} from '@codemirror/commands';
 import { EditorSelection } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { EditorView, type Command } from '@codemirror/view';
 import fc from 'fast-check';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createSourceEditor, type SourceEditor } from '../createSourceEditor';
+import type { EditingMode } from '../editing-mode/editingMode';
 import { BYTE_EXACT_FIXTURES_FOLDER, documentFixtures } from './documentFixtures';
 import { openDocumentBytes, savedDocumentBytes } from './documentBytes';
 import { generatedDocumentBytes } from './generatedDocuments';
@@ -13,6 +25,12 @@ type ViewerAction =
   | { readonly kind: 'switchMode' }
   | { readonly kind: 'select'; readonly anchor: number; readonly head: number }
   | { readonly kind: 'addCursor'; readonly at: number }
+  | { readonly kind: 'scroll'; readonly ratio: number };
+
+type CaretAction =
+  | { readonly kind: 'select'; readonly anchor: number; readonly head: number }
+  | { readonly kind: 'addCursor'; readonly at: number }
+  | { readonly kind: 'key'; readonly command: Command }
   | { readonly kind: 'scroll'; readonly ratio: number };
 
 interface DocumentLine {
@@ -29,13 +47,32 @@ const viewerAction: fc.Arbitrary<ViewerAction> = fc.oneof(
   fc.record({ kind: fc.constant('scroll' as const), ratio: unitInterval }),
 );
 
+/** The keys that move the caret or extend the selection without typing. */
+const CARET_KEYS: readonly Command[] = [
+  cursorCharLeft,
+  cursorCharRight,
+  cursorGroupLeft,
+  cursorGroupRight,
+  cursorDocStart,
+  cursorDocEnd,
+  selectCharLeft,
+  selectCharRight,
+  selectGroupRight,
+];
+const caretAction: fc.Arbitrary<CaretAction> = fc.oneof(
+  fc.record({ kind: fc.constant('select' as const), anchor: unitInterval, head: unitInterval }),
+  fc.record({ kind: fc.constant('addCursor' as const), at: unitInterval }),
+  fc.record({ kind: fc.constant('key' as const), command: fc.constantFrom(...CARET_KEYS) }),
+  fc.record({ kind: fc.constant('scroll' as const), ratio: unitInterval }),
+);
+
 let editor: SourceEditor | undefined;
 
-function openInEditor(text: string) {
+function openInEditor(text: string, editingMode: EditingMode = 'source') {
   const parent = document.createElement('div');
   document.body.append(parent);
   const onChange = vi.fn();
-  editor = createSourceEditor({ parent, text, label: 'Source', phrases: {}, onChange });
+  editor = createSourceEditor({ parent, text, label: 'Source', phrases: {}, onChange, editingMode });
   const view = EditorView.findFromDOM(parent.querySelector<HTMLElement>('.cm-editor') ?? parent);
   if (!view) throw new Error('The editor view was not created');
   return { editor, view, onChange };
@@ -66,6 +103,26 @@ function perform(action: ViewerAction, opened: { editor: SourceEditor; view: Edi
   } else {
     opened.editor.scrollToRatio(action.ratio);
   }
+}
+
+function moveCaret(action: CaretAction, opened: { editor: SourceEditor; view: EditorView }): void {
+  if (action.kind === 'key') action.command(opened.view);
+  else perform(action, opened);
+}
+
+/** Opens the bytes in Rich text, moves the caret and the selection about without typing, and saves. */
+function bytesAfterMovingTheCaret(bytes: Uint8Array, actions: readonly CaretAction[]) {
+  const document = openDocumentBytes(bytes);
+  const opened = openInEditor(document.text, 'richText');
+  const textBefore = opened.view.state.doc;
+  for (const action of actions) moveCaret(action, opened);
+  const outcome = {
+    saved: savedDocumentBytes(opened.editor.text(), document),
+    isDocumentUnchanged: opened.view.state.doc.eq(textBefore),
+    changes: opened.onChange,
+  };
+  closeEditor();
+  return outcome;
 }
 
 /** Opens the bytes as the app does, acts on the editor without typing, and saves. */
@@ -109,6 +166,33 @@ describe('byte-exact editing', () => {
     fc.assert(
       fc.property(generatedDocumentBytes(), fc.array(viewerAction, { maxLength: 20 }), (bytes, actions) => {
         const { saved, isDocumentUnchanged, changes } = bytesAfterViewing(bytes, actions);
+
+        expect(isDocumentUnchanged).toBe(true);
+        expect(changes).not.toHaveBeenCalled();
+        expect([...saved]).toEqual([...bytes]);
+      }),
+    );
+  });
+
+  it('moving the caret anywhere leaves the document unchanged, in every fixture', () => {
+    for (const fixture of documentFixtures()) {
+      fc.assert(
+        fc.property(fc.array(caretAction, { maxLength: 30 }), (actions) => {
+          const { saved, isDocumentUnchanged, changes } = bytesAfterMovingTheCaret(fixture.bytes, actions);
+
+          expect(isDocumentUnchanged, fixture.name).toBe(true);
+          expect(changes, fixture.name).not.toHaveBeenCalled();
+          expect([...saved], fixture.name).toEqual([...fixture.bytes]);
+        }),
+        { numRuns: RUNS_PER_FIXTURE },
+      );
+    }
+  });
+
+  it('moving the caret anywhere leaves the document unchanged, in generated documents', () => {
+    fc.assert(
+      fc.property(generatedDocumentBytes(), fc.array(caretAction, { maxLength: 30 }), (bytes, actions) => {
+        const { saved, isDocumentUnchanged, changes } = bytesAfterMovingTheCaret(bytes, actions);
 
         expect(isDocumentUnchanged).toBe(true);
         expect(changes).not.toHaveBeenCalled();

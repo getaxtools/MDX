@@ -30,6 +30,8 @@ export interface PaletteContext {
   readonly workspaces?: WorkspacesView;
   /** A Notes workspace is shown, so its daily note, templates and trash are offered. */
   readonly isNotesWorkspace?: boolean;
+  /** The editor's caret is in a link, so Open Link is offered. */
+  readonly isCaretInLink?: boolean;
 }
 
 const DEFAULT_PALETTE_CONTEXT: PaletteContext = {
@@ -84,6 +86,7 @@ export function paletteCommands(
     snippets = [],
     workspaces,
     isNotesWorkspace = false,
+    isCaretInLink = false,
   }: PaletteContext = DEFAULT_PALETTE_CONTEXT,
 ): PaletteCommand[] {
   const withShortcuts = shortcuts
@@ -103,6 +106,7 @@ export function paletteCommands(
   return [
     ...withShortcuts,
     ...withoutShortcuts,
+    ...(isCaretInLink ? [openLinkCommand(translator)] : []),
     ...workspaceKindCommands(workspaceKinds, translator),
     ...(workspaces ? workspaceCommands(workspaces, workspaceKinds, translator) : []),
     ...(isNotesWorkspace ? notesCommands(translator) : []),
@@ -111,6 +115,13 @@ export function paletteCommands(
     ...readingWidthCommands(translator),
     ...typographyCommands(translator),
   ];
+}
+
+function openLinkCommand(translator: Translator): PaletteCommand {
+  return {
+    command: { kind: 'runEditorCommand', command: 'openLink' },
+    label: translator.translate('editor.action.openLink'),
+  };
 }
 
 function notesCommands(translator: Translator): PaletteCommand[] {

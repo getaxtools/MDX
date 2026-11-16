@@ -28,6 +28,7 @@
   import EditingLayout from '../editing/EditingLayout.svelte';
   import type { ScrollSync } from '../editing/ScrollSync';
   import SourceEditorPane from '../editing/SourceEditorPane.svelte';
+  import { openLinkFromEditor } from '../editing/editorLinks';
   import PanelResizer from '../../components/PanelResizer.svelte';
   import SettingsDialog from '../settings/SettingsDialog.svelte';
   import StartPage from '../start-page/StartPage.svelte';
@@ -157,6 +158,7 @@
   const activeKey = $derived(activeTab?.location.canonicalKey);
   let headingRequest: HeadingRequest | undefined = $state();
   let cursorCount = $state(1);
+  let isCaretInLink = $state(false);
   let selectedWords = $state(0);
   const sessionWordCounts = new SessionWordCounts();
   const activeWordGoal = $derived(
@@ -239,6 +241,13 @@
       return;
     }
     headingRequest = { entry, number: (headingRequest?.number ?? 0) + 1 };
+  }
+
+  function openEditorLink(address: string) {
+    openLinkFromEditor(address, editedDocument?.outline ?? [], {
+      openLink: (link) => void controller.openLink(link),
+      goToHeading,
+    });
   }
 
   // The webview's own menu offers browser actions such as Back and Refresh that make no sense in the app.
@@ -481,12 +490,15 @@
                     fileName={editedDocument.fileName}
                     text={editedDocument.source}
                     zoomPercent={viewSettings.zoomPercent}
+                    typography={viewSettings.typography}
                     scrollRatio={editedDocument.scrollRatio}
                     {translator}
                     editorRequest={snapshot?.editorRequest}
                     isSlashMenuEnabled={viewSettings.isSlashMenuInSource}
                     onPastePicture={(bytes: Uint8Array) => controller.pastePicture(bytes)}
                     onCursorCountChange={(count: number) => (cursorCount = count)}
+                    onOpenLink={openEditorLink}
+                    onCaretInLinkChange={(isInLink: boolean) => (isCaretInLink = isInLink)}
                     snippets={snapshot ? availableSnippets(snapshot.viewer.snippetLibrary) : []}
                     wikiLinks={activeTab ? controller.wikiLinkSuggesterFor(activeTab.location) : undefined}
                     onSelectedTextChange={(selectedText: string) =>
@@ -674,6 +686,7 @@
         workspaceKinds: snapshot.viewer.workspaceKinds,
         snippets: availableSnippets(snapshot.viewer.snippetLibrary),
         isNotesWorkspace: snapshot.notes !== undefined,
+        isCaretInLink: editedDocument ? isCaretInLink : false,
         ...(snapshot.workspaces ? { workspaces: snapshot.workspaces } : {}),
       })}
       loadDocuments={() => controller.quickOpenDocuments()}

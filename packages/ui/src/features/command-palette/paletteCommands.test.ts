@@ -47,6 +47,17 @@ describe('paletteCommands', () => {
     expect(labels).toEqual(expect.arrayContaining(['Settings…', 'Copy as HTML', 'Clear All Data…']));
   });
 
+  it('offers Open Link only with the caret in a link', () => {
+    const shortcuts = effectiveCommandShortcuts({});
+    const workspaceKinds = WorkspaceKindsState.initial(WORKSPACE_KINDS);
+    const openLink = { command: { kind: 'runEditorCommand', command: 'openLink' }, label: 'Open Link' };
+
+    expect(paletteCommands(createTranslator(), { shortcuts, workspaceKinds })).not.toContainEqual(openLink);
+    expect(
+      paletteCommands(createTranslator(), { shortcuts, workspaceKinds, isCaretInLink: true }),
+    ).toContainEqual(openLink);
+  });
+
   it('leaves out the command palette itself', () => {
     expect(commands.some(({ command }) => command.kind === 'showCommandPalette')).toBe(false);
   });

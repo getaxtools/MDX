@@ -305,6 +305,7 @@
   "editor.action.quote": "Quote",
   "editor.action.codeBlock": "Code block",
   "editor.action.horizontalRule": "Horizontal rule",
+  "editor.action.openLink": "Open Link",
   "editor.phrase.find": "Find",
   "editor.phrase.replace": "Replace",
   "editor.phrase.next": "next",
