@@ -11,6 +11,7 @@ import {
   QUOTE_CLASS,
   RICH_TEXT_CLASS,
   TASK_CHECKBOX_CLASS,
+  WIKI_LINK_TEXT_CLASS,
   headingClassOf,
   quoteDepthClassOf,
 } from './richTextClasses';
@@ -59,7 +60,7 @@ const textRules = {
   [`.${HEADING_CLASS} span`]: { color: 'inherit' },
   [`.${headingClassOf(DEEPEST_HEADING_LEVEL)}`]: { color: 'var(--color-text-secondary)' },
   ...headingRules,
-  [`.${LINK_TEXT_CLASS}, .${HEADING_CLASS} .${LINK_TEXT_CLASS}`]: {
+  [`.${LINK_TEXT_CLASS}, .${HEADING_CLASS} .${LINK_TEXT_CLASS}, .${WIKI_LINK_TEXT_CLASS}`]: {
     color: 'var(--color-accent)',
     textDecoration: 'underline',
     textDecorationThickness: '1px',
@@ -114,7 +115,7 @@ const blockMarkerRules = {
 const forcedColourRules = {
   '@media (forced-colors: active)': {
     [`.${HEADING_CLASS}, .${HEADING_CLASS} span`]: { color: 'CanvasText' },
-    [`.${LINK_TEXT_CLASS}, .${LINK_TEXT_CLASS} *, .${HEADING_CLASS} .${LINK_TEXT_CLASS}, .${HEADING_CLASS} .${LINK_TEXT_CLASS} *`]:
+    [`.${LINK_TEXT_CLASS}, .${LINK_TEXT_CLASS} *, .${HEADING_CLASS} .${LINK_TEXT_CLASS}, .${HEADING_CLASS} .${LINK_TEXT_CLASS} *, .${WIKI_LINK_TEXT_CLASS}, .${WIKI_LINK_TEXT_CLASS} *`]:
       { color: 'LinkText' },
     [QUOTE_LINE]: { borderInlineStartColor: 'CanvasText', color: 'CanvasText' },
     [`.${TASK_CHECKBOX_CLASS}`]: { borderColor: 'CanvasText' },

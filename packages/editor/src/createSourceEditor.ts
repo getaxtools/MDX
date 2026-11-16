@@ -53,6 +53,7 @@ import { formattingStateOf, type FormattingState } from './formatting/formatting
 import { runToolboxAction } from './formatting/toolboxCommands';
 import { isSlashMenuOnIn, SLASH_MENU_OFF, type SlashMenuSettings } from './editing-mode/slashMenuSettings';
 import { editorCompletions } from './slash-menu/slashMenu';
+import { WIKI_LINK_BRACKETS } from './wiki-links/wikiLinkBrackets';
 import { wikiLinkCompletions, type WikiLinkSuggester } from './wiki-links/wikiLinkCompletions';
 import { snippetFields, snippetInsertion, type SnippetExpander } from './snippets/snippetFields';
 import { snippetMenuProvider, type EditorSnippet } from './snippets/snippetMenu';
@@ -111,7 +112,10 @@ export interface SourceEditorOptions {
   readonly onSelectedTextChange?: (selectedText: string) => void;
   /** Snippets offered in the insert menu. */
   readonly snippets?: readonly EditorSnippet[];
-  /** Suggests notes after `[[` and their headings after `#`, in a note of a Notes workspace. */
+  /**
+   * Suggests notes after `[[` and their headings after `#`, in a note of a Notes workspace, where
+   * Rich text also shows wiki-links without their brackets.
+   */
   readonly wikiLinks?: WikiLinkSuggester;
   /** Rich text or Source; Source when not given. */
   readonly editingMode?: EditingMode;
@@ -284,6 +288,7 @@ function startingExtensions(
     typographyExtension(options.typography ?? DEFAULT_EDITOR_TYPOGRAPHY),
     editorExtensions(options),
     appDialogExtensions(options),
+    options.wikiLinks ? richTextProvidersFacet.of({ inline: [WIKI_LINK_BRACKETS] }) : [],
   ];
 }
 

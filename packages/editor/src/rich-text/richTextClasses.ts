@@ -1,6 +1,7 @@
 /** On the editor while it shows Rich text. */
 export const RICH_TEXT_CLASS = 'cm-rich-text';
 export const LINK_TEXT_CLASS = 'cm-rich-link';
+export const WIKI_LINK_TEXT_CLASS = 'cm-rich-wiki-link';
 export const INLINE_CODE_CLASS = 'cm-rich-inline-code';
 export const CODE_LINE_CLASS = 'cm-rich-code-line';
 export const HEADING_CLASS = 'cm-rich-heading';
