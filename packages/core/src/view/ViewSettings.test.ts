@@ -268,4 +268,8 @@ describe('view settings', () => {
     expect(DEFAULT_VIEW_SETTINGS.editingMode).toBe('richText');
     expect(parseViewSettings(undefined).editingMode).toBe('richText');
   });
+
+  it('remembers the prompt injection panel as the side bar view', () => {
+    expect(parseViewSettings({ sidebarView: 'promptInjection' }).sidebarView).toBe('promptInjection');
+  });
 });

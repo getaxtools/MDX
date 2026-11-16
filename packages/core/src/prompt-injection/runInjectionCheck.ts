@@ -56,35 +56,61 @@ function inDocumentOrder({ match: left }: RatedMatch, { match: right }: RatedMat
   return left.from - right.from || left.to - right.to || left.ruleId.localeCompare(right.ruleId);
 }
 
-/** Checks one document; the structure, from the renderer, says where code, links and hidden content are. */
-export function runInjectionCheck(
-  request: InjectionCheckRequest,
-  structure: DocumentStructure = EMPTY_DOCUMENT_STRUCTURE,
-  ruleset: Ruleset = Ruleset.bundled(),
-): InjectionCheckResult {
-  const positions = TextPositions.of(request.text);
-  const lookup = StructureLookup.of(structure);
-  const isAgentFile = request.isAgentContext === true || isAgentFileLocation(request.location, ruleset);
-  const source = { text: request.text, positions, ruleset, isAgentFile };
-  const characterMatches = findCharacterMatches({ text: request.text, lookup, positions }, ruleset);
-  const documentInput = documentRuleInputOf(
-    { text: request.text, structure, lookup, positions, isAgentFile },
-    ruleset,
-  );
-  const matches = [
-    ...characterMatches.matches,
-    ...findDocumentMatches(documentInput, characterMatches.matches),
-  ];
+interface CheckedMatches {
+  readonly matches: readonly RuleMatch[];
+  readonly isPartial: boolean;
+}
+
+function resultOf(source: FindingSource, { matches, isPartial }: CheckedMatches): InjectionCheckResult {
   const ratedMatches = matches.flatMap((match) => rate(source, match) ?? []);
   const listedMatches = ratedMatches
     .sort(highestSeverityFirst)
     .slice(0, MAX_LISTED_FINDINGS)
     .sort(inDocumentOrder);
   return {
-    rulesetVersion: ruleset.version,
+    rulesetVersion: source.ruleset.version,
     findings: listedMatches.map((ratedMatch) => toFinding(source, ratedMatch)),
     isAgentFile: source.isAgentFile,
     ignoredCount: 0,
-    isPartial: characterMatches.isPartial || ratedMatches.length > MAX_LISTED_FINDINGS,
+    isPartial: isPartial || ratedMatches.length > MAX_LISTED_FINDINGS,
   };
+}
+
+function findingSourceOf(request: InjectionCheckRequest, ruleset: Ruleset): FindingSource {
+  const isAgentFile = request.isAgentContext === true || isAgentFileLocation(request.location, ruleset);
+  return { text: request.text, positions: TextPositions.of(request.text), ruleset, isAgentFile };
+}
+
+/** Checks one document; the structure, from the renderer, says where code, links and hidden content are. */
+export function runInjectionCheck(
+  request: InjectionCheckRequest,
+  structure: DocumentStructure = EMPTY_DOCUMENT_STRUCTURE,
+  ruleset: Ruleset = Ruleset.bundled(),
+): InjectionCheckResult {
+  const source = findingSourceOf(request, ruleset);
+  const { text, positions, isAgentFile } = source;
+  const lookup = StructureLookup.of(structure);
+  const characterMatches = findCharacterMatches({ text, lookup, positions }, ruleset);
+  const documentInput = documentRuleInputOf({ text, structure, lookup, positions, isAgentFile }, ruleset);
+  return resultOf(source, {
+    matches: [...characterMatches.matches, ...findDocumentMatches(documentInput, characterMatches.matches)],
+    isPartial: characterMatches.isPartial,
+  });
+}
+
+/**
+ * Runs only the character rules, for documents too large to parse in time. The structure, phrase and
+ * address rules are left out, so the result is always partial.
+ */
+export function runCharacterCheck(
+  request: InjectionCheckRequest,
+  ruleset: Ruleset = Ruleset.bundled(),
+): InjectionCheckResult {
+  const source = findingSourceOf(request, ruleset);
+  const lookup = StructureLookup.of(EMPTY_DOCUMENT_STRUCTURE);
+  const { matches } = findCharacterMatches(
+    { text: source.text, lookup, positions: source.positions },
+    ruleset,
+  );
+  return resultOf(source, { matches, isPartial: true });
 }

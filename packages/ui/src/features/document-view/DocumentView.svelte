@@ -16,7 +16,8 @@
   import { untrack, type Snippet } from 'svelte';
   import type { ExportFormat } from '@mdx/platform';
   import { standaloneDocumentHtml } from '../document-export/standaloneDocumentHtml';
-  import type { ExportRequest, LinkedHeadingRequest } from '../viewer/ViewerController';
+  import type { ExportRequest, LinkedHeadingRequest, SourceRangeRequest } from '../viewer/ViewerController';
+  import { keepSourceRangeOutlined } from './outlineSourceRange';
   import { documentClipboardHtml, documentExportHtml, documentPlainText } from './documentClipboardHtml';
   import { enhanceCodeBlocks } from './enhanceCodeBlocks';
   import { findLinkedHeading } from './findLinkedHeading';
@@ -48,6 +49,8 @@
     headingRequest?: HeadingRequest | undefined;
     /** A heading a link from another document points to; the request it starts with is ignored. */
     linkedHeadingRequest?: LinkedHeadingRequest | undefined;
+    /** A range to outline in the source view, such as a prompt injection finding. */
+    sourceRangeRequest?: SourceRangeRequest | undefined;
     locale?: string;
     isSourceView?: boolean;
     onCloseFind?: () => void;
@@ -80,6 +83,7 @@
     exportRequest,
     headingRequest,
     linkedHeadingRequest,
+    sourceRangeRequest,
     locale = 'en',
     isSourceView = false,
     onCloseFind = () => undefined,
@@ -162,6 +166,20 @@
     const article = articleElement;
     if (!document?.html || !article || isSourceView) return;
     makeUnresolvedNoteLinksFocusable(article);
+  });
+
+  let scrolledSourceRange = untrack(() => sourceRangeRequest?.number);
+
+  $effect(() => {
+    const request = sourceRangeRequest;
+    const area = documentArea;
+    const sourceView = isSourceView ? articleElement?.querySelector('pre') : undefined;
+    if (!request || !area || !sourceView || document?.canonicalKey !== request.canonicalKey) return;
+    if (request.number !== scrolledSourceRange) {
+      scrolledSourceRange = request.number;
+      untrack(() => scrollSourceLineToTop(area, sourceView, request.line));
+    }
+    return keepSourceRangeOutlined(sourceView, request);
   });
 
   function goToHeading(entry: OutlineEntry) {

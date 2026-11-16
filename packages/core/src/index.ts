@@ -103,6 +103,8 @@ export {
   toggleExplorerSection,
   zoomIn,
   zoomOut,
+  AUTOMATIC_INJECTION_CHECKS,
+  type AutomaticInjectionCheck,
   type ColorScheme,
   type ExplorerSection,
   type KindSwitcher,
@@ -343,13 +345,20 @@ export {
 } from './prompt-injection/injectionSeverity';
 export { HiddenCharacterNames, type HiddenCharacterName } from './prompt-injection/HiddenCharacterNames';
 export { bundledRulesetWithLists, Ruleset, type InjectionRule } from './prompt-injection/Ruleset';
-export { MAX_EXCERPT_LENGTH } from './prompt-injection/safeExcerpt';
-export { MAX_LISTED_FINDINGS, runInjectionCheck } from './prompt-injection/runInjectionCheck';
+export { MAX_EXCERPT_LENGTH, safeDisplayText } from './prompt-injection/safeExcerpt';
+export {
+  MAX_LISTED_FINDINGS,
+  runCharacterCheck,
+  runInjectionCheck,
+} from './prompt-injection/runInjectionCheck';
+export { InjectionIgnoreList, MAX_IGNORE_ENTRIES } from './prompt-injection/InjectionIgnoreList';
 export {
   evidenceHashOf,
   filterIgnoredFindings,
   ignoreEntryFor,
+  isIgnoredBy,
   type FilteredResult,
+  type IgnoreContext,
   type IgnoreEntry,
   type IgnoreScope,
 } from './prompt-injection/ignoreFindings';

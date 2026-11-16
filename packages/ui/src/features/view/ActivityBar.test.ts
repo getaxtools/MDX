@@ -47,6 +47,16 @@ describe('ActivityBar', () => {
     expect(onCommand).toHaveBeenCalledWith({ kind: 'toggleSidebarView', sidebarView: 'search' });
   });
 
+  it('shows and hides the prompt injection panel, pressed while it is shown', async () => {
+    const { onCommand } = renderActivityBar({ sidebarView: 'promptInjection' });
+    const button = screen.getByRole('button', { name: 'Prompt injection check' });
+
+    await userEvent.click(button);
+
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'toggleSidebarView', sidebarView: 'promptInjection' });
+  });
+
   it('mentions the shortcut in the tooltip', () => {
     renderActivityBar();
 

@@ -106,6 +106,17 @@ export interface SourceEditorOptions {
   readonly richTextProviders?: RichTextProviders;
 }
 
+/** A place in the text by zero-based line and column, in UTF-16 code units from the start of the line. */
+export interface EditorTextPosition {
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface EditorTextRange {
+  readonly from: EditorTextPosition;
+  readonly to: EditorTextPosition;
+}
+
 export interface SourceEditor {
   focus(): void;
   text(): string;
@@ -117,6 +128,8 @@ export interface SourceEditor {
   scrollToLine(line: number): void;
   /** Moves the caret to the start of a zero-based line, shows that line at the top and focuses the editor. */
   revealLine(line: number): void;
+  /** Selects a range, such as a prompt injection finding, scrolls it into view and focuses the editor. */
+  revealRange(range: EditorTextRange): void;
   /** Replaces the whole text, for example after the file was reloaded from disk. */
   replaceText(text: string): void;
   run(command: EditorMenuCommand): void;
@@ -177,6 +190,7 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
     text: () => view.state.doc.toString(),
     ...scrolling,
     revealLine: (line) => revealLine(view, line),
+    revealRange: (range) => revealRange(view, range),
     replaceText: (text) => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } }),
     run: (command) => commands[command](),
     ...blockEditingOf(view),
@@ -321,6 +335,23 @@ function revealLine(view: EditorView, line: number): void {
   view.dispatch({
     selection: { anchor: lineStart },
     effects: EditorView.scrollIntoView(lineStart, { y: 'start' }),
+  });
+  view.focus();
+}
+
+/** Columns past the end of a line stop at its end, so a range given for text with CRLF still fits. */
+function offsetOf(view: EditorView, { line, column }: EditorTextPosition): number {
+  const { doc } = view.state;
+  const documentLine = doc.line(Math.min(Math.max(Math.floor(line), 0), doc.lines - 1) + 1);
+  return Math.min(documentLine.from + Math.max(column, 0), documentLine.to);
+}
+
+function revealRange(view: EditorView, range: EditorTextRange): void {
+  const anchor = offsetOf(view, range.from);
+  const head = Math.max(anchor, offsetOf(view, range.to));
+  view.dispatch({
+    selection: { anchor, head },
+    effects: EditorView.scrollIntoView(EditorSelection.range(anchor, head), { y: 'center' }),
   });
   view.focus();
 }

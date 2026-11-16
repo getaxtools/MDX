@@ -19,6 +19,7 @@ import type { NotesLinkCommand } from '../notes/NotesIndexActions';
 import type { PropertyCommand } from '../document-view/propertyCommands';
 import type { SpecViewerCommand } from '../spec-viewer/specViewerCommands';
 import type { ViewCommand } from '../view/viewCommands';
+import type { InjectionCheckCommand } from '../prompt-injection/injectionCheckCommands';
 
 export type ViewerCommand =
   | TabCommand
@@ -42,6 +43,7 @@ export type ViewerCommand =
   | NotesLinkCommand
   | PropertyCommand
   | SpecViewerCommand
+  | InjectionCheckCommand
   | { readonly kind: 'toggleFullScreen' }
   | { readonly kind: 'toggleControlWheel' }
   | { readonly kind: 'showWorkspaceKindSettings' }
@@ -137,6 +139,7 @@ const COMMANDS_BY_MENU_ITEM: Readonly<Record<string, ViewerCommand>> = {
   exportWorkspace: { kind: 'exportWorkspace' },
   showRenameWorkspace: { kind: 'showRenameWorkspace' },
   confirmDeleteWorkspace: { kind: 'confirmDeleteWorkspace' },
+  checkForPromptInjection: { kind: 'checkForPromptInjection' },
 };
 
 const RECENT_FILE_MENU_ITEM = /^openRecent\.(\d{1,2})$/;

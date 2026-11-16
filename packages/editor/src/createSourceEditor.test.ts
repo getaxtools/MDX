@@ -186,6 +186,43 @@ describe('createSourceEditor', () => {
     expect(parent.contains(document.activeElement)).toBe(true);
   });
 
+  it('selects a range it reveals, such as a finding, and focuses the editor', () => {
+    const parent = document.createElement('div');
+    document.body.append(parent);
+    const onSelectedTextChange = vi.fn();
+    editor = createSourceEditor({
+      parent,
+      text: ['first', 'second line', 'third'].join('\n'),
+      label: 'Source of Guide.md',
+      phrases: {},
+      onChange: vi.fn(),
+      onSelectedTextChange,
+    });
+
+    editor.revealRange({ from: { line: 1, column: 7 }, to: { line: 1, column: 11 } });
+
+    expect(onSelectedTextChange).toHaveBeenLastCalledWith('line');
+    expect(parent.contains(document.activeElement)).toBe(true);
+  });
+
+  it('keeps a revealed range inside the text when its columns run past the end of a line', () => {
+    const parent = document.createElement('div');
+    document.body.append(parent);
+    const onSelectedTextChange = vi.fn();
+    editor = createSourceEditor({
+      parent,
+      text: ['one', 'two'].join('\n'),
+      label: 'Source of Guide.md',
+      phrases: {},
+      onChange: vi.fn(),
+      onSelectedTextChange,
+    });
+
+    editor.revealRange({ from: { line: 0, column: 1 }, to: { line: 9, column: 40 } });
+
+    expect(onSelectedTextChange).toHaveBeenLastCalledWith(['ne', 'two'].join('\n'));
+  });
+
   it('opens the search panel in the user language', () => {
     const { parent, editor: opened } = openEditor();
 

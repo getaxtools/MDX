@@ -1,6 +1,8 @@
 import { hasFile } from '@mdx/platform';
 import type { DocumentLocation } from '@mdx/platform';
 import { ExplorerFolders } from '../explorer/ExplorerFolders';
+import type { IgnoreEntry } from '../prompt-injection/ignoreFindings';
+import { InjectionIgnoreList } from '../prompt-injection/InjectionIgnoreList';
 import { FavouritesList, type Favourite, type FavouriteGroup } from '../favourites/FavouritesList';
 import { parseFavourites } from '../favourites/parseFavourites';
 import { RecentFilesList, type RecentFile } from '../recent-files/RecentFilesList';
@@ -34,6 +36,8 @@ export interface PersistedAppState {
   readonly shortcutOverrides: ShortcutOverrides;
   readonly wordGoals: WordGoals;
   readonly snippetLibrary: SnippetLibrary;
+  /** Findings the user ignored in the prompt injection check, as rule ids and hashes. */
+  readonly injectionIgnoreEntries?: readonly IgnoreEntry[];
   /** Lets an older MDX name the version that wrote state it cannot read. */
   readonly savedByAppVersion?: string;
 }
@@ -48,6 +52,7 @@ export interface ViewerState {
   readonly shortcutOverrides: ShortcutOverrides;
   readonly wordGoals: WordGoals;
   readonly snippetLibrary: SnippetLibrary;
+  readonly injectionIgnoreList: InjectionIgnoreList;
   /** The shown workspace's own theme, reading width or typography; absent without workspaces. */
   readonly workspaceOverrides?: WorkspaceOverrides;
 }
@@ -73,6 +78,7 @@ export function toPersistedAppState(
     shortcutOverrides,
     wordGoals,
     snippetLibrary,
+    injectionIgnoreList,
   }: ViewerState,
   appVersion?: string,
 ): PersistedAppState {
@@ -89,6 +95,7 @@ export function toPersistedAppState(
     shortcutOverrides,
     wordGoals,
     snippetLibrary,
+    ...(injectionIgnoreList.isEmpty() ? {} : { injectionIgnoreEntries: injectionIgnoreList.toSaved() }),
   };
 }
 
@@ -125,6 +132,7 @@ export function restoreAppState(
     shortcutOverrides: parseShortcutOverrides(saved.shortcutOverrides),
     wordGoals: parseWordGoals(saved.wordGoals),
     snippetLibrary: parseSnippetLibrary(saved.snippetLibrary),
+    injectionIgnoreList: InjectionIgnoreList.fromSaved(saved.injectionIgnoreEntries),
     wasReset: false,
     newerSavedState: undefined,
   };
@@ -156,6 +164,7 @@ function emptyAppState({
     shortcutOverrides: {},
     wordGoals: {},
     snippetLibrary: EMPTY_SNIPPET_LIBRARY,
+    injectionIgnoreList: InjectionIgnoreList.empty(),
     wasReset,
     newerSavedState,
   };

@@ -1,6 +1,8 @@
 export {
   createSourceEditor,
   type EditorMenuCommand,
+  type EditorTextPosition,
+  type EditorTextRange,
   type SourceEditor,
   type SourceEditorOptions,
 } from './createSourceEditor';

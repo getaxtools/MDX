@@ -13,4 +13,6 @@ export default defineConfig({
     warmup: { clientFiles: ['./src/main.ts', './src/startViewerApp.ts'] },
   },
   build: { target: 'es2022', sourcemap: false, chunkSizeWarningLimit: 1024 },
+  // The prompt injection check worker imports modules that split into chunks, which only module workers can load.
+  worker: { format: 'es' },
 });

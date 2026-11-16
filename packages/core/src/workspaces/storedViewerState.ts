@@ -21,13 +21,14 @@ import type { WorkspaceKind } from '../workspace-kinds/workspaceKinds';
 export const DEFAULT_WORKSPACE_ID = 'default';
 export const MAIN_WINDOW_ID = 'main';
 
-/** App-wide values: settings, kind choices, shortcuts, word goals and snippets. */
+/** App-wide values: settings, kind choices, shortcuts, word goals, snippets and ignored findings. */
 export const APP_VALUE_KEYS = [
   'viewSettings',
   'workspaceKinds',
   'shortcutOverrides',
   'wordGoals',
   'snippetLibrary',
+  'injectionIgnoreEntries',
 ] as const;
 
 export type AppValueKey = (typeof APP_VALUE_KEYS)[number];
@@ -63,6 +64,7 @@ export function storedViewerStateOf(state: ViewerState): StoredViewerState {
       shortcutOverrides: persisted.shortcutOverrides,
       wordGoals: persisted.wordGoals,
       snippetLibrary: persisted.snippetLibrary,
+      injectionIgnoreEntries: persisted.injectionIgnoreEntries ?? [],
     },
   };
 }
@@ -93,6 +95,7 @@ export function viewerStateFrom(
       shortcutOverrides: appValues.shortcutOverrides,
       wordGoals: appValues.wordGoals,
       snippetLibrary: appValues.snippetLibrary,
+      injectionIgnoreEntries: appValues.injectionIgnoreEntries,
     },
     kindRegistry,
   );

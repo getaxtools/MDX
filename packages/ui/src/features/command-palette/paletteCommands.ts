@@ -33,6 +33,8 @@ export interface PaletteContext {
   readonly isNotesWorkspace?: boolean;
   /** The editor's caret is in a link, so Open Link is offered. */
   readonly isCaretInLink?: boolean;
+  /** A document is shown, so commands that act on it, such as the prompt injection check, are offered. */
+  readonly hasDocument?: boolean;
 }
 
 const DEFAULT_PALETTE_CONTEXT: PaletteContext = {
@@ -88,8 +90,25 @@ export function paletteCommands(
     workspaces,
     isNotesWorkspace = false,
     isCaretInLink = false,
+    hasDocument = false,
   }: PaletteContext = DEFAULT_PALETTE_CONTEXT,
 ): PaletteCommand[] {
+  return [
+    ...menuCommands(shortcuts, translator),
+    ...(isCaretInLink ? [openLinkCommand(translator)] : []),
+    ...workspaceKindCommands(workspaceKinds, translator),
+    ...(workspaces ? workspaceCommands(workspaces, workspaceKinds, translator) : []),
+    ...(isNotesWorkspace ? notesCommands(translator) : []),
+    ...(hasDocument ? documentCommands(translator) : []),
+    ...snippetCommands(snippets, translator),
+    ...themeCommands(translator),
+    ...readingWidthCommands(translator),
+    ...typographyCommands(translator),
+    ...editingModeCommands(translator),
+  ];
+}
+
+function menuCommands(shortcuts: PaletteContext['shortcuts'], translator: Translator): PaletteCommand[] {
   const withShortcuts = shortcuts
     .filter(({ command }) => command.kind !== 'showCommandPalette')
     .map(({ command, combinations, actionKey }) => {
@@ -104,19 +123,7 @@ export function paletteCommands(
     command,
     label: translator.translate(actionKey),
   }));
-  return [
-    ...withShortcuts,
-    ...withoutShortcuts,
-    ...(isCaretInLink ? [openLinkCommand(translator)] : []),
-    ...workspaceKindCommands(workspaceKinds, translator),
-    ...(workspaces ? workspaceCommands(workspaces, workspaceKinds, translator) : []),
-    ...(isNotesWorkspace ? notesCommands(translator) : []),
-    ...snippetCommands(snippets, translator),
-    ...themeCommands(translator),
-    ...readingWidthCommands(translator),
-    ...typographyCommands(translator),
-    ...editingModeCommands(translator),
-  ];
+  return [...withShortcuts, ...withoutShortcuts];
 }
 
 function editingModeCommands(translator: Translator): PaletteCommand[] {
@@ -135,6 +142,15 @@ function openLinkCommand(translator: Translator): PaletteCommand {
     command: { kind: 'runEditorCommand', command: 'openLink' },
     label: translator.translate('editor.action.openLink'),
   };
+}
+
+function documentCommands(translator: Translator): PaletteCommand[] {
+  return [
+    {
+      command: { kind: 'checkForPromptInjection' },
+      label: translator.translate('promptInjection.command.check'),
+    },
+  ];
 }
 
 function notesCommands(translator: Translator): PaletteCommand[] {

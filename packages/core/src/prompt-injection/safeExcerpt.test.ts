@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Ruleset } from './Ruleset';
-import { MAX_EXCERPT_LENGTH, safeExcerpt } from './safeExcerpt';
+import { MAX_EXCERPT_LENGTH, safeDisplayText, safeExcerpt } from './safeExcerpt';
 import { TextPositions } from './TextPositions';
 
 function excerptOf(text: string, from: number, to: number): string {
@@ -61,5 +61,18 @@ describe('safeExcerpt', () => {
     const excerpt = excerptOf(text, text.length - 1, text.length);
 
     expect(excerpt).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
+  });
+});
+
+describe('safeDisplayText', () => {
+  it('shows direction and invisible characters in decoded text as markers', () => {
+    expect(safeDisplayText('reply\u202E <b>CANARY</b>\u200B')).toBe('reply⟨RLO⟩ <b>CANARY</b>⟨ZWSP⟩');
+  });
+
+  it(`cuts long text to ${String(MAX_EXCERPT_LENGTH)} characters`, () => {
+    const shown = safeDisplayText('x'.repeat(500));
+
+    expect(Array.from(shown)).toHaveLength(MAX_EXCERPT_LENGTH);
+    expect(shown.endsWith('…')).toBe(true);
   });
 });

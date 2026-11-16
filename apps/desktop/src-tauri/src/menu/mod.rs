@@ -186,6 +186,12 @@ const SOURCE_VIEW_TOGGLE_ITEM: CommandItem = (
     Some("Ctrl+U"),
 );
 
+const PROMPT_INJECTION_CHECK_ITEM: CommandItem = (
+    "checkForPromptInjection",
+    "promptInjection.command.check",
+    None,
+);
+
 const PREVIEW_BESIDE_EDITOR_TOGGLE_ITEM: CommandItem = (
     TOGGLE_PREVIEW_BESIDE_EDITOR_ITEM_ID,
     "menu.view.previewBeside",
@@ -532,6 +538,7 @@ impl MainMenuBuilder<'_> {
         let control_wheel = self.rebindable_item(CONTROL_WHEEL_ITEM)?;
         let toggle_editing = self.command_item(TOGGLE_EDITING_ITEM)?;
         let full_screen = self.command_item(FULL_SCREEN_ITEM)?;
+        let prompt_injection_check = self.command_item(PROMPT_INJECTION_CHECK_ITEM)?;
         let builder = SubmenuBuilder::new(self.app, self.labels.label("menu.view"))
             .item(&command_palette)
             .item(&control_wheel)
@@ -548,6 +555,7 @@ impl MainMenuBuilder<'_> {
             .with_items(builder, &ZOOM_ITEMS)?
             .separator()
             .item(&source_view)
+            .item(&prompt_injection_check)
             .separator();
         panels
             .iter()
@@ -679,6 +687,7 @@ mod tests {
                 COMMAND_PALETTE_ITEM,
                 FULL_SCREEN_ITEM,
                 CONTROL_WHEEL_ITEM,
+                PROMPT_INJECTION_CHECK_ITEM,
             ])
             .chain(&EXPORT_ITEMS)
             .chain(&NAVIGATION_ITEMS)

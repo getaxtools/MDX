@@ -12,6 +12,7 @@ import {
   type RestoreOutcome,
   type ViewerSession,
   type ViewerState,
+  type InjectionFinding,
   type WorkspaceKindId,
   type WorkspaceRegistry,
   parseFavouritesFile,
@@ -104,6 +105,16 @@ import { windowTitleFor } from '../workspaces/windowTitle';
 import { recentWorkspaceLinks } from '../workspaces/recentWorkspaceLinks';
 import { applySessionCommand } from './applySessionCommand';
 import { LiveReload } from './LiveReload';
+import { InjectionCheckActions, type InjectionCheckView } from '../prompt-injection/InjectionCheckActions';
+import { InjectionChecker } from '../prompt-injection/InjectionChecker';
+import {
+  isInjectionCheckCommand,
+  type InjectionCheckCommand,
+} from '../prompt-injection/injectionCheckCommands';
+import {
+  startModuleWorker,
+  type InjectionCheckWorkerStarter,
+} from '../prompt-injection/InjectionCheckWorker';
 import { commandForMenuItem, type ViewerCommand } from './viewerCommands';
 
 export const STATE_SAVE_DELAY_MS = 500;
@@ -116,6 +127,11 @@ const LARGE_DOCUMENT_LIVE_PREVIEW_DELAY_MS = 500;
 const LARGE_DOCUMENT_CHARACTERS = 256_000;
 const SCROLL_RATIO_PRECISION = 0.001;
 const EXPORT_EXTENSIONS: Readonly<Record<ExportFormat, string>> = { html: '.html', plainText: '.txt' };
+
+/** The check waits for the frame that draws the document, and then for the browser to finish it. */
+function runAfterNextFrame(run: () => void): void {
+  globalThis.requestAnimationFrame(() => globalThis.setTimeout(run, 0));
+}
 
 /** `Guide.md` exports as `Guide.html` or `Guide.txt`. */
 function exportFileNameFor(fileName: string, format: ExportFormat): string {
@@ -146,6 +162,10 @@ export interface ViewerControllerDependencies {
   readonly specProjects?: SpecProjectPort;
   /** The clock for daily notes and templates; the real one unless a test sets it. */
   readonly now?: () => Date;
+  /** Starts the worker that checks large documents for prompt injection; tests pass a fake. */
+  readonly startInjectionCheckWorker?: InjectionCheckWorkerStarter;
+  /** Runs work once the shown document has been drawn; the next animation frame unless a test sets it. */
+  readonly afterPaint?: (run: () => void) => void;
 }
 
 export interface RenderedActiveDocument {
@@ -181,6 +201,10 @@ export interface ViewerSnapshot {
   readonly folderSearchQuery?: string;
   /** The notes linking to the shown note, in a Notes workspace. */
   readonly noteBacklinks?: NoteBacklinks;
+  /** The prompt injection check of the shown document, once one has started. */
+  readonly injectionCheck?: InjectionCheckView;
+  /** A range of the shown document to outline in the source view, such as a finding. */
+  readonly sourceRangeRequest?: SourceRangeRequest;
   /** Goes up each time the shown document should be copied as HTML, from the Edit menu or the palette. */
   readonly copyAsHtmlRequest?: number;
   /** The format the shown document should export to, numbered so the same format can be asked again. */
@@ -230,6 +254,16 @@ export interface LinkedHeadingRequest {
   readonly canonicalKey: string;
   /** The part of the link after #, as written. */
   readonly fragment: string;
+  readonly number: number;
+}
+
+/** Numbered, so the same range can be asked for again. */
+export interface SourceRangeRequest {
+  readonly canonicalKey: string;
+  readonly from: number;
+  readonly to: number;
+  /** Zero-based. */
+  readonly line: number;
   readonly number: number;
 }
 
@@ -323,6 +357,8 @@ export class ViewerController {
   private readonly editingModes: EditingModeActions;
   private readonly navigation: DocumentNavigation;
   private readonly documentAttachments: DocumentAttachments | undefined;
+  private readonly injectionChecks: InjectionCheckActions;
+  private sourceRangeRequest: SourceRangeRequest | undefined;
 
   constructor(private readonly dependencies: ViewerControllerDependencies) {
     this.snapshot = {
@@ -360,12 +396,28 @@ export class ViewerController {
     this.notesActions = this.createNotesActions();
     this.notesIndexActions = this.createNotesIndexActions();
     this.specViewerActions = this.createSpecViewerActions();
+    this.injectionChecks = this.createInjectionCheckActions();
   }
 
   private createEditingModes(): EditingModeActions {
     return new EditingModeActions(this.dependencies.session, {
       activeEditedLocation: () => this.editedLocation(),
       showNotice: (key, values) => this.showNotice(key, values),
+      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+    });
+  }
+
+  private createInjectionCheckActions(): InjectionCheckActions {
+    const {
+      session,
+      startInjectionCheckWorker = startModuleWorker,
+      afterPaint = runAfterNextFrame,
+    } = this.dependencies;
+    return new InjectionCheckActions({
+      session,
+      checker: new InjectionChecker(startInjectionCheckWorker),
+      afterPaint,
+      now: () => (this.dependencies.now?.() ?? new Date()).getTime(),
       onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
     });
   }
@@ -387,6 +439,39 @@ export class ViewerController {
       editingActions: this.editingActions,
       isNote: (location) => this.notesActions?.isNote(location) ?? false,
     });
+  }
+
+  private async runInjectionCheckCommand(command: InjectionCheckCommand): Promise<void> {
+    if (command.kind === 'checkForPromptInjection') {
+      if (!this.activeDocument) return;
+      this.dependencies.session.updateViewSettings((viewSettings) =>
+        showSidebarView(viewSettings, 'promptInjection'),
+      );
+      await this.injectionChecks.checkShownDocument();
+    } else if (command.kind === 'revealInjectionFinding') this.revealInjectionFinding(command.finding);
+    else if (command.kind === 'ignoreInjectionFinding')
+      this.injectionChecks.ignore(command.finding, command.scope);
+    else this.injectionChecks.showAgain(command.finding);
+  }
+
+  /** The editor selects the finding; otherwise the source view opens with the finding outlined. */
+  private revealInjectionFinding(finding: InjectionFinding): void {
+    const place = this.injectionChecks.placeOf(finding);
+    if (!place) return;
+    if (this.editingActions.isActiveDocumentEditing()) {
+      this.editingActions.revealRange(place.range);
+      return;
+    }
+    this.isSourceView = true;
+    this.sourceRangeRequest = {
+      canonicalKey: place.documentKey,
+      from: place.from,
+      to: place.to,
+      line: place.range.from.line,
+      number: (this.sourceRangeRequest?.number ?? 0) + 1,
+    };
+    this.publish(this.composeSnapshot(this.snapshot.notice));
+    this.showViewStateInMenu();
   }
 
   private createNotesActions(): NotesActions | undefined {
@@ -647,6 +732,7 @@ export class ViewerController {
     for (const stopAction of this.stopActions.splice(0)) stopAction();
     clearTimeout(this.pendingSave);
     clearTimeout(this.pendingLivePreview);
+    this.injectionChecks.stop();
   }
 
   async saveNow(): Promise<void> {
@@ -882,6 +968,7 @@ export class ViewerController {
     if (isSpecViewerCommand(command)) return this.runSpecViewerCommand(command);
     if (isWorkspaceFileCommand(command)) return this.runWorkspaceFileCommand(command);
     if (isWorkspaceCommand(command)) return this.workspaceActions.run(command);
+    if (isInjectionCheckCommand(command)) return this.runInjectionCheckCommand(command);
     return undefined;
   }
 
@@ -1123,6 +1210,7 @@ export class ViewerController {
   /** Records the source editor's text for a document; the window shows when it has unsaved changes. */
   updateEditedText(canonicalKey: string, text: string): void {
     this.editingActions.updateText(canonicalKey, text);
+    this.injectionChecks.textEdited(canonicalKey, text);
     if (this.isPreviewBesideEditor()) this.scheduleLivePreview(text.length);
     else this.scheduleOutlineRefresh(canonicalKey, text);
   }
@@ -1382,6 +1470,7 @@ export class ViewerController {
       ),
     );
     this.scheduleSave();
+    this.injectionChecks.viewChanged();
     void this.refreshActiveDocument();
   }
 
@@ -1398,14 +1487,16 @@ export class ViewerController {
     const text = document ? this.textShownFor(document) : undefined;
     const shouldMarkSourceLines = this.isPreviewBesideEditor();
     const noteList = this.notesActions?.noteListVersion();
-    if (this.isRenderUpToDate({ document, text, shouldMarkSourceLines, noteList })) return;
-    this.renderedNoteList = noteList;
-    this.renderedDocument = document;
-    this.renderedText = text;
-    this.hasRenderedSourceLines = shouldMarkSourceLines;
-    this.activeDocument =
-      document && text !== undefined ? this.render(document, text, shouldMarkSourceLines) : undefined;
-    this.publish(this.composeSnapshot(this.snapshot.notice));
+    if (!this.isRenderUpToDate({ document, text, shouldMarkSourceLines, noteList })) {
+      this.renderedNoteList = noteList;
+      this.renderedDocument = document;
+      this.renderedText = text;
+      this.hasRenderedSourceLines = shouldMarkSourceLines;
+      this.activeDocument =
+        document && text !== undefined ? this.render(document, text, shouldMarkSourceLines) : undefined;
+      this.publish(this.composeSnapshot(this.snapshot.notice));
+    }
+    this.injectionChecks.documentShown(document, text);
   }
 
   private isRenderUpToDate(next: {
@@ -1544,6 +1635,18 @@ export class ViewerController {
       ...this.workspacesPart(),
       ...this.notesPart(),
       ...this.specProjectsPart(),
+      ...this.injectionCheckPart(),
+    };
+  }
+
+  /** The check and an outlined range belong to the shown document only. */
+  private injectionCheckPart(): Pick<ViewerSnapshot, 'injectionCheck' | 'sourceRangeRequest'> {
+    const shownKey = this.activeDocument?.canonicalKey;
+    const injectionCheck = this.injectionChecks.view();
+    const sourceRangeRequest = this.sourceRangeRequest;
+    return {
+      ...(injectionCheck && injectionCheck.documentKey === shownKey ? { injectionCheck } : {}),
+      ...(sourceRangeRequest && sourceRangeRequest.canonicalKey === shownKey ? { sourceRangeRequest } : {}),
     };
   }
 

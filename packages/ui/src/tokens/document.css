@@ -112,6 +112,12 @@
   color: #1b1d22;
 }
 
+::highlight(mdx-source-range) {
+  background-color: var(--color-mark-background);
+  color: var(--color-mark-text);
+  text-decoration: underline wavy var(--color-alert-caution);
+}
+
 .rendered-document .copy-code {
   position: absolute;
   top: var(--space-2);

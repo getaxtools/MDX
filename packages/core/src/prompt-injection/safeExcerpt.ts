@@ -2,7 +2,7 @@ import { CodePointSet, formatCodePoint } from './CodePointSet';
 import type { SourceRange } from './DocumentStructure';
 import { HiddenCharacterNames } from './HiddenCharacterNames';
 import { hiddenCharactersOf } from './matchers/scanHiddenCharacters';
-import type { Ruleset } from './Ruleset';
+import { Ruleset } from './Ruleset';
 import type { TextPositions } from './TextPositions';
 
 export const MAX_EXCERPT_LENGTH = 120;
@@ -130,4 +130,13 @@ export function safeExcerpt(source: ExcerptSource, range: SourceRange): string {
   return (
     (isCutBefore ? ELLIPSIS : '') + before.text + finding.text + after.text + (isCutAfter ? ELLIPSIS : '')
   );
+}
+
+/**
+ * Any text for the panel, such as text decoded from a hidden payload, made as safe as an excerpt:
+ * hidden and direction characters become markers, and it is cut to 120 characters.
+ */
+export function safeDisplayText(text: string, ruleset: Ruleset = Ruleset.bundled()): string {
+  const shown = takeWithin(tokenize(text, markedCharactersOf(ruleset)), MAX_EXCERPT_LENGTH - ELLIPSIS.length);
+  return shown.isComplete ? shown.text : shown.text + ELLIPSIS;
 }

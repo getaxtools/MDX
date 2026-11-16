@@ -74,6 +74,17 @@
     </svg>
   </button>
   <button
+    aria-label={translator.translate('promptInjection.activityBar.label')}
+    title={translator.translate('promptInjection.activityBar.label')}
+    aria-pressed={isSidebarVisible && sidebarView === 'promptInjection'}
+    onclick={() => onCommand({ kind: 'toggleSidebarView', sidebarView: 'promptInjection' })}
+  >
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 3l7 3v5.5c0 4.3-3 7.9-7 9.5-4-1.6-7-5.2-7-9.5V6z" />
+      <path d="M12 8v4.5M12 15.5v.5" />
+    </svg>
+  </button>
+  <button
     class="bottom"
     aria-label={translator.translate('settings.title')}
     title={labelOf('settings.title', { kind: 'showSettings' })}

@@ -20,6 +20,7 @@ import { RecentFilesList } from '../recent-files/RecentFilesList';
 import type { ShortcutOverrides } from '../shortcuts/parseShortcutOverrides';
 import type { WordGoals } from '../word-goals/wordGoals';
 import { EMPTY_SNIPPET_LIBRARY, type SnippetLibrary } from '../snippets/snippetLibrary';
+import { InjectionIgnoreList } from '../prompt-injection/InjectionIgnoreList';
 import { TabStrip } from '../tabs/TabStrip';
 import { DEFAULT_VIEW_SETTINGS, type ViewSettings } from '../view/ViewSettings';
 import {
@@ -86,6 +87,7 @@ function emptyState(kindRegistry: readonly WorkspaceKind[]): ViewerState {
     shortcutOverrides: {},
     wordGoals: {},
     snippetLibrary: EMPTY_SNIPPET_LIBRARY,
+    injectionIgnoreList: InjectionIgnoreList.empty(),
   };
 }
 
@@ -115,6 +117,7 @@ function viewerStateOf(restored: ViewerState): ViewerState {
     shortcutOverrides: restored.shortcutOverrides,
     wordGoals: restored.wordGoals,
     snippetLibrary: restored.snippetLibrary,
+    injectionIgnoreList: restored.injectionIgnoreList,
     ...(restored.workspaceOverrides ? { workspaceOverrides: restored.workspaceOverrides } : {}),
   };
 }
@@ -475,6 +478,12 @@ export class ViewerSession {
 
   updateWordGoals(change: (wordGoals: WordGoals) => WordGoals): void {
     this.replaceState({ ...this.state, wordGoals: change(this.state.wordGoals) });
+  }
+
+  updateInjectionIgnoreList(change: (ignoreList: InjectionIgnoreList) => InjectionIgnoreList): void {
+    const changed = change(this.state.injectionIgnoreList);
+    if (changed !== this.state.injectionIgnoreList)
+      this.replaceState({ ...this.state, injectionIgnoreList: changed });
   }
 
   updateSnippetLibrary(change: (snippetLibrary: SnippetLibrary) => SnippetLibrary): void {

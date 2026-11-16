@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_LISTED_FINDINGS, runInjectionCheck } from './runInjectionCheck';
+import { MAX_LISTED_FINDINGS, runCharacterCheck, runInjectionCheck } from './runInjectionCheck';
 import { Ruleset } from './Ruleset';
 
 describe('runInjectionCheck', () => {
@@ -70,5 +70,14 @@ describe('runInjectionCheck', () => {
     expect(result.findings).toHaveLength(MAX_LISTED_FINDINGS);
     expect(result.isPartial).toBe(true);
     expect(result.findings.at(-1)?.ruleId).toBe('char-unicode-tags');
+  });
+
+  it('runs only the character rules on request and marks the result partial', () => {
+    const text = 'Plain <!-- a hidden comment --> ign\u200Bore';
+
+    const result = runCharacterCheck({ text, origin: 'local', trigger: 'manual' });
+
+    expect(result.findings.map((finding) => finding.ruleId)).toEqual(['char-zero-width']);
+    expect(result.isPartial).toBe(true);
   });
 });

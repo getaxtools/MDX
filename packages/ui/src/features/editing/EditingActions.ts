@@ -2,6 +2,7 @@ import { withUnixLineBreaks, type ViewerSession } from '@mdx/core';
 import {
   changeSectionInText,
   type EditorMenuCommand,
+  type EditorTextRange,
   type SectionAction,
   type SectionRefusal,
 } from '@mdx/editor';
@@ -142,6 +143,15 @@ export class EditingActions {
       links,
       point,
     });
+    this.callbacks.onChange();
+  }
+
+  /** Asks the active document's editor to select a range, such as a prompt injection finding. */
+  revealRange(range: EditorTextRange): void {
+    const location = this.activeLocation();
+    if (!location || !this.editing.isEditing(location.canonicalKey)) return;
+    const { canonicalKey } = location;
+    this.requests.set(canonicalKey, { id: this.nextRequestId(), canonicalKey, kind: 'revealRange', range });
     this.callbacks.onChange();
   }
 

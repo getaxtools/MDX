@@ -134,4 +134,21 @@ describe('paletteCommands', () => {
       expect.arrayContaining(["Open Today's Note", 'New Note from Template…', 'Show Trash']),
     );
   });
+
+  it('offers Check for Prompt Injection only while a document is shown', () => {
+    const translator = createTranslator();
+    const context = {
+      shortcuts: COMMAND_SHORTCUTS,
+      workspaceKinds: WorkspaceKindsState.initial(WORKSPACE_KINDS),
+    };
+
+    const withoutDocument = paletteCommands(translator, context).map((entry) => entry.command.kind);
+    const withDocument = paletteCommands(translator, { ...context, hasDocument: true });
+
+    expect(withoutDocument).not.toContain('checkForPromptInjection');
+    expect(withDocument).toContainEqual({
+      command: { kind: 'checkForPromptInjection' },
+      label: 'Check for Prompt Injection',
+    });
+  });
 });

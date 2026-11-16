@@ -1,3 +1,4 @@
+import { InjectionIgnoreList } from '../prompt-injection/InjectionIgnoreList';
 import { EMPTY_SNIPPET_LIBRARY } from '../snippets/snippetLibrary';
 import { InMemoryDocumentFiles, untitledLocation } from '@mdx/platform';
 import { describe, expect, it } from 'vitest';
@@ -33,6 +34,7 @@ function emptyViewerState() {
     shortcutOverrides: {},
     wordGoals: {},
     snippetLibrary: EMPTY_SNIPPET_LIBRARY,
+    injectionIgnoreList: InjectionIgnoreList.empty(),
   };
 }
 

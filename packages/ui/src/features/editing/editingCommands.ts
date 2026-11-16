@@ -1,5 +1,5 @@
 import type { EditingModeSetting } from '@mdx/core';
-import type { EditorMenuCommand, SectionAction } from '@mdx/editor';
+import type { EditorMenuCommand, EditorTextRange, SectionAction } from '@mdx/editor';
 
 export type EditingCommand =
   | { readonly kind: 'toggleEditing' }
@@ -54,4 +54,10 @@ export type EditorRequest =
       readonly kind: 'changeSection';
       readonly line: number;
       readonly action: SectionAction;
+    }
+  | {
+      readonly id: number;
+      readonly canonicalKey: string;
+      readonly kind: 'revealRange';
+      readonly range: EditorTextRange;
     };

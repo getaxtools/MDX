@@ -58,6 +58,7 @@
   import { SessionWordCounts } from '../word-goals/SessionWordCounts';
   import PasteTableDialog from '../table-paste/PasteTableDialog.svelte';
   import OutlinePanel from '../outline/OutlinePanel.svelte';
+  import PromptInjectionPanel from '../prompt-injection/PromptInjectionPanel.svelte';
   import type { HeadingRequest } from '../outline/HeadingRequest';
   import { headingIdAtLine } from '../outline/headingIdAtLine';
   import TabStripView from '../tabs/TabStripView.svelte';
@@ -362,6 +363,13 @@
               requestedQuery={snapshot.folderSearchQuery}
               notesIndexStatus={snapshot.notes?.indexStatus}
             />
+          {:else if viewSettings.sidebarView === 'promptInjection'}
+            <PromptInjectionPanel
+              hasDocument={activeTab !== undefined && snapshot.activeDocument !== undefined}
+              check={snapshot.injectionCheck}
+              {translator}
+              onCommand={(command: ViewerCommand) => void controller.execute(command)}
+            />
           {:else if viewSettings.sidebarView === 'outline'}
             <OutlinePanel
               outline={activeTab ? snapshot.activeDocument?.outline : undefined}
@@ -583,6 +591,7 @@
               exportRequest={snapshot.exportRequest}
               {headingRequest}
               linkedHeadingRequest={snapshot.linkedHeadingRequest}
+              sourceRangeRequest={snapshot.sourceRangeRequest}
               footer={snapshot.noteBacklinks ? backlinksFooter : undefined}
               locale={translator.locale}
               isSourceView={snapshot.isSourceView ?? false}
@@ -720,6 +729,7 @@
         snippets: availableSnippets(snapshot.viewer.snippetLibrary),
         isNotesWorkspace: snapshot.notes !== undefined,
         isCaretInLink: editedDocument ? isCaretInLink : false,
+        hasDocument: snapshot.activeDocument !== undefined,
         ...(snapshot.workspaces ? { workspaces: snapshot.workspaces } : {}),
       })}
       loadDocuments={() => controller.quickOpenDocuments()}

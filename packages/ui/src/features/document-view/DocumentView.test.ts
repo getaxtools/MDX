@@ -3,6 +3,7 @@ import type { RichBlockRenderer } from '@mdx/renderer';
 import { createTranslator } from '@mdx/i18n';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
+import type { SourceRangeRequest } from '../viewer/ViewerController';
 import DocumentView from './DocumentView.svelte';
 
 interface ViewOptions {
@@ -13,6 +14,7 @@ interface ViewOptions {
   readonly isSourceView?: boolean;
   readonly richBlocks?: RichBlockRenderer;
   readonly copyAsHtmlRequest?: number;
+  readonly sourceRangeRequest?: SourceRangeRequest;
 }
 
 function renderDocument(
@@ -25,6 +27,7 @@ function renderDocument(
     isSourceView = false,
     richBlocks,
     copyAsHtmlRequest,
+    sourceRangeRequest,
   }: ViewOptions = {},
 ) {
   const onOpenLink = vi.fn();
@@ -57,6 +60,7 @@ function renderDocument(
     isSourceView,
     onCommand,
     richBlocks,
+    sourceRangeRequest,
   });
   return { onOpenLink, onCommand, rerender: view.rerender };
 }
@@ -308,5 +312,27 @@ describe('DocumentView', () => {
     });
 
     expect(renderInto).not.toHaveBeenCalled();
+  });
+
+  it('outlines a range asked for in the source view, such as a finding', () => {
+    const highlights = new Map<string, { readonly ranges: Range[] }>();
+    vi.stubGlobal('CSS', { highlights });
+    vi.stubGlobal(
+      'Highlight',
+      class {
+        readonly ranges: Range[];
+        constructor(...ranges: Range[]) {
+          this.ranges = ranges;
+        }
+      },
+    );
+
+    renderDocument('<h1>Source</h1>', {
+      isSourceView: true,
+      sourceRangeRequest: { canonicalKey: 'a.md', from: 2, to: 8, line: 0, number: 1 },
+    });
+
+    expect(highlights.get('mdx-source-range')?.ranges[0]?.toString()).toBe('Source');
+    vi.unstubAllGlobals();
   });
 });

@@ -4,6 +4,7 @@ import { ExplorerFolders } from '../explorer/ExplorerFolders';
 import { FavouritesList } from '../favourites/FavouritesList';
 import { RecentFilesList } from '../recent-files/RecentFilesList';
 import { restoreAppState, toPersistedAppState, type ViewerState } from '../session/persistedAppState';
+import { InjectionIgnoreList } from '../prompt-injection/InjectionIgnoreList';
 import { EMPTY_SNIPPET_LIBRARY } from '../snippets/snippetLibrary';
 import { TabStrip } from '../tabs/TabStrip';
 import { DEFAULT_VIEW_SETTINGS } from '../view/ViewSettings';
@@ -39,6 +40,7 @@ function fullViewerState(): ViewerState {
     shortcutOverrides: { toggleControlWheel: ['ctrl', 'shift', 'J'] },
     wordGoals: {},
     snippetLibrary: EMPTY_SNIPPET_LIBRARY,
+    injectionIgnoreList: InjectionIgnoreList.empty(),
   };
 }
 

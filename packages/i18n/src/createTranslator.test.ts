@@ -45,6 +45,10 @@ const SAMPLE_VALUES = {
   notes: 2,
   notUpdated: 1,
   indexing: 'yes',
+  severity: 'High',
+  rule: 'HTML comment',
+  line: 12,
+  column: 4,
 };
 
 describe('createTranslator', () => {

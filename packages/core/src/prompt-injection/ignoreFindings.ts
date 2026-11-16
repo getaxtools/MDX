@@ -56,7 +56,8 @@ export function ignoreEntryFor(
   return { ruleId: finding.ruleId, documentKey, evidenceHash, scope, createdAt: now() };
 }
 
-function isIgnoredBy(entry: IgnoreEntry, finding: InjectionFinding, context: IgnoreContext): boolean {
+/** Same document and rule, the rule's earlier names included, and for one finding the same matched text. */
+export function isIgnoredBy(entry: IgnoreEntry, finding: InjectionFinding, context: IgnoreContext): boolean {
   if (entry.documentKey !== context.documentKey) return false;
   if (context.ruleset.currentRuleIdOf(entry.ruleId) !== finding.ruleId) return false;
   if (entry.scope === 'ruleInDocument') return true;

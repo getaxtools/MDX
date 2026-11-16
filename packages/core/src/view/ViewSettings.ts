@@ -9,9 +9,11 @@ export type LanguagePreference = 'system' | (string & {});
 export type ExplorerSection = 'favourites' | 'folders' | 'tags' | 'recentFiles';
 /** The side bar, whatever view it shows; saved as `explorer` by earlier versions. */
 export type ResizablePanel = 'explorer';
-export type SidebarView = 'explorer' | 'search' | 'outline';
+export type SidebarView = 'explorer' | 'search' | 'outline' | 'promptInjection';
 /** Where workspace kinds can be switched: the control wheel, the kind bar in the activity bar, or both. */
 export type KindSwitcher = 'wheel' | 'bar' | 'both';
+/** Which documents the prompt injection check reads by itself: agent files, remote copies and spec projects by default. */
+export type AutomaticInjectionCheck = 'off' | 'agentContext' | 'allDocuments';
 /** The bottom corner the control wheel opens in; the inline end is the right in left-to-right layouts. */
 export type WheelDock = 'bottomInlineEnd' | 'bottomInlineStart';
 
@@ -81,7 +83,12 @@ export const EXPLORER_SECTIONS: readonly ExplorerSection[] = ['favourites', 'fol
 export const MIN_EXPLORER_SECTION_HEIGHT_PX = 48;
 export const MAX_EXPLORER_SECTION_HEIGHT_PX = 4000;
 export const RESIZABLE_PANELS: readonly ResizablePanel[] = ['explorer'];
-export const SIDEBAR_VIEWS: readonly SidebarView[] = ['explorer', 'search', 'outline'];
+export const SIDEBAR_VIEWS: readonly SidebarView[] = ['explorer', 'search', 'outline', 'promptInjection'];
+export const AUTOMATIC_INJECTION_CHECKS: readonly AutomaticInjectionCheck[] = [
+  'off',
+  'agentContext',
+  'allDocuments',
+];
 export const KIND_SWITCHERS: readonly KindSwitcher[] = ['wheel', 'bar', 'both'];
 export const WHEEL_DOCKS: readonly WheelDock[] = ['bottomInlineEnd', 'bottomInlineStart'];
 export const DEFAULT_PANEL_WIDTHS_PX: Readonly<Record<ResizablePanel, number>> = {
