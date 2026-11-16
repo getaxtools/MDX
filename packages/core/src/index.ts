@@ -309,3 +309,11 @@ export {
   type SpecAfterChange,
 } from './spec-projects/change-based/applyDelta';
 export { type DeltaRefusal, type DeltaRefusalReason } from './spec-projects/change-based/deltaRefusals';
+export {
+  activeTaskDocumentsOf,
+  specProjectsOverview,
+  type ChangeDocuments,
+  type ChangeSummary,
+  type ProjectDocument,
+  type SpecProjectSummary,
+} from './spec-projects/overview/specProjectsOverview';

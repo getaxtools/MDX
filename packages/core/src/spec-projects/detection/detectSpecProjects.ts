@@ -1,5 +1,6 @@
 import type { SpecProjectManifest } from '@mdx/platform';
 import { topLevelYamlValue } from '../yaml/readTopLevelYamlEntries';
+import { keyOf, ProjectFiles, uniqueInAnyCase } from './ProjectFiles';
 
 export type SpecLayoutKind =
   'changeBased' | 'featureNumbered' | 'requirementsDesignTasks' | 'decisionRecords';
@@ -69,78 +70,7 @@ const TIMESTAMPED_FEATURE = /^(\d{8}-\d{6})-./;
 const NUMBERED_FEATURE = /^(\d{3,})-./;
 const DECISION_RECORD = /^(\d+)-.*\.(?:md|markdown)$/i;
 
-/** The manifest seen from one project folder: paths relative to it, compared in any case. */
-class ProjectView {
-  private readonly folderKeys: ReadonlySet<string>;
-  private readonly textByFileKey: ReadonlyMap<string, string | null>;
-
-  constructor(
-    readonly folders: readonly string[],
-    readonly files: readonly { readonly path: string; readonly text: string | null }[],
-  ) {
-    this.folderKeys = new Set(
-      [...folders, ...files.flatMap((file) => parentFoldersOf(file.path))].map(keyOf),
-    );
-    this.textByFileKey = new Map(files.map((file) => [keyOf(file.path), file.text]));
-  }
-
-  static of(manifest: SpecProjectManifest, projectFolder: string): ProjectView {
-    const prefix = projectFolder === '' ? '' : `${keyOf(projectFolder)}/`;
-    const inside = (path: string) => keyOf(path).startsWith(prefix);
-    const relative = (path: string) => path.slice(prefix.length);
-    return new ProjectView(
-      manifest.folders.filter(inside).map(relative),
-      manifest.files
-        .filter((file) => inside(file.path))
-        .map((file) => ({ ...file, path: relative(file.path) })),
-    );
-  }
-
-  hasFolder(folder: string): boolean {
-    return this.folderKeys.has(keyOf(folder));
-  }
-
-  hasFile(path: string): boolean {
-    return this.textByFileKey.has(keyOf(path));
-  }
-
-  textOf(path: string): string | undefined {
-    return this.textByFileKey.get(keyOf(path)) ?? undefined;
-  }
-
-  /** The names of the folders directly inside a folder. */
-  subfolderNamesOf(folder: string): string[] {
-    const prefix = `${keyOf(folder)}/`;
-    const names = [...this.folders, ...this.files.flatMap((file) => parentFoldersOf(file.path))]
-      .filter((path) => keyOf(path).startsWith(prefix))
-      .map((path) => path.slice(prefix.length).split('/')[0] ?? '');
-    return uniqueInAnyCase(names);
-  }
-
-  /** The paths of the files directly inside a folder. */
-  filesDirectlyIn(folder: string): string[] {
-    const prefix = `${keyOf(folder)}/`;
-    return this.files
-      .map((file) => file.path)
-      .filter((path) => keyOf(path).startsWith(prefix) && !path.slice(prefix.length).includes('/'));
-  }
-}
-
-function keyOf(path: string): string {
-  return path.toLowerCase();
-}
-
-function parentFoldersOf(path: string): string[] {
-  const parts = path.split('/').slice(0, -1);
-  return parts.map((_, index) => parts.slice(0, index + 1).join('/'));
-}
-
-function uniqueInAnyCase(names: readonly string[]): string[] {
-  const byKey = new Map(names.filter((name) => name !== '').map((name) => [keyOf(name), name]));
-  return [...byKey.values()].sort((first, second) => first.localeCompare(second));
-}
-
-function changeBasedLayoutOf(view: ProjectView): ChangeBasedLayout | undefined {
+function changeBasedLayoutOf(view: ProjectFiles): ChangeBasedLayout | undefined {
   const configuration = CONFIGURATION_FILES.map((name) => `${CHANGE_BASED_FOLDER}/${name}`).find((path) =>
     view.hasFile(path),
   );
@@ -171,7 +101,7 @@ function compareFeatures(first: FeatureFolder, second: FeatureFolder): number {
   return (first.timestamp ?? '').localeCompare(second.timestamp ?? '');
 }
 
-function featureNumberedLayoutOf(view: ProjectView): FeatureNumberedLayout | undefined {
+function featureNumberedLayoutOf(view: ProjectFiles): FeatureNumberedLayout | undefined {
   if (!view.hasFolder(FEATURE_MARKER_FOLDER)) return undefined;
   const features = view
     .subfolderNamesOf(FEATURES_FOLDER)
@@ -180,7 +110,7 @@ function featureNumberedLayoutOf(view: ProjectView): FeatureNumberedLayout | und
   return { kind: 'featureNumbered', folder: FEATURE_MARKER_FOLDER, features };
 }
 
-function requirementsDesignTasksLayoutOf(view: ProjectView): RequirementsDesignTasksLayout | undefined {
+function requirementsDesignTasksLayoutOf(view: ProjectFiles): RequirementsDesignTasksLayout | undefined {
   const specs = view
     .subfolderNamesOf(REQUIREMENTS_DESIGN_TASKS_FOLDER)
     .map((name) => ({ name, folder: `${REQUIREMENTS_DESIGN_TASKS_FOLDER}/${name}` }));
@@ -189,7 +119,7 @@ function requirementsDesignTasksLayoutOf(view: ProjectView): RequirementsDesignT
     : { kind: 'requirementsDesignTasks', folder: REQUIREMENTS_DESIGN_TASKS_FOLDER, specs };
 }
 
-function decisionRecordsLayoutOf(view: ProjectView): DecisionRecordsLayout | undefined {
+function decisionRecordsLayoutOf(view: ProjectFiles): DecisionRecordsLayout | undefined {
   const records = DECISION_RECORD_FOLDERS.flatMap((folder) => view.filesDirectlyIn(folder)).flatMap(
     (path) => {
       const number = DECISION_RECORD.exec(path.split('/').at(-1) ?? '')?.[1];
@@ -199,7 +129,7 @@ function decisionRecordsLayoutOf(view: ProjectView): DecisionRecordsLayout | und
   return records.length === 0 ? undefined : { kind: 'decisionRecords', records };
 }
 
-function layoutsOf(view: ProjectView): SpecLayout[] {
+function layoutsOf(view: ProjectFiles): SpecLayout[] {
   return [
     changeBasedLayoutOf(view),
     featureNumberedLayoutOf(view),
@@ -230,12 +160,12 @@ function subfolderCandidates(manifest: SpecProjectManifest, rootLayouts: readonl
 
 /** The spec projects of a scanned root: the root itself and its direct subfolders, each with its layouts. */
 export function detectSpecProjects(manifest: SpecProjectManifest): DetectedSpecProject[] {
-  const rootLayouts = layoutsOf(ProjectView.of(manifest, ''));
+  const rootLayouts = layoutsOf(ProjectFiles.of(manifest, ''));
   const root: DetectedSpecProject = { folder: '', name: manifest.root.fileName, layouts: rootLayouts };
   const subfolderProjects = subfolderCandidates(manifest, rootLayouts).map((folder) => ({
     folder,
     name: folder,
-    layouts: layoutsOf(ProjectView.of(manifest, folder)),
+    layouts: layoutsOf(ProjectFiles.of(manifest, folder)),
   }));
   return [root, ...subfolderProjects].filter((project) => project.layouts.length > 0);
 }
