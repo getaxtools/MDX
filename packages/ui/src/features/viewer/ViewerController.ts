@@ -340,11 +340,7 @@ export class ViewerController {
       onConflict: (location) => this.showChangedOnDiskNotice(location, 'editing.conflict.message'),
     });
     this.propertyEditing = this.createPropertyEditing();
-    this.editingModes = new EditingModeActions(dependencies.session, {
-      activeEditedLocation: () => this.editedLocation(),
-      showNotice: (key, values) => this.showNotice(key, values),
-      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
-    });
+    this.editingModes = this.createEditingModes();
     this.liveReload = dependencies.watcher
       ? new LiveReload(dependencies.watcher, dependencies.session, (changedKeys) => {
           this.refreshPathStatuses({ isForced: true });
@@ -363,12 +359,24 @@ export class ViewerController {
     this.notesLocationActions = this.createNotesLocationActions();
     this.notesActions = this.createNotesActions();
     this.notesIndexActions = this.createNotesIndexActions();
-    this.specViewerActions = dependencies.specProjects
-      ? new SpecViewerActions({
-          specProjects: dependencies.specProjects,
-          onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
-        })
-      : undefined;
+    this.specViewerActions = this.createSpecViewerActions();
+  }
+
+  private createEditingModes(): EditingModeActions {
+    return new EditingModeActions(this.dependencies.session, {
+      activeEditedLocation: () => this.editedLocation(),
+      showNotice: (key, values) => this.showNotice(key, values),
+      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+    });
+  }
+
+  private createSpecViewerActions(): SpecViewerActions | undefined {
+    const { specProjects } = this.dependencies;
+    if (!specProjects) return undefined;
+    return new SpecViewerActions({
+      specProjects,
+      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+    });
   }
 
   private createPropertyEditing(): PropertyEditing {
