@@ -62,7 +62,10 @@ function lineFrom(lines: readonly string[], from: 'start' | 'end', offset: numbe
   return from === 'start' ? lines[offset] : lines[lines.length - 1 - offset];
 }
 
+/** Ties go to Windows breaks, then Unix ones, as before old Mac breaks were kept. */
 function mostCommonBreakOf(breaks: readonly string[]): string {
-  const windowsBreaks = breaks.filter((lineBreak) => lineBreak === '\r\n').length;
-  return windowsBreaks * 2 >= breaks.length && windowsBreaks > 0 ? '\r\n' : '\n';
+  const countOf = (kind: string) => breaks.filter((lineBreak) => lineBreak === kind).length;
+  const [windows, unix, oldMac] = [countOf('\r\n'), countOf('\n'), countOf('\r')];
+  if (oldMac > windows && oldMac > unix) return '\r';
+  return windows > 0 && windows >= unix ? '\r\n' : '\n';
 }

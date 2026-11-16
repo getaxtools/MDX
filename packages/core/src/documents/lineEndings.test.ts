@@ -23,6 +23,10 @@ describe('line endings', () => {
     expect(withDocumentLineBreaks('A\nb\nC\n', 'mixed', 'a\r\nb\nc\r\n')).toBe('A\r\nb\nC\r\n');
   });
 
+  it('gives a new line the old Mac break in a document that mostly uses it', () => {
+    expect(withDocumentLineBreaks('a\nnew\nb\nc', 'mixed', 'a\rb\rc')).toBe('a\rnew\rb\rc');
+  });
+
   it('keeps old Mac breaks in a mixed document', () => {
     expect(withDocumentLineBreaks('a\nB\nc', 'mixed', 'a\rb\nc')).toBe('a\rB\nc');
   });

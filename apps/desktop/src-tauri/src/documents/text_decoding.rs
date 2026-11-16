@@ -53,9 +53,14 @@ pub fn encoding_for_label(label: &str) -> Option<&'static Encoding> {
     Encoding::for_label(label.trim().as_bytes())
 }
 
+/// Old Mac breaks (a lone `\r`) count as mixed, so saving keeps each line's own break.
 pub fn detect_line_ending(text: &str) -> LineEnding {
     let windows_line_endings = text.matches("\r\n").count();
     let unix_line_endings = text.matches('\n').count() - windows_line_endings;
+    let old_mac_line_endings = text.matches('\r').count() - windows_line_endings;
+    if old_mac_line_endings > 0 {
+        return LineEnding::Mixed;
+    }
     match (windows_line_endings > 0, unix_line_endings > 0) {
         (true, true) => LineEnding::Mixed,
         (true, false) => LineEnding::Crlf,
@@ -187,5 +192,12 @@ mod tests {
         assert_eq!(detect_line_ending("a\r\nb\r\n"), LineEnding::Crlf);
         assert_eq!(detect_line_ending("a\r\nb\n"), LineEnding::Mixed);
         assert_eq!(detect_line_ending("single line"), LineEnding::Lf);
+    }
+
+    #[test]
+    fn old_mac_breaks_count_as_mixed_so_each_break_is_kept() {
+        assert_eq!(detect_line_ending("a\rb\r"), LineEnding::Mixed);
+        assert_eq!(detect_line_ending("a\r\nb\rc\r\n"), LineEnding::Mixed);
+        assert_eq!(detect_line_ending("a\rb\n"), LineEnding::Mixed);
     }
 }
