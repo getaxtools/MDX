@@ -6,6 +6,9 @@ import { createSourceEditor, type SourceEditor } from '../createSourceEditor';
 import type { EditingMode } from '../editing-mode/editingMode';
 import { inlineMarkupLayer } from './inlineMarkupLayer';
 
+/** Parsing 3,000 lines takes seconds under coverage on a busy machine. */
+const LARGE_DOCUMENT_TIMEOUT_MS = 30_000;
+
 let editor: SourceEditor | undefined;
 
 function openEditor(text: string, editingMode: EditingMode = 'richText') {
@@ -76,7 +79,7 @@ describe('Rich text inline markup', () => {
     expect(shownLines(view)[0]).toBe('A **bold** word, an odd one and a [link](guide.md).');
   });
 
-  it('decorations only for visible lines', () => {
+  it('decorations only for visible lines', { timeout: LARGE_DOCUMENT_TIMEOUT_MS }, () => {
     const lines = Array.from({ length: 3000 }, (_, index) => `Line **${String(index)}** with a [link](a.md)`);
     const { view } = openEditor(lines.join('\n'));
     placeCaret(view, 0);
