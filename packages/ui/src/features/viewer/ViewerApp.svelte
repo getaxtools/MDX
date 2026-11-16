@@ -33,6 +33,8 @@
   import PanelResizer from '../../components/PanelResizer.svelte';
   import SettingsDialog from '../settings/SettingsDialog.svelte';
   import StartPage from '../start-page/StartPage.svelte';
+  import SpecDashboard from '../spec-viewer/SpecDashboard.svelte';
+  import { shownDashboardOf } from '../spec-viewer/specDashboard';
   import AboutDialog from '../about/AboutDialog.svelte';
   import type { AppInfo } from '../about/AppInfo';
   import type { ThirdPartyLicensesLoader } from '../about/ThirdPartyLicenses';
@@ -159,6 +161,7 @@
     (shownWorkspace?.kindId ?? DEFAULT_WORKSPACE_KIND_ID) as WorkspaceKindId,
   );
   const activeKey = $derived(activeTab?.location.canonicalKey);
+  const shownDashboard = $derived(shownDashboardOf(snapshot?.specProjects, activeTab?.location));
   let headingRequest: HeadingRequest | undefined = $state();
   let cursorCount = $state(1);
   let isCaretInLink = $state(false);
@@ -480,6 +483,12 @@
               {translator}
               onCommand={(command: ViewerCommand) => void controller.execute(command)}
               onOpenRecentFile={(recentFile: RecentFile) => void controller.openRecentFile(recentFile)}
+            />
+          {:else if shownDashboard}
+            <SpecDashboard
+              dashboard={shownDashboard}
+              {translator}
+              onOpenDocument={(documentPath: string) => void controller.openDocuments([documentPath])}
             />
           {:else if editedDocument}
             {#key editedDocument.canonicalKey}

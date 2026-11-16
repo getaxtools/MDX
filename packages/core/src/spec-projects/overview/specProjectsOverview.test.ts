@@ -1,6 +1,11 @@
 import type { SpecProjectManifest } from '@mdx/platform';
 import { describe, expect, it } from 'vitest';
-import { activeTaskDocumentsOf, specProjectsOverview } from './specProjectsOverview';
+import {
+  activeTaskDocumentsOf,
+  changeStatusOf,
+  specProjectsOverview,
+  type ChangeSummary,
+} from './specProjectsOverview';
 
 const ROOT = 'C:\\Projects\\shop';
 
@@ -55,6 +60,7 @@ describe('specProjectsOverview', () => {
           deltas: [{ name: 'tabs', path: 'openspec/changes/add-pins/specs/tabs/spec.md' }],
         },
         progress: undefined,
+        created: undefined,
       },
     ]);
     expect(project?.archivedChanges.map((change) => [change.name, change.archivedOn])).toEqual([
@@ -117,5 +123,42 @@ describe('specProjectsOverview', () => {
     expect(projects.map((project) => [project.name, project.layouts])).toEqual([
       ['shop', ['changeBased', 'featureNumbered']],
     ]);
+  });
+
+  it('reads the creation day from the change metadata', () => {
+    const files = [
+      ...PROJECT.map((path) => ({ path, sizeBytes: 1, modifiedAtMs: 1, text: null })),
+      {
+        path: 'openspec/changes/add-pins/.openspec.yaml',
+        sizeBytes: 1,
+        modifiedAtMs: 1,
+        text: 'schema: spec-driven\ncreated: 2026-11-12\n',
+      },
+    ];
+
+    const [project] = specProjectsOverview(manifestOf([], { files }));
+
+    expect(project?.activeChanges[0]?.created).toBe('2026-11-12');
+  });
+});
+
+describe('changeStatusOf', () => {
+  const change = (progress?: { done: number; total: number }, archivedOn?: string): ChangeSummary => ({
+    name: 'add-pins',
+    folder: 'openspec/changes/add-pins',
+    archivedOn,
+    documents: { deltas: [] },
+    progress,
+  });
+
+  it.each([
+    ['noTasks', change()],
+    ['noTasks', change({ done: 0, total: 0 })],
+    ['notStarted', change({ done: 0, total: 8 })],
+    ['inProgress', change({ done: 3, total: 8 })],
+    ['tasksComplete', change({ done: 5, total: 5 })],
+    ['archived', change({ done: 5, total: 5 }, '2026-10-01')],
+  ])('is %s', (status, summary) => {
+    expect(changeStatusOf(summary)).toBe(status);
   });
 });

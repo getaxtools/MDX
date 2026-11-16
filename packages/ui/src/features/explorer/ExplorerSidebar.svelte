@@ -157,6 +157,8 @@
         isExpanded={isExpanded('folders')}
         onToggleExpanded={() => toggle('folders')}
         {onOpenDocument}
+        onOpenDashboard={(rootKey: string, folder: string) =>
+          onCommand({ kind: 'openSpecDashboard', rootKey, folder })}
         {activeDocumentKey}
       />
     {:else}

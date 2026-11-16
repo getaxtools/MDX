@@ -7,6 +7,7 @@ import {
 } from '../detection/detectSpecProjects';
 import { ProjectFiles } from '../detection/ProjectFiles';
 import { countTaskProgress, type TaskProgress } from '../tasks/countTaskProgress';
+import { CHANGE_METADATA_FILE, readChangeMetadata } from '../change-based/readChangeMetadata';
 
 /** A document of a project, by its path relative to the scanned root. */
 export interface ProjectDocument {
@@ -31,6 +32,8 @@ export interface ChangeSummary {
   readonly documents: ChangeDocuments;
   /** Undefined until its tasks document has been read, or when it has none. */
   readonly progress?: TaskProgress | undefined;
+  /** The creation day its metadata gives, as `YYYY-MM-DD`. */
+  readonly created?: string | undefined;
 }
 
 export interface SpecProjectSummary {
@@ -112,6 +115,7 @@ function changeOf(reading: ChangeReading, changesFolder: string, folderName: str
     archivedOn: archived?.[1],
     documents,
     progress: tasksText === undefined ? undefined : countTaskProgress(tasksText),
+    created: readChangeMetadata(reading.files.textOf(`${changeFolder}/${CHANGE_METADATA_FILE}`)).created,
   };
 }
 
@@ -192,4 +196,15 @@ export function activeTaskDocumentsOf(projects: readonly SpecProjectSummary[]): 
   return projects.flatMap((project) =>
     project.activeChanges.flatMap((change) => change.documents.tasks ?? []),
   );
+}
+
+export type ChangeStatus = 'noTasks' | 'notStarted' | 'inProgress' | 'tasksComplete' | 'archived';
+
+/** Where a change stands by its tasks; a change with all its tasks done is ready to archive. */
+export function changeStatusOf(change: ChangeSummary): ChangeStatus {
+  if (change.archivedOn !== undefined) return 'archived';
+  const { progress } = change;
+  if (progress === undefined || progress.total === 0) return 'noTasks';
+  if (progress.done === 0) return 'notStarted';
+  return progress.done === progress.total ? 'tasksComplete' : 'inProgress';
 }

@@ -29,8 +29,32 @@ describe('SpecViewerActions', () => {
     expect(project?.activeChanges.map((change) => [change.name, change.progress])).toEqual([
       ['add-pins', { done: 1, total: 2 }],
     ]);
-    expect(specProjects.readFiles).toEqual([`${ROOT}|openspec/changes/add-pins/tasks.md`]);
+    expect(specProjects.readFiles.filter((read) => read.endsWith('tasks.md'))).toEqual([
+      `${ROOT}|openspec/changes/add-pins/tasks.md`,
+    ]);
     expect(onChange).toHaveBeenCalledTimes(2);
+  });
+
+  it('checks the structure of each active change against the current specs', async () => {
+    const specProjects = new InMemorySpecProjects({
+      [ROOT]: {
+        files: {
+          'openspec/config.yaml': 'schema: spec-driven',
+          'openspec/specs/tabs/spec.md':
+            '## Purpose\nTabs.\n## Requirements\n### Requirement: Open\nIt SHALL open.\n#### Scenario: A\n- **WHEN** a\n- **THEN** b\n#### Scenario: B\n- **WHEN** a\n- **THEN** b',
+          'openspec/changes/add-pins/specs/tabs/spec.md':
+            '## MODIFIED Requirements\n### Requirement: Open\nIt SHALL open.\n#### Scenario: A\n- **WHEN** a\n- **THEN** b',
+        },
+      },
+    });
+    const { actions } = actionsWith(specProjects);
+
+    await actions.show([ROOT]);
+
+    const findings = actions.view()?.roots?.[0]?.findingsByChange.get('openspec/changes/add-pins');
+    expect(findings?.map((finding) => [finding.rule, finding.detail])).toEqual([
+      ['modifiedDropsScenario', 'B'],
+    ]);
   });
 
   it('shows the folders as being read until the scan ends', () => {

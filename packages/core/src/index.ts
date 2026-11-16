@@ -313,7 +313,9 @@ export {
 export { type DeltaRefusal, type DeltaRefusalReason } from './spec-projects/change-based/deltaRefusals';
 export {
   activeTaskDocumentsOf,
+  changeStatusOf,
   specProjectsOverview,
+  type ChangeStatus,
   type ChangeDocuments,
   type ChangeSummary,
   type ProjectDocument,
@@ -353,3 +355,4 @@ export {
 } from './prompt-injection/ignoreFindings';
 export { isAgentFileLocation } from './prompt-injection/isAgentFileLocation';
 export { isTooLargeForRichText, MAX_RICH_TEXT_DOCUMENT_BYTES } from './documents/richTextSizeLimit';
+export { topLevelYamlValue } from './spec-projects/yaml/readTopLevelYamlEntries';

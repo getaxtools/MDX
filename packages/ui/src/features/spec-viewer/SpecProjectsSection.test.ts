@@ -36,6 +36,7 @@ function scanned(manifest: SpecProjectManifest, taskTexts = new Map<string, stri
     root: manifest.root,
     isIncomplete: manifest.isIncomplete,
     projects: specProjectsOverview(manifest, taskTexts),
+    findingsByChange: new Map(),
   };
 }
 
@@ -110,6 +111,22 @@ describe('SpecProjectsSection', () => {
     expect(onOpenDocument).toHaveBeenCalledWith(
       'C:\\Projects\\shop\\openspec\\changes\\add-pins\\proposal.md',
     );
+  });
+
+  it('opens the dashboard of a project from its first row', async () => {
+    const onOpenDashboard = vi.fn<(rootKey: string, folder: string) => void>();
+    render(SpecProjectsSection, {
+      roots: [scanned(manifestOf(PROJECT_FILES))],
+      translator: createTranslator(),
+      isExpanded: true,
+      onToggleExpanded: vi.fn(),
+      onOpenDocument: vi.fn(),
+      onOpenDashboard,
+    });
+
+    await userEvent.click(screen.getByRole('treeitem', { name: 'Dashboard' }));
+
+    expect(onOpenDashboard).toHaveBeenCalledWith('c:\\projects\\shop', '');
   });
 
   it('marks a linked folder that is not read', async () => {

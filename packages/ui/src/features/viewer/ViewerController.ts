@@ -98,6 +98,8 @@ import { NotesLocationActions, isNotesLocationCommand } from '../notes-location/
 import { NotesActions, isNotesCommand, type NotesCommand, type NotesView } from '../notes/NotesActions';
 import { NotesIndexActions, type NoteBacklinks } from '../notes/NotesIndexActions';
 import { SpecViewerActions, type SpecProjectsView } from '../spec-viewer/SpecViewerActions';
+import { dashboardLocationOf } from '../spec-viewer/specDashboard';
+import { isSpecViewerCommand, type SpecViewerCommand } from '../spec-viewer/specViewerCommands';
 import { windowTitleFor } from '../workspaces/windowTitle';
 import { recentWorkspaceLinks } from '../workspaces/recentWorkspaceLinks';
 import { applySessionCommand } from './applySessionCommand';
@@ -458,6 +460,18 @@ export class ViewerController {
   /** The window got the focus: a Notes folder that reports no changes is checked again now. */
   windowFocused(): Promise<void> {
     return this.notesIndexActions?.windowFocused() ?? Promise.resolve();
+  }
+
+  private runSpecViewerCommand(command: SpecViewerCommand): Promise<void> {
+    const scanned = this.specViewerActions
+      ?.view()
+      ?.roots?.find((root) => root.root.canonicalKey === command.rootKey);
+    const project = scanned?.projects.find((candidate) => candidate.folder === command.folder);
+    if (project)
+      this.dependencies.session.openView(
+        dashboardLocationOf(command.rootKey, project, this.dependencies.translator),
+      );
+    return Promise.resolve();
   }
 
   /** A Spec viewer workspace's folders are scanned again only when the workspace or its folders change. */
@@ -857,6 +871,7 @@ export class ViewerController {
   private runFeatureCommand(command: ViewerCommand): Promise<void> | undefined {
     if (isNotesLocationCommand(command)) return this.notesLocationActions?.run(command) ?? Promise.resolve();
     if (isNotesCommand(command)) return this.runNotesCommand(command);
+    if (isSpecViewerCommand(command)) return this.runSpecViewerCommand(command);
     if (isWorkspaceFileCommand(command)) return this.runWorkspaceFileCommand(command);
     if (isWorkspaceCommand(command)) return this.workspaceActions.run(command);
     return undefined;

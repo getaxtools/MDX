@@ -73,6 +73,22 @@ describe('a Spec viewer workspace', () => {
     expect(project?.activeChanges[0]?.progress).toEqual({ done: 1, total: 1 });
   });
 
+  it('opens a project dashboard in a tab that stays out of recent files', async () => {
+    const { controller, folders, snapshot } = await startWithSpecProjects();
+    await controller.execute({ kind: 'createWorkspace', name: 'Plans', kindId: 'specViewer' });
+    folders.pickedFolder = PROJECT;
+    await controller.execute({ kind: 'openFolder' });
+    await settled();
+    const rootKey = snapshot().specProjects?.roots?.[0]?.root.canonicalKey ?? '';
+
+    await controller.execute({ kind: 'openSpecDashboard', rootKey, folder: '' });
+
+    const activeTab = snapshot().viewer.tabStrip.activeTab();
+    expect(activeTab?.location.fileName).toBe('Dashboard - shop');
+    expect(activeTab?.location.canonicalKey.startsWith('view:')).toBe(true);
+    expect(snapshot().viewer.recentFiles.entries()).toEqual([]);
+  });
+
   it('does not scan the folders of a Markdown viewer workspace', async () => {
     const { controller, folders, specProjects, snapshot } = await startWithSpecProjects();
     folders.pickedFolder = PROJECT;

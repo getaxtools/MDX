@@ -1,4 +1,10 @@
-import type { ChangeSummary, ProjectDocument, SpecLayoutKind, SpecProjectSummary } from '@mdx/core';
+import type {
+  ChangeSummary,
+  ProjectDocument,
+  SpecLayoutKind,
+  SpecProjectSummary,
+  StructuralFinding,
+} from '@mdx/core';
 import type { MessageKey, Translator } from '@mdx/i18n';
 import type { DocumentLocation, SpecProjectLink } from '@mdx/platform';
 
@@ -7,6 +13,8 @@ export interface ScannedSpecRoot {
   readonly root: DocumentLocation;
   readonly isIncomplete: boolean;
   readonly projects: readonly SpecProjectSummary[];
+  /** The structural findings of each active change, by its folder relative to the root. */
+  readonly findingsByChange: ReadonlyMap<string, readonly StructuralFinding[]>;
 }
 
 export interface SpecTreeNode {
@@ -19,6 +27,8 @@ export interface SpecTreeNode {
   /** The full path of the document the row opens. */
   readonly documentPath?: string | undefined;
   readonly isUnavailable?: boolean | undefined;
+  /** The project whose dashboard the row opens. */
+  readonly dashboard?: { readonly rootKey: string; readonly folder: string } | undefined;
   readonly isInitiallyExpanded: boolean;
   readonly children: readonly SpecTreeNode[];
 }
@@ -152,7 +162,17 @@ function linkNode(context: TreeContext, link: SpecProjectLink): SpecTreeNode {
 }
 
 function projectGroups(context: TreeContext, project: SpecProjectSummary): SpecTreeNode[] {
-  const groups: SpecTreeNode[] = [];
+  const label = context.translator.translate('specViewer.sidebar.dashboard');
+  const groups: SpecTreeNode[] = [
+    {
+      id: `${context.idPrefix}|dashboard`,
+      label,
+      accessibleName: label,
+      dashboard: { rootKey: context.root.canonicalKey, folder: project.folder },
+      isInitiallyExpanded: false,
+      children: [],
+    },
+  ];
   const add = (key: MessageKey, children: readonly SpecTreeNode[], isInitiallyExpanded = false) => {
     if (children.length > 0)
       groups.push(groupNode(context, { titleKey: key, children, isInitiallyExpanded }));

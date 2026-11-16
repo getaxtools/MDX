@@ -15,6 +15,7 @@
     isExpanded: boolean;
     onToggleExpanded: () => void;
     onOpenDocument: (documentPath: string) => void;
+    onOpenDashboard?: (rootKey: string, folder: string) => void;
     activeDocumentKey?: string | undefined;
   }
 
@@ -25,6 +26,7 @@
     isExpanded,
     onToggleExpanded,
     onOpenDocument,
+    onOpenDashboard = () => undefined,
     activeDocumentKey,
   }: Props = $props();
 
@@ -50,7 +52,8 @@
   }
 
   function chooseRow(node: SpecTreeNode) {
-    if (node.documentPath !== undefined) onOpenDocument(node.documentPath);
+    if (node.dashboard) onOpenDashboard(node.dashboard.rootKey, node.dashboard.folder);
+    else if (node.documentPath !== undefined) onOpenDocument(node.documentPath);
     else if (node.children.length > 0) toggleRow(node);
   }
 

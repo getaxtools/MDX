@@ -1,5 +1,6 @@
 import { activeTaskDocumentsOf, AGENT_INSTRUCTION_LOCATIONS, specProjectsOverview } from '@mdx/core';
 import type { SpecProjectManifest, SpecProjectPort } from '@mdx/platform';
+import { activeChangeFindings, type ProjectTextReader } from './activeChangeFindings';
 import type { ScannedSpecRoot } from './specProjectTree';
 
 /** What the Spec viewer's sidebar shows for the folders of the shown workspace. */
@@ -65,20 +66,29 @@ export class SpecViewerActions {
   }
 
   private async overviewOf(folderPath: string, manifest: SpecProjectManifest): Promise<ScannedSpecRoot> {
-    const taskDocuments = activeTaskDocumentsOf(specProjectsOverview(manifest));
+    const readText = this.cachedReaderFor(folderPath);
     const taskTexts = new Map<string, string>();
-    await Promise.all(
-      taskDocuments.map(async (path) => {
-        const document = await this.dependencies.specProjects
-          .readProjectFile(folderPath, path)
-          .catch(() => undefined);
-        if (document) taskTexts.set(path, document.text);
-      }),
-    );
-    return {
-      root: manifest.root,
-      isIncomplete: manifest.isIncomplete,
-      projects: specProjectsOverview(manifest, taskTexts),
+    for (const path of activeTaskDocumentsOf(specProjectsOverview(manifest))) {
+      const text = await readText(path);
+      if (text !== undefined) taskTexts.set(path, text);
+    }
+    const projects = specProjectsOverview(manifest, taskTexts);
+    const findingsByChange = await activeChangeFindings(manifest, projects, readText);
+    return { root: manifest.root, isIncomplete: manifest.isIncomplete, projects, findingsByChange };
+  }
+
+  /** Reads each file of a scan once, however many views need it. */
+  private cachedReaderFor(folderPath: string): ProjectTextReader {
+    const texts = new Map<string, Promise<string | undefined>>();
+    return (relativePath) => {
+      const known = texts.get(relativePath);
+      if (known) return known;
+      const reading = this.dependencies.specProjects
+        .readProjectFile(folderPath, relativePath)
+        .then((document) => document.text)
+        .catch(() => undefined);
+      texts.set(relativePath, reading);
+      return reading;
     };
   }
 }
