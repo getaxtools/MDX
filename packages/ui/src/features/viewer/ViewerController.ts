@@ -102,7 +102,11 @@ import { NotesIndexActions, type NoteBacklinks } from '../notes/NotesIndexAction
 import { SpecViewerActions, type SpecProjectsView } from '../spec-viewer/SpecViewerActions';
 import { dashboardLocationOf } from '../spec-viewer/specDashboard';
 import { changePageLocationOf } from '../spec-viewer/specChangePage';
-import { isSpecViewerCommand, type SpecViewerCommand } from '../spec-viewer/specViewerCommands';
+import {
+  isRefusedInReadOnlyWorkspace,
+  isSpecViewerCommand,
+  type SpecViewerCommand,
+} from '../spec-viewer/specViewerCommands';
 import { windowTitleFor } from '../workspaces/windowTitle';
 import { recentWorkspaceLinks } from '../workspaces/recentWorkspaceLinks';
 import { applySessionCommand } from './applySessionCommand';
@@ -593,6 +597,11 @@ export class ViewerController {
     if (heading) this.revealLinkedHeading(`#${heading.id}`);
   }
 
+  /** Documents are never changed from a Spec viewer workspace, so its files stay as agents wrote them. */
+  private isSpecViewerShown(): boolean {
+    return this.dependencies.session.shownWorkspace()?.kindId === 'specViewer';
+  }
+
   /** A Spec viewer workspace's folders are scanned again only when the workspace or its folders change. */
   private showSpecProjects(): void {
     const actions = this.specViewerActions;
@@ -972,6 +981,10 @@ export class ViewerController {
     }
     if (command.kind === 'setLanguage') {
       this.changeLanguage(command.language);
+      return;
+    }
+    if (this.isSpecViewerShown() && isRefusedInReadOnlyWorkspace(command)) {
+      this.showNotice('specViewer.readOnly');
       return;
     }
     const featureRun = this.runFeatureCommand(command);

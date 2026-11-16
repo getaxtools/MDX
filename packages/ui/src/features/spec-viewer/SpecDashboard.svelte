@@ -52,6 +52,7 @@
     </table>
   {/if}
   <p class="notice">{translator.translate('specViewer.dashboard.subsetNotice')}</p>
+  <p class="notice">{translator.translate('specViewer.notAffiliated')}</p>
 </article>
 
 <style>

@@ -989,6 +989,8 @@
   "specViewer.rule.purposeIsPlaceholder": "The purpose is still a placeholder.",
   "specViewer.rule.requirementTooLong": "Requirement \"{name}\" is longer than 500 characters.",
   "specViewer.rule.unknownMetadataKey": "Unknown keys in .openspec.yaml: {name}.",
+  "specViewer.readOnly": "Documents cannot be edited in a Spec viewer workspace. Open the document in a Markdown viewer workspace to edit it.",
+  "specViewer.notAffiliated": "MDX reads these folder layouts. It is not affiliated with or endorsed by their authors.",
   "settings.notes.confirmDeletion": "Ask before moving a note to the trash",
   "settings.notes.confirmDeletionDescription": "Deleted notes always go to the Notes trash first, so you can restore them.",
   "settings.notes.confirmLinkUpdates": "Ask before updating links to a renamed or moved note",

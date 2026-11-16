@@ -35,3 +35,17 @@ const SPEC_VIEWER_COMMAND_KINDS: ReadonlySet<string> = new Set([
 export function isSpecViewerCommand(command: { readonly kind: string }): command is SpecViewerCommand {
   return SPEC_VIEWER_COMMAND_KINDS.has(command.kind);
 }
+
+/** Commands that would change a document, which a Spec viewer workspace refuses. */
+const EDITING_COMMAND_KINDS: ReadonlySet<string> = new Set([
+  'toggleEditing',
+  'togglePreviewBesideEditor',
+  'newDocument',
+  'runEditorCommand',
+  'insertSnippet',
+  'changeOutlineSection',
+]);
+
+export function isRefusedInReadOnlyWorkspace(command: { readonly kind: string }): boolean {
+  return EDITING_COMMAND_KINDS.has(command.kind);
+}

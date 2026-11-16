@@ -106,6 +106,16 @@ describe('SpecDashboard', () => {
     expect(onOpenChange).toHaveBeenCalledWith('openspec/changes/add-pins');
   });
 
+  it('says that MDX is not affiliated with the authors of the layouts it reads', () => {
+    render(SpecDashboard, { dashboard: dashboard(), translator: createTranslator(), onOpenChange: vi.fn() });
+
+    expect(
+      screen.getByText(
+        'MDX reads these folder layouts. It is not affiliated with or endorsed by their authors.',
+      ),
+    ).toBeTruthy();
+  });
+
   it('says that it checks a subset of the spec tool rules', () => {
     render(SpecDashboard, {
       dashboard: dashboard(),
