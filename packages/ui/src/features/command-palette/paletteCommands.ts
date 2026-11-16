@@ -62,6 +62,7 @@ const COMMANDS_WITHOUT_SHORTCUTS: readonly CommandWithoutShortcut[] = [
   { command: { kind: 'exportDocument', format: 'plainText' }, actionKey: 'menu.file.exportAsPlainText' },
   { command: { kind: 'toggleStatusBar' }, actionKey: 'menu.view.toggleStatusBar' },
   { command: { kind: 'toggleBreadcrumbs' }, actionKey: 'settings.breadcrumbs.label' },
+  { command: { kind: 'toggleHiddenCharacters' }, actionKey: 'promptInjection.hiddenCharacters.toggle' },
   { command: { kind: 'showAbout' }, actionKey: 'menu.help.about' },
   { command: { kind: 'confirmClearAllData' }, actionKey: 'privacy.clearAllData' },
   { command: { kind: 'showWorkspaceKindSettings' }, actionKey: 'workspaceKinds.choose' },

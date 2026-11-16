@@ -18,9 +18,10 @@ use crate::documents::DocumentError;
 use crate::open_requests::MAIN_WINDOW_LABEL;
 use recent_files_menu::{RecentMenuContents, fill_recent_menu};
 use view_menu_state::{
-    EDITING_MODE_ITEM_PREFIX, READING_WIDTH_ITEM_PREFIX, THEME_ITEM_PREFIX, TOGGLE_OUTLINE_ITEM_ID,
-    TOGGLE_PREVIEW_BESIDE_EDITOR_ITEM_ID, TOGGLE_SIDEBAR_ITEM_ID, TOGGLE_SOURCE_VIEW_ITEM_ID,
-    TOGGLE_STATUS_BAR_ITEM_ID, TYPOGRAPHY_ITEM_PREFIX,
+    EDITING_MODE_ITEM_PREFIX, READING_WIDTH_ITEM_PREFIX, THEME_ITEM_PREFIX,
+    TOGGLE_HIDDEN_CHARACTERS_ITEM_ID, TOGGLE_OUTLINE_ITEM_ID, TOGGLE_PREVIEW_BESIDE_EDITOR_ITEM_ID,
+    TOGGLE_SIDEBAR_ITEM_ID, TOGGLE_SOURCE_VIEW_ITEM_ID, TOGGLE_STATUS_BAR_ITEM_ID,
+    TYPOGRAPHY_ITEM_PREFIX,
 };
 
 pub const MENU_COMMAND_EVENT: &str = "menu-command";
@@ -184,6 +185,12 @@ const SOURCE_VIEW_TOGGLE_ITEM: CommandItem = (
     TOGGLE_SOURCE_VIEW_ITEM_ID,
     "menu.view.toggleSource",
     Some("Ctrl+U"),
+);
+
+const HIDDEN_CHARACTERS_TOGGLE_ITEM: CommandItem = (
+    TOGGLE_HIDDEN_CHARACTERS_ITEM_ID,
+    "promptInjection.hiddenCharacters.toggle",
+    None,
 );
 
 const PROMPT_INJECTION_CHECK_ITEM: CommandItem = (
@@ -539,6 +546,7 @@ impl MainMenuBuilder<'_> {
         let toggle_editing = self.command_item(TOGGLE_EDITING_ITEM)?;
         let full_screen = self.command_item(FULL_SCREEN_ITEM)?;
         let prompt_injection_check = self.command_item(PROMPT_INJECTION_CHECK_ITEM)?;
+        let hidden_characters = self.toggle_item(HIDDEN_CHARACTERS_TOGGLE_ITEM)?;
         let builder = SubmenuBuilder::new(self.app, self.labels.label("menu.view"))
             .item(&command_palette)
             .item(&control_wheel)
@@ -555,6 +563,7 @@ impl MainMenuBuilder<'_> {
             .with_items(builder, &ZOOM_ITEMS)?
             .separator()
             .item(&source_view)
+            .item(&hidden_characters)
             .item(&prompt_injection_check)
             .separator();
         panels
@@ -688,6 +697,7 @@ mod tests {
                 FULL_SCREEN_ITEM,
                 CONTROL_WHEEL_ITEM,
                 PROMPT_INJECTION_CHECK_ITEM,
+                HIDDEN_CHARACTERS_TOGGLE_ITEM,
             ])
             .chain(&EXPORT_ITEMS)
             .chain(&NAVIGATION_ITEMS)

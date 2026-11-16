@@ -9,6 +9,7 @@ pub const TOGGLE_OUTLINE_ITEM_ID: &str = "toggleOutline";
 pub const TOGGLE_STATUS_BAR_ITEM_ID: &str = "toggleStatusBar";
 pub const TOGGLE_SOURCE_VIEW_ITEM_ID: &str = "toggleSourceView";
 pub const TOGGLE_PREVIEW_BESIDE_EDITOR_ITEM_ID: &str = "togglePreviewBesideEditor";
+pub const TOGGLE_HIDDEN_CHARACTERS_ITEM_ID: &str = "toggleHiddenCharacters";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -25,6 +26,8 @@ pub struct ViewMenuState {
     pub is_source_view: bool,
     #[serde(default)]
     pub is_preview_beside_editor: bool,
+    #[serde(default)]
+    pub is_showing_hidden_characters: bool,
 }
 
 impl ViewMenuState {
@@ -47,6 +50,7 @@ impl ViewMenuState {
             TOGGLE_STATUS_BAR_ITEM_ID => self.is_status_bar_visible,
             TOGGLE_SOURCE_VIEW_ITEM_ID => self.is_source_view,
             TOGGLE_PREVIEW_BESIDE_EDITOR_ITEM_ID => self.is_preview_beside_editor,
+            TOGGLE_HIDDEN_CHARACTERS_ITEM_ID => self.is_showing_hidden_characters,
             _ => false,
         }
     }
@@ -67,6 +71,7 @@ mod tests {
             is_status_bar_visible: true,
             is_source_view: false,
             is_preview_beside_editor: true,
+            is_showing_hidden_characters: false,
         }
     }
 
@@ -127,6 +132,16 @@ mod tests {
 
         assert!(!state.is_checked("toggleStatusBar"));
         assert!(state.is_checked("toggleSourceView"));
+    }
+
+    #[test]
+    fn checks_show_hidden_characters_while_they_are_shown() {
+        let mut state = state();
+        assert!(!state.is_checked("toggleHiddenCharacters"));
+
+        state.is_showing_hidden_characters = true;
+
+        assert!(state.is_checked("toggleHiddenCharacters"));
     }
 
     #[test]

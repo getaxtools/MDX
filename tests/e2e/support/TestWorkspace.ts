@@ -47,9 +47,11 @@ interface SavedAppState {
     readonly explorerSectionHeights?: Readonly<Record<string, number>>;
     readonly panelWidths?: Readonly<Record<string, number>>;
     readonly wheelDock?: string;
+    readonly isShowingHiddenCharacters?: boolean;
   };
   readonly workspaceKinds?: SavedWorkspaceKinds;
   readonly shortcutOverrides?: Readonly<Record<string, readonly string[]>>;
+  readonly injectionIgnoreEntries?: readonly unknown[];
 }
 
 export class TestWorkspace {
@@ -189,6 +191,14 @@ export class TestWorkspace {
 
   savedWheelDock(): string | undefined {
     return this.readSavedState()?.view?.wheelDock;
+  }
+
+  isShowingHiddenCharactersInSavedState(): boolean {
+    return this.readSavedState()?.view?.isShowingHiddenCharacters === true;
+  }
+
+  savedIgnoreEntryCount(): number {
+    return this.readSavedState()?.injectionIgnoreEntries?.length ?? 0;
   }
 
   savedShortcutOverrides(): Readonly<Record<string, readonly string[]>> | undefined {

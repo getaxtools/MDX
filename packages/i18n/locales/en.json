@@ -1042,5 +1042,7 @@
   "promptInjection.finding.ignoreRuleLabel": "Ignore this rule in this document: {rule}",
   "promptInjection.finding.showAgain": "Show again",
   "promptInjection.finding.showAgainLabel": "Show again: {rule} on line {line, number}",
-  "promptInjection.activityBar.label": "Prompt injection check"
+  "promptInjection.activityBar.label": "Prompt injection check",
+  "promptInjection.hiddenCharacters.toggle": "Show Hidden Characters",
+  "promptInjection.hiddenCharacters.panelToggle": "Show hidden characters"
 }

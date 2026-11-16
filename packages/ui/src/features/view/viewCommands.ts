@@ -49,7 +49,8 @@ export type ViewCommand =
   | { readonly kind: 'toggleSlashMenuInRichText' }
   | { readonly kind: 'toggleSlashMenuInSource' }
   | { readonly kind: 'toggleNoteDeletionConfirmation' }
-  | { readonly kind: 'toggleNoteLinkUpdateConfirmation' };
+  | { readonly kind: 'toggleNoteLinkUpdateConfirmation' }
+  | { readonly kind: 'toggleHiddenCharacters' };
 
 type ViewCommandHandlers = {
   readonly [Kind in ViewCommand['kind']]: (
@@ -104,6 +105,10 @@ const VIEW_COMMAND_HANDLERS: ViewCommandHandlers = {
   toggleNoteLinkUpdateConfirmation: (settings) => ({
     ...settings,
     isNoteLinkUpdateConfirmed: !settings.isNoteLinkUpdateConfirmed,
+  }),
+  toggleHiddenCharacters: (settings) => ({
+    ...settings,
+    isShowingHiddenCharacters: !settings.isShowingHiddenCharacters,
   }),
 };
 

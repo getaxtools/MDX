@@ -10,6 +10,7 @@ export interface ViewMenuState {
   readonly isStatusBarVisible: boolean;
   readonly isSourceView: boolean;
   readonly isPreviewBesideEditor: boolean;
+  readonly isShowingHiddenCharacters: boolean;
 }
 
 /** A workspace offered under File > Open Recent > Workspaces. */

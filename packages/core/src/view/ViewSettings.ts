@@ -52,6 +52,8 @@ export interface ViewSettings {
   readonly isNoteDeletionConfirmed: boolean;
   /** Renaming or moving a note shows the link changes it needs before making them; Undo works either way. */
   readonly isNoteLinkUpdateConfirmed: boolean;
+  /** Invisible, control, direction and variation characters are drawn as labelled markers. */
+  readonly isShowingHiddenCharacters: boolean;
 }
 
 export const THEME_PREFERENCES: readonly ThemePreference[] = [
@@ -131,6 +133,7 @@ export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
   isSlashMenuInSource: false,
   isNoteDeletionConfirmed: true,
   isNoteLinkUpdateConfirmed: true,
+  isShowingHiddenCharacters: false,
 };
 
 export function zoomIn(settings: ViewSettings): ViewSettings {
@@ -252,9 +255,28 @@ export function parseViewSettings(saved: unknown): ViewSettings {
     panelWidths: parsePanelWidths(panelWidths),
     isPreviewBesideEditor: isPreviewBesideEditor === true,
     editorSharePercent: parseEditorShare(editorSharePercent),
-    ...parseKindSwitcherSettings(saved as Record<string, unknown>),
-    ...parseEditingSettings(saved as Record<string, unknown>),
-    ...parseNoteQuestionSettings(saved as Record<string, unknown>),
+    ...parseFeatureSettings(saved as Record<string, unknown>),
+  };
+}
+
+type FeatureSettings = KindSwitcherSettings &
+  Pick<
+    ViewSettings,
+    | 'editingMode'
+    | 'isSlashMenuInRichText'
+    | 'isSlashMenuInSource'
+    | 'isNoteDeletionConfirmed'
+    | 'isNoteLinkUpdateConfirmed'
+    | 'isShowingHiddenCharacters'
+  >;
+
+/** The settings of the control wheel, editing, notes and the prompt injection check. */
+function parseFeatureSettings(saved: Record<string, unknown>): FeatureSettings {
+  return {
+    ...parseKindSwitcherSettings(saved),
+    ...parseEditingSettings(saved),
+    ...parseNoteQuestionSettings(saved),
+    ...parseInjectionCheckSettings(saved),
   };
 }
 
@@ -279,6 +301,12 @@ function parseNoteQuestionSettings(
     isNoteDeletionConfirmed: saved.isNoteDeletionConfirmed !== false,
     isNoteLinkUpdateConfirmed: saved.isNoteLinkUpdateConfirmed !== false,
   };
+}
+
+function parseInjectionCheckSettings(
+  saved: Record<string, unknown>,
+): Pick<ViewSettings, 'isShowingHiddenCharacters'> {
+  return { isShowingHiddenCharacters: saved.isShowingHiddenCharacters === true };
 }
 
 function parseEditingSettings(

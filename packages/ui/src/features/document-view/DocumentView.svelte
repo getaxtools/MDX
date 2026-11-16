@@ -18,6 +18,7 @@
   import { standaloneDocumentHtml } from '../document-export/standaloneDocumentHtml';
   import type { ExportRequest, LinkedHeadingRequest, SourceRangeRequest } from '../viewer/ViewerController';
   import { keepSourceRangeOutlined } from './outlineSourceRange';
+  import { keepHiddenCharactersMarked } from '../prompt-injection/hiddenCharacterMarkers';
   import { documentClipboardHtml, documentExportHtml, documentPlainText } from './documentClipboardHtml';
   import { enhanceCodeBlocks } from './enhanceCodeBlocks';
   import { findLinkedHeading } from './findLinkedHeading';
@@ -51,6 +52,8 @@
     linkedHeadingRequest?: LinkedHeadingRequest | undefined;
     /** A range to outline in the source view, such as a prompt injection finding. */
     sourceRangeRequest?: SourceRangeRequest | undefined;
+    /** Invisible and direction characters are drawn as labelled markers. */
+    isShowingHiddenCharacters?: boolean;
     locale?: string;
     isSourceView?: boolean;
     onCloseFind?: () => void;
@@ -84,6 +87,7 @@
     headingRequest,
     linkedHeadingRequest,
     sourceRangeRequest,
+    isShowingHiddenCharacters = false,
     locale = 'en',
     isSourceView = false,
     onCloseFind = () => undefined,
@@ -166,6 +170,12 @@
     const article = articleElement;
     if (!document?.html || !article || isSourceView) return;
     makeUnresolvedNoteLinksFocusable(article);
+  });
+
+  $effect(() => {
+    const article = articleElement;
+    if (!document || !article || !isShowingHiddenCharacters) return;
+    return keepHiddenCharactersMarked(article);
   });
 
   let scrolledSourceRange = untrack(() => sourceRangeRequest?.number);

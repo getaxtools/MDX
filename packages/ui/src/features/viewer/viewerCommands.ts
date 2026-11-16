@@ -140,6 +140,7 @@ const COMMANDS_BY_MENU_ITEM: Readonly<Record<string, ViewerCommand>> = {
   showRenameWorkspace: { kind: 'showRenameWorkspace' },
   confirmDeleteWorkspace: { kind: 'confirmDeleteWorkspace' },
   checkForPromptInjection: { kind: 'checkForPromptInjection' },
+  toggleHiddenCharacters: { kind: 'toggleHiddenCharacters' },
 };
 
 const RECENT_FILE_MENU_ITEM = /^openRecent\.(\d{1,2})$/;

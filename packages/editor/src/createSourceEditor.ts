@@ -42,6 +42,12 @@ import { snippetFields, snippetInsertion, type SnippetExpander } from './snippet
 import { snippetMenuProvider, type EditorSnippet } from './snippets/snippetMenu';
 import { selectNextCell, selectPreviousCell } from './tables/tableNavigation';
 import { EDITOR_SHORTCUTS } from './editorShortcuts';
+import {
+  hiddenCharacterMarkers,
+  markedRangesField,
+  setMarkedRanges,
+  type HiddenCharacterFinder,
+} from './hidden-characters/hiddenCharacters';
 import { editorTheme, markdownHighlightStyle } from './editorTheme';
 import { markdownSyntax } from './syntax/markdownSyntax';
 import { isComposing } from './rich-text/compositionHold';
@@ -104,6 +110,9 @@ export interface SourceEditorOptions {
   readonly richTextRendering?: RichTextRendering;
   /** Widgets and decorations of the workspace kind and of later editor features. */
   readonly richTextProviders?: RichTextProviders;
+  /** Finds the hidden characters of a line, for Show hidden characters; without it none are drawn. */
+  readonly findHiddenCharacters?: HiddenCharacterFinder;
+  readonly isShowingHiddenCharacters?: boolean;
 }
 
 /** A place in the text by zero-based line and column, in UTF-16 code units from the start of the line. */
@@ -130,6 +139,10 @@ export interface SourceEditor {
   revealLine(line: number): void;
   /** Selects a range, such as a prompt injection finding, scrolls it into view and focuses the editor. */
   revealRange(range: EditorTextRange): void;
+  /** Draws hidden characters as labelled chips, or stops drawing them; the text never changes. */
+  setHiddenCharactersShown(isShown: boolean): void;
+  /** Underlines ranges, such as findings; they follow the text while it is edited. */
+  markRanges(ranges: readonly EditorTextRange[]): void;
   /** Replaces the whole text, for example after the file was reloaded from disk. */
   replaceText(text: string): void;
   run(command: EditorMenuCommand): void;
@@ -170,16 +183,12 @@ const BRACKETS_CLOSED_AUTOMATICALLY = ['(', '[', '{', '"', '`'];
 
 export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
   const slashMenuSwitch = new Compartment();
+  const hiddenCharactersSwitch = new Compartment();
   const view = new EditorView({
     parent: options.parent,
     state: EditorState.create({
       doc: options.text,
-      extensions: [
-        slashMenuSwitch.of(initialSlashMenu(options, options.editingMode ?? DEFAULT_EDITING_MODE)),
-        editingModeExtension(options.editingMode ?? DEFAULT_EDITING_MODE, options.onEditingModeChange),
-        typographyExtension(options.typography ?? DEFAULT_EDITOR_TYPOGRAPHY),
-        editorExtensions(options),
-      ],
+      extensions: startingExtensions(options, slashMenuSwitch, hiddenCharactersSwitch),
     }),
   });
   const commands = menuCommandsOf(view);
@@ -191,6 +200,7 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
     ...scrolling,
     revealLine: (line) => revealLine(view, line),
     revealRange: (range) => revealRange(view, range),
+    ...hiddenCharacterControlOf(view, hiddenCharactersSwitch, options),
     replaceText: (text) => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } }),
     run: (command) => commands[command](),
     ...blockEditingOf(view),
@@ -206,6 +216,21 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
       view.destroy();
     },
   };
+}
+
+function startingExtensions(
+  options: SourceEditorOptions,
+  slashMenuSwitch: Compartment,
+  hiddenCharactersSwitch: Compartment,
+): Extension[] {
+  const mode = options.editingMode ?? DEFAULT_EDITING_MODE;
+  return [
+    slashMenuSwitch.of(initialSlashMenu(options, mode)),
+    hiddenCharactersSwitch.of(initialHiddenCharacters(options)),
+    editingModeExtension(mode, options.onEditingModeChange),
+    typographyExtension(options.typography ?? DEFAULT_EDITOR_TYPOGRAPHY),
+    editorExtensions(options),
+  ];
 }
 
 function scrollingOf(
@@ -231,6 +256,31 @@ function scrollingOf(
     },
     stopReportingScroll: () => scroller.removeEventListener('scroll', reportScroll),
   };
+}
+
+function hiddenCharacterControlOf(
+  view: EditorView,
+  hiddenCharactersSwitch: Compartment,
+  options: SourceEditorOptions,
+): Pick<SourceEditor, 'setHiddenCharactersShown' | 'markRanges'> {
+  return {
+    setHiddenCharactersShown: (isShown) =>
+      view.dispatch({ effects: hiddenCharactersSwitch.reconfigure(hiddenCharactersFor(options, isShown)) }),
+    markRanges: (ranges) =>
+      view.dispatch({
+        effects: setMarkedRanges.of(
+          ranges.map((range) => ({ from: offsetOf(view, range.from), to: offsetOf(view, range.to) })),
+        ),
+      }),
+  };
+}
+
+function initialHiddenCharacters(options: SourceEditorOptions): Extension {
+  return hiddenCharactersFor(options, options.isShowingHiddenCharacters === true);
+}
+
+function hiddenCharactersFor(options: SourceEditorOptions, isShown: boolean): Extension {
+  return isShown && options.findHiddenCharacters ? hiddenCharacterMarkers(options.findHiddenCharacters) : [];
 }
 
 function initialSlashMenu(options: SourceEditorOptions, mode: EditingMode): Extension {
@@ -376,6 +426,7 @@ function editorExtensions(options: SourceEditorOptions): Extension[] {
   return [
     history(),
     drawSelection(),
+    markedRangesField,
     ...multipleCursors(),
     snippetFields(),
     EditorView.lineWrapping,
@@ -391,6 +442,14 @@ function editorExtensions(options: SourceEditorOptions): Extension[] {
     options.richTextProviders ? richTextProvidersFacet.of(options.richTextProviders) : [],
     // An explicit tab stop lets checkers see that the scrolling editor can be reached with the keyboard.
     EditorView.contentAttributes.of({ 'aria-label': options.label, spellcheck: 'false', tabindex: '0' }),
+    ...editorKeymaps(),
+    EditorView.domEventHandlers({ paste: (event, view) => pastePictures(event, view, options) }),
+    EditorView.updateListener.of((update) => reportChanges(update, options)),
+  ];
+}
+
+function editorKeymaps(): Extension[] {
+  return [
     keymap.of(formattingKeymap()),
     EditorView.domEventHandlers({ keydown: runPhysicalKeyShortcut }),
     keymap.of([
@@ -409,8 +468,6 @@ function editorExtensions(options: SourceEditorOptions): Extension[] {
         { key: 'Mod-g', run: gotoLine },
       ]),
     ),
-    EditorView.domEventHandlers({ paste: (event, view) => pastePictures(event, view, options) }),
-    EditorView.updateListener.of((update) => reportChanges(update, options)),
   ];
 }
 

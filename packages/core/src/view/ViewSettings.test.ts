@@ -45,6 +45,7 @@ describe('view settings', () => {
       isSlashMenuInSource: false,
       isNoteDeletionConfirmed: true,
       isNoteLinkUpdateConfirmed: true,
+      isShowingHiddenCharacters: false,
     });
   });
 
@@ -93,6 +94,7 @@ describe('view settings', () => {
       isSlashMenuInSource: true,
       isNoteDeletionConfirmed: false,
       isNoteLinkUpdateConfirmed: false,
+      isShowingHiddenCharacters: true,
     };
 
     expect(parseViewSettings(saved)).toEqual(saved);
@@ -267,6 +269,12 @@ describe('view settings', () => {
   it('a new installation starts in Rich text', () => {
     expect(DEFAULT_VIEW_SETTINGS.editingMode).toBe('richText');
     expect(parseViewSettings(undefined).editingMode).toBe('richText');
+  });
+
+  it('reads Show hidden characters, off unless it was turned on', () => {
+    expect(parseViewSettings({ isShowingHiddenCharacters: true }).isShowingHiddenCharacters).toBe(true);
+    expect(parseViewSettings({ isShowingHiddenCharacters: 'yes' }).isShowingHiddenCharacters).toBe(false);
+    expect(parseViewSettings({}).isShowingHiddenCharacters).toBe(false);
   });
 
   it('remembers the prompt injection panel as the side bar view', () => {

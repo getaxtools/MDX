@@ -203,6 +203,11 @@
       : undefined,
   );
   const isActiveUntitled = $derived(activeTab ? isUntitledLocation(activeTab.location) : false);
+  /** Shown by the setting, and in a document whose finding was just revealed. */
+  const isShowingHiddenCharacters = $derived(
+    (snapshot?.viewer.viewSettings.isShowingHiddenCharacters ?? false) ||
+      snapshot?.isRevealingFinding === true,
+  );
   const isActiveFavourite = $derived(
     activeTab ? (snapshot?.viewer.favourites.isFavourite(activeTab.location.canonicalKey) ?? false) : false,
   );
@@ -367,6 +372,7 @@
             <PromptInjectionPanel
               hasDocument={activeTab !== undefined && snapshot.activeDocument !== undefined}
               check={snapshot.injectionCheck}
+              isShowingHiddenCharacters={viewSettings.isShowingHiddenCharacters}
               {translator}
               onCommand={(command: ViewerCommand) => void controller.execute(command)}
             />
@@ -536,6 +542,8 @@
                       isInRichText: viewSettings.isSlashMenuInRichText,
                       isInSource: viewSettings.isSlashMenuInSource,
                     }}
+                    {isShowingHiddenCharacters}
+                    markedRanges={snapshot?.injectionCheck?.findingRanges ?? []}
                     onPastePicture={(bytes: Uint8Array) => controller.pastePicture(bytes)}
                     onCursorCountChange={(count: number) => (cursorCount = count)}
                     onOpenLink={openEditorLink}
@@ -560,6 +568,7 @@
                     {richBlocks}
                     {translator}
                     shouldRestoreScroll={false}
+                    {isShowingHiddenCharacters}
                     copyAsHtmlRequest={snapshot?.copyAsHtmlRequest}
                     onOpenLink={(link: DocumentLink) => void controller.openLink(link)}
                     onCommand={(command: ViewerCommand) => void controller.execute(command)}
@@ -592,6 +601,7 @@
               {headingRequest}
               linkedHeadingRequest={snapshot.linkedHeadingRequest}
               sourceRangeRequest={snapshot.sourceRangeRequest}
+              {isShowingHiddenCharacters}
               footer={snapshot.noteBacklinks ? backlinksFooter : undefined}
               locale={translator.locale}
               isSourceView={snapshot.isSourceView ?? false}

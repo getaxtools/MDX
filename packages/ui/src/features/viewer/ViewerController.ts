@@ -205,6 +205,8 @@ export interface ViewerSnapshot {
   readonly injectionCheck?: InjectionCheckView;
   /** A range of the shown document to outline in the source view, such as a finding. */
   readonly sourceRangeRequest?: SourceRangeRequest;
+  /** A finding of the shown document was revealed, so its hidden characters are shown whatever the setting. */
+  readonly isRevealingFinding?: boolean;
   /** Goes up each time the shown document should be copied as HTML, from the Edit menu or the palette. */
   readonly copyAsHtmlRequest?: number;
   /** The format the shown document should export to, numbered so the same format can be asked again. */
@@ -359,6 +361,7 @@ export class ViewerController {
   private readonly documentAttachments: DocumentAttachments | undefined;
   private readonly injectionChecks: InjectionCheckActions;
   private sourceRangeRequest: SourceRangeRequest | undefined;
+  private revealedFindingKey: string | undefined;
 
   constructor(private readonly dependencies: ViewerControllerDependencies) {
     this.snapshot = {
@@ -458,6 +461,7 @@ export class ViewerController {
   private revealInjectionFinding(finding: InjectionFinding): void {
     const place = this.injectionChecks.placeOf(finding);
     if (!place) return;
+    this.revealedFindingKey = place.documentKey;
     if (this.editingActions.isActiveDocumentEditing()) {
       this.editingActions.revealRange(place.range);
       return;
@@ -1103,8 +1107,15 @@ export class ViewerController {
     const { menu, session } = this.dependencies;
     if (!menu) return;
     const { viewSettings } = session.currentState();
-    const { theme, readingWidth, typography, editingMode, isStatusBarVisible, isPreviewBesideEditor } =
-      viewSettings;
+    const {
+      theme,
+      readingWidth,
+      typography,
+      editingMode,
+      isStatusBarVisible,
+      isPreviewBesideEditor,
+      isShowingHiddenCharacters,
+    } = viewSettings;
     const state = {
       theme,
       readingWidth,
@@ -1115,6 +1126,7 @@ export class ViewerController {
       isStatusBarVisible,
       isSourceView: this.isSourceView,
       isPreviewBesideEditor,
+      isShowingHiddenCharacters,
     };
     const stateKey = JSON.stringify(state);
     if (stateKey === this.shownMenuViewState) return;
@@ -1640,11 +1652,15 @@ export class ViewerController {
   }
 
   /** The check and an outlined range belong to the shown document only. */
-  private injectionCheckPart(): Pick<ViewerSnapshot, 'injectionCheck' | 'sourceRangeRequest'> {
+  private injectionCheckPart(): Pick<
+    ViewerSnapshot,
+    'injectionCheck' | 'sourceRangeRequest' | 'isRevealingFinding'
+  > {
     const shownKey = this.activeDocument?.canonicalKey;
     const injectionCheck = this.injectionChecks.view();
     const sourceRangeRequest = this.sourceRangeRequest;
     return {
+      ...(shownKey !== undefined && this.revealedFindingKey === shownKey ? { isRevealingFinding: true } : {}),
       ...(injectionCheck && injectionCheck.documentKey === shownKey ? { injectionCheck } : {}),
       ...(sourceRangeRequest && sourceRangeRequest.canonicalKey === shownKey ? { sourceRangeRequest } : {}),
     };

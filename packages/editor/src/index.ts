@@ -37,3 +37,4 @@ export type {
   RichTextInlineProvider,
   RichTextProviders,
 } from './rich-text/richTextProviders';
+export type { FoundHiddenCharacter, HiddenCharacterFinder } from './hidden-characters/hiddenCharacters';

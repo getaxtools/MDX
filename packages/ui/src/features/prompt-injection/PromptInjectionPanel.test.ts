@@ -24,6 +24,7 @@ function checkViewOf(text: string, overrides: Partial<InjectionCheckView> = {}):
     result: checkInjectionText({ text, origin: 'local', trigger: 'manual' }),
     ignoredFindings: [],
     isCharactersOnly: false,
+    findingRanges: [],
     ...overrides,
   };
 }
@@ -137,6 +138,7 @@ describe('PromptInjectionPanel', () => {
 
     await userEvent.tab();
     await userEvent.tab();
+    await userEvent.tab();
     await userEvent.keyboard('{Enter}');
 
     expect(document.activeElement?.textContent).toContain('Line 2, column 4');
@@ -154,11 +156,28 @@ describe('PromptInjectionPanel', () => {
     expect(onCommand).toHaveBeenCalledWith({ kind: 'checkForPromptInjection' });
   });
 
+  it('shows whether hidden characters are shown, and turns them on and off', async () => {
+    const onCommand = vi.fn<(command: ViewerCommand) => void>();
+    render(PromptInjectionPanel, {
+      hasDocument: true,
+      check: undefined,
+      isShowingHiddenCharacters: true,
+      translator: createTranslator(),
+      onCommand,
+    });
+    const toggle = screen.getByRole('button', { name: 'Show hidden characters' });
+
+    await userEvent.click(toggle);
+
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'toggleHiddenCharacters' });
+  });
+
   it('has nothing to check without a document', () => {
     renderPanel(undefined, false);
 
     expect(screen.getByText('Open a document to check it.')).toBeTruthy();
-    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Check/ })).toBeNull();
   });
 
   it('keeps excerpts left to right in a right-to-left layout', () => {

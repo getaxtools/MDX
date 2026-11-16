@@ -223,6 +223,39 @@ describe('createSourceEditor', () => {
     expect(onSelectedTextChange).toHaveBeenLastCalledWith(['ne', 'two'].join('\n'));
   });
 
+  it('draws hidden characters as chips on request, and stops, without changing the text', () => {
+    const parent = document.createElement('div');
+    document.body.append(parent);
+    const text = ['a', 'b'].join('\u200D');
+    editor = createSourceEditor({
+      parent,
+      text,
+      label: 'Source of Guide.md',
+      phrases: {},
+      onChange: vi.fn(),
+      findHiddenCharacters: (lineText) =>
+        lineText.includes('\u200D')
+          ? [{ from: 1, to: 2, name: 'ZERO WIDTH JOINER', abbreviation: 'ZWJ', isInSequence: false }]
+          : [],
+    });
+
+    editor.setHiddenCharactersShown(true);
+    const chipName = parent.querySelector('.cm-hidden-character')?.getAttribute('aria-label');
+    editor.setHiddenCharactersShown(false);
+
+    expect(chipName).toBe('zero width joiner');
+    expect(parent.querySelector('.cm-hidden-character')).toBeNull();
+    expect(editor.text()).toBe(text);
+  });
+
+  it('underlines marked ranges, such as findings', () => {
+    const { parent, editor: opened } = openEditor(['one', 'two three'].join('\n'));
+
+    opened.markRanges([{ from: { line: 1, column: 4 }, to: { line: 1, column: 9 } }]);
+
+    expect(parent.querySelector('.cm-marked-range')?.textContent).toBe('three');
+  });
+
   it('opens the search panel in the user language', () => {
     const { parent, editor: opened } = openEditor();
 

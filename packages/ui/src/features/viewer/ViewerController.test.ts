@@ -1316,6 +1316,7 @@ describe('ViewerController', () => {
         isStatusBarVisible: true,
         isSourceView: false,
         isPreviewBesideEditor: false,
+        isShowingHiddenCharacters: false,
       });
 
       menu.choose('theme.dark');

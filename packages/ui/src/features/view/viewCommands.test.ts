@@ -34,6 +34,7 @@ describe('view commands', () => {
       isSlashMenuInSource: false,
       isNoteDeletionConfirmed: true,
       isNoteLinkUpdateConfirmed: true,
+      isShowingHiddenCharacters: false,
     });
     expect(applyViewCommand(withoutSidebar, { kind: 'resetZoom' }).zoomPercent).toBe(100);
     expect(applyViewCommand(withoutSidebar, { kind: 'zoomOut' }).zoomPercent).toBe(100);

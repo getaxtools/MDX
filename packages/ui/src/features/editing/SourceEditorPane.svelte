@@ -7,6 +7,7 @@
   import { isContextMenuKey, type ContextMenuRequest } from '../../components/ContextMenuItem';
   import { editorMenuItems, type EditorMenuChoice } from './blockMenu';
   import type {
+    EditorTextRange,
     RichTextRendering,
     SourceEditor,
     SlashMenuSettings,
@@ -14,6 +15,7 @@
     WikiLinkSuggester,
     WrittenLink,
   } from '@mdx/editor';
+  import { listHiddenCharacters } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
   import { untrack } from 'svelte';
   import type { EditorRequest } from './editingCommands';
@@ -43,6 +45,9 @@
     snippets?: readonly Snippet[];
     /** Suggests notes after `[[` in a note of a Notes workspace. */
     wikiLinks?: WikiLinkSuggester | undefined;
+    isShowingHiddenCharacters?: boolean;
+    /** Ranges to underline, such as prompt injection findings. */
+    markedRanges?: readonly EditorTextRange[];
     onChange: (text: string) => void;
     /** Opens a link, as written, the way the preview opens links. */
     onOpenLink?: (link: WrittenLink) => void;
@@ -68,6 +73,8 @@
     onSelectedTextChange = () => undefined,
     snippets = [],
     wikiLinks,
+    isShowingHiddenCharacters = false,
+    markedRanges = [],
     onChange,
     onOpenLink = () => undefined,
     onCaretInLinkChange = () => undefined,
@@ -140,6 +147,8 @@
       ...(richTextRendering ? { richTextRendering } : {}),
       snippets: editorSnippets,
       ...(wikiLinks ? { wikiLinks } : {}),
+      findHiddenCharacters: (lineText: string) => listHiddenCharacters(lineText),
+      isShowingHiddenCharacters,
     }));
   }
 
@@ -182,6 +191,14 @@
 
   $effect(() => {
     editor?.setEditingMode(editingMode);
+  });
+
+  $effect(() => {
+    editor?.setHiddenCharactersShown(isShowingHiddenCharacters);
+  });
+
+  $effect(() => {
+    editor?.markRanges(markedRanges);
   });
 
   $effect(() => {

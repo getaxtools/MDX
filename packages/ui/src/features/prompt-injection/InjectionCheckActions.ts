@@ -31,6 +31,8 @@ export interface InjectionCheckView {
   readonly ignoredFindings: readonly InjectionFinding[];
   /** The document was too large for more than the character rules. */
   readonly isCharactersOnly: boolean;
+  /** The listed findings by line and column, for the editor to underline. */
+  readonly findingRanges: readonly EditorTextRange[];
 }
 
 /** A finding's place, by offsets for the source view and by lines and columns for the editor. */
@@ -75,6 +77,11 @@ interface FilteredCheck {
   readonly check: DocumentCheck;
   readonly ignoreList: InjectionIgnoreList;
   readonly filtered: FilteredResult | undefined;
+  readonly findingRanges: readonly EditorTextRange[];
+}
+
+function rangeOf(text: string, finding: InjectionFinding): EditorTextRange {
+  return { from: { line: finding.line, column: finding.column }, to: findingEnd(text, finding) };
 }
 
 function shownDocumentOf(opened: OpenedDocument, text: string): ShownDocument {
@@ -169,23 +176,21 @@ export class InjectionCheckActions {
       documentKey: check.documentKey,
       from: finding.from,
       to: finding.to,
-      range: {
-        from: { line: finding.line, column: finding.column },
-        to: findingEnd(check.checked.text, finding),
-      },
+      range: rangeOf(check.checked.text, finding),
     };
   }
 
   view(): InjectionCheckView | undefined {
     const check = this.current;
     if (!check) return undefined;
-    const filtered = this.filteredResultOf(check);
+    const { filtered, findingRanges } = this.filteredCheckOf(check);
     return {
       documentKey: check.documentKey,
       status: check.status,
       ...(filtered ? { result: filtered.result } : {}),
       ignoredFindings: filtered?.ignoredFindings ?? [],
       isCharactersOnly: check.checked ? isCheckedForCharactersOnly(check.checked.text) : false,
+      findingRanges,
     };
   }
 
@@ -237,10 +242,10 @@ export class InjectionCheckActions {
     this.dependencies.onChange();
   }
 
-  private filteredResultOf(check: DocumentCheck): FilteredResult | undefined {
+  private filteredCheckOf(check: DocumentCheck): FilteredCheck {
     const ignoreList = this.dependencies.session.currentState().injectionIgnoreList;
     const cached = this.lastFiltered;
-    if (cached?.check === check && cached.ignoreList === ignoreList) return cached.filtered;
+    if (cached?.check === check && cached.ignoreList === ignoreList) return cached;
     const filtered = check.checked
       ? filterIgnoredFindings(check.checked.result, ignoreList.entries(), {
           text: check.checked.text,
@@ -248,8 +253,10 @@ export class InjectionCheckActions {
           ruleset: Ruleset.bundled(),
         })
       : undefined;
-    this.lastFiltered = { check, ignoreList, filtered };
-    return filtered;
+    const checkedText = check.checked?.text ?? '';
+    const findingRanges = (filtered?.result.findings ?? []).map((finding) => rangeOf(checkedText, finding));
+    this.lastFiltered = { check, ignoreList, filtered, findingRanges };
+    return this.lastFiltered;
   }
 
   private forget(): void {

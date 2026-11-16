@@ -251,6 +251,7 @@ describe('TauriAppMenu', () => {
       isStatusBarVisible: true,
       isSourceView: false,
       isPreviewBesideEditor: false,
+      isShowingHiddenCharacters: true,
     };
 
     await new TauriAppMenu().showViewState(state);

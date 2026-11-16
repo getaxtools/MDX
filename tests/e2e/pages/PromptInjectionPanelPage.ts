@@ -24,6 +24,30 @@ export class PromptInjectionPanelPage {
     await this.panel().waitForDisplayed();
   }
 
+  async toggleHiddenCharactersFromCommandPalette(): Promise<void> {
+    const commandName = translator.translate('promptInjection.hiddenCharacters.toggle');
+    await this.mainWindow.searchInCommandPalette(`>${commandName}`);
+    await this.mainWindow.waitForCommandPaletteOption(commandName);
+    await this.mainWindow.pressShortcut('Enter');
+  }
+
+  /** The accessible names of the hidden character markers in the rendered document. */
+  async previewMarkerNames(): Promise<string[]> {
+    return this.browser.execute(() =>
+      [...document.querySelectorAll('main article .mdx-hidden-character')].map(
+        (marker) => marker.getAttribute('aria-label') ?? '',
+      ),
+    );
+  }
+
+  async editorChipNames(): Promise<string[]> {
+    return this.browser.execute(() =>
+      [...document.querySelectorAll('.cm-editor .cm-hidden-character')].map(
+        (chip) => chip.getAttribute('aria-label') ?? '',
+      ),
+    );
+  }
+
   async waitForSummary(expectedPart: string): Promise<void> {
     await this.browser.waitUntil(
       async () => (await this.panel().$('.summary').getText()).includes(expectedPart),

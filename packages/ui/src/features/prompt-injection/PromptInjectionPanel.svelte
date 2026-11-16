@@ -10,11 +10,12 @@
     hasDocument: boolean;
     /** The check of the shown document; undefined until one has started. */
     check: InjectionCheckView | undefined;
+    isShowingHiddenCharacters?: boolean;
     translator: Translator;
     onCommand: (command: ViewerCommand) => void;
   }
 
-  const { hasDocument, check, translator, onCommand }: Props = $props();
+  const { hasDocument, check, isShowingHiddenCharacters = false, translator, onCommand }: Props = $props();
 
   let isShowingIgnored = $state(false);
   let announcement = $state('');
@@ -38,6 +39,13 @@
       </button>
     {/if}
   </header>
+  <button
+    class="hidden-characters"
+    aria-pressed={isShowingHiddenCharacters}
+    onclick={() => onCommand({ kind: 'toggleHiddenCharacters' })}
+  >
+    {translator.translate('promptInjection.hiddenCharacters.panelToggle')}
+  </button>
   <p class="visually-hidden" role="status">{announcement}</p>
   {#if !hasDocument}
     <p class="note">{translator.translate('promptInjection.panel.noDocument')}</p>
@@ -209,6 +217,16 @@
 
   button:hover {
     background: var(--color-surface-hover);
+  }
+
+  .hidden-characters {
+    align-self: flex-start;
+    margin-inline: var(--space-2);
+  }
+
+  .hidden-characters[aria-pressed='true'] {
+    background: var(--color-surface-selected);
+    color: var(--color-accent);
   }
 
   button:focus-visible,

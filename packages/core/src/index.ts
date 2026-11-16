@@ -352,6 +352,7 @@ export {
   runInjectionCheck,
 } from './prompt-injection/runInjectionCheck';
 export { InjectionIgnoreList, MAX_IGNORE_ENTRIES } from './prompt-injection/InjectionIgnoreList';
+export { listHiddenCharacters, type ListedHiddenCharacter } from './prompt-injection/listHiddenCharacters';
 export {
   evidenceHashOf,
   filterIgnoredFindings,
