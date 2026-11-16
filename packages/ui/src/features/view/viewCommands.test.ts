@@ -29,6 +29,7 @@ describe('view commands', () => {
       wheelDock: 'bottomInlineEnd',
       isWheelOpenedAtPointer: false,
       isWheelButtonInStatusBar: false,
+      editingMode: 'richText',
       isSlashMenuInRichText: true,
       isSlashMenuInSource: false,
       isNoteDeletionConfirmed: true,

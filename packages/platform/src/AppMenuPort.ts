@@ -4,6 +4,7 @@ export interface ViewMenuState {
   readonly theme: string;
   readonly readingWidth: string;
   readonly typography: string;
+  readonly editingMode: string;
   readonly isSidebarVisible: boolean;
   readonly isOutlineVisible: boolean;
   readonly isStatusBarVisible: boolean;

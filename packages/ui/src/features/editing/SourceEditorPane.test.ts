@@ -38,7 +38,7 @@ interface RichTextPaneOptions {
   readonly onOpenLink?: (link: WrittenLink) => void;
 }
 
-/** Opens the pane in Rich text, through the editor's own switch, with the caret on a zero-based line. */
+/** Opens the pane in Rich text with the caret on a zero-based line. */
 async function renderRichText(text: string, caretLine: number, options: RichTextPaneOptions = {}) {
   let shownEditor: SourceEditor | undefined;
   const props = {
@@ -47,6 +47,7 @@ async function renderRichText(text: string, caretLine: number, options: RichText
     text,
     zoomPercent: 100,
     typography: options.typography ?? 'github',
+    editingMode: 'richText' as const,
     translator: createTranslator(),
     onChange: vi.fn(),
     onOpenLink: options.onOpenLink ?? vi.fn(),
@@ -58,7 +59,6 @@ async function renderRichText(text: string, caretLine: number, options: RichText
     () => shownEditor ?? Promise.reject(new Error('The editor is not ready')),
     EDITOR_LOAD_WAIT,
   );
-  editor.setEditingMode('richText');
   editor.revealLine(caretLine);
   return { editor, textBox, props, rerender };
 }

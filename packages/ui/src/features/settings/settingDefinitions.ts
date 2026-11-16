@@ -4,6 +4,7 @@ import {
   READING_WIDTHS,
   THEME_PREFERENCES,
   TYPOGRAPHIES,
+  EDITING_MODES,
   ZOOM_LEVELS_PERCENT,
   type ReadingWidth,
   type ThemePreference,
@@ -233,7 +234,26 @@ const WORKSPACE_KIND_SETTINGS: readonly SettingDefinition[] = [
   },
 ];
 
+const editingModeSetting: ChoiceSetting = {
+  id: 'editingMode',
+  kind: 'choice',
+  section: 'editing',
+  labelKey: 'menu.view.editingMode',
+  descriptionKey: 'settings.editingMode.description',
+  choices: (translator) =>
+    EDITING_MODES.map((editingMode) => ({
+      value: editingMode,
+      label: translator.translate(`menu.view.editingMode.${editingMode}`),
+    })),
+  valueIn: (settings) => settings.editingMode,
+  commandFor: (value) => {
+    const editingMode = EDITING_MODES.find((mode) => mode === value);
+    return editingMode ? { kind: 'setEditingMode', editingMode } : undefined;
+  },
+};
+
 const EDITING_SETTINGS: readonly SettingDefinition[] = [
+  editingModeSetting,
   {
     id: 'slashMenuInRichText',
     kind: 'toggle',

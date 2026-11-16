@@ -18,7 +18,7 @@ use crate::documents::DocumentError;
 use crate::open_requests::MAIN_WINDOW_LABEL;
 use recent_files_menu::{RecentMenuContents, fill_recent_menu};
 use view_menu_state::{
-    READING_WIDTH_ITEM_PREFIX, THEME_ITEM_PREFIX, TOGGLE_OUTLINE_ITEM_ID,
+    EDITING_MODE_ITEM_PREFIX, READING_WIDTH_ITEM_PREFIX, THEME_ITEM_PREFIX, TOGGLE_OUTLINE_ITEM_ID,
     TOGGLE_PREVIEW_BESIDE_EDITOR_ITEM_ID, TOGGLE_SIDEBAR_ITEM_ID, TOGGLE_SOURCE_VIEW_ITEM_ID,
     TOGGLE_STATUS_BAR_ITEM_ID, TYPOGRAPHY_ITEM_PREFIX,
 };
@@ -51,6 +51,12 @@ const READING_WIDTH_CHOICES: CheckChoices = CheckChoices {
     title_key: "menu.view.readingWidth",
     id_prefix: READING_WIDTH_ITEM_PREFIX,
     choices: &["narrow", "medium", "wide", "full"],
+};
+
+const EDITING_MODE_CHOICES: CheckChoices = CheckChoices {
+    title_key: "menu.view.editingMode",
+    id_prefix: EDITING_MODE_ITEM_PREFIX,
+    choices: &["richText", "source"],
 };
 
 const TYPOGRAPHY_CHOICES: CheckChoices = CheckChoices {
@@ -108,7 +114,13 @@ const EDIT_SEARCH_ITEMS: [CommandItem; 4] = [
 const COPY_AS_HTML_ITEM: CommandItem = ("copyAsHtml", "menu.edit.copyAsHtml", None);
 
 const TOGGLE_EDITING_ITEM: CommandItem =
-    ("toggleEditing", "menu.view.toggleEditing", Some("Ctrl+/"));
+    ("toggleEditing", "menu.view.toggleEditing", Some("Ctrl+E"));
+
+const TOGGLE_EDITING_MODE_ITEM: CommandItem = (
+    "toggleEditingMode",
+    "menu.view.toggleEditingMode",
+    Some("Ctrl+/"),
+);
 
 const SETTINGS_ITEM: CommandItem = ("showSettings", "menu.file.settings", Some("Ctrl+,"));
 
@@ -508,6 +520,8 @@ impl MainMenuBuilder<'_> {
         let themes = self.check_submenu(&THEME_CHOICES)?;
         let reading_widths = self.check_submenu(&READING_WIDTH_CHOICES)?;
         let typographies = self.check_submenu(&TYPOGRAPHY_CHOICES)?;
+        let editing_modes = self.check_submenu(&EDITING_MODE_CHOICES)?;
+        let toggle_editing_mode = self.command_item(TOGGLE_EDITING_MODE_ITEM)?;
         let source_view = self.toggle_item(SOURCE_VIEW_TOGGLE_ITEM)?;
         let panels = PANEL_TOGGLE_ITEMS
             .iter()
@@ -522,6 +536,8 @@ impl MainMenuBuilder<'_> {
             .item(&command_palette)
             .item(&control_wheel)
             .item(&toggle_editing)
+            .item(&editing_modes)
+            .item(&toggle_editing_mode)
             .item(&preview_beside_editor)
             .separator()
             .item(&themes)
@@ -744,7 +760,12 @@ mod tests {
     fn every_menu_choice_has_a_label_in_the_catalog() {
         let labels = MenuLabels::english();
 
-        for choices in [THEME_CHOICES, READING_WIDTH_CHOICES, TYPOGRAPHY_CHOICES] {
+        for choices in [
+            THEME_CHOICES,
+            READING_WIDTH_CHOICES,
+            TYPOGRAPHY_CHOICES,
+            EDITING_MODE_CHOICES,
+        ] {
             for choice in choices.choices {
                 let key = format!("{}.{choice}", choices.title_key);
                 assert!(labels.has(&key), "{key}");

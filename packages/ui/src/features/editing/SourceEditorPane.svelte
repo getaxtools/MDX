@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Snippet, Typography } from '@mdx/core';
+  import type { EditingModeSetting, Snippet, Typography } from '@mdx/core';
   import type { EditorSnippet } from '@mdx/editor';
   import { snippetExpander } from '../snippets/snippetExpander';
   import type { BlockAction } from '@mdx/editor';
@@ -9,6 +9,7 @@
   import type {
     RichTextRendering,
     SourceEditor,
+    SlashMenuSettings,
     SourceEditorOptions,
     WikiLinkSuggester,
     WrittenLink,
@@ -25,13 +26,15 @@
     zoomPercent: number;
     /** The Document style, whose fonts Rich text uses. */
     typography?: Typography;
+    /** Rich text or Source; the editor switches without changing the text. */
+    editingMode?: EditingModeSetting;
     /** Renders Rich text's widgets as the preview renders this document. */
     richTextRendering?: RichTextRendering | undefined;
     scrollRatio?: number;
     translator: Translator;
     editorRequest?: EditorRequest | undefined;
-    /** Whether a slash at the start of a line or after a space opens the insert menu. */
-    isSlashMenuEnabled?: boolean;
+    /** Whether a slash opens the insert menu, in each mode. */
+    slashMenu?: SlashMenuSettings;
     /** Saves a pasted picture and gives the Markdown link to insert. */
     onPastePicture?: (bytes: Uint8Array) => Promise<string | undefined>;
     onCursorCountChange?: (count: number) => void;
@@ -55,10 +58,11 @@
     text,
     zoomPercent,
     typography = 'github',
+    editingMode = 'source',
     richTextRendering,
     translator,
     editorRequest,
-    isSlashMenuEnabled = false,
+    slashMenu = { isInRichText: false, isInSource: false },
     onPastePicture,
     onCursorCountChange = () => undefined,
     onSelectedTextChange = () => undefined,
@@ -125,7 +129,8 @@
       phrases: editorPhrases(translator),
       onChange: (editedText: string) => onChange(editedText),
       onScroll: (ratio: number) => onScroll(ratio),
-      isSlashMenuEnabled,
+      slashMenu,
+      editingMode,
       ...(onPastePicture ? { onPastePicture } : {}),
       onCursorCountChange: (count: number) => onCursorCountChange(count),
       onSelectedTextChange: (selectedText: string) => onSelectedTextChange(selectedText),
@@ -164,7 +169,7 @@
   });
 
   $effect(() => {
-    editor?.setSlashMenuEnabled(isSlashMenuEnabled);
+    editor?.setSlashMenuSettings(slashMenu);
   });
 
   $effect(() => {
@@ -173,6 +178,10 @@
 
   $effect(() => {
     editor?.setTypography(typography);
+  });
+
+  $effect(() => {
+    editor?.setEditingMode(editingMode);
   });
 
   $effect(() => {

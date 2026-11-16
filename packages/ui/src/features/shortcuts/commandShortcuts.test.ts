@@ -1,3 +1,4 @@
+import { EDITOR_SHORTCUTS } from '@mdx/editor/shortcuts';
 import { createTranslator, englishCatalog } from '@mdx/i18n';
 import { describe, expect, it } from 'vitest';
 import {
@@ -19,6 +20,24 @@ function keys(key: string, modifiers: Partial<ShortcutKeyEvent> = {}): ShortcutK
     ...modifiers,
   };
 }
+
+describe('the moved editing keys', () => {
+  it('Ctrl+E toggles editing and Ctrl+/ switches Rich text and Source', () => {
+    expect(commandForShortcut(keys('e', { ctrlKey: true }), 'windows')).toEqual({ kind: 'toggleEditing' });
+    expect(commandForShortcut(keys('/', { ctrlKey: true }), 'windows')).toEqual({
+      kind: 'toggleEditingMode',
+    });
+  });
+
+  it('the shortcut tables have no duplicate key', () => {
+    const allCombinations = [
+      ...COMMAND_SHORTCUTS.flatMap(({ combinations }) => combinations),
+      ...EDITOR_SHORTCUTS.map(({ combination }) => combination),
+    ].map((combination) => combination.join('+').toLowerCase());
+
+    expect(allCombinations.filter((name, index) => allCombinations.indexOf(name) !== index)).toEqual([]);
+  });
+});
 
 describe('commandForShortcut on Windows', () => {
   it.each([

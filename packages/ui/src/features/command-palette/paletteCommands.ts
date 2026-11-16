@@ -2,6 +2,7 @@ import {
   READING_WIDTHS,
   THEME_PREFERENCES,
   TYPOGRAPHIES,
+  EDITING_MODES,
   WorkspaceKindsState,
   WORKSPACE_KINDS,
   isBuiltInSnippetId,
@@ -114,7 +115,19 @@ export function paletteCommands(
     ...themeCommands(translator),
     ...readingWidthCommands(translator),
     ...typographyCommands(translator),
+    ...editingModeCommands(translator),
   ];
+}
+
+function editingModeCommands(translator: Translator): PaletteCommand[] {
+  const group = translator.translate('menu.view.editingMode');
+  return EDITING_MODES.map((editingMode) => ({
+    command: { kind: 'setEditingMode', editingMode },
+    label: translator.translate('palette.groupedAction', {
+      group,
+      action: translator.translate(`menu.view.editingMode.${editingMode}`),
+    }),
+  }));
 }
 
 function openLinkCommand(translator: Translator): PaletteCommand {

@@ -85,6 +85,7 @@ export {
   THEME_COLOR_SCHEMES,
   THEME_PREFERENCES,
   TYPOGRAPHIES,
+  EDITING_MODES,
   ZOOM_LEVELS_PERCENT,
   WHEEL_DOCKS,
   panelWidthOf,
@@ -111,6 +112,7 @@ export {
   type SidebarView,
   type ThemePreference,
   type Typography,
+  type EditingModeSetting,
   type ViewSettings,
   type WheelDock,
 } from './view/ViewSettings';
@@ -350,3 +352,4 @@ export {
   type IgnoreScope,
 } from './prompt-injection/ignoreFindings';
 export { isAgentFileLocation } from './prompt-injection/isAgentFileLocation';
+export { isTooLargeForRichText, MAX_RICH_TEXT_DOCUMENT_BYTES } from './documents/richTextSizeLimit';

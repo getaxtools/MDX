@@ -26,6 +26,7 @@ async function renderRichText(text: string) {
     fileName: 'Widgets.md',
     text,
     zoomPercent: 100,
+    editingMode: 'richText',
     translator,
     onChange,
     richTextRendering: createRichTextRendering({
@@ -41,7 +42,6 @@ async function renderRichText(text: string) {
     () => shownEditor ?? Promise.reject(new Error('The editor is not ready')),
     EDITOR_LOAD_WAIT,
   );
-  editor.setEditingMode('richText');
   editor.revealLine(text.split('\n').length - 1);
   return { textBox, onChange, renderMarkdown };
 }

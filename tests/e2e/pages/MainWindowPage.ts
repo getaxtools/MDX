@@ -147,9 +147,28 @@ export class MainWindowPage {
     );
   }
 
+  /** Opens the editor in Source, which the editing specs written before Rich text expect. */
   async startEditing(): Promise<void> {
-    await this.pressShortcut('Ctrl+/');
+    await this.openEditor();
+    if (await this.isEditorInRichText()) await this.switchEditingMode();
+  }
+
+  /** Opens the editor in the mode of the setting, Rich text on a new installation. */
+  async openEditor(): Promise<void> {
+    await this.pressShortcut('Ctrl+E');
     await this.browser.$('[role="textbox"][aria-label^="Source of"]').waitForDisplayed();
+  }
+
+  /** Ctrl+/ between Rich text and Source, waiting for the editor to show the other mode. */
+  async switchEditingMode(): Promise<void> {
+    const wasRichText = await this.isEditorInRichText();
+    await this.pressShortcut('Ctrl+/');
+    await this.browser.waitUntil(async () => (await this.isEditorInRichText()) !== wasRichText);
+  }
+
+  /** The editor marks Rich text with a class only; the mode has no role or accessible name of its own. */
+  async isEditorInRichText(): Promise<boolean> {
+    return this.browser.$('.cm-editor.cm-rich-text').isExisting();
   }
 
   /**

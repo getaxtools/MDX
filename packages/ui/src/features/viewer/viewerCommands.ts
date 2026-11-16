@@ -1,4 +1,4 @@
-import { READING_WIDTHS, THEME_PREFERENCES, TYPOGRAPHIES } from '@mdx/core';
+import { READING_WIDTHS, THEME_PREFERENCES, TYPOGRAPHIES, EDITING_MODES } from '@mdx/core';
 import { DETECT_ENCODING_ITEM, isReopenEncoding } from '../encodings/reopenEncodings';
 import type { ExportFormat, TextSearchOptions } from '@mdx/platform';
 import type { WorkspaceKindCommand } from '../control-wheel/workspaceKindCommands';
@@ -114,6 +114,7 @@ const COMMANDS_BY_MENU_ITEM: Readonly<Record<string, ViewerCommand>> = {
   showKeyboardShortcuts: { kind: 'showKeyboardShortcuts' },
   showCommandPalette: { kind: 'showCommandPalette' },
   toggleEditing: { kind: 'toggleEditing' },
+  toggleEditingMode: { kind: 'toggleEditingMode' },
   togglePreviewBesideEditor: { kind: 'togglePreviewBesideEditor' },
   newDocument: { kind: 'newDocument' },
   goBack: { kind: 'goBack' },
@@ -147,6 +148,8 @@ export function commandForMenuItem(menuItemId: string): ViewerCommand | undefine
   if (readingWidth) return { kind: 'setReadingWidth', readingWidth };
   const typography = TYPOGRAPHIES.find((preset) => menuItemId === `typography.${preset}`);
   if (typography) return { kind: 'setTypography', typography };
+  const editingMode = EDITING_MODES.find((mode) => menuItemId === `editingMode.${mode}`);
+  if (editingMode) return { kind: 'setEditingMode', editingMode };
   if (menuItemId.startsWith(REOPEN_WITH_ENCODING_PREFIX)) {
     return reopenCommandFor(menuItemId.slice(REOPEN_WITH_ENCODING_PREFIX.length));
   }

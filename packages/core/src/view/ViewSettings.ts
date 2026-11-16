@@ -3,6 +3,7 @@ export type ThemePreference =
 export type ColorScheme = 'light' | 'dark';
 export type ReadingWidth = 'narrow' | 'medium' | 'wide' | 'full';
 export type Typography = 'github' | 'book' | 'academic';
+export type EditingModeSetting = 'richText' | 'source';
 /** A language tag such as `hi` or `pt-BR`, or `system` to follow the language of Windows. */
 export type LanguagePreference = 'system' | (string & {});
 export type ExplorerSection = 'favourites' | 'folders' | 'tags' | 'recentFiles';
@@ -40,6 +41,8 @@ export interface ViewSettings {
   /** The control wheel opens where the pointer is instead of in its corner. */
   readonly isWheelOpenedAtPointer: boolean;
   readonly isWheelButtonInStatusBar: boolean;
+  /** Rich text shows formatting like the preview, with the Markdown where the caret is; Source shows all of it. */
+  readonly editingMode: EditingModeSetting;
   /** A slash at the start of a line or after a space opens the insert menu, per editing mode. */
   readonly isSlashMenuInRichText: boolean;
   readonly isSlashMenuInSource: boolean;
@@ -71,6 +74,9 @@ export const THEME_COLOR_SCHEMES: Readonly<Record<Exclude<ThemePreference, 'syst
 };
 export const READING_WIDTHS: readonly ReadingWidth[] = ['narrow', 'medium', 'wide', 'full'];
 export const TYPOGRAPHIES: readonly Typography[] = ['github', 'book', 'academic'];
+export const EDITING_MODES: readonly EditingModeSetting[] = ['richText', 'source'];
+/** What saved settings from before Rich text existed mean, so upgraded installations keep Source. */
+const EDITING_MODE_OF_EARLIER_SETTINGS: EditingModeSetting = 'source';
 export const EXPLORER_SECTIONS: readonly ExplorerSection[] = ['favourites', 'folders', 'tags', 'recentFiles'];
 export const MIN_EXPLORER_SECTION_HEIGHT_PX = 48;
 export const MAX_EXPLORER_SECTION_HEIGHT_PX = 4000;
@@ -113,6 +119,7 @@ export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
   wheelDock: 'bottomInlineEnd',
   isWheelOpenedAtPointer: false,
   isWheelButtonInStatusBar: false,
+  editingMode: 'richText',
   isSlashMenuInRichText: true,
   isSlashMenuInSource: false,
   isNoteDeletionConfirmed: true,
@@ -239,7 +246,7 @@ export function parseViewSettings(saved: unknown): ViewSettings {
     isPreviewBesideEditor: isPreviewBesideEditor === true,
     editorSharePercent: parseEditorShare(editorSharePercent),
     ...parseKindSwitcherSettings(saved as Record<string, unknown>),
-    ...parseSlashMenuSettings(saved as Record<string, unknown>),
+    ...parseEditingSettings(saved as Record<string, unknown>),
     ...parseNoteQuestionSettings(saved as Record<string, unknown>),
   };
 }
@@ -267,10 +274,11 @@ function parseNoteQuestionSettings(
   };
 }
 
-function parseSlashMenuSettings(
+function parseEditingSettings(
   saved: Record<string, unknown>,
-): Pick<ViewSettings, 'isSlashMenuInRichText' | 'isSlashMenuInSource'> {
+): Pick<ViewSettings, 'editingMode' | 'isSlashMenuInRichText' | 'isSlashMenuInSource'> {
   return {
+    editingMode: oneOf(EDITING_MODES, saved.editingMode, EDITING_MODE_OF_EARLIER_SETTINGS),
     isSlashMenuInRichText: saved.isSlashMenuInRichText !== false,
     isSlashMenuInSource: saved.isSlashMenuInSource === true,
   };

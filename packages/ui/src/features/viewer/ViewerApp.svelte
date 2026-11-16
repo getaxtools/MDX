@@ -438,6 +438,15 @@
             onCommand={(command: ViewerCommand) => void controller.execute(command)}
           />
         </div>
+        <span class="mode-announcement" role="status">
+          {#key snapshot.editingModeAnnouncement?.number}
+            {snapshot.editingModeAnnouncement
+              ? translator.translate('editing.modeAnnouncement', {
+                  mode: snapshot.editingModeAnnouncement.mode,
+                })
+              : ''}
+          {/key}
+        </span>
         <NoticeBar
           message={snapshot.notice}
           actions={snapshot.noticeActions}
@@ -502,7 +511,11 @@
                     scrollRatio={editedDocument.scrollRatio}
                     {translator}
                     editorRequest={snapshot?.editorRequest}
-                    isSlashMenuEnabled={viewSettings.isSlashMenuInSource}
+                    editingMode={snapshot?.editingMode ?? 'source'}
+                    slashMenu={{
+                      isInRichText: viewSettings.isSlashMenuInRichText,
+                      isInSource: viewSettings.isSlashMenuInSource,
+                    }}
                     onPastePicture={(bytes: Uint8Array) => controller.pastePicture(bytes)}
                     onCursorCountChange={(count: number) => (cursorCount = count)}
                     onOpenLink={openEditorLink}
@@ -749,6 +762,16 @@
 {/if}
 
 <style>
+  /* Heard by screen readers, not shown: the editor itself shows the mode. */
+  .mode-announcement {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
   .app-shell {
     display: grid;
     grid-template-rows: 1fr auto;

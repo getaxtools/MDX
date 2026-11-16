@@ -1310,6 +1310,7 @@ describe('ViewerController', () => {
         theme: 'system',
         readingWidth: 'medium',
         typography: 'github',
+        editingMode: 'richText',
         isSidebarVisible: true,
         isOutlineVisible: false,
         isStatusBarVisible: true,
@@ -1320,6 +1321,15 @@ describe('ViewerController', () => {
       menu.choose('theme.dark');
 
       await vi.waitFor(() => expect(menu.shownViewState?.theme).toBe('dark'));
+    });
+
+    it('View menu checks the current mode', async () => {
+      const { controller, menu } = createViewer();
+      await controller.start();
+
+      menu.choose('editingMode.source');
+
+      await vi.waitFor(() => expect(menu.shownViewState?.editingMode).toBe('source'));
     });
 
     it('checks Source View in the menu while the source is shown', async () => {

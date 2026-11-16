@@ -3,6 +3,7 @@ use serde::Deserialize;
 pub const THEME_ITEM_PREFIX: &str = "theme.";
 pub const READING_WIDTH_ITEM_PREFIX: &str = "readingWidth.";
 pub const TYPOGRAPHY_ITEM_PREFIX: &str = "typography.";
+pub const EDITING_MODE_ITEM_PREFIX: &str = "editingMode.";
 pub const TOGGLE_SIDEBAR_ITEM_ID: &str = "toggleSidebar";
 pub const TOGGLE_OUTLINE_ITEM_ID: &str = "toggleOutline";
 pub const TOGGLE_STATUS_BAR_ITEM_ID: &str = "toggleStatusBar";
@@ -16,6 +17,8 @@ pub struct ViewMenuState {
     pub reading_width: String,
     #[serde(default)]
     pub typography: String,
+    #[serde(default)]
+    pub editing_mode: String,
     pub is_sidebar_visible: bool,
     pub is_outline_visible: bool,
     pub is_status_bar_visible: bool,
@@ -34,6 +37,9 @@ impl ViewMenuState {
         }
         if let Some(typography) = item_id.strip_prefix(TYPOGRAPHY_ITEM_PREFIX) {
             return typography == self.typography;
+        }
+        if let Some(editing_mode) = item_id.strip_prefix(EDITING_MODE_ITEM_PREFIX) {
+            return editing_mode == self.editing_mode;
         }
         match item_id {
             TOGGLE_SIDEBAR_ITEM_ID => self.is_sidebar_visible,
@@ -55,6 +61,7 @@ mod tests {
             theme: "dark".to_owned(),
             reading_width: "wide".to_owned(),
             typography: "book".to_owned(),
+            editing_mode: "richText".to_owned(),
             is_sidebar_visible: true,
             is_outline_visible: false,
             is_status_bar_visible: true,
@@ -79,6 +86,14 @@ mod tests {
 
         assert!(state.is_checked("typography.book"));
         assert!(!state.is_checked("typography.github"));
+    }
+
+    #[test]
+    fn checks_only_the_current_editing_mode() {
+        let state = state();
+
+        assert!(state.is_checked("editingMode.richText"));
+        assert!(!state.is_checked("editingMode.source"));
     }
 
     #[test]

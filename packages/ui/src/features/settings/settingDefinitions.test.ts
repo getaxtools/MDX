@@ -26,7 +26,7 @@ describe('setting definitions', () => {
 
   it('turns every choice into a view command that applies it', () => {
     for (const setting of SETTING_DEFINITIONS) {
-      if (setting.kind !== 'choice') continue;
+      if (setting.kind !== 'choice' || setting.id === 'editingMode') continue;
       for (const choice of setting.choices(translator)) {
         const command = setting.commandFor(choice.value);
         if (!command || !isViewCommand(command)) throw new Error(`${setting.id} ${choice.value}`);
@@ -34,6 +34,17 @@ describe('setting definitions', () => {
         expect(setting.valueIn(applyViewCommand(DEFAULT_VIEW_SETTINGS, command))).toBe(choice.value);
       }
     }
+  });
+
+  it('the editing mode choice asks for the mode, which a document too large for Rich text may refuse', () => {
+    const editingMode = settingWithId('editingMode');
+    if (editingMode.kind !== 'choice') throw new Error('editingMode');
+
+    expect(editingMode.choices(translator).map((choice) => editingMode.commandFor(choice.value))).toEqual([
+      { kind: 'setEditingMode', editingMode: 'richText' },
+      { kind: 'setEditingMode', editingMode: 'source' },
+    ]);
+    expect(editingMode.valueIn(DEFAULT_VIEW_SETTINGS)).toBe('richText');
   });
 
   it('ignores a choice that does not exist', () => {

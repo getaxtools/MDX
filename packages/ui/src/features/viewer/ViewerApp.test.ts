@@ -1,11 +1,16 @@
 import { ViewerSession, WorkspaceKindsState, type WorkspaceKind } from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
-import { InMemoryAppState, InMemoryDocumentFiles, InMemoryDocumentRequests } from '@mdx/platform';
+import {
+  InMemoryAppState,
+  InMemoryDocumentFiles,
+  InMemoryDocumentLinks,
+  InMemoryDocumentRequests,
+} from '@mdx/platform';
 import { createMarkdownRenderer } from '@mdx/renderer';
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { tick } from 'svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ViewerApp from './ViewerApp.svelte';
 import { ViewerController } from './ViewerController';
 
@@ -15,11 +20,16 @@ const LAZY_LOAD_WAIT = { timeout: 10_000 };
 const GUIDE = 'C:\\Docs\\Guide.md';
 const NOTES = 'C:\\Docs\\Notes.md';
 
-async function renderViewer(startupPaths: string[] = []) {
+async function renderViewer(startupPaths: string[] = [], files: Readonly<Record<string, string>> = {}) {
   const requests = new InMemoryDocumentRequests(startupPaths);
   const translator = createTranslator();
+  const links = new InMemoryDocumentLinks();
   const session = new ViewerSession({
-    documentFiles: new InMemoryDocumentFiles({ [GUIDE]: '# Guide\n\nWelcome.', [NOTES]: '# Notes' }),
+    documentFiles: new InMemoryDocumentFiles({
+      [GUIDE]: '# Guide\n\nWelcome.',
+      [NOTES]: '# Notes',
+      ...files,
+    }),
     appState: new InMemoryAppState(),
     now: () => 0,
   });
@@ -28,6 +38,7 @@ async function renderViewer(startupPaths: string[] = []) {
     requests,
     renderer: createMarkdownRenderer({ window }),
     translator,
+    links,
   });
   await controller.start();
   render(ViewerApp, {
@@ -36,7 +47,7 @@ async function renderViewer(startupPaths: string[] = []) {
     platform: 'windows',
     appInfo: { version: '1.0.0', dataFolder: 'C:\\Data' },
   });
-  return { requests, controller, session };
+  return { requests, controller, session, links };
 }
 
 const NOTES_BUILT: readonly WorkspaceKind[] = [
@@ -180,11 +191,11 @@ describe('ViewerApp', () => {
     expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull();
   });
 
-  it('switches to the source editor with Ctrl+/ and marks the tab while edits are unsaved', async () => {
+  it('Ctrl+E toggles editing and marks the tab while edits are unsaved', async () => {
     const { controller } = await renderViewer([GUIDE]);
     await screen.findByRole('heading', { name: 'Guide' });
 
-    await userEvent.keyboard('{Control>}/{/Control}');
+    await userEvent.keyboard('{Control>}e{/Control}');
     await screen.findByRole('textbox', { name: 'Source of Guide.md' });
     controller.updateEditedText(GUIDE.toLowerCase(), '# Guide\n\nEdited.');
 
@@ -192,6 +203,114 @@ describe('ViewerApp', () => {
     expect(screen.getByRole('button', { name: 'Preview' }).getAttribute('aria-pressed')).toBe('true');
     await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
     expect(await screen.findByText('Edited.')).toBeTruthy();
+  });
+
+  describe('Rich text and Source', () => {
+    const LINKS = 'C:\\Docs\\Links.md';
+    const LARGE = 'C:\\Docs\\Large.md';
+    const EDITOR_WAIT = { timeout: 5_000 };
+
+    // CodeMirror measures text positions, which jsdom does not lay out.
+    beforeEach(() => {
+      Object.defineProperty(Range.prototype, 'getClientRects', {
+        configurable: true,
+        value: () => [new DOMRect(0, 0, 1, 1)],
+      });
+      Object.defineProperty(Range.prototype, 'getBoundingClientRect', {
+        configurable: true,
+        value: () => new DOMRect(0, 0, 1, 1),
+      });
+    });
+
+    afterEach(() => {
+      Reflect.deleteProperty(Range.prototype, 'getClientRects');
+      Reflect.deleteProperty(Range.prototype, 'getBoundingClientRect');
+    });
+
+    async function editedTextBox(fileName: string): Promise<HTMLElement> {
+      await userEvent.keyboard('{Control>}e{/Control}');
+      return screen.findByRole('textbox', { name: `Source of ${fileName}` }, EDITOR_WAIT);
+    }
+
+    function isShownInRichText(textBox: HTMLElement): boolean {
+      return textBox.closest('.cm-editor')?.classList.contains('cm-rich-text') ?? false;
+    }
+
+    async function linkText(textBox: HTMLElement, text: string): Promise<Element> {
+      return vi.waitFor(
+        () =>
+          [...textBox.querySelectorAll('.cm-rich-link')].find((link) => link.textContent === text) ??
+          Promise.reject(new Error(`No link named ${text}`)),
+        EDITOR_WAIT,
+      );
+    }
+
+    it('Ctrl+/ switches to Source and back, and each change is announced once', async () => {
+      await renderViewer([GUIDE]);
+      await screen.findByRole('heading', { name: 'Guide' });
+      const textBox = await editedTextBox('Guide.md');
+      const wasRichTextAtFirst = isShownInRichText(textBox);
+
+      await userEvent.keyboard('{Control>}/{/Control}');
+      await vi.waitFor(() => expect(isShownInRichText(textBox)).toBe(false));
+      const announcements = screen
+        .getAllByRole('status')
+        .map((region) => region.textContent.trim())
+        .filter((text) => text.endsWith('mode'));
+      await userEvent.keyboard('{Control>}/{/Control}');
+
+      expect(wasRichTextAtFirst).toBe(true);
+      expect(announcements).toEqual(['Source mode']);
+      await vi.waitFor(() => expect(isShownInRichText(textBox)).toBe(true));
+    });
+
+    it('the mode carries over to the next document opened for editing', async () => {
+      await renderViewer([GUIDE, NOTES]);
+      await screen.findByRole('heading', { name: 'Notes' });
+      await editedTextBox('Notes.md');
+      await userEvent.keyboard('{Control>}/{/Control}');
+      await userEvent.keyboard('{Control>}e{/Control}');
+
+      await userEvent.click(screen.getByRole('tab', { name: 'Guide.md' }));
+      const guide = await editedTextBox('Guide.md');
+
+      expect(isShownInRichText(guide)).toBe(false);
+    });
+
+    it('Ctrl+click opens a relative link in a tab', async () => {
+      await renderViewer([LINKS], { [LINKS]: 'See [the notes](Notes.md).\n\nEnd' });
+      await screen.findByRole('tab', { name: 'Links.md', selected: true });
+      const textBox = await editedTextBox('Links.md');
+
+      await fireEvent.mouseDown(await linkText(textBox, 'the notes'), { ctrlKey: true, button: 0 });
+
+      expect(await screen.findByRole('tab', { name: 'Notes.md', selected: true })).toBeTruthy();
+    });
+
+    it('external link asks first', async () => {
+      const { links } = await renderViewer([LINKS], {
+        [LINKS]: 'Visit [the site](https://example.com).\n\nEnd',
+      });
+      await screen.findByRole('tab', { name: 'Links.md', selected: true });
+      const textBox = await editedTextBox('Links.md');
+
+      await fireEvent.mouseDown(await linkText(textBox, 'the site'), { ctrlKey: true, button: 0 });
+
+      expect(await screen.findByRole('alertdialog', { name: 'Open link in your browser?' })).toBeTruthy();
+      expect(links.openedExternalLinks).toEqual([]);
+    });
+
+    it('a document over 1 MB opens in Source with a notice that names the reason', async () => {
+      await renderViewer([LARGE], { [LARGE]: 'a'.repeat(1_048_577) });
+      await screen.findByRole('tab', { name: 'Large.md', selected: true });
+
+      const textBox = await editedTextBox('Large.md');
+
+      expect(isShownInRichText(textBox)).toBe(false);
+      expect(
+        await screen.findByText('Large.md is larger than 1 MB, so it is edited in Source mode.'),
+      ).toBeTruthy();
+    });
   });
 
   it('moves the editor caret to a heading chosen while the editor is still starting', async () => {
@@ -202,7 +321,7 @@ describe('ViewerApp', () => {
     const heldFrames: FrameRequestCallback[] = [];
     vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((frame) => heldFrames.push(frame));
 
-    await userEvent.keyboard('{Control>}/{/Control}');
+    await userEvent.keyboard('{Control>}e{/Control}');
     const source = await screen.findByRole('textbox', { name: 'Source of Guide.md' });
     await userEvent.click(within(outline).getByRole('button', { name: 'Guide' }));
     for (const frame of heldFrames.splice(0)) frame(0);

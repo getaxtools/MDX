@@ -1,7 +1,10 @@
+import type { EditingModeSetting } from '@mdx/core';
 import type { EditorMenuCommand, SectionAction } from '@mdx/editor';
 
 export type EditingCommand =
   | { readonly kind: 'toggleEditing' }
+  | { readonly kind: 'toggleEditingMode' }
+  | { readonly kind: 'setEditingMode'; readonly editingMode: EditingModeSetting }
   | { readonly kind: 'togglePreviewBesideEditor' }
   | { readonly kind: 'newDocument' }
   | { readonly kind: 'runEditorCommand'; readonly command: EditorMenuCommand }

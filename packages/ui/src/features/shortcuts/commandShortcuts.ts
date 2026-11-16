@@ -110,8 +110,13 @@ export const COMMAND_SHORTCUTS: readonly CommandShortcut[] = [
   },
   {
     command: { kind: 'toggleEditing' },
-    combinations: [['ctrl', '/']],
+    combinations: [['ctrl', 'E']],
     actionKey: 'menu.view.toggleEditing',
+  },
+  {
+    command: { kind: 'toggleEditingMode' },
+    combinations: [['ctrl', '/']],
+    actionKey: 'menu.view.toggleEditingMode',
   },
   {
     command: { kind: 'togglePreviewBesideEditor' },

@@ -245,6 +245,7 @@ describe('TauriAppMenu', () => {
       theme: 'dark',
       readingWidth: 'wide',
       typography: 'book',
+      editingMode: 'richText',
       isSidebarVisible: false,
       isOutlineVisible: true,
       isStatusBarVisible: true,

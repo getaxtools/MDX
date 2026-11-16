@@ -19,6 +19,7 @@ import {
   notesLocationOf,
   notesSettingsOf,
   type FrontMatterEdit,
+  type EditingModeSetting,
 } from '@mdx/core';
 import type { WikiLinkSuggester } from '@mdx/editor';
 import type { MessageKey, Translator } from '@mdx/i18n';
@@ -64,6 +65,7 @@ import { DocumentAttachments } from '../editing/DocumentAttachments';
 import { DocumentEditing } from '../editing/DocumentEditing';
 import type { FindQuery } from '../find/findTextRanges';
 import { EditingActions } from '../editing/EditingActions';
+import { EditingModeActions, type EditingModeAnnouncement } from '../editing/EditingModeActions';
 import type { EditorRequest } from '../editing/editingCommands';
 import { ExplorerFolderActions } from '../explorer/ExplorerFolderActions';
 import { FolderRefresh } from '../folder-tree/FolderRefresh';
@@ -186,6 +188,9 @@ export interface ViewerSnapshot {
   /** How often each shown folder changed on disk, so its listing reloads when the count goes up. */
   readonly folderRevisions: ReadonlyMap<string, number>;
   readonly isActiveDocumentEditing?: boolean;
+  /** Rich text or Source for the edited document: the setting, or Source for a document too large for Rich text. */
+  readonly editingMode?: EditingModeSetting;
+  readonly editingModeAnnouncement?: EditingModeAnnouncement;
   /** Open documents whose edited text is not saved yet. */
   readonly unsavedDocumentKeys: ReadonlySet<string>;
   /** The note whose property is being written, whose fields wait without asking for a save. */
@@ -305,6 +310,7 @@ export class ViewerController {
   private readonly propertyEditing: PropertyEditing;
   private readonly editing = new DocumentEditing();
   private readonly editingActions: EditingActions;
+  private readonly editingModes: EditingModeActions;
   private readonly navigation: DocumentNavigation;
   private readonly documentAttachments: DocumentAttachments | undefined;
 
@@ -324,6 +330,11 @@ export class ViewerController {
       onConflict: (location) => this.showChangedOnDiskNotice(location, 'editing.conflict.message'),
     });
     this.propertyEditing = this.createPropertyEditing();
+    this.editingModes = new EditingModeActions(dependencies.session, {
+      activeEditedLocation: () => this.editedLocation(),
+      showNotice: (key, values) => this.showNotice(key, values),
+      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+    });
     this.liveReload = dependencies.watcher
       ? new LiveReload(dependencies.watcher, dependencies.session, (changedKeys) => {
           this.refreshPathStatuses({ isForced: true });
@@ -838,7 +849,13 @@ export class ViewerController {
     exportFavourites: () => this.exportFavourites(),
     importFavourites: () => this.importFavourites(),
     refreshFolders: () => this.folderRefresh.refreshShownFolders(),
-    toggleEditing: () => this.editingActions.toggleActiveDocument(),
+    toggleEditing: () => {
+      this.editingActions.toggleActiveDocument();
+      const location = this.editedLocation();
+      if (location) this.editingModes.explainSourceFor(location);
+    },
+    toggleEditingMode: () => this.editingModes.toggleMode(),
+    setEditingMode: ({ editingMode }) => this.editingModes.changeMode(editingMode),
     togglePreviewBesideEditor: () => this.togglePreviewBesideEditor(),
     newDocument: () => this.openNewDocument(),
     goBack: () => this.navigation.goBack(),
@@ -943,11 +960,13 @@ export class ViewerController {
     const { menu, session } = this.dependencies;
     if (!menu) return;
     const { viewSettings } = session.currentState();
-    const { theme, readingWidth, typography, isStatusBarVisible, isPreviewBesideEditor } = viewSettings;
+    const { theme, readingWidth, typography, editingMode, isStatusBarVisible, isPreviewBesideEditor } =
+      viewSettings;
     const state = {
       theme,
       readingWidth,
       typography,
+      editingMode,
       isSidebarVisible: isSidebarViewShown(viewSettings, 'explorer'),
       isOutlineVisible: isSidebarViewShown(viewSettings, 'outline'),
       isStatusBarVisible,
@@ -1454,6 +1473,7 @@ export class ViewerController {
       unsavedDocumentKeys: this.editing.unsavedKeys(),
       ...this.propertySavingPart(),
       ...(this.editingActions.isActiveDocumentEditing() ? { isActiveDocumentEditing: true } : {}),
+      ...this.editingModePart(),
       ...this.editorRequestPart(),
       ...(this.activeDocument ? { activeDocument: this.activeDocument } : {}),
       ...(notice === undefined ? {} : { notice }),
@@ -1467,6 +1487,21 @@ export class ViewerController {
       ...this.workspacesPart(),
       ...this.notesPart(),
     };
+  }
+
+  private editingModePart(): Pick<ViewerSnapshot, 'editingMode' | 'editingModeAnnouncement'> {
+    const location = this.editedLocation();
+    const announcement = this.editingModes.announcement();
+    return {
+      ...(location ? { editingMode: this.editingModes.modeFor(location.canonicalKey) } : {}),
+      ...(announcement ? { editingModeAnnouncement: announcement } : {}),
+    };
+  }
+
+  /** The active document while it is open in the editor. */
+  private editedLocation(): DocumentLocation | undefined {
+    if (!this.editingActions.isActiveDocumentEditing()) return undefined;
+    return this.dependencies.session.currentState().tabStrip.activeTab()?.location;
   }
 
   /** Either the missing folder's path or, while the folder is there, its note tree. */

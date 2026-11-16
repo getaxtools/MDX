@@ -35,6 +35,7 @@ import {
   type EditingMode,
 } from './editing-mode/editingMode';
 import { EDITOR_ACTION_COMMANDS } from './editorActionCommands';
+import { isSlashMenuOnIn, SLASH_MENU_OFF, type SlashMenuSettings } from './editing-mode/slashMenuSettings';
 import { editorCompletions } from './slash-menu/slashMenu';
 import { wikiLinkCompletions, type WikiLinkSuggester } from './wiki-links/wikiLinkCompletions';
 import { snippetFields, snippetInsertion, type SnippetExpander } from './snippets/snippetFields';
@@ -77,8 +78,8 @@ export interface SourceEditorOptions {
   readonly onChange: (text: string) => void;
   /** How far down the text is scrolled, from 0 to 1, so the preview can open at the same place. */
   readonly onScroll?: (scrollRatio: number) => void;
-  /** Whether a slash at the start of a line or after a space opens the insert menu. */
-  readonly isSlashMenuEnabled?: boolean;
+  /** Whether a slash opens the insert menu, in Rich text and in Source; off in both when not given. */
+  readonly slashMenu?: SlashMenuSettings;
   /** Saves a pasted picture next to the document and gives the Markdown link to insert. */
   readonly onPastePicture?: (bytes: Uint8Array) => Promise<string | undefined>;
   /** How many cursors or selections there are, reported when the number changes. */
@@ -121,7 +122,7 @@ export interface SourceEditor {
   run(command: EditorMenuCommand): void;
   /** Moves, promotes or demotes the outline section whose heading is on a zero-based line, as one undo step. */
   changeSection(headingLine: number, action: SectionAction): void;
-  setSlashMenuEnabled(isEnabled: boolean): void;
+  setSlashMenuSettings(settings: SlashMenuSettings): void;
   setSnippets(snippets: readonly EditorSnippet[]): void;
   /** Inserts a snippet at the selection, selecting its first field. */
   insertSnippet(expand: SnippetExpander): void;
@@ -137,8 +138,12 @@ export interface SourceEditor {
   destroy(): void;
 }
 
-/** Keys the app owns while editing: Ctrl+/ returns to preview, Ctrl+D stars the document, Alt+arrows go back and forward. */
+/**
+ * Keys the app owns while editing: Ctrl+E returns to preview, Ctrl+/ switches Rich text and Source,
+ * Ctrl+D stars the document, Alt+arrows go back and forward.
+ */
 const KEYS_LEFT_TO_THE_APP = new Set([
+  'Mod-e',
   'Mod-/',
   'Mod-d',
   'Alt-A',
@@ -157,7 +162,7 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
     state: EditorState.create({
       doc: options.text,
       extensions: [
-        slashMenuSwitch.of(initialSlashMenu(options)),
+        slashMenuSwitch.of(initialSlashMenu(options, options.editingMode ?? DEFAULT_EDITING_MODE)),
         editingModeExtension(options.editingMode ?? DEFAULT_EDITING_MODE, options.onEditingModeChange),
         typographyExtension(options.typography ?? DEFAULT_EDITOR_TYPOGRAPHY),
         editorExtensions(options),
@@ -165,6 +170,7 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
     }),
   });
   const commands = menuCommandsOf(view);
+  const { followEditingMode, ...slashMenu } = slashMenuControlOf(view, slashMenuSwitch, options);
   const { stopReportingScroll, ...scrolling } = scrollingOf(view, options);
   return {
     focus: () => view.focus(),
@@ -174,9 +180,12 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
     replaceText: (text) => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } }),
     run: (command) => commands[command](),
     ...blockEditingOf(view),
-    ...slashMenuControlOf(view, slashMenuSwitch, options),
+    ...slashMenu,
     editingMode: () => editingModeOf(view.state),
-    setEditingMode: (mode) => setEditingMode(view, mode),
+    setEditingMode: (mode) => {
+      setEditingMode(view, mode);
+      followEditingMode();
+    },
     setTypography: (typography) => setTypography(view, typography),
     destroy: () => {
       stopReportingScroll();
@@ -210,8 +219,9 @@ function scrollingOf(
   };
 }
 
-function initialSlashMenu(options: SourceEditorOptions): Extension {
-  return completionsFor(options.isSlashMenuEnabled === true, options.snippets ?? [], options.wikiLinks);
+function initialSlashMenu(options: SourceEditorOptions, mode: EditingMode): Extension {
+  const isOn = isSlashMenuOnIn(options.slashMenu ?? SLASH_MENU_OFF, mode);
+  return completionsFor(isOn, options.snippets ?? [], options.wikiLinks);
 }
 
 function completionsFor(
@@ -225,25 +235,33 @@ function completionsFor(
   });
 }
 
-/** The insert menu can be turned on and off, and its snippet group changes with the user's snippets. */
+/**
+ * The insert menu follows its setting for the mode the editor is in, and its snippet group changes
+ * with the user's snippets.
+ */
 function slashMenuControlOf(
   view: EditorView,
   slashMenuSwitch: Compartment,
   options: SourceEditorOptions,
-): Pick<SourceEditor, 'setSlashMenuEnabled' | 'setSnippets' | 'insertSnippet'> {
-  let isSlashMenuEnabled = options.isSlashMenuEnabled === true;
+): Pick<SourceEditor, 'setSlashMenuSettings' | 'setSnippets' | 'insertSnippet'> & {
+  readonly followEditingMode: () => void;
+} {
+  let settings = options.slashMenu ?? SLASH_MENU_OFF;
   let snippets = options.snippets ?? [];
-  const reconfigureSlashMenu = () =>
+  const reconfigureSlashMenu = () => {
+    const isOn = isSlashMenuOnIn(settings, editingModeOf(view.state));
     view.dispatch({
-      effects: slashMenuSwitch.reconfigure(completionsFor(isSlashMenuEnabled, snippets, options.wikiLinks)),
+      effects: slashMenuSwitch.reconfigure(completionsFor(isOn, snippets, options.wikiLinks)),
     });
+  };
   return {
+    followEditingMode: reconfigureSlashMenu,
     setSnippets: (changed) => {
       snippets = changed;
       reconfigureSlashMenu();
     },
-    setSlashMenuEnabled: (isEnabled) => {
-      isSlashMenuEnabled = isEnabled;
+    setSlashMenuSettings: (changed) => {
+      settings = changed;
       reconfigureSlashMenu();
     },
     insertSnippet: (expand) => {
@@ -343,6 +361,7 @@ function editorExtensions(options: SourceEditorOptions): Extension[] {
     // An explicit tab stop lets checkers see that the scrolling editor can be reached with the keyboard.
     EditorView.contentAttributes.of({ 'aria-label': options.label, spellcheck: 'false', tabindex: '0' }),
     keymap.of(formattingKeymap()),
+    EditorView.domEventHandlers({ keydown: runPhysicalKeyShortcut }),
     keymap.of([
       { key: 'Tab', run: selectNextCell },
       { key: 'Shift-Tab', run: selectPreviousCell },
@@ -447,11 +466,20 @@ async function insertPastedPicture(
 }
 
 function formattingKeymap(): KeyBinding[] {
-  return EDITOR_SHORTCUTS.map(({ action, key }) => ({
+  return EDITOR_SHORTCUTS.filter((shortcut) => shortcut.code === undefined).map(({ action, key }) => ({
     key,
     run: EDITOR_ACTION_COMMANDS[action],
     preventDefault: true,
   }));
+}
+
+/** Shortcuts matched on the physical key run with Ctrl alone, whatever the key types on the layout. */
+function runPhysicalKeyShortcut(event: KeyboardEvent, view: EditorView): boolean {
+  if (event.isComposing || !event.ctrlKey || event.altKey || event.shiftKey || event.metaKey) return false;
+  const shortcut = EDITOR_SHORTCUTS.find((candidate) => candidate.code === event.code);
+  if (!shortcut) return false;
+  EDITOR_ACTION_COMMANDS[shortcut.action](view);
+  return true;
 }
 
 /** An input method may use Ctrl+Enter while it composes, so the key does nothing then. */

@@ -27,6 +27,7 @@ export { EDITOR_SHORTCUTS, type EditorAction, type EditorShortcut } from './edit
 export { editingModeFacet, editingModeOf, type EditingMode } from './editing-mode/editingMode';
 export type { EditorTypography } from './rich-text/typography';
 export type { WrittenLink } from './rich-text/linkTargets';
+export type { SlashMenuSettings } from './editing-mode/slashMenuSettings';
 export type { CalloutPresentation, RichTextLabels, RichTextRendering } from './rich-text/richTextRendering';
 export type {
   RichTextBlock,

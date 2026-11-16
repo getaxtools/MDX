@@ -40,6 +40,7 @@ describe('view settings', () => {
       wheelDock: 'bottomInlineEnd',
       isWheelOpenedAtPointer: false,
       isWheelButtonInStatusBar: false,
+      editingMode: 'richText',
       isSlashMenuInRichText: true,
       isSlashMenuInSource: false,
       isNoteDeletionConfirmed: true,
@@ -87,6 +88,7 @@ describe('view settings', () => {
       wheelDock: 'bottomInlineStart',
       isWheelOpenedAtPointer: true,
       isWheelButtonInStatusBar: true,
+      editingMode: 'richText',
       isSlashMenuInRichText: false,
       isSlashMenuInSource: true,
       isNoteDeletionConfirmed: false,
@@ -123,7 +125,7 @@ describe('view settings', () => {
         language: '<script>',
         isSidebarVisible: 'no',
       }),
-    ).toEqual(DEFAULT_VIEW_SETTINGS);
+    ).toEqual({ ...DEFAULT_VIEW_SETTINGS, editingMode: 'source' });
   });
 
   it('shows a side bar view, and hides the side bar when that view is shown again', () => {
@@ -254,5 +256,16 @@ describe('view settings', () => {
     expect(settings.wheelDock).toBe('bottomInlineEnd');
     expect(settings.isWheelOpenedAtPointer).toBe(false);
     expect(settings.isWheelButtonInStatusBar).toBe(false);
+  });
+
+  it('a saved state without the setting reads as Source', () => {
+    expect(parseViewSettings({ theme: 'dark' }).editingMode).toBe('source');
+    expect(parseViewSettings({ editingMode: 'richText' }).editingMode).toBe('richText');
+    expect(parseViewSettings({ editingMode: 'wysiwyg' }).editingMode).toBe('source');
+  });
+
+  it('a new installation starts in Rich text', () => {
+    expect(DEFAULT_VIEW_SETTINGS.editingMode).toBe('richText');
+    expect(parseViewSettings(undefined).editingMode).toBe('richText');
   });
 });

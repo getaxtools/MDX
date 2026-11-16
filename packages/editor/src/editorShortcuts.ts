@@ -25,6 +25,11 @@ export interface EditorShortcut {
   readonly key: string;
   /** The same key for display, in the app's shortcut table notation. */
   readonly combination: readonly string[];
+  /**
+   * The physical key, for a shortcut that must work on every keyboard layout: the key left of 1 is
+   * a backtick on a US keyboard but a dead key on a German one.
+   */
+  readonly code?: string;
 }
 
 const MAX_HEADING_LEVEL = 6;
@@ -42,7 +47,7 @@ export const EDITOR_SHORTCUTS: readonly EditorShortcut[] = [
   { action: 'bold', key: 'Mod-b', combination: ['ctrl', 'B'] },
   { action: 'italic', key: 'Mod-i', combination: ['ctrl', 'I'] },
   { action: 'strikethrough', key: 'Mod-Shift-x', combination: ['ctrl', 'shift', 'X'] },
-  { action: 'inlineCode', key: 'Mod-e', combination: ['ctrl', 'E'] },
+  { action: 'inlineCode', key: 'Mod-`', code: 'Backquote', combination: ['ctrl', '`'] },
   { action: 'link', key: 'Mod-k', combination: ['ctrl', 'K'] },
   ...HEADING_LEVELS.map((level) => ({
     action: `heading${String(level)}` as EditorAction,

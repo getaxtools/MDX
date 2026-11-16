@@ -35,11 +35,11 @@ describe('createSourceEditor', () => {
       label: 'Source of Plan.md',
       phrases: {},
       onChange: vi.fn(),
-      isSlashMenuEnabled: true,
+      slashMenu: { isInRichText: true, isInSource: true },
       wikiLinks,
     });
-    editor.setSlashMenuEnabled(false);
-    editor.setSlashMenuEnabled(true);
+    editor.setSlashMenuSettings({ isInRichText: false, isInSource: false });
+    editor.setSlashMenuSettings({ isInRichText: true, isInSource: true });
 
     expect(editor.text()).toBe('');
   });
@@ -70,6 +70,41 @@ describe('createSourceEditor', () => {
     textBox.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
     expect(opened.text()).toBe('- one\n- ');
+  });
+
+  it('Ctrl+` makes inline code on a German layout', () => {
+    const { parent, editor: opened } = openEditor('word');
+    const textBox = parent.querySelector('[contenteditable="true"]') ?? parent;
+    textBox.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true }));
+
+    const deadKey = new KeyboardEvent('keydown', {
+      key: 'Dead',
+      code: 'Backquote',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    textBox.dispatchEvent(deadKey);
+
+    expect(opened.text()).toBe('`word`');
+    expect(deadKey.defaultPrevented).toBe(true);
+  });
+
+  it('leaves Ctrl+E to the app for switching to the preview', () => {
+    const { parent, editor: opened } = openEditor('word');
+    const textBox = parent.querySelector('[contenteditable="true"]') ?? parent;
+    textBox.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true }));
+
+    const preview = new KeyboardEvent('keydown', {
+      key: 'e',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    textBox.dispatchEvent(preview);
+
+    expect(opened.text()).toBe('word');
+    expect(preview.defaultPrevented).toBe(false);
   });
 
   it('formats with its own keys and leaves the app keys alone', () => {
