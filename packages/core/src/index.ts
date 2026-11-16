@@ -240,3 +240,26 @@ export {
   type LocationClaimProblem,
   type NotesLocation,
 } from './notes-location/notesLocation';
+export {
+  detectSpecProjects,
+  type ChangeBasedLayout,
+  type DecisionRecordFile,
+  type DecisionRecordsLayout,
+  type DetectedSpecProject,
+  type FeatureFolder,
+  type FeatureNumberedLayout,
+  type FeatureSpecFolder,
+  type RequirementsDesignTasksLayout,
+  type SpecLayout,
+  type SpecLayoutKind,
+} from './spec-projects/detection/detectSpecProjects';
+export {
+  countTaskProgress,
+  readTasks,
+  type TaskItem,
+  type TaskProgress,
+} from './spec-projects/tasks/countTaskProgress';
+export {
+  AGENT_INSTRUCTION_LOCATIONS,
+  isAgentInstructionFile,
+} from './spec-projects/agent-files/agentInstructionLocations';
