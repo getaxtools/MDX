@@ -1,6 +1,8 @@
 import { CodePointSet, InvalidCodePointNotationError } from './CodePointSet';
 import type { SeverityEscalation } from './escalateSeverity';
 import { isInjectionSeverity, type InjectionSeverity } from './injectionSeverity';
+import agentFileLists from './rules/agent-files.json' with { type: 'json' };
+import commandLists from './rules/commands.json' with { type: 'json' };
 import hostLists from './rules/hosts.json' with { type: 'json' };
 import htmlElementLists from './rules/html-elements.json' with { type: 'json' };
 import bundledRulesetData from './rules/ruleset.json' with { type: 'json' };
@@ -283,7 +285,10 @@ export class Ruleset {
 
 /** The bundled rule records with the host, element and marker lists that ship beside them. */
 export function bundledRulesetWithLists(): Readonly<Record<string, unknown>> {
-  return { ...bundledRulesetData, lists: { ...hostLists, ...htmlElementLists, ...toolMarkerLists } };
+  return {
+    ...bundledRulesetData,
+    lists: { ...hostLists, ...htmlElementLists, ...toolMarkerLists, ...commandLists, ...agentFileLists },
+  };
 }
 
 export function numberParameter(rule: InjectionRule, name: string): number {

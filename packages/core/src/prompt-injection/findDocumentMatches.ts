@@ -1,5 +1,14 @@
 import type { DocumentStructure, SourceRange } from './DocumentStructure';
 import { analyzeHtml, type HtmlAnalysis } from './html/analyzeHtml';
+import {
+  findAlwaysLoadedRules,
+  findBroadToolGrants,
+  findDescriptionInstructions,
+  findExternalImports,
+  findSelfPropagation,
+} from './matchers/findAgentFileRisks';
+import { findConfusableCommands, findPipeToShell } from './matchers/findCommandRisks';
+import { findEncodedBlobs } from './matchers/findEncodedBlobs';
 import { findExfiltrationUrls } from './matchers/findExfiltrationUrls';
 import { findHiddenHtmlComments, findHiddenMarkdownComments } from './matchers/findHiddenComments';
 import { findHiddenHtml } from './matchers/findHiddenHtml';
@@ -9,6 +18,11 @@ import {
   findHiddenTitlesAndDescriptions,
   findUnusedReferences,
 } from './matchers/findHiddenMarkdown';
+import {
+  findInstructionPhrases,
+  findInstructionPhrasesInPayloads,
+  type DecodedPayload,
+} from './matchers/findInstructionPhrases';
 import { findOffScreenText } from './matchers/findOffScreenText';
 import type { DocumentMatcher, DocumentRuleInput, RuleMatch } from './matchers/RuleMatch';
 import { numberParameter, type Ruleset } from './Ruleset';
@@ -26,6 +40,16 @@ const DOCUMENT_MATCHERS: readonly DocumentMatcher[] = [
   findOffScreenText,
   findEmptyLinks,
   findExfiltrationUrls,
+  findInstructionPhrases,
+  findPipeToShell,
+  findConfusableCommands,
+];
+const AGENT_FILE_MATCHERS: readonly DocumentMatcher[] = [
+  findExternalImports,
+  findBroadToolGrants,
+  findDescriptionInstructions,
+  findSelfPropagation,
+  findAlwaysLoadedRules,
 ];
 
 export interface DocumentCheckInput {
@@ -59,7 +83,25 @@ export function documentRuleInputOf(input: DocumentCheckInput, ruleset: Ruleset)
   return { ...input, ruleset, html, hiddenRegions: hiddenRegionsOf(input.structure, html) };
 }
 
-/** Runs the `hidden-*` and `exfil-*` rules and the address look-alike rule over the parsed structure. */
-export function findDocumentMatches(input: DocumentRuleInput): RuleMatch[] {
-  return DOCUMENT_MATCHERS.flatMap((matcher) => matcher(input));
+function payloadsOf(matches: readonly RuleMatch[]): DecodedPayload[] {
+  return matches.flatMap((match) =>
+    match.decoded === undefined
+      ? []
+      : [{ range: { from: match.from, to: match.to }, decoded: match.decoded }],
+  );
+}
+
+/**
+ * Runs the structure, address, phrase and command rules, and the agent-file rules in agent files. Text
+ * decoded from hidden payloads, in the character matches or in encoded blocks, is checked once more.
+ */
+export function findDocumentMatches(
+  input: DocumentRuleInput,
+  characterMatches: readonly RuleMatch[],
+): RuleMatch[] {
+  const matchers = input.isAgentFile ? [...DOCUMENT_MATCHERS, ...AGENT_FILE_MATCHERS] : DOCUMENT_MATCHERS;
+  const documentMatches = matchers.flatMap((matcher) => matcher(input));
+  const encodedBlobs = findEncodedBlobs(input);
+  const payloads = payloadsOf([...characterMatches, ...encodedBlobs]);
+  return [...documentMatches, ...encodedBlobs, ...findInstructionPhrasesInPayloads(input, payloads)];
 }

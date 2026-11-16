@@ -141,7 +141,11 @@
       "U+057D",
       "U+0581",
       "U+0585"
-    ]
+    ],
+    "commandDashes": ["U+2010..U+2015", "U+2212", "U+FE58", "U+FE63", "U+FF0D"],
+    "fullwidthLatin": ["U+FF01..U+FF5E"],
+    "commandSpaces": ["U+00A0", "U+2000..U+200A", "U+202F", "U+205F", "U+3000"],
+    "curlyQuotes": ["U+2018..U+201F", "U+2032..U+2037"]
   },
   "rules": [
     {
@@ -555,6 +559,242 @@
       "parameters": {
         "redirectorSeverity": "low"
       }
+    },
+    {
+      "id": "instr-override",
+      "group": "instructions",
+      "kind": "phrases",
+      "severity": "medium",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.instrOverride.title",
+      "explanationKey": "promptInjection.rule.instrOverride.explanation",
+      "escalation": {
+        "hidden": 1,
+        "codeExample": -1
+      },
+      "parameters": {}
+    },
+    {
+      "id": "instr-role-markup",
+      "group": "instructions",
+      "kind": "phrases",
+      "severity": "medium",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.instrRoleMarkup.title",
+      "explanationKey": "promptInjection.rule.instrRoleMarkup.explanation",
+      "escalation": {
+        "hidden": 1,
+        "codeExample": -1
+      },
+      "parameters": {}
+    },
+    {
+      "id": "instr-tool-call-markup",
+      "group": "instructions",
+      "kind": "phrases",
+      "severity": "medium",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.instrToolCallMarkup.title",
+      "explanationKey": "promptInjection.rule.instrToolCallMarkup.explanation",
+      "escalation": {
+        "hidden": 1,
+        "codeExample": -1
+      },
+      "parameters": {}
+    },
+    {
+      "id": "instr-run-command",
+      "group": "instructions",
+      "kind": "phrases",
+      "severity": "low",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.instrRunCommand.title",
+      "explanationKey": "promptInjection.rule.instrRunCommand.explanation",
+      "escalation": {
+        "hidden": 1,
+        "agentFile": -2,
+        "codeExample": -1
+      },
+      "parameters": {}
+    },
+    {
+      "id": "instr-sensitive-files",
+      "group": "instructions",
+      "kind": "phrases",
+      "severity": "medium",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.instrSensitiveFiles.title",
+      "explanationKey": "promptInjection.rule.instrSensitiveFiles.explanation",
+      "escalation": {
+        "hidden": 1,
+        "codeExample": -1
+      },
+      "parameters": {}
+    },
+    {
+      "id": "instr-disable-safety",
+      "group": "instructions",
+      "kind": "phrases",
+      "severity": "high",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.instrDisableSafety.title",
+      "explanationKey": "promptInjection.rule.instrDisableSafety.explanation",
+      "escalation": {
+        "hidden": 1,
+        "codeExample": -1,
+        "negated": -2
+      },
+      "parameters": {}
+    },
+    {
+      "id": "instr-secrecy",
+      "group": "instructions",
+      "kind": "phrases",
+      "severity": "high",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.instrSecrecy.title",
+      "explanationKey": "promptInjection.rule.instrSecrecy.explanation",
+      "escalation": {
+        "hidden": 1,
+        "codeExample": -1
+      },
+      "parameters": {}
+    },
+    {
+      "id": "instr-addressed-to-ai",
+      "group": "instructions",
+      "kind": "phrases",
+      "severity": "low",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.instrAddressedToAi.title",
+      "explanationKey": "promptInjection.rule.instrAddressedToAi.explanation",
+      "escalation": {
+        "hidden": 1,
+        "agentFile": -2,
+        "codeExample": -1
+      },
+      "parameters": {}
+    },
+    {
+      "id": "instr-remote-instructions",
+      "group": "instructions",
+      "kind": "phrases",
+      "severity": "medium",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.instrRemoteInstructions.title",
+      "explanationKey": "promptInjection.rule.instrRemoteInstructions.explanation",
+      "escalation": {
+        "hidden": 1,
+        "agentFile": 1,
+        "codeExample": -1
+      },
+      "parameters": {}
+    },
+    {
+      "id": "exfil-pipe-to-shell",
+      "group": "exfiltration",
+      "kind": "command",
+      "severity": "medium",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.exfilPipeToShell.title",
+      "explanationKey": "promptInjection.rule.exfilPipeToShell.explanation",
+      "escalation": {
+        "hidden": 1,
+        "codeExample": -1
+      },
+      "parameters": {
+        "riskyHostSeverity": "high"
+      }
+    },
+    {
+      "id": "char-confusable-command",
+      "group": "characters",
+      "kind": "command",
+      "severity": "medium",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.charConfusableCommand.title",
+      "explanationKey": "promptInjection.rule.charConfusableCommand.explanation",
+      "escalation": {
+        "agentFile": 1
+      },
+      "parameters": {}
+    },
+    {
+      "id": "exfil-encoded-blob",
+      "group": "exfiltration",
+      "kind": "decoder",
+      "severity": "medium",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.exfilEncodedBlob.title",
+      "explanationKey": "promptInjection.rule.exfilEncodedBlob.explanation",
+      "escalation": {
+        "hidden": 1
+      },
+      "parameters": {
+        "minBase64Length": 40,
+        "minHexLength": 40,
+        "minPercentEncodedCharacters": 10,
+        "decodedInstructionSeverity": "high"
+      }
+    },
+    {
+      "id": "agent-external-import",
+      "group": "agentFiles",
+      "kind": "structure",
+      "severity": "high",
+      "appliesTo": "agentFiles",
+      "titleKey": "promptInjection.rule.agentExternalImport.title",
+      "explanationKey": "promptInjection.rule.agentExternalImport.explanation",
+      "escalation": {},
+      "parameters": {}
+    },
+    {
+      "id": "agent-broad-tool-grant",
+      "group": "agentFiles",
+      "kind": "structure",
+      "severity": "high",
+      "appliesTo": "agentFiles",
+      "titleKey": "promptInjection.rule.agentBroadToolGrant.title",
+      "explanationKey": "promptInjection.rule.agentBroadToolGrant.explanation",
+      "escalation": {},
+      "parameters": {}
+    },
+    {
+      "id": "agent-description-instructions",
+      "group": "agentFiles",
+      "kind": "structure",
+      "severity": "medium",
+      "appliesTo": "agentFiles",
+      "titleKey": "promptInjection.rule.agentDescriptionInstructions.title",
+      "explanationKey": "promptInjection.rule.agentDescriptionInstructions.explanation",
+      "escalation": {},
+      "parameters": {
+        "maxDescriptionLength": 1024
+      }
+    },
+    {
+      "id": "agent-self-propagation",
+      "group": "agentFiles",
+      "kind": "phrases",
+      "severity": "high",
+      "appliesTo": "agentFiles",
+      "titleKey": "promptInjection.rule.agentSelfPropagation.title",
+      "explanationKey": "promptInjection.rule.agentSelfPropagation.explanation",
+      "escalation": {},
+      "parameters": {
+        "codeSeverity": "low"
+      }
+    },
+    {
+      "id": "agent-always-loaded",
+      "group": "agentFiles",
+      "kind": "structure",
+      "severity": "info",
+      "appliesTo": "agentFiles",
+      "titleKey": "promptInjection.rule.agentAlwaysLoaded.title",
+      "explanationKey": "promptInjection.rule.agentAlwaysLoaded.explanation",
+      "escalation": {},
+      "parameters": {}
     }
   ]
 }

@@ -4,6 +4,7 @@ import { findCharacterMatches } from './findCharacterMatches';
 import { documentRuleInputOf, findDocumentMatches } from './findDocumentMatches';
 import type { InjectionCheckRequest, InjectionCheckResult, InjectionFinding } from './InjectionCheck';
 import { severityRank, type InjectionSeverity } from './injectionSeverity';
+import { isAgentFileLocation } from './isAgentFileLocation';
 import type { RuleMatch } from './matchers/RuleMatch';
 import { Ruleset } from './Ruleset';
 import { safeExcerpt } from './safeExcerpt';
@@ -63,14 +64,17 @@ export function runInjectionCheck(
 ): InjectionCheckResult {
   const positions = TextPositions.of(request.text);
   const lookup = StructureLookup.of(structure);
-  const isAgentFile = request.isAgentContext === true;
+  const isAgentFile = request.isAgentContext === true || isAgentFileLocation(request.location, ruleset);
   const source = { text: request.text, positions, ruleset, isAgentFile };
   const characterMatches = findCharacterMatches({ text: request.text, lookup, positions }, ruleset);
   const documentInput = documentRuleInputOf(
     { text: request.text, structure, lookup, positions, isAgentFile },
     ruleset,
   );
-  const matches = [...characterMatches.matches, ...findDocumentMatches(documentInput)];
+  const matches = [
+    ...characterMatches.matches,
+    ...findDocumentMatches(documentInput, characterMatches.matches),
+  ];
   const ratedMatches = matches.flatMap((match) => rate(source, match) ?? []);
   const listedMatches = ratedMatches
     .sort(highestSeverityFirst)

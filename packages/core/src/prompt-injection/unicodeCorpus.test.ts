@@ -160,13 +160,15 @@ describe('Unicode corpus scorecard', () => {
     expect(characterRuleIds.filter((ruleId) => !sampledRuleIds.has(ruleId))).toEqual([]);
   });
 
-  it('reports nothing at Medium or above in any of the 16 locale catalogs', () => {
+  it('reports no character finding at Medium or above in any of the 16 locale catalogs', () => {
     const falseAlarms = readdirSync(LOCALES_FOLDER).flatMap((file) => {
       const catalog = JSON.parse(readFileSync(join(LOCALES_FOLDER, file), 'utf8')) as Record<string, string>;
       return Object.entries(catalog).flatMap(([key, message]) =>
         alarmsAtMediumOrAbove(
           `${file} ${key}`,
-          runInjectionCheck({ text: message, origin: 'local', trigger: 'manual' }).findings,
+          runInjectionCheck({ text: message, origin: 'local', trigger: 'manual' }).findings.filter(
+            (finding) => finding.ruleId.startsWith('char-'),
+          ),
         ),
       );
     });

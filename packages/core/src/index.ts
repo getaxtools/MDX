@@ -341,3 +341,12 @@ export { HiddenCharacterNames, type HiddenCharacterName } from './prompt-injecti
 export { bundledRulesetWithLists, Ruleset, type InjectionRule } from './prompt-injection/Ruleset';
 export { MAX_EXCERPT_LENGTH } from './prompt-injection/safeExcerpt';
 export { MAX_LISTED_FINDINGS, runInjectionCheck } from './prompt-injection/runInjectionCheck';
+export {
+  evidenceHashOf,
+  filterIgnoredFindings,
+  ignoreEntryFor,
+  type FilteredResult,
+  type IgnoreEntry,
+  type IgnoreScope,
+} from './prompt-injection/ignoreFindings';
+export { isAgentFileLocation } from './prompt-injection/isAgentFileLocation';

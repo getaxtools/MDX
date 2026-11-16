@@ -11,3 +11,5 @@ The samples imitate published ways of hiding text from people or of steering AI 
 `unicode-samples.json` holds the character samples. `malicious` samples mark each expected finding with double brackets; `harmless` samples, including multilingual text, must give no finding at Medium or above.
 
 `markdown-samples.json` holds Markdown samples for hidden content, web addresses and look-alike hosts. `badges.example.test` and `collector.example.test` stand in for a badge service and a request collector, so no sample names a real one.
+
+`instruction-samples.json` holds samples for the instruction and agent-file rules, including harmless agent instructions, specs and security articles that quote attack phrases.
