@@ -194,9 +194,10 @@ describe('SourceEditorPane', () => {
       await renderRichText('- [ ] Pay **rent**\n- [x] Buy milk\n\nEnd', 3);
 
       const payRent = await screen.findByRole('checkbox', { name: 'Pay rent' }, EDITOR_LOAD_WAIT);
+      const buyMilk = await screen.findByRole('checkbox', { name: 'Buy milk' }, EDITOR_LOAD_WAIT);
 
       expect(payRent.getAttribute('aria-checked')).toBe('false');
-      expect(screen.getByRole('checkbox', { name: 'Buy milk' }).getAttribute('aria-checked')).toBe('true');
+      expect(buyMilk.getAttribute('aria-checked')).toBe('true');
       expect(payRent.tabIndex).toBe(-1);
     });
 
