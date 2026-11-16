@@ -35,6 +35,6 @@ export interface SpecProjectPort {
    * files of `additionalLocations`: patterns with `/` between parts, `*` in a name and `**` for any folders.
    */
   scanProject(root: string, additionalLocations: readonly string[]): Promise<SpecProjectManifest>;
-  /** Reads a Markdown, YAML or JSON file of the project by its path relative to the root. */
+  /** Reads a Markdown, YAML, JSON or instruction file of the project by its path relative to the root. */
   readProjectFile(root: string, relativePath: string): Promise<OpenedDocument>;
 }

@@ -7,8 +7,10 @@ use crate::documents::{
 pub const MAX_SPEC_FILE_BYTES: u64 = 5 * 1024 * 1024;
 const MAX_RELATIVE_PATH_CHARACTERS: usize = 1_024;
 const READABLE_EXTENSIONS: [&str; 6] = ["md", "markdown", "mdc", "yaml", "yml", "json"];
+/// Instruction files that some coding assistants read although their names have no extension.
+const READABLE_FILE_NAMES: [&str; 2] = [".cursorrules", ".windsurfrules"];
 
-/// Reads a Markdown, YAML or JSON file of a granted project root by its path relative to the root.
+/// Reads a Markdown, YAML, JSON or instruction file of a granted project root by its path relative to the root.
 pub fn read_granted_project_file(
     root: &Path,
     relative_path: &str,
@@ -24,7 +26,7 @@ pub fn read_granted_project_file(
     if !access.is_allowed(&location) {
         return Err(DocumentError::AccessDenied);
     }
-    if !has_readable_extension(&location.path()) {
+    if !is_readable_file(&location.path()) {
         return Err(DocumentError::InvalidRequest);
     }
     read_located_text_file(location, MAX_SPEC_FILE_BYTES)
@@ -43,16 +45,22 @@ fn validated_relative_path(relative_path: &str) -> Result<PathBuf, DocumentError
         }
         relative.push(part);
     }
-    if !has_readable_extension(&relative) {
+    if !is_readable_file(&relative) {
         return Err(DocumentError::InvalidRequest);
     }
     Ok(relative)
 }
 
-fn has_readable_extension(path: &Path) -> bool {
-    path.extension()
+fn is_readable_file(path: &Path) -> bool {
+    let has_readable_extension = path
+        .extension()
         .and_then(|extension| extension.to_str())
-        .is_some_and(|extension| READABLE_EXTENSIONS.contains(&extension.to_lowercase().as_str()))
+        .is_some_and(|extension| READABLE_EXTENSIONS.contains(&extension.to_lowercase().as_str()));
+    let has_readable_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| READABLE_FILE_NAMES.contains(&name.to_lowercase().as_str()));
+    has_readable_extension || has_readable_name
 }
 
 #[cfg(test)]
@@ -128,6 +136,39 @@ mod tests {
                 "{path}"
             );
         }
+    }
+
+    #[test]
+    fn reads_instruction_files_named_without_an_extension() {
+        let root = tempfile::tempdir().unwrap();
+        write_files(root.path(), &[".cursorrules", "app/.windsurfrules"]);
+        let access = granted(root.path());
+
+        for path in [".cursorrules", "app/.windsurfrules"] {
+            let file = read_granted_project_file(root.path(), path, &access).unwrap();
+            assert_eq!(file.text, "# Text", "{path}");
+        }
+    }
+
+    #[test]
+    fn refuses_other_files_without_an_extension_and_large_instruction_files() {
+        let root = tempfile::tempdir().unwrap();
+        write_files(root.path(), &[".env", "LICENSE"]);
+        let oversized = vec![b'x'; usize::try_from(MAX_SPEC_FILE_BYTES).unwrap() + 1];
+        fs::write(root.path().join(".cursorrules"), oversized).unwrap();
+        let access = granted(root.path());
+
+        for path in [".env", "LICENSE"] {
+            assert_eq!(
+                read_granted_project_file(root.path(), path, &access).unwrap_err(),
+                DocumentError::InvalidRequest,
+                "{path}"
+            );
+        }
+        assert_eq!(
+            read_granted_project_file(root.path(), ".cursorrules", &access).unwrap_err(),
+            DocumentError::TooLarge
+        );
     }
 
     #[test]

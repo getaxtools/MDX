@@ -22,7 +22,7 @@ pub async fn scan_spec_project(
         .await?
 }
 
-/// Reads a Markdown, YAML or JSON file of a chosen project root by its path relative to the root.
+/// Reads a Markdown, YAML, JSON or instruction file of a chosen project root by its path relative to the root.
 #[tauri::command]
 pub async fn read_spec_project_file(
     root: String,

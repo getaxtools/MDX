@@ -57,7 +57,11 @@ function problemsOf(values: ReadonlyMap<string, string>): ChangeMetadataProblem[
   return problems;
 }
 
-/** Whether the spec tool would honour `skip_specs: true`: its own date rule checks the format only. */
+/**
+ * Whether the spec tool would honour `skip_specs: true`: its own date rule checks the format only.
+ * The tool also requires the schema to exist in its schema registry, which the viewer cannot see, so
+ * any schema name counts here.
+ */
 function honoursSkipSpecs(
   values: ReadonlyMap<string, string>,
   problems: readonly ChangeMetadataProblem[],

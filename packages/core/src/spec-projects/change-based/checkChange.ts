@@ -104,6 +104,8 @@ function deltaPresenceFindings(
   return findings;
 }
 
+// The tool checks the files its schema tracks as tasks; the viewer knows that only for the built-in schema,
+// which tracks `tasks.md`, so other schemas get no task checks.
 function taskFindings(input: ChangeCheckInput, metadata: ChangeMetadata): StructuralFinding[] {
   const schema = metadata.schema ?? input.projectSchema ?? BUILT_IN_SCHEMA;
   const tasks = input.files.get(TASKS_FILE);
