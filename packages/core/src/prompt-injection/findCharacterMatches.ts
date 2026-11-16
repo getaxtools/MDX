@@ -1,4 +1,3 @@
-import type { DocumentStructure } from './DocumentStructure';
 import {
   findBidiMarksInCode,
   findBidiOverrides,
@@ -14,7 +13,7 @@ import { findZeroWidthCharacters } from './matchers/findZeroWidthCharacters';
 import type { CharacterMatcher, RuleMatch } from './matchers/RuleMatch';
 import { hiddenCharactersOf, scanHiddenCharacters } from './matchers/scanHiddenCharacters';
 import type { Ruleset } from './Ruleset';
-import { StructureLookup } from './StructureLookup';
+import type { StructureLookup } from './StructureLookup';
 import type { TextPositions } from './TextPositions';
 
 const CHARACTER_MATCHERS: readonly CharacterMatcher[] = [
@@ -32,7 +31,7 @@ const CHARACTER_MATCHERS: readonly CharacterMatcher[] = [
 
 export interface CharacterCheckInput {
   readonly text: string;
-  readonly structure: DocumentStructure;
+  readonly lookup: StructureLookup;
   readonly positions: TextPositions;
 }
 
@@ -47,7 +46,7 @@ export function findCharacterMatches(input: CharacterCheckInput, ruleset: Rulese
   const ruleInput = {
     text: input.text,
     ruleset,
-    structure: StructureLookup.of(input.structure),
+    structure: input.lookup,
     positions: input.positions,
     hiddenCharacters: scan.characters,
   };

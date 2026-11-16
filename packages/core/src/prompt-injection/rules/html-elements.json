@@ -1,0 +1,47 @@
+{
+  "removedContentElements": [
+    "script",
+    "style",
+    "template",
+    "iframe",
+    "noscript",
+    "xmp",
+    "noembed",
+    "noframes",
+    "plaintext",
+    "desc",
+    "annotation-xml",
+    "foreignobject",
+    "mi",
+    "mtext"
+  ],
+  "rawTextElements": [
+    "script",
+    "style",
+    "textarea",
+    "title",
+    "xmp",
+    "iframe",
+    "noembed",
+    "noframes",
+    "noscript"
+  ],
+  "voidElements": [
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "param",
+    "source",
+    "track",
+    "wbr"
+  ],
+  "pageBackgroundColors": ["white", "#fff", "#ffffff", "black", "#000", "#000000", "transparent"],
+  "unsafeLinkPrefixes": ["javascript:", "vbscript:", "data:text/html"]
+}

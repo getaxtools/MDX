@@ -41,7 +41,15 @@ describe('char-bidi-override', () => {
   it('reports an override in link text as High', () => {
     const text = `[safe${RLO}exe.txt](https://example.invalid)`;
     const segments: DocumentSegment[] = [
-      { kind: 'link', range: { from: 0, to: text.length }, destination: '', textRange: { from: 1, to: 10 } },
+      {
+        kind: 'link',
+        range: { from: 0, to: text.length },
+        destination: '',
+        text: '',
+        hasImage: false,
+        isAutolink: false,
+        textRange: { from: 1, to: 10 },
+      },
     ];
 
     const [finding] = rulesOf(findingsOf(text, segments), 'char-bidi-override');
@@ -106,6 +114,9 @@ describe('char-bidi-mark-in-code', () => {
         kind: 'link',
         range: { from: 0, to: text.length },
         destination: '',
+        text: '',
+        hasImage: false,
+        isAutolink: false,
         destinationRange: { from: destinationStart, to: text.length - 1 },
       },
     ];

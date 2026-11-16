@@ -317,3 +317,27 @@ export {
   type ProjectDocument,
   type SpecProjectSummary,
 } from './spec-projects/overview/specProjectsOverview';
+export {
+  EMPTY_DOCUMENT_STRUCTURE,
+  type DocumentSegment,
+  type DocumentStructure,
+  type SourceRange,
+} from './prompt-injection/DocumentStructure';
+export {
+  type CheckTrigger,
+  type DocumentOrigin,
+  type FindingMessageArguments,
+  type InjectionCheckRequest,
+  type InjectionCheckResult,
+  type InjectionFinding,
+} from './prompt-injection/InjectionCheck';
+export {
+  SEVERITIES_FROM_HIGHEST,
+  highestSeverityOf,
+  isAtLeast,
+  type InjectionSeverity,
+} from './prompt-injection/injectionSeverity';
+export { HiddenCharacterNames, type HiddenCharacterName } from './prompt-injection/HiddenCharacterNames';
+export { bundledRulesetWithLists, Ruleset, type InjectionRule } from './prompt-injection/Ruleset';
+export { MAX_EXCERPT_LENGTH } from './prompt-injection/safeExcerpt';
+export { MAX_LISTED_FINDINGS, runInjectionCheck } from './prompt-injection/runInjectionCheck';

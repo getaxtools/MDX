@@ -103,6 +103,44 @@
       "U+EFFFE..U+EFFFF",
       "U+FFFFE..U+FFFFF",
       "U+10FFFE..U+10FFFF"
+    ],
+    "latinLookalikes": [
+      "U+0430",
+      "U+0435",
+      "U+043A",
+      "U+043E",
+      "U+0440",
+      "U+0441",
+      "U+0443",
+      "U+0445",
+      "U+0455",
+      "U+0456",
+      "U+0458",
+      "U+04AF",
+      "U+04BB",
+      "U+04CF",
+      "U+0501",
+      "U+051B",
+      "U+051D",
+      "U+03B1",
+      "U+03B5",
+      "U+03B9",
+      "U+03BA",
+      "U+03BD",
+      "U+03BF",
+      "U+03C1",
+      "U+03C4",
+      "U+03C5",
+      "U+03C7",
+      "U+03F2",
+      "U+03F3",
+      "U+0561",
+      "U+0566",
+      "U+0570",
+      "U+0578",
+      "U+057D",
+      "U+0581",
+      "U+0585"
     ]
   },
   "rules": [
@@ -114,8 +152,12 @@
       "appliesTo": "allDocuments",
       "titleKey": "promptInjection.rule.charUnicodeTags.title",
       "explanationKey": "promptInjection.rule.charUnicodeTags.explanation",
-      "escalation": { "agentFile": 1 },
-      "parameters": { "maxEmojiTagLength": 32 }
+      "escalation": {
+        "agentFile": 1
+      },
+      "parameters": {
+        "maxEmojiTagLength": 32
+      }
     },
     {
       "id": "char-variation-selectors",
@@ -125,8 +167,12 @@
       "appliesTo": "allDocuments",
       "titleKey": "promptInjection.rule.charVariationSelectors.title",
       "explanationKey": "promptInjection.rule.charVariationSelectors.explanation",
-      "escalation": { "agentFile": 1 },
-      "parameters": { "minimumRunLength": 2 }
+      "escalation": {
+        "agentFile": 1
+      },
+      "parameters": {
+        "minimumRunLength": 2
+      }
     },
     {
       "id": "char-bidi-override",
@@ -136,8 +182,12 @@
       "appliesTo": "allDocuments",
       "titleKey": "promptInjection.rule.charBidiOverride.title",
       "explanationKey": "promptInjection.rule.charBidiOverride.explanation",
-      "escalation": { "agentFile": 1 },
-      "parameters": { "proseSeverity": "medium" }
+      "escalation": {
+        "agentFile": 1
+      },
+      "parameters": {
+        "proseSeverity": "medium"
+      }
     },
     {
       "id": "char-bidi-unbalanced",
@@ -147,7 +197,9 @@
       "appliesTo": "allDocuments",
       "titleKey": "promptInjection.rule.charBidiUnbalanced.title",
       "explanationKey": "promptInjection.rule.charBidiUnbalanced.explanation",
-      "escalation": { "agentFile": 1 },
+      "escalation": {
+        "agentFile": 1
+      },
       "parameters": {}
     },
     {
@@ -158,7 +210,9 @@
       "appliesTo": "allDocuments",
       "titleKey": "promptInjection.rule.charBidiMarkInCode.title",
       "explanationKey": "promptInjection.rule.charBidiMarkInCode.explanation",
-      "escalation": { "agentFile": 1 },
+      "escalation": {
+        "agentFile": 1
+      },
       "parameters": {}
     },
     {
@@ -169,7 +223,9 @@
       "appliesTo": "allDocuments",
       "titleKey": "promptInjection.rule.charZeroWidth.title",
       "explanationKey": "promptInjection.rule.charZeroWidth.explanation",
-      "escalation": { "agentFile": 1 },
+      "escalation": {
+        "agentFile": 1
+      },
       "parameters": {
         "longRunLength": 8,
         "alternatingRunLength": 4,
@@ -185,7 +241,9 @@
       "appliesTo": "allDocuments",
       "titleKey": "promptInjection.rule.charInvisibleFiller.title",
       "explanationKey": "promptInjection.rule.charInvisibleFiller.explanation",
-      "escalation": { "agentFile": 1 },
+      "escalation": {
+        "agentFile": 1
+      },
       "parameters": {}
     },
     {
@@ -196,7 +254,9 @@
       "appliesTo": "allDocuments",
       "titleKey": "promptInjection.rule.charControl.title",
       "explanationKey": "promptInjection.rule.charControl.explanation",
-      "escalation": { "agentFile": 1 },
+      "escalation": {
+        "agentFile": 1
+      },
       "parameters": {
         "escapeSequenceSeverity": "high",
         "formFeedSeverity": "info",
@@ -211,7 +271,9 @@
       "appliesTo": "allDocuments",
       "titleKey": "promptInjection.rule.charPrivateUse.title",
       "explanationKey": "promptInjection.rule.charPrivateUse.explanation",
-      "escalation": { "agentFile": 1 },
+      "escalation": {
+        "agentFile": 1
+      },
       "parameters": {}
     },
     {
@@ -222,8 +284,277 @@
       "appliesTo": "allDocuments",
       "titleKey": "promptInjection.rule.charEncodedInvisible.title",
       "explanationKey": "promptInjection.rule.charEncodedInvisible.explanation",
-      "escalation": { "agentFile": 1 },
-      "parameters": { "tagOrBidiSeverity": "medium" }
+      "escalation": {
+        "agentFile": 1
+      },
+      "parameters": {
+        "tagOrBidiSeverity": "medium"
+      }
+    },
+    {
+      "id": "char-confusable-url",
+      "group": "characters",
+      "kind": "urlShape",
+      "severity": "high",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.charConfusableUrl.title",
+      "explanationKey": "promptInjection.rule.charConfusableUrl.explanation",
+      "escalation": {
+        "agentFile": 1
+      },
+      "parameters": {}
+    },
+    {
+      "id": "hidden-html-comment",
+      "group": "hidden",
+      "kind": "structure",
+      "severity": "info",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.hiddenHtmlComment.title",
+      "explanationKey": "promptInjection.rule.hiddenHtmlComment.explanation",
+      "escalation": {
+        "agentFile": 1
+      },
+      "parameters": {
+        "longCommentWords": 20,
+        "longCommentSeverity": "medium",
+        "maxToolMarkerWords": 8
+      }
+    },
+    {
+      "id": "hidden-markdown-comment",
+      "group": "hidden",
+      "kind": "structure",
+      "severity": "info",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.hiddenMarkdownComment.title",
+      "explanationKey": "promptInjection.rule.hiddenMarkdownComment.explanation",
+      "escalation": {
+        "agentFile": 1
+      },
+      "parameters": {
+        "longCommentWords": 20,
+        "longCommentSeverity": "medium"
+      }
+    },
+    {
+      "id": "hidden-css",
+      "group": "hidden",
+      "kind": "structure",
+      "severity": "medium",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.hiddenCss.title",
+      "explanationKey": "promptInjection.rule.hiddenCss.explanation",
+      "escalation": {
+        "agentFile": 1
+      },
+      "parameters": {
+        "minFontSizePx": 2,
+        "offScreenOffsetPx": 999
+      }
+    },
+    {
+      "id": "hidden-attribute",
+      "group": "hidden",
+      "kind": "structure",
+      "severity": "medium",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.hiddenAttribute.title",
+      "explanationKey": "promptInjection.rule.hiddenAttribute.explanation",
+      "escalation": {
+        "agentFile": 1
+      },
+      "parameters": {}
+    },
+    {
+      "id": "hidden-removed-element",
+      "group": "hidden",
+      "kind": "structure",
+      "severity": "medium",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.hiddenRemovedElement.title",
+      "explanationKey": "promptInjection.rule.hiddenRemovedElement.explanation",
+      "escalation": {
+        "agentFile": 1
+      },
+      "parameters": {}
+    },
+    {
+      "id": "hidden-collapsed-details",
+      "group": "hidden",
+      "kind": "structure",
+      "severity": "low",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.hiddenCollapsedDetails.title",
+      "explanationKey": "promptInjection.rule.hiddenCollapsedDetails.explanation",
+      "escalation": {
+        "agentFile": 1
+      },
+      "parameters": {}
+    },
+    {
+      "id": "hidden-link-title",
+      "group": "hidden",
+      "kind": "structure",
+      "severity": "low",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.hiddenLinkTitle.title",
+      "explanationKey": "promptInjection.rule.hiddenLinkTitle.explanation",
+      "escalation": {
+        "agentFile": 1
+      },
+      "parameters": {}
+    },
+    {
+      "id": "hidden-image-alt",
+      "group": "hidden",
+      "kind": "structure",
+      "severity": "low",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.hiddenImageAlt.title",
+      "explanationKey": "promptInjection.rule.hiddenImageAlt.explanation",
+      "escalation": {
+        "agentFile": 1
+      },
+      "parameters": {
+        "maxAltLength": 100
+      }
+    },
+    {
+      "id": "hidden-unused-reference",
+      "group": "hidden",
+      "kind": "structure",
+      "severity": "low",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.hiddenUnusedReference.title",
+      "explanationKey": "promptInjection.rule.hiddenUnusedReference.explanation",
+      "escalation": {
+        "agentFile": 1
+      },
+      "parameters": {}
+    },
+    {
+      "id": "hidden-front-matter",
+      "group": "hidden",
+      "kind": "structure",
+      "severity": "info",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.hiddenFrontMatter.title",
+      "explanationKey": "promptInjection.rule.hiddenFrontMatter.explanation",
+      "escalation": {
+        "agentFile": 1
+      },
+      "parameters": {}
+    },
+    {
+      "id": "hidden-off-screen-text",
+      "group": "hidden",
+      "kind": "structure",
+      "severity": "medium",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.hiddenOffScreenText.title",
+      "explanationKey": "promptInjection.rule.hiddenOffScreenText.explanation",
+      "escalation": {
+        "agentFile": 1
+      },
+      "parameters": {
+        "paddingLength": 80,
+        "blankLineCount": 50
+      }
+    },
+    {
+      "id": "hidden-empty-link",
+      "group": "hidden",
+      "kind": "structure",
+      "severity": "low",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.hiddenEmptyLink.title",
+      "explanationKey": "promptInjection.rule.hiddenEmptyLink.explanation",
+      "escalation": {
+        "agentFile": 1
+      },
+      "parameters": {
+        "dataSeverity": "medium"
+      }
+    },
+    {
+      "id": "exfil-image-url-data",
+      "group": "exfiltration",
+      "kind": "urlShape",
+      "severity": "high",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.exfilImageUrlData.title",
+      "explanationKey": "promptInjection.rule.exfilImageUrlData.explanation",
+      "escalation": {
+        "hidden": 1
+      },
+      "parameters": {
+        "maxValueLength": 64,
+        "minEncodedLength": 24,
+        "minHexLength": 32,
+        "minDataValueLength": 8
+      }
+    },
+    {
+      "id": "exfil-remote-image",
+      "group": "exfiltration",
+      "kind": "urlShape",
+      "severity": "info",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.exfilRemoteImage.title",
+      "explanationKey": "promptInjection.rule.exfilRemoteImage.explanation",
+      "escalation": {
+        "agentFile": 1
+      },
+      "parameters": {}
+    },
+    {
+      "id": "exfil-link-url-data",
+      "group": "exfiltration",
+      "kind": "urlShape",
+      "severity": "medium",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.exfilLinkUrlData.title",
+      "explanationKey": "promptInjection.rule.exfilLinkUrlData.explanation",
+      "escalation": {
+        "hidden": 1
+      },
+      "parameters": {
+        "maxValueLength": 64,
+        "minEncodedLength": 64,
+        "minHexLength": 64,
+        "minDataValueLength": 0
+      }
+    },
+    {
+      "id": "exfil-collector-host",
+      "group": "exfiltration",
+      "kind": "urlShape",
+      "severity": "medium",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.exfilCollectorHost.title",
+      "explanationKey": "promptInjection.rule.exfilCollectorHost.explanation",
+      "escalation": {
+        "hidden": 1
+      },
+      "parameters": {
+        "imageSeverity": "high"
+      }
+    },
+    {
+      "id": "exfil-link-mismatch",
+      "group": "exfiltration",
+      "kind": "urlShape",
+      "severity": "medium",
+      "appliesTo": "allDocuments",
+      "titleKey": "promptInjection.rule.exfilLinkMismatch.title",
+      "explanationKey": "promptInjection.rule.exfilLinkMismatch.explanation",
+      "escalation": {
+        "hidden": 1
+      },
+      "parameters": {
+        "redirectorSeverity": "low"
+      }
     }
   ]
 }

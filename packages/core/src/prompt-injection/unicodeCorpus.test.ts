@@ -70,8 +70,30 @@ function segmentsFor(context: SampleContext | undefined, length: number): Docume
   const range = { from: 0, to: length };
   if (context === 'code') return [{ kind: 'codeBlock', range, language: 'sh' }];
   if (context === 'math') return [{ kind: 'math', range }];
-  if (context === 'linkText') return [{ kind: 'link', range, destination: '', textRange: range }];
-  if (context === 'address') return [{ kind: 'link', range, destination: '', destinationRange: range }];
+  if (context === 'linkText')
+    return [
+      {
+        kind: 'link',
+        range,
+        destination: '',
+        text: '',
+        hasImage: false,
+        isAutolink: false,
+        textRange: range,
+      },
+    ];
+  if (context === 'address')
+    return [
+      {
+        kind: 'link',
+        range,
+        destination: '',
+        text: '',
+        hasImage: false,
+        isAutolink: false,
+        destinationRange: range,
+      },
+    ];
   return [];
 }
 

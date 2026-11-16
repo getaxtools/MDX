@@ -21,10 +21,22 @@ export interface MathSegment {
   readonly range: SourceRange;
 }
 
+export interface HtmlSegment {
+  readonly kind: 'html';
+  readonly range: SourceRange;
+  readonly isInline: boolean;
+}
+
 export interface LinkSegment {
   readonly kind: 'link';
   readonly range: SourceRange;
+  /** As written in the document, or in the reference definition the link uses. */
   readonly destination: string;
+  /** The text a reader sees, without Markdown syntax. */
+  readonly text: string;
+  readonly hasImage: boolean;
+  readonly isAutolink: boolean;
+  readonly title?: string;
   readonly textRange?: SourceRange;
   readonly destinationRange?: SourceRange;
 }
@@ -33,12 +45,36 @@ export interface ImageSegment {
   readonly kind: 'image';
   readonly range: SourceRange;
   readonly source: string;
+  readonly alt: string;
+  readonly title?: string;
   readonly sourceRange?: SourceRange;
 }
 
-export type DocumentSegment = CodeSpanSegment | CodeBlockSegment | MathSegment | LinkSegment | ImageSegment;
+export interface ReferenceDefinitionSegment {
+  readonly kind: 'referenceDefinition';
+  readonly range: SourceRange;
+  readonly label: string;
+  readonly destination: string;
+  readonly title?: string;
+  readonly isUsed: boolean;
+}
 
-/** The parts of a Markdown document the rules need, found by a parser without sanitizing anything. */
+export interface FrontMatterSegment {
+  readonly kind: 'frontMatter';
+  readonly range: SourceRange;
+}
+
+export type DocumentSegment =
+  | CodeSpanSegment
+  | CodeBlockSegment
+  | MathSegment
+  | HtmlSegment
+  | LinkSegment
+  | ImageSegment
+  | ReferenceDefinitionSegment
+  | FrontMatterSegment;
+
+/** The parts of a Markdown document the rules need, found by the renderer without sanitizing anything. */
 export interface DocumentStructure {
   readonly segments: readonly DocumentSegment[];
 }

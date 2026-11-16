@@ -1,7 +1,10 @@
 import { CodePointSet, InvalidCodePointNotationError } from './CodePointSet';
 import type { SeverityEscalation } from './escalateSeverity';
 import { isInjectionSeverity, type InjectionSeverity } from './injectionSeverity';
+import hostLists from './rules/hosts.json' with { type: 'json' };
+import htmlElementLists from './rules/html-elements.json' with { type: 'json' };
 import bundledRulesetData from './rules/ruleset.json' with { type: 'json' };
+import toolMarkerLists from './rules/tool-markers.json' with { type: 'json' };
 
 export type RuleGroup = 'characters' | 'hidden' | 'instructions' | 'exfiltration' | 'agentFiles';
 export type MatcherKind = 'codepoints' | 'phrases' | 'urlShape' | 'structure' | 'command' | 'decoder';
@@ -28,7 +31,8 @@ export type RulesetProblem =
   | 'invalidCodepointSet'
   | 'invalidRename'
   | 'missingRule'
-  | 'invalidParameter';
+  | 'invalidParameter'
+  | 'invalidList';
 
 export class RulesetError extends Error {
   constructor(
@@ -162,6 +166,17 @@ function parseCodepointSets(value: unknown): ReadonlyMap<string, CodePointSet> {
   );
 }
 
+function parseLists(value: unknown): ReadonlyMap<string, readonly string[]> {
+  if (value === undefined) return new Map();
+  if (!isRecord(value)) throw new RulesetError('invalidList', 'lists');
+  return new Map(
+    Object.entries(value).map(([name, items]) => {
+      if (!isStringList(items)) throw new RulesetError('invalidList', name);
+      return [name, items];
+    }),
+  );
+}
+
 function indexRules(rules: readonly InjectionRule[]): ReadonlyMap<string, InjectionRule> {
   const rulesById = new Map<string, InjectionRule>();
   for (const rule of rules) {
@@ -197,6 +212,7 @@ interface RulesetContents {
   readonly version: string;
   readonly rulesById: ReadonlyMap<string, InjectionRule>;
   readonly codepointSets: ReadonlyMap<string, CodePointSet>;
+  readonly lists: ReadonlyMap<string, readonly string[]>;
   readonly renamedRules: Readonly<Record<string, string>>;
 }
 
@@ -207,12 +223,14 @@ export class Ruleset {
   readonly version: string;
   private readonly rulesById: ReadonlyMap<string, InjectionRule>;
   private readonly codepointSets: ReadonlyMap<string, CodePointSet>;
+  private readonly lists: ReadonlyMap<string, readonly string[]>;
   private readonly renamedRules: Readonly<Record<string, string>>;
 
   private constructor(contents: RulesetContents) {
     this.version = contents.version;
     this.rulesById = contents.rulesById;
     this.codepointSets = contents.codepointSets;
+    this.lists = contents.lists;
     this.renamedRules = contents.renamedRules;
   }
 
@@ -226,11 +244,11 @@ export class Ruleset {
     const rulesById = indexRules(rules.map(parseRule));
     const codepointSets = parseCodepointSets(data.codepointSets);
     const renamedRules = parseRenamedRules(data.renamedRules, rulesById);
-    return new Ruleset({ version, rulesById, codepointSets, renamedRules });
+    return new Ruleset({ version, rulesById, codepointSets, lists: parseLists(data.lists), renamedRules });
   }
 
   static bundled(): Ruleset {
-    Ruleset.bundledRuleset ??= Ruleset.parse(bundledRulesetData);
+    Ruleset.bundledRuleset ??= Ruleset.parse(bundledRulesetWithLists());
     return Ruleset.bundledRuleset;
   }
 
@@ -250,10 +268,22 @@ export class Ruleset {
     return set;
   }
 
+  /** A named list of hosts, element names or markers from the rule data. */
+  list(name: string): readonly string[] {
+    const items = this.lists.get(name);
+    if (!items) throw new RulesetError('invalidList', name);
+    return items;
+  }
+
   /** The id a rule has in this ruleset, following renames, so ignore entries saved under an old id still apply. */
   currentRuleIdOf(ruleId: string): string {
     return followRenames(this.renamedRules, ruleId);
   }
+}
+
+/** The bundled rule records with the host, element and marker lists that ship beside them. */
+export function bundledRulesetWithLists(): Readonly<Record<string, unknown>> {
+  return { ...bundledRulesetData, lists: { ...hostLists, ...htmlElementLists, ...toolMarkerLists } };
 }
 
 export function numberParameter(rule: InjectionRule, name: string): number {

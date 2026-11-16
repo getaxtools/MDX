@@ -91,7 +91,7 @@ export function createMarkdownRenderer({
 
 type CountedOutlineEnvironment = OutlineEnvironment & { outlineLineOffset: number };
 
-function createMarkdownParser(alertTitles: AlertTitles): MarkdownParser {
+export function createMarkdownParser(alertTitles: AlertTitles): MarkdownParser {
   return (
     new MarkdownIt({ html: true, linkify: true, typographer: false })
       .use(footnotesPlugin)

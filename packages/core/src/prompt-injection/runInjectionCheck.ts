@@ -1,11 +1,13 @@
 import { EMPTY_DOCUMENT_STRUCTURE, type DocumentStructure } from './DocumentStructure';
 import { escalateSeverity, PLAIN_FINDING_CONTEXT } from './escalateSeverity';
 import { findCharacterMatches } from './findCharacterMatches';
+import { documentRuleInputOf, findDocumentMatches } from './findDocumentMatches';
 import type { InjectionCheckRequest, InjectionCheckResult, InjectionFinding } from './InjectionCheck';
 import { severityRank, type InjectionSeverity } from './injectionSeverity';
 import type { RuleMatch } from './matchers/RuleMatch';
 import { Ruleset } from './Ruleset';
 import { safeExcerpt } from './safeExcerpt';
+import { StructureLookup } from './StructureLookup';
 import { TextPositions } from './TextPositions';
 
 /** More findings than this are not listed; the result is then marked partial. */
@@ -60,9 +62,16 @@ export function runInjectionCheck(
   ruleset: Ruleset = Ruleset.bundled(),
 ): InjectionCheckResult {
   const positions = TextPositions.of(request.text);
-  const source = { text: request.text, positions, ruleset, isAgentFile: request.isAgentContext === true };
-  const characterMatches = findCharacterMatches({ text: request.text, structure, positions }, ruleset);
-  const ratedMatches = characterMatches.matches.flatMap((match) => rate(source, match) ?? []);
+  const lookup = StructureLookup.of(structure);
+  const isAgentFile = request.isAgentContext === true;
+  const source = { text: request.text, positions, ruleset, isAgentFile };
+  const characterMatches = findCharacterMatches({ text: request.text, lookup, positions }, ruleset);
+  const documentInput = documentRuleInputOf(
+    { text: request.text, structure, lookup, positions, isAgentFile },
+    ruleset,
+  );
+  const matches = [...characterMatches.matches, ...findDocumentMatches(documentInput)];
+  const ratedMatches = matches.flatMap((match) => rate(source, match) ?? []);
   const listedMatches = ratedMatches
     .sort(highestSeverityFirst)
     .slice(0, MAX_LISTED_FINDINGS)
