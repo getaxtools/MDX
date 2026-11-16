@@ -1,6 +1,6 @@
 import MarkdownIt from 'markdown-it';
 import { describe, expect, it } from 'vitest';
-import { alertsPlugin } from './alertsPlugin';
+import { alertsPlugin, calloutLookOf } from './alertsPlugin';
 
 const markdown = new MarkdownIt().use(alertsPlugin);
 
@@ -84,5 +84,11 @@ describe('alertsPlugin', () => {
     const html = markdown.render('> [!NOTE]\n> Outer\n> > Inner quote\n\nAfter');
 
     expect(html).toContain('<blockquote>\n<p>Inner quote</p>\n</blockquote>\n</div>\n<p>After</p>');
+  });
+
+  it('gives the look of each known callout type and none for an unknown one', () => {
+    expect(calloutLookOf('TIP')).toBe('tip');
+    expect(calloutLookOf('danger')).toBe('caution');
+    expect(calloutLookOf('mystery')).toBeUndefined();
   });
 });

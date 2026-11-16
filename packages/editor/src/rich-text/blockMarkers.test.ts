@@ -1,5 +1,6 @@
 import { EditorSelection } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
+import { parseWholeDocument } from './parseWholeDocument';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createSourceEditor, type SourceEditor } from '../createSourceEditor';
 
@@ -19,6 +20,7 @@ function openRichText(text: string) {
   });
   const view = EditorView.findFromDOM(parent.querySelector<HTMLElement>('.cm-editor') ?? parent);
   if (!view) throw new Error('The editor view was not created');
+  parseWholeDocument(view);
   return { view, onChange };
 }
 

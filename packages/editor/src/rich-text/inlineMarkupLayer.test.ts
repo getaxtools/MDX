@@ -1,5 +1,6 @@
 import { EditorSelection } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
+import { parseWholeDocument } from './parseWholeDocument';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createSourceEditor, type SourceEditor } from '../createSourceEditor';
 import type { EditingMode } from '../editing-mode/editingMode';
@@ -14,6 +15,7 @@ function openEditor(text: string, editingMode: EditingMode = 'richText') {
   editor = createSourceEditor({ parent, text, label: 'Source', phrases: {}, onChange, editingMode });
   const view = EditorView.findFromDOM(parent.querySelector<HTMLElement>('.cm-editor') ?? parent);
   if (!view) throw new Error('The editor view was not created');
+  parseWholeDocument(view);
   return { view, onChange };
 }
 

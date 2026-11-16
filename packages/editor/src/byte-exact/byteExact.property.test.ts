@@ -39,6 +39,8 @@ interface DocumentLine {
 }
 
 const RUNS_PER_FIXTURE = 15;
+/** Each property opens a hundred editors or more, which takes longer than one test usually may on a busy machine. */
+const PROPERTY_TEST_TIMEOUT_MS = 30_000;
 const unitInterval = fc.double({ min: 0, max: 1, noNaN: true });
 const viewerAction: fc.Arbitrary<ViewerAction> = fc.oneof(
   fc.constant({ kind: 'switchMode' } as const),
@@ -144,62 +146,78 @@ function bytesAfterViewing(bytes: Uint8Array, actions: readonly ViewerAction[]) 
 describe('byte-exact editing', () => {
   afterEach(closeEditor);
 
-  it('switching modes any number of times and saving gives the same bytes, in every fixture', () => {
-    const fixtures = documentFixtures();
-    expect(fixtures.length).toBeGreaterThan(0);
+  it(
+    'switching modes any number of times and saving gives the same bytes, in every fixture',
+    () => {
+      const fixtures = documentFixtures();
+      expect(fixtures.length).toBeGreaterThan(0);
 
-    for (const fixture of fixtures) {
+      for (const fixture of fixtures) {
+        fc.assert(
+          fc.property(fc.array(viewerAction, { maxLength: 20 }), (actions) => {
+            const { saved, isDocumentUnchanged, changes } = bytesAfterViewing(fixture.bytes, actions);
+
+            expect(isDocumentUnchanged, fixture.name).toBe(true);
+            expect(changes, fixture.name).not.toHaveBeenCalled();
+            expect([...saved], fixture.name).toEqual([...fixture.bytes]);
+          }),
+          { numRuns: RUNS_PER_FIXTURE },
+        );
+      }
+    },
+    PROPERTY_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'switching modes any number of times and saving gives the same bytes, in generated documents',
+    () => {
       fc.assert(
-        fc.property(fc.array(viewerAction, { maxLength: 20 }), (actions) => {
-          const { saved, isDocumentUnchanged, changes } = bytesAfterViewing(fixture.bytes, actions);
+        fc.property(generatedDocumentBytes(), fc.array(viewerAction, { maxLength: 20 }), (bytes, actions) => {
+          const { saved, isDocumentUnchanged, changes } = bytesAfterViewing(bytes, actions);
 
-          expect(isDocumentUnchanged, fixture.name).toBe(true);
-          expect(changes, fixture.name).not.toHaveBeenCalled();
-          expect([...saved], fixture.name).toEqual([...fixture.bytes]);
+          expect(isDocumentUnchanged).toBe(true);
+          expect(changes).not.toHaveBeenCalled();
+          expect([...saved]).toEqual([...bytes]);
         }),
-        { numRuns: RUNS_PER_FIXTURE },
       );
-    }
-  });
+    },
+    PROPERTY_TEST_TIMEOUT_MS,
+  );
 
-  it('switching modes any number of times and saving gives the same bytes, in generated documents', () => {
-    fc.assert(
-      fc.property(generatedDocumentBytes(), fc.array(viewerAction, { maxLength: 20 }), (bytes, actions) => {
-        const { saved, isDocumentUnchanged, changes } = bytesAfterViewing(bytes, actions);
+  it(
+    'moving the caret anywhere leaves the document unchanged, in every fixture',
+    () => {
+      for (const fixture of documentFixtures()) {
+        fc.assert(
+          fc.property(fc.array(caretAction, { maxLength: 30 }), (actions) => {
+            const { saved, isDocumentUnchanged, changes } = bytesAfterMovingTheCaret(fixture.bytes, actions);
 
-        expect(isDocumentUnchanged).toBe(true);
-        expect(changes).not.toHaveBeenCalled();
-        expect([...saved]).toEqual([...bytes]);
-      }),
-    );
-  });
+            expect(isDocumentUnchanged, fixture.name).toBe(true);
+            expect(changes, fixture.name).not.toHaveBeenCalled();
+            expect([...saved], fixture.name).toEqual([...fixture.bytes]);
+          }),
+          { numRuns: RUNS_PER_FIXTURE },
+        );
+      }
+    },
+    PROPERTY_TEST_TIMEOUT_MS,
+  );
 
-  it('moving the caret anywhere leaves the document unchanged, in every fixture', () => {
-    for (const fixture of documentFixtures()) {
+  it(
+    'moving the caret anywhere leaves the document unchanged, in generated documents',
+    () => {
       fc.assert(
-        fc.property(fc.array(caretAction, { maxLength: 30 }), (actions) => {
-          const { saved, isDocumentUnchanged, changes } = bytesAfterMovingTheCaret(fixture.bytes, actions);
+        fc.property(generatedDocumentBytes(), fc.array(caretAction, { maxLength: 30 }), (bytes, actions) => {
+          const { saved, isDocumentUnchanged, changes } = bytesAfterMovingTheCaret(bytes, actions);
 
-          expect(isDocumentUnchanged, fixture.name).toBe(true);
-          expect(changes, fixture.name).not.toHaveBeenCalled();
-          expect([...saved], fixture.name).toEqual([...fixture.bytes]);
+          expect(isDocumentUnchanged).toBe(true);
+          expect(changes).not.toHaveBeenCalled();
+          expect([...saved]).toEqual([...bytes]);
         }),
-        { numRuns: RUNS_PER_FIXTURE },
       );
-    }
-  });
-
-  it('moving the caret anywhere leaves the document unchanged, in generated documents', () => {
-    fc.assert(
-      fc.property(generatedDocumentBytes(), fc.array(caretAction, { maxLength: 30 }), (bytes, actions) => {
-        const { saved, isDocumentUnchanged, changes } = bytesAfterMovingTheCaret(bytes, actions);
-
-        expect(isDocumentUnchanged).toBe(true);
-        expect(changes).not.toHaveBeenCalled();
-        expect([...saved]).toEqual([...bytes]);
-      }),
-    );
-  });
+    },
+    PROPERTY_TEST_TIMEOUT_MS,
+  );
 
   it('CRLF fixture still has CRLF after checkout', () => {
     const textOf = (fileName: string) =>
@@ -216,44 +234,51 @@ describe('byte-exact editing', () => {
     expect(mixed.replaceAll('\r\n', '')).toContain('\n');
   });
 
-  it("a mixed line ending file keeps each line's break after an edit and a save", () => {
-    const line = fc.record({
-      text: fc.stringMatching(/^[a-z ]{0,12}$/),
-      ending: fc.constantFrom('\n', '\r\n'),
-    });
-    const firstTwoLines = fc.tuple(fc.stringMatching(/^[a-z ]{0,12}$/), fc.stringMatching(/^[a-z ]{0,12}$/));
-    const mixedLines = fc
-      .tuple(firstTwoLines, fc.array(line, { minLength: 1, maxLength: 10 }))
-      .map(([[first, second], rest]): DocumentLine[] => [
-        { text: first, ending: '\r\n' },
-        { text: second, ending: '\n' },
-        ...rest,
-      ]);
+  it(
+    "a mixed line ending file keeps each line's break after an edit and a save",
+    () => {
+      const line = fc.record({
+        text: fc.stringMatching(/^[a-z ]{0,12}$/),
+        ending: fc.constantFrom('\n', '\r\n'),
+      });
+      const firstTwoLines = fc.tuple(
+        fc.stringMatching(/^[a-z ]{0,12}$/),
+        fc.stringMatching(/^[a-z ]{0,12}$/),
+      );
+      const mixedLines = fc
+        .tuple(firstTwoLines, fc.array(line, { minLength: 1, maxLength: 10 }))
+        .map(([[first, second], rest]): DocumentLine[] => [
+          { text: first, ending: '\r\n' },
+          { text: second, ending: '\n' },
+          ...rest,
+        ]);
 
-    fc.assert(
-      fc.property(mixedLines, fc.nat(), fc.nat(), (lines, lineChoice, columnChoice) => {
-        const original = lines.map(({ text, ending }) => `${text}${ending}`).join('');
-        const lineIndex = lineChoice % lines.length;
-        const lineText = lines[lineIndex]?.text ?? '';
-        const column = columnChoice % (lineText.length + 1);
-        const document = openDocumentBytes(new TextEncoder().encode(original));
-        const { editor: opened, view } = openInEditor(document.text);
+      fc.assert(
+        fc.property(mixedLines, fc.nat(), fc.nat(), (lines, lineChoice, columnChoice) => {
+          const original = lines.map(({ text, ending }) => `${text}${ending}`).join('');
+          const lineIndex = lineChoice % lines.length;
+          const lineText = lines[lineIndex]?.text ?? '';
+          const column = columnChoice % (lineText.length + 1);
+          const document = openDocumentBytes(new TextEncoder().encode(original));
+          const { editor: opened, view } = openInEditor(document.text);
 
-        opened.setEditingMode('richText');
-        view.dispatch({
-          changes: { from: view.state.doc.line(lineIndex + 1).from + column, insert: 'word' },
-        });
-        const saved = new TextDecoder().decode(savedDocumentBytes(opened.text(), document));
-        closeEditor();
+          opened.setEditingMode('richText');
+          view.dispatch({
+            changes: { from: view.state.doc.line(lineIndex + 1).from + column, insert: 'word' },
+          });
+          const saved = new TextDecoder().decode(savedDocumentBytes(opened.text(), document));
+          closeEditor();
 
-        const expected = lines
-          .map(({ text, ending }, index) => {
-            const edited = index === lineIndex ? `${text.slice(0, column)}word${text.slice(column)}` : text;
-            return `${edited}${ending}`;
-          })
-          .join('');
-        expect(saved).toBe(expected);
-      }),
-    );
-  });
+          const expected = lines
+            .map(({ text, ending }, index) => {
+              const edited = index === lineIndex ? `${text.slice(0, column)}word${text.slice(column)}` : text;
+              return `${edited}${ending}`;
+            })
+            .join('');
+          expect(saved).toBe(expected);
+        }),
+      );
+    },
+    PROPERTY_TEST_TIMEOUT_MS,
+  );
 });

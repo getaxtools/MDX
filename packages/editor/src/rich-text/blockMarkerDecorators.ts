@@ -1,5 +1,6 @@
 import type { syntaxTree } from '@codemirror/language';
 import { Decoration } from '@codemirror/view';
+import { decorateCallout } from './calloutDecorator';
 import { decorate, decorateLines, hide, isRevealed, type MarkupContext } from './markupContext';
 import { BulletWidget, TaskCheckboxWidget } from './markerWidgets';
 import {
@@ -42,6 +43,7 @@ export function decorateCodeLines(node: SyntaxNode, context: MarkupContext): voi
 
 /** Every line of a quote gets the quote bar, indented by how deep the quote is. */
 export function decorateQuote(node: SyntaxNode, context: MarkupContext): void {
+  if (decorateCallout(node, context)) return;
   const depth = Math.min(depthAmong(node, QUOTE_NAMES), DEEPEST_QUOTE_STYLE);
   const line = QUOTE_LINES[depth - 1];
   if (line) decorateLines(context, line, node);

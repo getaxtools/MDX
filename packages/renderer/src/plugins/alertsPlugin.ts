@@ -111,6 +111,13 @@ function calloutOfMarker(
   };
 }
 
+/** The look of a callout type written as `[!type]`, or undefined for a type the preview does not know. */
+export function calloutLookOf(typeName: string): AlertKind | undefined {
+  const type = typeName.toLowerCase();
+  const knownType = CALLOUT_TYPES.find((candidate) => candidate === type);
+  return knownType ? lookOf(knownType) : undefined;
+}
+
 function lookOf(type: CalloutType): AlertKind {
   return Object.hasOwn(LOOKS_OF_EXTRA_TYPES, type)
     ? LOOKS_OF_EXTRA_TYPES[type as ExtraCalloutType]

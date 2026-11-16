@@ -22,6 +22,11 @@ export interface RichBlockRenderOptions {
 export interface RichBlockRenderer {
   /** Typesets the math placeholders inside `root`, loading KaTeX only when there are some. */
   renderInto(root: HTMLElement, options: RichBlockRenderOptions): Promise<void>;
+  /**
+   * Sanitized HTML for one formula with the preview's options; undefined when it is too long, does
+   * not typeset, or KaTeX cannot load, so the caller can show the source instead.
+   */
+  typesetMath(tex: string, isDisplay: boolean): Promise<string | undefined>;
 }
 
 // Security limits from the KaTeX documentation: no \href or \url, and caps on size and macro expansion.
@@ -49,6 +54,17 @@ export function createRichBlockRenderer({
       for (const placeholder of placeholders) {
         if (!typesetter || !isStillShown()) return;
         typeset(placeholder, typesetter, sanitizeMath);
+      }
+    },
+    async typesetMath(tex, isDisplay) {
+      if (tex.length > MAX_MATH_SOURCE_LENGTH) return undefined;
+      const typesetter = await loadedOrUndefined(loadMathTypesetter);
+      if (!typesetter) return undefined;
+      try {
+        const options = { ...KATEX_OPTIONS, throwOnError: true, displayMode: isDisplay };
+        return sanitizeMath(typesetter.renderToString(tex, options));
+      } catch {
+        return undefined;
       }
     },
   };

@@ -291,7 +291,9 @@ describe('DocumentView', () => {
   it('typesets the math in the rendered document', async () => {
     const renderInto = vi.fn<RichBlockRenderer['renderInto']>(() => Promise.resolve());
 
-    renderDocument('<p><span class="mdx-math-inline">x</span></p>', { richBlocks: { renderInto } });
+    renderDocument('<p><span class="mdx-math-inline">x</span></p>', {
+      richBlocks: { renderInto, typesetMath: () => Promise.resolve(undefined) },
+    });
 
     await vi.waitFor(() => expect(renderInto).toHaveBeenCalled());
     expect(renderInto.mock.calls[0]?.[0].getAttribute('aria-label')).toBe('a.md');
@@ -300,7 +302,10 @@ describe('DocumentView', () => {
   it('leaves math as source in source view', () => {
     const renderInto = vi.fn(() => Promise.resolve());
 
-    renderDocument('<p>x</p>', { richBlocks: { renderInto }, isSourceView: true });
+    renderDocument('<p>x</p>', {
+      richBlocks: { renderInto, typesetMath: () => Promise.resolve(undefined) },
+      isSourceView: true,
+    });
 
     expect(renderInto).not.toHaveBeenCalled();
   });

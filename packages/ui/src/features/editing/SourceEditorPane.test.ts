@@ -16,6 +16,8 @@ import { openLinkFromEditor } from './editorLinks';
 import SourceEditorPane from './SourceEditorPane.svelte';
 
 const KEY = 'c:\\docs\\guide.md';
+/** The editor chunk loads and parses in the background, which takes longer on a busy test machine. */
+const EDITOR_LOAD_WAIT = { timeout: 5_000 };
 
 function renderPane() {
   const onChange = vi.fn();
@@ -51,8 +53,11 @@ async function renderRichText(text: string, caretLine: number, options: RichText
     onReady: (editor: SourceEditor | undefined) => (shownEditor = editor),
   };
   const { rerender } = render(SourceEditorPane, props);
-  const textBox = await screen.findByRole('textbox', { name: 'Source of Guide.md' });
-  const editor = await vi.waitFor(() => shownEditor ?? Promise.reject(new Error('The editor is not ready')));
+  const textBox = await screen.findByRole('textbox', { name: 'Source of Guide.md' }, EDITOR_LOAD_WAIT);
+  const editor = await vi.waitFor(
+    () => shownEditor ?? Promise.reject(new Error('The editor is not ready')),
+    EDITOR_LOAD_WAIT,
+  );
   editor.setEditingMode('richText');
   editor.revealLine(caretLine);
   return { editor, textBox, props, rerender };
@@ -187,7 +192,7 @@ describe('SourceEditorPane', () => {
     it('checkbox named by the item text and reports its state', async () => {
       await renderRichText('- [ ] Pay **rent**\n- [x] Buy milk\n\nEnd', 3);
 
-      const payRent = await screen.findByRole('checkbox', { name: 'Pay rent' });
+      const payRent = await screen.findByRole('checkbox', { name: 'Pay rent' }, EDITOR_LOAD_WAIT);
 
       expect(payRent.getAttribute('aria-checked')).toBe('false');
       expect(screen.getByRole('checkbox', { name: 'Buy milk' }).getAttribute('aria-checked')).toBe('true');

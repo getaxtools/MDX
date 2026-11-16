@@ -8,6 +8,16 @@ export const QUOTE_CLASS = 'cm-rich-quote';
 export const BULLET_CLASS = 'cm-rich-bullet';
 export const LIST_NUMBER_CLASS = 'cm-rich-list-number';
 export const TASK_CHECKBOX_CLASS = 'cm-rich-task';
+export const RENDERED_BLOCK_CLASS = 'cm-rich-rendered';
+export const FORMULA_CLASS = 'cm-rich-formula';
+export const TABLE_CLASS = 'cm-rich-table';
+export const HTML_BLOCK_CLASS = 'cm-rich-html';
+export const DIAGRAM_CLASS = 'cm-rich-diagram';
+export const IMAGE_CLASS = 'cm-rich-image';
+export const RULE_CLASS = 'cm-rich-rule';
+export const PROPERTIES_CLASS = 'cm-rich-properties';
+export const CALLOUT_CLASS = 'cm-rich-callout';
+export const CALLOUT_TITLE_CLASS = 'cm-rich-callout-title';
 
 /** Quotes nested deeper than this are indented like this depth. */
 export const DEEPEST_QUOTE_STYLE = 3;

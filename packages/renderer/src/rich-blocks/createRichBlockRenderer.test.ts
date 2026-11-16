@@ -80,4 +80,43 @@ describe('rich block renderer', () => {
 
     expect(article.querySelector('.katex')).toBeNull();
   });
+
+  describe('one formula at a time', () => {
+    it('typesets a formula as sanitized HTML', async () => {
+      const html = await withKatex().typesetMath('x^2', false);
+
+      expect(html).toContain('katex');
+      expect(html).not.toContain('<script');
+    });
+
+    it('formula options keep links off and the size limits', async () => {
+      const renderToString = vi.fn((tex: string, options: Record<string, unknown>) =>
+        katex.renderToString(tex, options),
+      );
+      const renderer = createRichBlockRenderer({
+        window,
+        loadMathTypesetter: () => Promise.resolve({ renderToString }),
+      });
+
+      await renderer.typesetMath('x', true);
+
+      expect(renderToString.mock.calls[0]?.[1]).toMatchObject({
+        trust: false,
+        maxSize: 50,
+        maxExpand: 1000,
+        displayMode: true,
+      });
+    });
+
+    it('gives nothing for a formula that does not typeset, is too long, or when KaTeX cannot load', async () => {
+      const failingLoad = createRichBlockRenderer({
+        window,
+        loadMathTypesetter: () => Promise.reject(new Error()),
+      });
+
+      expect(await withKatex().typesetMath(String.raw`\frac{1}{`, false)).toBeUndefined();
+      expect(await withKatex().typesetMath('x'.repeat(10_001), false)).toBeUndefined();
+      expect(await failingLoad.typesetMath('x', false)).toBeUndefined();
+    });
+  });
 });

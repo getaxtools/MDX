@@ -10,6 +10,7 @@ export { HEADING_ID_PREFIX, slugify, type OutlineEntry } from './plugins/heading
 export {
   ALERT_KINDS,
   CALLOUT_TYPES,
+  calloutLookOf,
   type AlertKind,
   type AlertTitles,
   type CalloutType,

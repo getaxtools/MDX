@@ -15,13 +15,18 @@ import {
 } from './blockMarkerDecorators';
 import { DecorationsHeldDuringComposition } from './compositionHold';
 import type { MarkupContext, VisibleRange } from './markupContext';
+import { isTouchedBySelection } from './revealRule';
+import { richTextProvidersFacet, withoutFailures } from './richTextProviders';
 import { HEADING_LEVELS } from './richTextClasses';
 import {
   atxHeadingDecorator,
   decorateAutolink,
   decorateBareUrl,
   decorateEscape,
+  decorateHorizontalRule,
+  decorateImage,
   decorateInlineCode,
+  decorateInlineMath,
   decorateLink,
   hideMarksOf,
   setextHeadingDecorator,
@@ -41,6 +46,9 @@ const NODE_DECORATORS: ReadonlyMap<string, NodeDecorator> = new Map([
   ['Autolink', decorateAutolink],
   ['URL', decorateBareUrl],
   ['Escape', decorateEscape],
+  ['Image', decorateImage],
+  ['InlineMath', decorateInlineMath],
+  ['HorizontalRule', decorateHorizontalRule],
   ['Blockquote', decorateQuote],
   ['QuoteMark', decorateQuoteMark],
   ['ListMark', decorateListMark],
@@ -48,7 +56,7 @@ const NODE_DECORATORS: ReadonlyMap<string, NodeDecorator> = new Map([
   ['CodeBlock', decorateCodeLines],
   ['FrontMatter', decorateCodeLines],
 ]);
-/** Pictures become widgets of their own; their alternative text keeps its Markdown until then. */
+/** A picture is one widget; the Markdown of its alternative text is not decorated on its own. */
 const SKIPPED_NODES = new Set(['Image']);
 
 let editorCount = 0;
@@ -67,13 +75,29 @@ export function inlineMarkupDecorations(
       from: visible.from,
       to: visible.to,
       enter: (node) => {
-        if (SKIPPED_NODES.has(node.name)) return false;
         NODE_DECORATORS.get(node.name)?.(node.node, context);
-        return undefined;
+        return SKIPPED_NODES.has(node.name) ? false : undefined;
       },
     });
+    decorations.push(...providerDecorations(state, visible));
   }
   return Decoration.set(decorations, true);
+}
+
+/** Provider decorations within the rules: no hidden line breaks, and nothing hidden where a selection touches. */
+function providerDecorations(state: EditorState, visible: VisibleRange): Range<Decoration>[] {
+  return state
+    .facet(richTextProvidersFacet)
+    .inline.flatMap((provider) =>
+      withoutFailures(() => provider.decorate(state, visible), []).filter((range) => isAllowed(state, range)),
+    );
+}
+
+function isAllowed(state: EditorState, range: Range<Decoration>): boolean {
+  if (!range.value.point) return true;
+  const isOnOneLine = state.doc.lineAt(range.from).number === state.doc.lineAt(range.to).number;
+  const isBlock = (range.value.spec as { block?: boolean }).block === true;
+  return isOnOneLine && !isBlock && !isTouchedBySelection(state.selection, range.from, range.to);
 }
 
 function isRebuildNeeded(update: ViewUpdate): boolean {
