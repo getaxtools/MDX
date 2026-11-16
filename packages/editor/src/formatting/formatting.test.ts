@@ -62,8 +62,9 @@ describe('line formatting', () => {
     expect(run(toggleLinePrefix('bulletList'), '  [nested]')).toBe('  - [nested]');
   });
 
-  it('does nothing on blank lines', () => {
-    expect(run(toggleLinePrefix('quote'), '[]')).toBe('[]');
+  it('starts a quote or a list on a blank line, as the insert menu does', () => {
+    expect(run(toggleLinePrefix('quote'), '[]')).toBe('> []');
+    expect(run(toggleLinePrefix('bulletList'), '[]')).toBe('- []');
   });
 
   it('sets a heading level, changes it, and removes it when pressed again', () => {

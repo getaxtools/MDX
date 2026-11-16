@@ -10,6 +10,7 @@ const SAMPLE_VALUES = {
   columns: 2,
   type: 'mermaid',
   mode: 'richText',
+  level: 'Heading 2',
   minutes: 3,
   percent: 125,
   current: 1,

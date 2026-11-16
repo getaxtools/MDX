@@ -19,6 +19,9 @@ export type EditorAction =
   | 'moveBlockUp'
   | 'moveBlockDown';
 
+/** What a Formatting toolbar control does: an editing key's action, or an insert that has no key. */
+export type ToolboxAction = EditorAction | 'paragraph' | 'table' | 'inlineMath' | 'displayMath';
+
 export interface EditorShortcut {
   readonly action: EditorAction;
   /** The key in CodeMirror's notation, where `Mod` is Ctrl, or Cmd on macOS. */

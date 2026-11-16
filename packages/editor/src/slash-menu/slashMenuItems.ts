@@ -1,5 +1,6 @@
-import { syntaxTree } from '@codemirror/language';
 import { EditorSelection, type EditorState, type TransactionSpec } from '@codemirror/state';
+import { documentStyleOf } from '../formatting/documentStyle';
+import { prefixFor } from '../formatting/lineFormatting';
 
 /** One entry of the insert menu; its name and description are CodeMirror phrases, translated by the app. */
 export interface SlashMenuItem {
@@ -31,7 +32,6 @@ interface ItemSpec {
 const CARET = '{caret}';
 const TABLE_COLUMNS = 3;
 const TABLE_BODY_ROWS = 2;
-const DEFAULT_BULLET = '-';
 
 const ITEM_SPECS: readonly ItemSpec[] = [
   {
@@ -64,7 +64,7 @@ const ITEM_SPECS: readonly ItemSpec[] = [
     description: 'A list with bullets',
     aliases: ['ul', 'bullet', 'list'],
     placement: 'block',
-    markdown: (state) => `${bulletMarkerOf(state)} `,
+    markdown: (state) => prefixFor('bulletList', 1, documentStyleOf(state)),
   },
   {
     id: 'numberedList',
@@ -72,7 +72,7 @@ const ITEM_SPECS: readonly ItemSpec[] = [
     description: 'A list with numbers',
     aliases: ['ol', 'number', 'ordered'],
     placement: 'block',
-    markdown: () => '1. ',
+    markdown: (state) => prefixFor('numberedList', 1, documentStyleOf(state)),
   },
   {
     id: 'taskList',
@@ -80,7 +80,7 @@ const ITEM_SPECS: readonly ItemSpec[] = [
     description: 'A list with checkboxes',
     aliases: ['todo', 'task', 'checkbox'],
     placement: 'block',
-    markdown: (state) => `${bulletMarkerOf(state)} [ ] `,
+    markdown: (state) => prefixFor('taskList', 1, documentStyleOf(state)),
   },
   {
     id: 'quote',
@@ -88,7 +88,7 @@ const ITEM_SPECS: readonly ItemSpec[] = [
     description: 'Quoted text',
     aliases: ['blockquote', 'citation'],
     placement: 'block',
-    markdown: () => '> ',
+    markdown: (state) => prefixFor('quote', 1, documentStyleOf(state)),
   },
   {
     id: 'callout',
@@ -171,21 +171,6 @@ export const BUILT_IN_SLASH_ITEMS: readonly SlashMenuItem[] = ITEM_SPECS.map((sp
   aliases: spec.aliases,
   insert: (state, range) => insertItem(state, range, spec),
 }));
-
-/** The marker the document's lists already use, so a new list matches them. */
-export function bulletMarkerOf(state: EditorState): string {
-  let marker: string | undefined;
-  syntaxTree(state).iterate({
-    enter: (node) => {
-      if (marker !== undefined) return false;
-      if (node.name === 'ListMark' && node.node.parent?.parent?.name === 'BulletList') {
-        marker = state.sliceDoc(node.from, node.to);
-      }
-      return undefined;
-    },
-  });
-  return marker ?? DEFAULT_BULLET;
-}
 
 /** A block after text on the same line goes on the next line, and the text stays. */
 function insertItem(state: EditorState, range: SlashTextRange, spec: ItemSpec): TransactionSpec {

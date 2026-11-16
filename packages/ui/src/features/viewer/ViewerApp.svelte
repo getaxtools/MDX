@@ -17,7 +17,7 @@
     noteNameOf,
     notesSettingsOf,
   } from '@mdx/core';
-  import type { SectionAction, SourceEditor, WrittenLink } from '@mdx/editor';
+  import type { FormattingState, SectionAction, SourceEditor, ToolboxAction, WrittenLink } from '@mdx/editor';
   import type { Translator } from '@mdx/i18n';
   import type { CodeHighlighter, OutlineEntry, RichBlockRenderer } from '@mdx/renderer';
   import { untrack } from 'svelte';
@@ -28,6 +28,7 @@
   import EditingLayout from '../editing/EditingLayout.svelte';
   import type { ScrollSync } from '../editing/ScrollSync';
   import SourceEditorPane from '../editing/SourceEditorPane.svelte';
+  import FormattingToolbar from '../editing/FormattingToolbar.svelte';
   import { openLinkFromEditor } from '../editing/editorLinks';
   import { createRichTextRendering } from '../editing/richTextRendering';
   import PanelResizer from '../../components/PanelResizer.svelte';
@@ -166,6 +167,7 @@
   let headingRequest: HeadingRequest | undefined = $state();
   let cursorCount = $state(1);
   let isCaretInLink = $state(false);
+  let editorFormatting: FormattingState | undefined = $state();
   let selectedWords = $state(0);
   const sessionWordCounts = new SessionWordCounts();
   const activeWordGoal = $derived(
@@ -457,6 +459,16 @@
             {translator}
             onCommand={(command: ViewerCommand) => void controller.execute(command)}
           />
+          {#if editedDocument}
+            <FormattingToolbar
+              formatting={editorFormatting}
+              editingMode={snapshot.editingMode ?? 'source'}
+              {translator}
+              onRun={(action: ToolboxAction) => shownEditor?.runFormatting(action)}
+              onToggleEditingMode={() => void controller.execute({ kind: 'toggleEditingMode' })}
+              onReturnToEditor={() => shownEditor?.focus()}
+            />
+          {/if}
         </div>
         <span class="mode-announcement" role="status">
           {#key snapshot.editingModeAnnouncement?.number}
@@ -548,6 +560,7 @@
                     onCursorCountChange={(count: number) => (cursorCount = count)}
                     onOpenLink={openEditorLink}
                     onCaretInLinkChange={(isInLink: boolean) => (isCaretInLink = isInLink)}
+                    onFormattingChange={(formatting: FormattingState) => (editorFormatting = formatting)}
                     snippets={snapshot ? availableSnippets(snapshot.viewer.snippetLibrary) : []}
                     wikiLinks={activeTab ? controller.wikiLinkSuggesterFor(activeTab.location) : undefined}
                     onSelectedTextChange={(selectedText: string) =>

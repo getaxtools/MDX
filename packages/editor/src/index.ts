@@ -25,7 +25,13 @@ export {
 } from './wiki-links/wikiLinkCompletions';
 export type { ExpandedSnippetText, SnippetExpander } from './snippets/snippetFields';
 export { SNIPPETS_SECTION, type EditorSnippet } from './snippets/snippetMenu';
-export { EDITOR_SHORTCUTS, type EditorAction, type EditorShortcut } from './editorShortcuts';
+export {
+  EDITOR_SHORTCUTS,
+  type EditorAction,
+  type EditorShortcut,
+  type ToolboxAction,
+} from './editorShortcuts';
+export type { FormattingState, PressableFormat } from './formatting/formattingState';
 export { editingModeFacet, editingModeOf, type EditingMode } from './editing-mode/editingMode';
 export type { EditorTypography } from './rich-text/typography';
 export type { WrittenLink } from './rich-text/linkTargets';

@@ -8,6 +8,7 @@
   import { editorMenuItems, type EditorMenuChoice } from './blockMenu';
   import type {
     EditorTextRange,
+    FormattingState,
     RichTextRendering,
     SourceEditor,
     SlashMenuSettings,
@@ -52,6 +53,8 @@
     /** Opens a link, as written, the way the preview opens links. */
     onOpenLink?: (link: WrittenLink) => void;
     onCaretInLinkChange?: (isCaretInLink: boolean) => void;
+    /** The formatting at the selection, for the Formatting toolbar. */
+    onFormattingChange?: (formatting: FormattingState) => void;
     onScroll?: (scrollRatio: number) => void;
     /** Called once the editor has loaded, for example to keep a preview beside it in step. */
     onReady?: (editor: SourceEditor | undefined) => void;
@@ -78,6 +81,7 @@
     onChange,
     onOpenLink = () => undefined,
     onCaretInLinkChange = () => undefined,
+    onFormattingChange = () => undefined,
     scrollRatio = 0,
     onScroll = () => undefined,
     onReady = () => undefined,
@@ -143,6 +147,7 @@
       onSelectedTextChange: (selectedText: string) => onSelectedTextChange(selectedText),
       onOpenLink: (link: WrittenLink) => onOpenLink(link),
       onCaretInLinkChange: reportCaretInLink,
+      onFormattingChange: (formatting: FormattingState) => onFormattingChange(formatting),
       typography,
       ...(richTextRendering ? { richTextRendering } : {}),
       snippets: editorSnippets,

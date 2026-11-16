@@ -264,6 +264,22 @@ describe('ViewerApp', () => {
       await vi.waitFor(() => expect(isShownInRichText(textBox)).toBe(true));
     });
 
+    it('the Formatting toolbar shows while editing and is hidden in the preview', async () => {
+      await renderViewer([GUIDE]);
+      await screen.findByRole('heading', { name: 'Guide' });
+      const isShownInPreview = screen.queryByRole('toolbar', { name: 'Formatting' }) !== null;
+
+      await editedTextBox('Guide.md');
+      const toolbar = await screen.findByRole('toolbar', { name: 'Formatting' });
+      await userEvent.keyboard('{Control>}e{/Control}');
+
+      expect(isShownInPreview).toBe(false);
+      expect(within(toolbar).getByRole('button', { name: 'Rich text' }).getAttribute('aria-pressed')).toBe(
+        'true',
+      );
+      await vi.waitFor(() => expect(screen.queryByRole('toolbar', { name: 'Formatting' })).toBeNull());
+    });
+
     it('the mode carries over to the next document opened for editing', async () => {
       await renderViewer([GUIDE, NOTES]);
       await screen.findByRole('heading', { name: 'Notes' });

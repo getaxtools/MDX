@@ -35,13 +35,15 @@ import {
   type EditingMode,
 } from './editing-mode/editingMode';
 import { EDITOR_ACTION_COMMANDS } from './editorActionCommands';
+import { formattingStateOf, type FormattingState } from './formatting/formattingState';
+import { runToolboxAction } from './formatting/toolboxCommands';
 import { isSlashMenuOnIn, SLASH_MENU_OFF, type SlashMenuSettings } from './editing-mode/slashMenuSettings';
 import { editorCompletions } from './slash-menu/slashMenu';
 import { wikiLinkCompletions, type WikiLinkSuggester } from './wiki-links/wikiLinkCompletions';
 import { snippetFields, snippetInsertion, type SnippetExpander } from './snippets/snippetFields';
 import { snippetMenuProvider, type EditorSnippet } from './snippets/snippetMenu';
 import { selectNextCell, selectPreviousCell } from './tables/tableNavigation';
-import { EDITOR_SHORTCUTS } from './editorShortcuts';
+import { EDITOR_SHORTCUTS, type ToolboxAction } from './editorShortcuts';
 import {
   hiddenCharacterMarkers,
   markedRangesField,
@@ -106,6 +108,8 @@ export interface SourceEditorOptions {
   readonly onCaretInLinkChange?: (isCaretInLink: boolean) => void;
   /** The Document style, whose fonts Rich text uses. */
   readonly typography?: EditorTypography;
+  /** The formatting at the selection, for the Formatting toolbar; reported at most once a frame. */
+  readonly onFormattingChange?: (formatting: FormattingState) => void;
   /** Renders Rich text's widgets the way the preview renders this document; without it, blocks stay text. */
   readonly richTextRendering?: RichTextRendering;
   /** Widgets and decorations of the workspace kind and of later editor features. */
@@ -161,6 +165,8 @@ export interface SourceEditor {
   /** Switches between Rich text and Source without changing the text, the selection or the undo history. */
   setEditingMode(mode: EditingMode): void;
   setTypography(typography: EditorTypography): void;
+  /** Runs a Formatting toolbar control on the selection, leaving the focus where it is. */
+  runFormatting(action: ToolboxAction): void;
   destroy(): void;
 }
 
@@ -184,11 +190,15 @@ const BRACKETS_CLOSED_AUTOMATICALLY = ['(', '[', '{', '"', '`'];
 export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
   const slashMenuSwitch = new Compartment();
   const hiddenCharactersSwitch = new Compartment();
+  const formatting = formattingReporter(options);
   const view = new EditorView({
     parent: options.parent,
     state: EditorState.create({
       doc: options.text,
-      extensions: startingExtensions(options, slashMenuSwitch, hiddenCharactersSwitch),
+      extensions: [
+        startingExtensions(options, slashMenuSwitch, hiddenCharactersSwitch),
+        formatting.extension,
+      ],
     }),
   });
   const commands = menuCommandsOf(view);
@@ -205,16 +215,27 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
     run: (command) => commands[command](),
     ...blockEditingOf(view),
     ...slashMenu,
+    ...modeAndFormattingOf(view, followEditingMode),
+    destroy: () => {
+      formatting.stop();
+      stopReportingScroll();
+      view.destroy();
+    },
+  };
+}
+
+function modeAndFormattingOf(
+  view: EditorView,
+  followEditingMode: () => void,
+): Pick<SourceEditor, 'editingMode' | 'setEditingMode' | 'setTypography' | 'runFormatting'> {
+  return {
     editingMode: () => editingModeOf(view.state),
     setEditingMode: (mode) => {
       setEditingMode(view, mode);
       followEditingMode();
     },
     setTypography: (typography) => setTypography(view, typography),
-    destroy: () => {
-      stopReportingScroll();
-      view.destroy();
-    },
+    runFormatting: (action) => runToolboxAction(view, action),
   };
 }
 
@@ -231,6 +252,35 @@ function startingExtensions(
     typographyExtension(options.typography ?? DEFAULT_EDITOR_TYPOGRAPHY),
     editorExtensions(options),
   ];
+}
+
+/** Reports the formatting at the selection once per frame while the selection or the text changes. */
+function formattingReporter(options: SourceEditorOptions): {
+  readonly extension: Extension;
+  readonly stop: () => void;
+} {
+  const report = options.onFormattingChange;
+  if (!report) return { extension: [], stop: () => undefined };
+  let frame: number | undefined;
+  let lastReported = '';
+  const reportFor = (view: EditorView) => {
+    frame = undefined;
+    const formatting = formattingStateOf(view.state);
+    const key = JSON.stringify(formatting);
+    if (key === lastReported) return;
+    lastReported = key;
+    report(formatting);
+  };
+  const extension = EditorView.updateListener.of((update) => {
+    if (!update.selectionSet && !update.docChanged && !update.viewportChanged) return;
+    frame ??= globalThis.requestAnimationFrame(() => reportFor(update.view));
+  });
+  return {
+    extension,
+    stop: () => {
+      if (frame !== undefined) globalThis.cancelAnimationFrame(frame);
+    },
+  };
 }
 
 function scrollingOf(
