@@ -206,15 +206,20 @@
     if (!editor || !request || request.id <= handledRequestId || request.canonicalKey !== canonicalKey)
       return;
     handledRequestId = request.id;
-    if (request.kind === 'command') editor.run(request.command);
-    else if (request.kind === 'changeSection') editor.changeSection(request.line, request.action);
-    else if (request.kind === 'revealLine') editor.revealLine(request.line);
-    else if (request.kind === 'insertPictureLinks') editor.insertPictureLinks(request.links, request.point);
-    else if (request.kind === 'revealRange') editor.revealRange(request.range);
-    else if (request.kind === 'insertSnippet')
-      editor.insertSnippet(snippetExpander(request.body, { fileName, locale: translator.locale }));
-    else editor.replaceText(request.text);
+    runEditorRequest(editor, request);
   });
+
+  function runEditorRequest(shownEditor: SourceEditor, request: EditorRequest) {
+    if (request.kind === 'command') shownEditor.run(request.command);
+    else if (request.kind === 'changeSection') shownEditor.changeSection(request.line, request.action);
+    else if (request.kind === 'revealLine') shownEditor.revealLine(request.line);
+    else if (request.kind === 'insertPictureLinks')
+      shownEditor.insertPictureLinks(request.links, request.point);
+    else if (request.kind === 'revealRange') shownEditor.revealRange(request.range);
+    else if (request.kind === 'insertSnippet')
+      shownEditor.insertSnippet(snippetExpander(request.body, { fileName, locale: translator.locale }));
+    else shownEditor.replaceText(request.text);
+  }
 </script>
 
 <!-- The editor inside is the focusable element; this only listens for the block menu keys it lets through. -->

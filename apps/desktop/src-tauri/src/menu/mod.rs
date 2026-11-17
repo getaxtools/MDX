@@ -533,27 +533,21 @@ impl MainMenuBuilder<'_> {
         let themes = self.check_submenu(&THEME_CHOICES)?;
         let reading_widths = self.check_submenu(&READING_WIDTH_CHOICES)?;
         let typographies = self.check_submenu(&TYPOGRAPHY_CHOICES)?;
-        let editing_modes = self.check_submenu(&EDITING_MODE_CHOICES)?;
-        let toggle_editing_mode = self.command_item(TOGGLE_EDITING_MODE_ITEM)?;
         let source_view = self.toggle_item(SOURCE_VIEW_TOGGLE_ITEM)?;
         let panels = PANEL_TOGGLE_ITEMS
             .iter()
             .map(|item| self.toggle_item(*item))
             .collect::<tauri::Result<Vec<_>>>()?;
-        let preview_beside_editor = self.toggle_item(PREVIEW_BESIDE_EDITOR_TOGGLE_ITEM)?;
         let command_palette = self.command_item(COMMAND_PALETTE_ITEM)?;
         let control_wheel = self.rebindable_item(CONTROL_WHEEL_ITEM)?;
-        let toggle_editing = self.command_item(TOGGLE_EDITING_ITEM)?;
         let full_screen = self.command_item(FULL_SCREEN_ITEM)?;
         let prompt_injection_check = self.command_item(PROMPT_INJECTION_CHECK_ITEM)?;
         let hidden_characters = self.toggle_item(HIDDEN_CHARACTERS_TOGGLE_ITEM)?;
         let builder = SubmenuBuilder::new(self.app, self.labels.label("menu.view"))
             .item(&command_palette)
-            .item(&control_wheel)
-            .item(&toggle_editing)
-            .item(&editing_modes)
-            .item(&toggle_editing_mode)
-            .item(&preview_beside_editor)
+            .item(&control_wheel);
+        let builder = self
+            .with_editing_items(builder)?
             .separator()
             .item(&themes)
             .item(&reading_widths)
@@ -572,6 +566,21 @@ impl MainMenuBuilder<'_> {
             .separator()
             .item(&full_screen)
             .build()
+    }
+
+    fn with_editing_items<'m>(
+        &mut self,
+        builder: SubmenuBuilder<'m, Wry, AppHandle>,
+    ) -> tauri::Result<SubmenuBuilder<'m, Wry, AppHandle>> {
+        let toggle_editing = self.command_item(TOGGLE_EDITING_ITEM)?;
+        let editing_modes = self.check_submenu(&EDITING_MODE_CHOICES)?;
+        let toggle_editing_mode = self.command_item(TOGGLE_EDITING_MODE_ITEM)?;
+        let preview_beside_editor = self.toggle_item(PREVIEW_BESIDE_EDITOR_TOGGLE_ITEM)?;
+        Ok(builder
+            .item(&toggle_editing)
+            .item(&editing_modes)
+            .item(&toggle_editing_mode)
+            .item(&preview_beside_editor))
     }
 
     fn window_menu(&self) -> tauri::Result<Submenu<Wry>> {
