@@ -48,3 +48,10 @@ export type { FoundHiddenCharacter, HiddenCharacterFinder } from './hidden-chara
 export type { FormulaKind, FormulaRefusal, FormulaTarget } from './formulas/formulaInsertion';
 export type { EditedLinesBox, FormulaEditRequest } from './formulas/formulaRequests';
 export { createFormulaField, type FormulaField, type FormulaFieldOptions } from './formulas/formulaField';
+export {
+  commandExample,
+  matchingCommands,
+  type FormulaSuggestions,
+  type TexCommand,
+} from './formulas/formulaSuggestions';
+export { texWithFields } from './formulas/texFields';

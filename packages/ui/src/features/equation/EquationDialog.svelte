@@ -8,7 +8,9 @@
   } from '@mdx/editor';
   import type { Translator } from '@mdx/i18n';
   import { untrack } from 'svelte';
+  import { editorPhrases } from '../editing/editorPhrases';
   import { equationDialogPlacement } from './equationPlacement';
+  import { EQUATION_TEMPLATE_GROUPS, type EquationTemplate } from './equationTemplates';
   import { FormulaPreviewer, type PreviewFormula, type ShownFormulaPreview } from './FormulaPreviewer';
   import {
     formulaProblemAnnouncement,
@@ -17,6 +19,8 @@
     sourceRefusalText,
     type SourceRefusal,
   } from './formulaProblemText';
+  import { SUPPORTED_TEX_COMMANDS } from './supportedTexCommands';
+  import TemplateGallery from './TemplateGallery.svelte';
 
   interface Props {
     request: FormulaEditRequest;
@@ -26,16 +30,30 @@
     previewFormula: PreviewFormula;
     /** The user chose Inline or Display for a new formula. */
     onKindChange: (kind: FormulaKind) => void;
+    /** Whether a slash after a term makes a fraction, as the user last set it. */
+    isAutomaticFractionOn: boolean;
+    onAutomaticFractionChange: (isOn: boolean) => void;
     /** Writes the formula, or says why the source could not be written. */
     onInsert: (formula: { readonly tex: string; readonly kind: FormulaKind }) => FormulaWriteOutcome;
     onCancel: () => void;
   }
 
-  const { request, lastKind, translator, previewFormula, onKindChange, onInsert, onCancel }: Props = $props();
+  const {
+    request,
+    lastKind,
+    translator,
+    previewFormula,
+    onKindChange,
+    isAutomaticFractionOn,
+    onAutomaticFractionChange,
+    onInsert,
+    onCancel,
+  }: Props = $props();
 
   const TITLE_ID = 'equation-dialog-title';
   const PROBLEM_ID = 'equation-dialog-problem';
   const HINT_ID = 'equation-dialog-hint';
+  const GALLERY_ID = 'equation-dialog-templates';
 
   let kind: FormulaKind = $state(untrack(() => request.kind ?? lastKind));
   let tex = $state(untrack(() => request.source));
@@ -44,6 +62,8 @@
   let dialogElement: HTMLElement | undefined = $state();
   let fieldParent: HTMLElement | undefined = $state();
   let field: FormulaField | undefined;
+  let isGalleryShown = $state(false);
+  let isFractionOn = $state(untrack(() => isAutomaticFractionOn));
 
   const previewer = new FormulaPreviewer(
     (source, isDisplay) => previewFormula(source, isDisplay),
@@ -64,6 +84,16 @@
     refusal = isRefusalOfTheSource(outcome) ? outcome : undefined;
   }
 
+  function chooseTemplate(template: EquationTemplate) {
+    field?.insertTemplate(template.source);
+  }
+
+  function typesetSuggestion(source: string): Promise<string | undefined> {
+    return previewFormula(source, false).then((preview) =>
+      preview.kind === 'typeset' ? preview.html : undefined,
+    );
+  }
+
   function chooseKind(chosen: FormulaKind) {
     kind = chosen;
     refusal = undefined;
@@ -72,12 +102,14 @@
   }
 
   function focusables(): HTMLElement[] {
-    const selector = 'button:not(:disabled), input:not(:disabled), [contenteditable="true"]';
+    const selector =
+      'button:not(:disabled), input:not(:disabled), [contenteditable="true"], [role="gridcell"][tabindex="0"]';
     return dialogElement ? [...dialogElement.querySelectorAll<HTMLElement>(selector)] : [];
   }
 
   /** Tab stays inside the dialog, from the last control back to the first and the other way round. */
   function keepTabInside(event: KeyboardEvent) {
+    if (event.defaultPrevented) return;
     const all = focusables();
     const edge = event.shiftKey ? all[0] : all.at(-1);
     if (globalThis.document.activeElement !== edge) return;
@@ -110,6 +142,9 @@
       },
       onInsert: insert,
       isEnterInserting: () => kind === 'inline',
+      phrases: editorPhrases(translator),
+      suggestions: { commands: SUPPORTED_TEX_COMMANDS, typeset: typesetSuggestion },
+      isAutomaticFractionOn: () => isFractionOn,
     });
     field.focus();
     void previewer.renderNow(
@@ -170,6 +205,33 @@
       {@html shown.html}
     {/if}
   </div>
+  <div class="tools">
+    <label>
+      <input
+        type="checkbox"
+        bind:checked={isFractionOn}
+        onchange={() => onAutomaticFractionChange(isFractionOn)}
+      />
+      {translator.translate('equation.automaticFractions')}
+    </label>
+    <button
+      aria-expanded={isGalleryShown}
+      aria-controls={GALLERY_ID}
+      onclick={() => (isGalleryShown = !isGalleryShown)}
+    >
+      {translator.translate('equation.templates')}
+    </button>
+  </div>
+  {#if isGalleryShown}
+    <div id={GALLERY_ID}>
+      <TemplateGallery
+        groups={EQUATION_TEMPLATE_GROUPS}
+        {translator}
+        {previewFormula}
+        onChoose={chooseTemplate}
+      />
+    </div>
+  {/if}
   <p class="problem" id={PROBLEM_ID}>{problemText}</p>
   <p class="announcement" role="status">{announcement}</p>
   <p class="hint" id={HINT_ID}>
@@ -206,9 +268,15 @@
     font-weight: 600;
   }
 
-  .kinds {
+  .kinds,
+  .tools {
     display: flex;
+    align-items: center;
     gap: var(--space-4);
+  }
+
+  .tools button {
+    margin-inline-start: auto;
   }
 
   .source {

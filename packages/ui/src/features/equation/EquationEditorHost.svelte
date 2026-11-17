@@ -21,6 +21,8 @@
 
   /** The kind the user chose last, which a new formula from the Math button starts with. */
   let lastKind: FormulaKind = $state('inline');
+  /** Automatic fractions stay as the user last set them, off until then. */
+  let isAutomaticFractionOn = $state(false);
 
   function insert(formula: { readonly tex: string; readonly kind: FormulaKind }): FormulaWriteOutcome {
     // Writing closes the equation editor, which clears `request`, so it is read first.
@@ -41,6 +43,8 @@
         {translator}
         {previewFormula}
         onKindChange={(kind: FormulaKind) => (lastKind = kind)}
+        {isAutomaticFractionOn}
+        onAutomaticFractionChange={(isOn: boolean) => (isAutomaticFractionOn = isOn)}
         onInsert={insert}
         {onCancel}
       />

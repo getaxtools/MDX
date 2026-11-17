@@ -3,7 +3,7 @@ import { createTranslator } from '@mdx/i18n';
 import type { FormulaPreview } from '@mdx/renderer';
 import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EquationDialog from './EquationDialog.svelte';
 
 const NEW_INLINE: FormulaEditRequest = {
@@ -23,10 +23,16 @@ function fakePreview(tex: string): Promise<FormulaPreview> {
 }
 
 function renderDialog(request: FormulaEditRequest = NEW_INLINE) {
-  const callbacks = { onInsert: vi.fn(), onCancel: vi.fn(), onKindChange: vi.fn() };
+  const callbacks = {
+    onInsert: vi.fn(),
+    onCancel: vi.fn(),
+    onKindChange: vi.fn(),
+    onAutomaticFractionChange: vi.fn(),
+  };
   render(EquationDialog, {
     request,
     lastKind: 'inline',
+    isAutomaticFractionOn: false,
     translator: createTranslator(),
     previewFormula: fakePreview,
     ...callbacks,
@@ -37,7 +43,21 @@ function renderDialog(request: FormulaEditRequest = NEW_INLINE) {
 }
 
 describe('EquationDialog', () => {
+  // CodeMirror measures text positions, which jsdom does not lay out.
+  beforeEach(() => {
+    Object.defineProperty(Range.prototype, 'getClientRects', {
+      configurable: true,
+      value: () => [new DOMRect(0, 0, 1, 1)],
+    });
+    Object.defineProperty(Range.prototype, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => new DOMRect(0, 0, 1, 1),
+    });
+  });
+
   afterEach(() => {
+    Reflect.deleteProperty(Range.prototype, 'getClientRects');
+    Reflect.deleteProperty(Range.prototype, 'getBoundingClientRect');
     vi.restoreAllMocks();
   });
 
@@ -131,5 +151,40 @@ describe('EquationDialog', () => {
     await userEvent.tab();
 
     expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'Inline' }));
+  });
+
+  it('a suggestion has a name and a preview', async () => {
+    renderDialog();
+
+    await userEvent.keyboard(String.raw`\fra`);
+
+    const suggestion = await screen.findByRole('option', { name: String.raw`\frac` });
+    await vi.waitFor(() => expect(suggestion.querySelector('.typeset')).not.toBeNull());
+  });
+
+  it('automatic fractions are off until turned on, and the choice is reported', async () => {
+    const { onAutomaticFractionChange } = renderDialog();
+    const automaticFractions = screen.getByRole<HTMLInputElement>('checkbox', {
+      name: 'Automatic fractions',
+    });
+    const wasOn = automaticFractions.checked;
+
+    await userEvent.click(automaticFractions);
+
+    expect(wasOn).toBe(false);
+    expect(onAutomaticFractionChange).toHaveBeenCalledWith(true);
+  });
+
+  it('choosing the quadratic formula puts its source in the field and the focus back there', async () => {
+    renderDialog();
+    await userEvent.click(screen.getByRole('button', { name: 'Templates' }));
+    const quadratic = await screen.findByRole('gridcell', { name: 'Quadratic formula' });
+
+    quadratic.focus();
+    await userEvent.keyboard('{Enter}');
+
+    const source = screen.getByRole('textbox', { name: 'TeX source' });
+    expect(source.textContent).toBe(String.raw`x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}`);
+    expect(source.contains(document.activeElement) || document.activeElement === source).toBe(true);
   });
 });
