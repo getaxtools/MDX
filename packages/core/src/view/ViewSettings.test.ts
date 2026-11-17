@@ -47,6 +47,7 @@ describe('view settings', () => {
       isNoteLinkUpdateConfirmed: true,
       isShowingHiddenCharacters: false,
       automaticInjectionCheck: 'agentContext',
+      ctrlWheelAction: 'moveBetweenFiles',
     });
   });
 
@@ -97,9 +98,36 @@ describe('view settings', () => {
       isNoteLinkUpdateConfirmed: false,
       isShowingHiddenCharacters: true,
       automaticInjectionCheck: 'off',
+      ctrlWheelAction: 'zoom',
     };
 
     expect(parseViewSettings(saved)).toEqual(saved);
+  });
+
+  describe('Ctrl with the mouse wheel', () => {
+    it('the setting survives a restart', () => {
+      const saved: unknown = JSON.parse(
+        JSON.stringify({ ...DEFAULT_VIEW_SETTINGS, ctrlWheelAction: 'zoom' }),
+      );
+
+      expect(parseViewSettings(saved).ctrlWheelAction).toBe('zoom');
+    });
+
+    it('a missing or bad value falls back to moves between files', () => {
+      expect(parseViewSettings({ ctrlWheelAction: 'scroll' }).ctrlWheelAction).toBe('moveBetweenFiles');
+      expect(parseViewSettings({ ctrlWheelAction: 1 }).ctrlWheelAction).toBe('moveBetweenFiles');
+    });
+
+    it('an earlier state without the field still restores', () => {
+      const earlier = { theme: 'dark', zoomPercent: 125, isSidebarVisible: false };
+
+      expect(parseViewSettings(earlier)).toMatchObject({
+        theme: 'dark',
+        zoomPercent: 125,
+        isSidebarVisible: false,
+        ctrlWheelAction: 'moveBetweenFiles',
+      });
+    });
   });
 
   it('restores every named theme', () => {

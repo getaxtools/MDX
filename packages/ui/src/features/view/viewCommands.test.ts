@@ -36,6 +36,7 @@ describe('view commands', () => {
       isNoteLinkUpdateConfirmed: true,
       isShowingHiddenCharacters: false,
       automaticInjectionCheck: 'agentContext',
+      ctrlWheelAction: 'moveBetweenFiles',
     });
     expect(applyViewCommand(withoutSidebar, { kind: 'resetZoom' }).zoomPercent).toBe(100);
     expect(applyViewCommand(withoutSidebar, { kind: 'zoomOut' }).zoomPercent).toBe(100);

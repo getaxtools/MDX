@@ -16,6 +16,8 @@ export type KindSwitcher = 'wheel' | 'bar' | 'both';
 export type AutomaticInjectionCheck = 'off' | 'agentContext' | 'allDocuments';
 /** The bottom corner the control wheel opens in; the inline end is the right in left-to-right layouts. */
 export type WheelDock = 'bottomInlineEnd' | 'bottomInlineStart';
+/** What Ctrl with the mouse wheel does over a document: turn the file arc, or zoom as it did before. */
+export type CtrlWheelAction = 'moveBetweenFiles' | 'zoom';
 
 export interface ViewSettings {
   readonly theme: ThemePreference;
@@ -55,6 +57,7 @@ export interface ViewSettings {
   /** Invisible, control, direction and variation characters are drawn as labelled markers. */
   readonly isShowingHiddenCharacters: boolean;
   readonly automaticInjectionCheck: AutomaticInjectionCheck;
+  readonly ctrlWheelAction: CtrlWheelAction;
 }
 
 export const THEME_PREFERENCES: readonly ThemePreference[] = [
@@ -94,6 +97,7 @@ export const AUTOMATIC_INJECTION_CHECKS: readonly AutomaticInjectionCheck[] = [
 ];
 export const KIND_SWITCHERS: readonly KindSwitcher[] = ['wheel', 'bar', 'both'];
 export const WHEEL_DOCKS: readonly WheelDock[] = ['bottomInlineEnd', 'bottomInlineStart'];
+export const CTRL_WHEEL_ACTIONS: readonly CtrlWheelAction[] = ['moveBetweenFiles', 'zoom'];
 export const DEFAULT_PANEL_WIDTHS_PX: Readonly<Record<ResizablePanel, number>> = {
   explorer: 260,
 };
@@ -136,6 +140,7 @@ export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
   isNoteLinkUpdateConfirmed: true,
   isShowingHiddenCharacters: false,
   automaticInjectionCheck: 'agentContext',
+  ctrlWheelAction: 'moveBetweenFiles',
 };
 
 export function zoomIn(settings: ViewSettings): ViewSettings {
@@ -234,9 +239,6 @@ export function parseViewSettings(saved: unknown): ViewSettings {
     sidebarView,
     isStatusBarVisible,
     isBreadcrumbsVisible,
-    collapsedExplorerSections,
-    explorerSectionHeights,
-    panelWidths,
     isPreviewBesideEditor,
     editorSharePercent,
   } = saved as Record<string, unknown>;
@@ -250,11 +252,7 @@ export function parseViewSettings(saved: unknown): ViewSettings {
     sidebarView: oneOf(SIDEBAR_VIEWS, sidebarView, DEFAULT_VIEW_SETTINGS.sidebarView),
     isStatusBarVisible: booleanOr(isStatusBarVisible, true),
     isBreadcrumbsVisible: booleanOr(isBreadcrumbsVisible, true),
-    collapsedExplorerSections: EXPLORER_SECTIONS.filter(
-      (section) => Array.isArray(collapsedExplorerSections) && collapsedExplorerSections.includes(section),
-    ),
-    explorerSectionHeights: parseSectionHeights(explorerSectionHeights),
-    panelWidths: parsePanelWidths(panelWidths),
+    ...parseExplorerLayout(saved as Record<string, unknown>),
     isPreviewBesideEditor: isPreviewBesideEditor === true,
     editorSharePercent: parseEditorShare(editorSharePercent),
     ...parseFeatureSettings(saved as Record<string, unknown>),
@@ -271,15 +269,36 @@ type FeatureSettings = KindSwitcherSettings &
     | 'isNoteLinkUpdateConfirmed'
     | 'isShowingHiddenCharacters'
     | 'automaticInjectionCheck'
+    | 'ctrlWheelAction'
   >;
 
-/** The settings of the control wheel, editing, notes and the prompt injection check. */
+/** The settings of the control wheel, editing, notes, the injection check and Ctrl with the mouse wheel. */
 function parseFeatureSettings(saved: Record<string, unknown>): FeatureSettings {
   return {
     ...parseKindSwitcherSettings(saved),
     ...parseEditingSettings(saved),
     ...parseNoteQuestionSettings(saved),
     ...parseInjectionCheckSettings(saved),
+    ...parseCtrlWheelSetting(saved),
+  };
+}
+
+function parseExplorerLayout(
+  saved: Record<string, unknown>,
+): Pick<ViewSettings, 'collapsedExplorerSections' | 'explorerSectionHeights' | 'panelWidths'> {
+  const { collapsedExplorerSections } = saved;
+  return {
+    collapsedExplorerSections: EXPLORER_SECTIONS.filter(
+      (section) => Array.isArray(collapsedExplorerSections) && collapsedExplorerSections.includes(section),
+    ),
+    explorerSectionHeights: parseSectionHeights(saved.explorerSectionHeights),
+    panelWidths: parsePanelWidths(saved.panelWidths),
+  };
+}
+
+function parseCtrlWheelSetting(saved: Record<string, unknown>): Pick<ViewSettings, 'ctrlWheelAction'> {
+  return {
+    ctrlWheelAction: oneOf(CTRL_WHEEL_ACTIONS, saved.ctrlWheelAction, DEFAULT_VIEW_SETTINGS.ctrlWheelAction),
   };
 }
 

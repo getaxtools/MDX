@@ -88,6 +88,7 @@ export {
   EDITING_MODES,
   ZOOM_LEVELS_PERCENT,
   WHEEL_DOCKS,
+  CTRL_WHEEL_ACTIONS,
   panelWidthOf,
   parseViewSettings,
   resetPanelWidth,
@@ -117,6 +118,7 @@ export {
   type EditingModeSetting,
   type ViewSettings,
   type WheelDock,
+  type CtrlWheelAction,
 } from './view/ViewSettings';
 export {
   measureDocument,
@@ -384,3 +386,25 @@ export {
   type TaskGroupProgress,
 } from './spec-projects/feature-numbered/readFeatureTasks';
 export type { DecisionRecordSummary, FolderSpecSummary } from './spec-projects/overview/folderSpecSummaries';
+export {
+  fileArcEntries,
+  type FileArcEntry,
+  type FileArcSource,
+  type FileArcTreeRow,
+} from './file-arc/fileArcEntries';
+export {
+  NO_WHEEL_MOVEMENT,
+  addWheelMovement,
+  startingIndex,
+  steppedIndex,
+  type FileArcDirection,
+  type WheelMovement,
+  type WheelSum,
+} from './file-arc/fileArcPosition';
+export {
+  ARC_CARD_MAX_WIDTH_PX,
+  fileArcLayout,
+  type FileArcLayout,
+  type FileArcPlace,
+  type LayoutDirection,
+} from './file-arc/fileArcLayout';
