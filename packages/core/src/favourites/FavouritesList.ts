@@ -1,4 +1,5 @@
 import type { DocumentLocation } from '@mdx/platform';
+import { isProtectedLocation } from '../protected-notes/protectedLocations';
 
 export type FavouriteKind = 'file' | 'folder';
 
@@ -65,7 +66,9 @@ export class FavouritesList {
     return this.orderedFavourites.some((favourite) => favourite.location.canonicalKey === canonicalKey);
   }
 
+  /** A protected note never becomes a favourite. */
   add(location: DocumentLocation, kind: FavouriteKind): FavouritesList {
+    if (isProtectedLocation(location)) return this;
     return this.addFavourite({ location, kind });
   }
 

@@ -415,3 +415,8 @@ export {
   withJumpListRemovals,
   type JumpListRemovals,
 } from './workspaces/jumpListRemovals';
+export {
+  isInsideProtectedSection,
+  isProtectedLocation,
+  withoutProtectedLocations,
+} from './protected-notes/protectedLocations';

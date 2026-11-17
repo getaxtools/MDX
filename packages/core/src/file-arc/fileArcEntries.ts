@@ -1,4 +1,5 @@
 import type { DocumentLocation } from '@mdx/platform';
+import { isProtectedLocation } from '../protected-notes/protectedLocations';
 
 /**
  * One row of a side bar tree as the arc sees it: a file, a folder, or both (a note with child
@@ -38,7 +39,7 @@ export function fileArcEntries({ roots, recentFiles, openTabKeys }: FileArcSourc
   const entries: FileArcEntry[] = [];
   const seenKeys = new Set<string>();
   const add = (location: DocumentLocation, name: string, folderLabel: string) => {
-    if (seenKeys.has(location.canonicalKey)) return;
+    if (seenKeys.has(location.canonicalKey) || isProtectedLocation(location)) return;
     seenKeys.add(location.canonicalKey);
     entries.push({ location, name, folderLabel, isOpenInTab: openTabKeys.has(location.canonicalKey) });
   };

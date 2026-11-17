@@ -10,6 +10,7 @@ import {
 } from '../workspaces/jumpListRemovals';
 import { FavouritesList, type Favourite, type FavouriteGroup } from '../favourites/FavouritesList';
 import { parseFavourites } from '../favourites/parseFavourites';
+import { isProtectedLocation, withoutProtectedLocations } from '../protected-notes/protectedLocations';
 import { RecentFilesList, type RecentFile } from '../recent-files/RecentFilesList';
 import { parseShortcutOverrides, type ShortcutOverrides } from '../shortcuts/parseShortcutOverrides';
 import { parseWordGoals, type WordGoals } from '../word-goals/wordGoals';
@@ -96,8 +97,8 @@ export function toPersistedAppState(
     ...(appVersion === undefined ? {} : { savedByAppVersion: appVersion }),
     schemaVersion: APP_STATE_SCHEMA_VERSION,
     tabs: withFileTabsOnly(tabStrip.toSnapshot()),
-    recentFiles: recentFiles.entries(),
-    favourites: favourites.favourites(),
+    recentFiles: withoutProtectedLocations(recentFiles.entries(), (file) => file.location),
+    favourites: withoutProtectedLocations(favourites.favourites(), (favourite) => favourite.location),
     favouriteGroups: favourites.groups(),
     explorerFolders: explorerFolders.folders(),
     view: viewSettings,
@@ -110,9 +111,12 @@ export function toPersistedAppState(
   };
 }
 
-/** Unsaved documents and views of the app exist only in memory, so they are not reopened later. */
+/**
+ * Unsaved documents and views of the app exist only in memory, and protected notes are never kept,
+ * so none of them is reopened later.
+ */
 function withFileTabsOnly({ tabs, activeKey }: TabStripSnapshot): TabStripSnapshot {
-  const savedTabs = tabs.filter((tab) => hasFile(tab.location));
+  const savedTabs = tabs.filter((tab) => hasFile(tab.location) && !isProtectedLocation(tab.location));
   const isActiveTabSaved = savedTabs.some((tab) => tab.location.canonicalKey === activeKey);
   return activeKey !== undefined && isActiveTabSaved ? { tabs: savedTabs, activeKey } : { tabs: savedTabs };
 }

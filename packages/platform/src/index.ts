@@ -22,6 +22,8 @@ export {
   hasFile,
   isUntitledLocation,
   isViewLocation,
+  isProtectedNoteLocation,
+  protectedNoteLocation,
   viewLocation,
   untitledLocation,
   type DocumentLocation,
