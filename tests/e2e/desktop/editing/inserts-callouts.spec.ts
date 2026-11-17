@@ -30,6 +30,8 @@ describe('callouts in Rich text', () => {
   it('insert a callout, change it to Warning, save, file matches the expected bytes', async () => {
     const toolbar = app.browser.$('[role="toolbar"][aria-label="Formatting"]');
     await mainWindow.pressWithPointer(toolbar.$('button[aria-label="Callout"]'));
+    // A press made while the editor is still starting runs once it is ready; type into the callout only then.
+    await app.browser.$('.cm-content .cm-rich-callout').waitForExist();
     await mainWindow.typeInFocusedField('Remember the backup.');
     await mainWindow.pressShortcut('Ctrl+Home');
 

@@ -229,6 +229,8 @@
   let shownEditor: SourceEditor | undefined;
   /** A heading chosen while the editor was still starting, revealed once it is ready. */
   let pendingEditorLine: number | undefined;
+  /** Formatting toolbar presses made while the editor was still starting, run once it is ready. */
+  let pendingToolboxActions: ToolboxAction[] = [];
   /** Edit Formula chosen in the preview, waiting for the editor it opened. */
   let pendingFormulaEdit: RenderedFormula | undefined;
   /** Kept with its document, so another tab never shows the section of the previous one. */
@@ -309,6 +311,12 @@
     if (sourceEditor && pendingFormulaEdit)
       sourceEditor.editFormulaInOrder(pendingFormulaEdit.index, pendingFormulaEdit.source);
     pendingFormulaEdit = undefined;
+    for (const action of pendingToolboxActions.splice(0)) sourceEditor?.runFormatting(action);
+  }
+
+  function runToolboxAction(action: ToolboxAction) {
+    if (shownEditor) shownEditor.runFormatting(action);
+    else pendingToolboxActions.push(action);
   }
 
   /** Edit Formula in the preview opens the document for editing, then the equation editor on that formula. */
@@ -588,7 +596,7 @@
               formatting={editorFormatting}
               editingMode={snapshot.editingMode ?? 'source'}
               {translator}
-              onRun={(action: ToolboxAction) => shownEditor?.runFormatting(action)}
+              onRun={runToolboxAction}
               onToggleEditingMode={() => void controller.execute({ kind: 'toggleEditingMode' })}
               onReturnToEditor={() => shownEditor?.focus()}
             />

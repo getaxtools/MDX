@@ -480,6 +480,28 @@ describe('ViewerApp', () => {
     expect(source.contains(document.activeElement)).toBe(true);
   });
 
+  it('a Formatting toolbar press while the editor is still starting is kept for it', async () => {
+    const { controller } = await renderViewer([GUIDE]);
+    await screen.findByRole('heading', { name: 'Guide' });
+    const heldFrames: FrameRequestCallback[] = [];
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((frame) => heldFrames.push(frame));
+
+    await userEvent.keyboard('{Control>}e{/Control}');
+    const toolbar = await screen.findByRole('toolbar', { name: 'Formatting' });
+    await screen.findByRole('textbox', { name: 'Source of Guide.md' });
+    const updateEditedText = vi.spyOn(controller, 'updateEditedText');
+    await fireEvent.click(within(toolbar).getByRole('button', { name: 'Callout' }));
+    for (const frame of heldFrames.splice(0)) frame(0);
+    await tick();
+
+    await vi.waitFor(() =>
+      expect(updateEditedText).toHaveBeenLastCalledWith(
+        GUIDE.toLowerCase(),
+        expect.stringContaining('> [!NOTE]'),
+      ),
+    );
+  });
+
   it('hides and shows the Explorer with Ctrl+Shift+E', async () => {
     await renderViewer();
     await screen.findByRole('navigation', { name: 'Explorer' });
