@@ -1,4 +1,6 @@
 export type { AppStatePort } from './AppStatePort';
+export type { ProtectedShellPort, ShellEvent, ShellEventListener } from './ProtectedShellPort';
+export { InMemoryProtectedShell, type FakeClipboard } from './fakes/InMemoryProtectedShell';
 export type {
   AppWindowsPort,
   WindowStateReport,

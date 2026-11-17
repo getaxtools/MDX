@@ -19,12 +19,12 @@ const UTF16_UNIT_BYTES: usize = 2;
 
 /// The clipboard is open while this lives and closed when it is dropped, on every path. It stays
 /// on the thread that opened it, as the clipboard is opened for one thread.
-struct OpenedClipboard {
+pub(crate) struct OpenedClipboard {
     _not_send: PhantomData<*const ()>,
 }
 
 impl OpenedClipboard {
-    fn open() -> io::Result<Self> {
+    pub(crate) fn open() -> io::Result<Self> {
         let mut attempt = 1;
         loop {
             // SAFETY: a null window ties the open clipboard to this thread, which OpenClipboard
@@ -128,6 +128,10 @@ pub fn read_clipboard_text(max_units: usize) -> io::Result<Option<String>> {
     text_within_limit(units, max_units).map(Some)
 }
 
+/// The real clipboard is one for the whole machine, so the tests that use it take turns.
+#[cfg(test)]
+pub(crate) static REAL_CLIPBOARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[cfg(test)]
 mod tests {
     use windows::Win32::System::DataExchange::{EmptyClipboard, SetClipboardData};
@@ -201,6 +205,9 @@ mod tests {
     #[test]
     #[ignore = "uses the real clipboard"]
     fn reads_back_text_put_on_the_clipboard_and_refuses_text_over_the_limit() {
+        let _turn = REAL_CLIPBOARD
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let earlier = read_clipboard_text(usize::MAX).unwrap_or_default();
         set_clipboard_text(Some("Area \\(x\\)\tdone\r\nnext"));
 
