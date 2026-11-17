@@ -107,14 +107,15 @@ pub fn grant_documents(paths: &[PathBuf], access: &DocumentAccessList) -> Vec<St
 
 /// A second launch hands its files to the running app: each goes to the window that has it open, else to
 /// the window whose workspace has the deepest root containing it, else to the window focused last. No
-/// window switches its workspace for a file; only an explicit workspace argument does that.
+/// window switches its workspace for a file; only an explicit workspace argument does that, and then
+/// the files open in that workspace once it is shown.
 pub fn forward_second_instance(app: &AppHandle, arguments: &[String], working_folder: &str) {
     let paths = markdown_paths_from_arguments(arguments, Path::new(working_folder));
     let display_paths = grant_documents(&paths, &app.state::<Arc<DocumentAccessList>>());
-    let mut focused = forward_documents(app, display_paths);
-    if let Some(argument) = workspace_argument(arguments) {
-        focused = Some(forward_workspace_argument(app, argument));
-    }
+    let mut focused = match workspace_argument(arguments) {
+        Some(argument) => Some(forward_workspace_argument(app, argument, display_paths)),
+        None => forward_documents(app, display_paths),
+    };
     if let Some(contents) = workspace_file_from_arguments(arguments, Path::new(working_folder))
         .and_then(|path| read_workspace_file(&path).ok())
     {
@@ -146,9 +147,22 @@ fn forward_documents(app: &AppHandle, display_paths: Vec<String>) -> Option<Stri
     last
 }
 
-/// Shows a named workspace: in a window that shows it already, else in the window focused last. A
-/// malformed or unknown id only makes that window say the workspace was not found.
-fn forward_workspace_argument(app: &AppHandle, argument: WorkspaceArgument) -> String {
+/// A workspace for a window to show, and the files to open in it once it shows it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceToShow {
+    workspace_id: String,
+    document_paths: Vec<String>,
+}
+
+/// Shows a named workspace with the files: in a window that shows it already, else in the window
+/// focused last. A malformed or unknown id makes that window say the workspace was not found, and the
+/// files are routed as usual.
+fn forward_workspace_argument(
+    app: &AppHandle,
+    argument: WorkspaceArgument,
+    display_paths: Vec<String>,
+) -> String {
     let windows = app.state::<Arc<OpenWindows>>();
     let target = target_window_label(app);
     let known = match argument {
@@ -159,13 +173,21 @@ fn forward_workspace_argument(app: &AppHandle, argument: WorkspaceArgument) -> S
         }
         WorkspaceArgument::Named(_) | WorkspaceArgument::Malformed => {
             let _ = app.emit_to(target.as_str(), WORKSPACE_NOT_FOUND_EVENT, ());
+            forward_documents(app, display_paths);
             return target;
         }
     };
     if let Some(label) = windows.other_window_showing(known.as_str(), "") {
+        if !display_paths.is_empty() {
+            let _ = app.emit_to(label.as_str(), OPEN_DOCUMENTS_EVENT, display_paths);
+        }
         return label;
     }
-    let _ = app.emit_to(target.as_str(), SHOW_WORKSPACE_EVENT, known.as_str());
+    let shown = WorkspaceToShow {
+        workspace_id: known.as_str().to_owned(),
+        document_paths: display_paths,
+    };
+    let _ = app.emit_to(target.as_str(), SHOW_WORKSPACE_EVENT, shown);
     target
 }
 

@@ -5,9 +5,11 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 
 use crate::app_windows::{
-    OpenWindows, WindowReport, next_window_label, open_window, save_open_windows,
+    OpenWindows, WindowReport, forget_window_sessions, next_window_label, open_window,
+    save_open_windows,
 };
 use crate::documents::canonical_key_of;
+use crate::open_requests::MAIN_WINDOW_LABEL;
 use crate::storage::{WorkspaceDatabase, WorkspaceId};
 
 /// A window reports at most this many open documents and roots; more would only slow routing down.
@@ -36,6 +38,7 @@ pub async fn open_new_window(
         .workspace_of(window.label())
         .ok_or(WindowCommandError::WindowUnavailable)?;
     let label = next_window_label(&windows.labels()).ok_or(WindowCommandError::TooManyWindows)?;
+    forget_window_sessions(&database, &label);
     open_window(&app, &label).map_err(|_| WindowCommandError::WindowUnavailable)?;
     windows.add(&label, &workspace_id);
     save_open_windows(&windows, &database);
@@ -133,12 +136,26 @@ impl StartupWorkspaceNotice {
     pub fn set(&self) {
         self.0.store(true, Ordering::Relaxed);
     }
+
+    /// True once after `set`.
+    pub fn take(&self) -> bool {
+        self.0.swap(false, Ordering::Relaxed)
+    }
 }
 
-/// True once, when the start-up workspace argument could not be shown, so the window says so.
+/// True once, when the start-up workspace argument could not be shown, so the first window says so.
 #[tauri::command]
-pub fn take_startup_workspace_notice(notice: State<'_, StartupWorkspaceNotice>) -> bool {
-    notice.0.swap(false, Ordering::Relaxed)
+pub fn take_startup_workspace_notice(
+    window: WebviewWindow,
+    notice: State<'_, StartupWorkspaceNotice>,
+) -> bool {
+    window.label() == MAIN_WINDOW_LABEL && notice.take()
+}
+
+/// The window asked about its edits while Exit closed every window, and the user chose to stay.
+#[tauri::command]
+pub fn close_cancelled(windows: State<'_, Arc<OpenWindows>>) {
+    windows.cancel_exiting();
 }
 
 #[cfg(test)]

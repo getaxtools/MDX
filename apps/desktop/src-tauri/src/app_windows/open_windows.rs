@@ -33,7 +33,8 @@ struct OpenWindow {
 struct Windows {
     open: Vec<OpenWindow>,
     last_focus_order: u64,
-    /// Set by Exit, so the windows it closes are all opened again at the next start.
+    /// Set by Exit, which saved the windows first, so the windows it closes are not saved again
+    /// one by one and all open again at the next start.
     is_exiting: bool,
 }
 
@@ -89,14 +90,19 @@ impl OpenWindows {
         self.with(|windows| windows.is_exiting = true);
     }
 
-    /// A closed window is not opened again, unless it was the last one or Exit closed it.
+    /// A window asked about its edits during Exit and the user stayed, so closing is normal again.
+    pub fn cancel_exiting(&self) {
+        self.with(|windows| windows.is_exiting = false);
+    }
+
+    /// Forgets a closed window. True when it is gone for good, so the saved windows are written again
+    /// and its sessions dropped; false when Exit closed it or it was the last window, which both open
+    /// again at the next start from the windows saved before.
     pub fn closed(&self, label: &str) -> bool {
         self.with(|windows| {
-            if windows.is_exiting || windows.open.len() <= 1 {
-                return false;
-            }
+            let was_open = windows.open.iter().any(|window| window.label == label);
             windows.open.retain(|window| window.label != label);
-            true
+            was_open && !windows.is_exiting && !windows.open.is_empty()
         })
     }
 
@@ -255,7 +261,7 @@ mod tests {
     }
 
     #[test]
-    fn a_closed_window_is_forgotten_but_the_last_one_and_those_exit_closes_are_kept() {
+    fn a_closed_window_is_forgotten_for_good_but_not_saved_again_while_exiting() {
         let windows = OpenWindows::default();
         windows.add("main", "default");
         windows.add("window-2", "reading");
@@ -265,16 +271,31 @@ mod tests {
         windows.start_exiting();
         assert!(!windows.closed("window-3"));
 
-        assert_eq!(windows.labels(), vec!["main", "window-3"]);
+        assert_eq!(windows.labels(), vec!["main"]);
     }
 
     #[test]
-    fn the_last_window_is_kept_when_it_closes() {
+    fn after_a_cancelled_exit_a_closed_window_is_gone_for_good() {
+        let windows = OpenWindows::default();
+        windows.add("main", "default");
+        windows.add("window-2", "reading");
+        windows.add("window-3", "handbook");
+        windows.start_exiting();
+        windows.cancel_exiting();
+
+        assert!(windows.closed("window-3"));
+
+        assert_eq!(windows.labels(), vec!["main", "window-2"]);
+        assert_eq!(windows.to_saved().len(), 2);
+    }
+
+    #[test]
+    fn the_last_window_is_not_saved_again_when_it_closes() {
         let windows = OpenWindows::default();
         windows.add("main", "default");
 
         assert!(!windows.closed("main"));
-        assert_eq!(windows.labels(), vec!["main"]);
+        assert!(windows.labels().is_empty());
     }
 
     #[test]

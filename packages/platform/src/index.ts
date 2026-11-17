@@ -1,5 +1,11 @@
 export type { AppStatePort } from './AppStatePort';
-export type { AppWindowsPort, WindowStateReport, WorkspaceIdListener } from './AppWindowsPort';
+export type {
+  AppWindowsPort,
+  WindowStateReport,
+  WorkspaceIdListener,
+  WorkspaceListChangeListener,
+  WorkspaceToShow,
+} from './AppWindowsPort';
 export { InMemoryAppWindows } from './fakes/InMemoryAppWindows';
 export type {
   DocumentFilePort,

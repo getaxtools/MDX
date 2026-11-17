@@ -14,8 +14,9 @@ pub use window_labels::{
 
 use crate::commands::app_windows::StartupWorkspaceNotice;
 use crate::commands::live_reload::stop_watching_for;
+use crate::notes_index::NotesIndexes;
 use crate::open_requests::MAIN_WINDOW_LABEL;
-use crate::storage::{AppValueKey, JsonText, WorkspaceDatabase, WorkspaceId};
+use crate::storage::{AppValueKey, JsonText, WindowId, WorkspaceDatabase, WorkspaceId};
 
 /// The app value that lists the windows to open again at the next start.
 const OPEN_WINDOWS_KEY: &str = "openWindows";
@@ -30,6 +31,13 @@ pub fn save_open_windows(windows: &OpenWindows, database: &WorkspaceDatabase) {
     };
     if let Ok(value) = JsonText::try_from(json) {
         let _ = database.save_app_value(&key, &value);
+    }
+}
+
+/// Drops the tabs and layout a window label had, so a window opened later under it starts empty.
+pub fn forget_window_sessions(database: &WorkspaceDatabase, label: &str) {
+    if let Ok(window_id) = WindowId::try_from(label.to_owned()) {
+        let _ = database.delete_window_sessions(&window_id);
     }
 }
 
@@ -77,29 +85,60 @@ pub fn open_window(app: &AppHandle, label: &str) -> tauri::Result<()> {
 }
 
 /// Opens the windows of the last session again, each with the workspace it showed. A workspace named
-/// on the command line is shown in the first window; one that does not exist only sets the notice.
-pub fn restore_windows(app: &App, arguments: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+/// on the command line is shown in the first window, unless another restored window shows it, which
+/// then comes to the front; one that does not exist only sets the notice. A window that cannot be
+/// built is left out rather than stopping the start.
+pub fn restore_windows(app: &App, arguments: &[String]) {
     let database = app.state::<WorkspaceDatabase>();
     let windows = app.state::<Arc<OpenWindows>>();
-    let saved = saved_open_windows(&database);
     let named = named_workspace(&database, arguments, &app.state::<StartupWorkspaceNotice>());
-    let main_workspace = named
-        .or_else(|| {
-            saved
-                .iter()
-                .find(|window| window.window_id == MAIN_WINDOW_LABEL)
-                .map(|window| window.workspace_id.clone())
-        })
-        .unwrap_or_default();
-    windows.add(MAIN_WINDOW_LABEL, &main_workspace);
-    for window in saved
-        .iter()
-        .filter(|window| window.window_id != MAIN_WINDOW_LABEL)
-    {
-        open_window(app.handle(), &window.window_id)?;
-        windows.add(&window.window_id, &window.workspace_id);
+    let plan = startup_plan(saved_open_windows(&database), named);
+    windows.add(MAIN_WINDOW_LABEL, &plan.main_workspace);
+    for window in &plan.other_windows {
+        if open_window(app.handle(), &window.window_id).is_ok() {
+            windows.add(&window.window_id, &window.workspace_id);
+        }
     }
-    Ok(())
+    if let Some(window) = plan
+        .window_to_focus
+        .and_then(|label| app.get_webview_window(&label))
+    {
+        let _ = window.set_focus();
+    }
+}
+
+/// The windows to open at start-up and which one to bring to the front.
+#[derive(Debug, PartialEq, Eq)]
+struct StartupPlan {
+    main_workspace: String,
+    other_windows: Vec<SavedWindow>,
+    window_to_focus: Option<String>,
+}
+
+fn startup_plan(saved: Vec<SavedWindow>, named: Option<String>) -> StartupPlan {
+    let saved_main = saved
+        .iter()
+        .find(|window| window.window_id == MAIN_WINDOW_LABEL)
+        .map(|window| window.workspace_id.clone());
+    let other_windows: Vec<SavedWindow> = saved
+        .into_iter()
+        .filter(|window| window.window_id != MAIN_WINDOW_LABEL)
+        .collect();
+    let shown_elsewhere = named.as_ref().and_then(|named| {
+        other_windows
+            .iter()
+            .find(|window| &window.workspace_id == named)
+            .map(|window| window.window_id.clone())
+    });
+    let main_workspace = match (&shown_elsewhere, named) {
+        (None, Some(named)) => named,
+        _ => saved_main.unwrap_or_default(),
+    };
+    StartupPlan {
+        main_workspace,
+        other_windows,
+        window_to_focus: shown_elsewhere,
+    }
 }
 
 fn named_workspace(
@@ -131,8 +170,11 @@ pub fn handle_window_event(window: &Window, event: &WindowEvent) {
         WindowEvent::Focused(true) => windows.focused(window.label()),
         WindowEvent::Destroyed => {
             stop_watching_for(window);
+            window.state::<Arc<NotesIndexes>>().hide(window.label());
             if windows.closed(window.label()) {
-                save_open_windows(&windows, &window.state::<WorkspaceDatabase>());
+                let database = window.state::<WorkspaceDatabase>();
+                forget_window_sessions(&database, window.label());
+                save_open_windows(&windows, &database);
             }
         }
         _ => {}
@@ -155,6 +197,56 @@ mod tests {
             window_id: window_id.to_owned(),
             workspace_id: workspace_id.to_owned(),
         }
+    }
+
+    #[test]
+    fn a_named_workspace_a_restored_window_shows_is_brought_forward_there() {
+        let plan = startup_plan(
+            vec![saved("main", "default"), saved("window-2", "handbook")],
+            Some("handbook".to_owned()),
+        );
+
+        assert_eq!(plan.main_workspace, "default");
+        assert_eq!(plan.window_to_focus.as_deref(), Some("window-2"));
+        assert_eq!(plan.other_windows, vec![saved("window-2", "handbook")]);
+    }
+
+    #[test]
+    fn a_named_workspace_no_window_shows_opens_in_the_first_window() {
+        let plan = startup_plan(
+            vec![saved("main", "default"), saved("window-2", "reading")],
+            Some("handbook".to_owned()),
+        );
+
+        assert_eq!(plan.main_workspace, "handbook");
+        assert_eq!(plan.window_to_focus, None);
+    }
+
+    #[test]
+    fn a_well_formed_but_unknown_workspace_id_opens_nothing_and_sets_the_notice() {
+        let folder = tempfile::tempdir().unwrap();
+        let database = WorkspaceDatabase::new(folder.path());
+        let notice = StartupWorkspaceNotice::default();
+        let arguments = ["mdx".to_owned(), "--workspace=ghost".to_owned()];
+
+        assert_eq!(named_workspace(&database, &arguments, &notice), None);
+        assert!(notice.take());
+    }
+
+    #[test]
+    fn open_windows_round_trip_through_the_database() {
+        let folder = tempfile::tempdir().unwrap();
+        let database = WorkspaceDatabase::new(folder.path());
+        let windows = OpenWindows::default();
+        windows.add("main", "default");
+        windows.add("window-2", "handbook");
+
+        save_open_windows(&windows, &database);
+
+        assert_eq!(
+            saved_open_windows(&database),
+            vec![saved("main", "default"), saved("window-2", "handbook")]
+        );
     }
 
     #[test]

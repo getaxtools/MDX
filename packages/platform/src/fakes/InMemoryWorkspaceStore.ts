@@ -89,6 +89,11 @@ export class InMemoryWorkspaceStore implements WorkspaceStorePort {
     return Promise.resolve();
   }
 
+  /** What the desktop app does for a closed window, so a later window under its label starts empty. */
+  deleteWindowSessions(windowId: string): void {
+    for (const row of this.rows.values()) row.windowSessions.delete(windowId);
+  }
+
   saveWindowSession(windowId: string, workspaceId: string, session: unknown): Promise<void> {
     const row = this.rows.get(workspaceId);
     if (!row) return Promise.reject(new UnknownWorkspaceError(workspaceId));

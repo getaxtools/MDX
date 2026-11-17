@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 
 use crate::commands::documents::run_blocking;
 use crate::commands::notes::allowed_root;
@@ -33,12 +33,12 @@ pub struct ShownNotes {
 }
 const MAX_NOTE_PATH_CHARACTERS: usize = 1_024;
 
-/// Opens the index of the shown Notes workspace and brings it up to date in the background,
-/// reporting its progress as `notes-index-status` events.
+/// Opens the index of the Notes workspace the window shows and brings it up to date in the background,
+/// reporting its progress as `notes-index-status` events to the windows showing it.
 #[tauri::command]
 pub async fn show_notes_index(
     location: ShownNotes,
-    app: AppHandle,
+    window: WebviewWindow,
     access: State<'_, Arc<DocumentAccessList>>,
 ) -> Result<(), DocumentError> {
     let location_id =
@@ -48,34 +48,41 @@ pub async fn show_notes_index(
     let access = Arc::clone(&access);
     run_blocking(move || {
         let root = allowed_root(&location.path, &access)?;
-        let indexes = app.state::<Arc<NotesIndexes>>();
-        let reporting_app = app.clone();
+        let indexes = window.state::<Arc<NotesIndexes>>();
+        let reporting_app = window.app_handle().clone();
         let shown = NotesLocationToShow {
             root: root.folder().to_path_buf(),
             location_id: location_id.as_str().to_owned(),
             excluded,
         };
         indexes
-            .show(shown, move |event| emit_index_event(&reporting_app, event))
+            .show(window.label(), shown, move |event, windows| {
+                emit_index_event(&reporting_app, event, windows);
+            })
             .map_err(|_| DocumentError::Unreadable)
     })
     .await?
 }
 
-fn emit_index_event(app: &AppHandle, event: IndexEvent) {
-    let _ = match event {
-        IndexEvent::Status(status) => app.emit(NOTES_INDEX_STATUS_EVENT, status),
-        IndexEvent::Changes {
-            location_id,
-            changes,
-        } => app.emit(
-            NOTES_INDEX_CHANGES_EVENT,
-            IndexChanges {
+fn emit_index_event(app: &AppHandle, event: IndexEvent, windows: &[String]) {
+    for window in windows {
+        let _ = match &event {
+            IndexEvent::Status(status) => {
+                app.emit_to(window.as_str(), NOTES_INDEX_STATUS_EVENT, status)
+            }
+            IndexEvent::Changes {
                 location_id,
                 changes,
-            },
-        ),
-    };
+            } => app.emit_to(
+                window.as_str(),
+                NOTES_INDEX_CHANGES_EVENT,
+                IndexChanges {
+                    location_id: location_id.clone(),
+                    changes: changes.clone(),
+                },
+            ),
+        };
+    }
 }
 
 /// Reconciles the shown index again, for a location that reports no changes, when the window gets the focus.
@@ -93,10 +100,10 @@ pub async fn clear_notes_indexes(
     run_blocking(move || indexes.clear_all().map_err(|_| DocumentError::Unreadable)).await?
 }
 
-/// Stops the build of the index once another workspace is shown.
+/// The window shows another workspace; the index stops once no window shows its location.
 #[tauri::command]
-pub fn hide_notes_index(indexes: State<'_, Arc<NotesIndexes>>) {
-    indexes.hide();
+pub fn hide_notes_index(window: WebviewWindow, indexes: State<'_, Arc<NotesIndexes>>) {
+    indexes.hide(window.label());
 }
 
 /// Searches the notes of the shown Notes workspace; `tag:` and `path:` words filter the notes.

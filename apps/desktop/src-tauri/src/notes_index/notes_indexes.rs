@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use std::collections::{BTreeSet, HashMap};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -63,8 +64,11 @@ pub struct NotesLocationToShow {
     pub excluded: ExcludedPaths,
 }
 
+/// The windows showing a location; its events go to them only.
+type ShowingWindows = Arc<Mutex<BTreeSet<String>>>;
+
 struct ShownLocation {
-    location_id: String,
+    windows: ShowingWindows,
     root: PathBuf,
     excluded: ExcludedPaths,
     stop: Arc<AtomicBool>,
@@ -73,96 +77,88 @@ struct ShownLocation {
     thread: thread::JoinHandle<()>,
 }
 
-/// The notes index of the shown Notes workspace: opened when the workspace is shown, reconciled
-/// in the background whenever its notes change, and stopped when another workspace is shown.
+/// The notes index of each Notes location a window shows: opened when a window shows it, reconciled
+/// in the background whenever its notes change, and stopped when no window shows it any more.
 pub struct NotesIndexes {
     index_folder: PathBuf,
-    shown: Mutex<Option<ShownLocation>>,
+    shown: Mutex<HashMap<String, ShownLocation>>,
 }
 
 impl NotesIndexes {
     pub fn new(index_folder: PathBuf) -> Self {
         Self {
             index_folder,
-            shown: Mutex::new(None),
+            shown: Mutex::new(HashMap::new()),
         }
     }
 
-    /// Opens the location's index, reconciles it with the folder and keeps it in step on a thread of its own.
+    /// Opens the location's index for the window, reconciles it with the folder and keeps it in step on
+    /// a thread of its own. The window stops showing any other location; windows already showing this
+    /// one keep it and hear the new reconcile too.
     pub fn show(
         &self,
+        window_label: &str,
         location: NotesLocationToShow,
-        report: impl Fn(IndexEvent) + Send + 'static,
+        report: impl Fn(IndexEvent, &[String]) + Send + 'static,
     ) -> Result<(), IndexError> {
-        self.hide();
-        let NotesLocationToShow {
-            root,
-            location_id,
-            excluded,
-        } = location;
-        let root = dunce::canonicalize(&root).unwrap_or(root);
-        let (index, opening) =
-            NotesIndex::open(&index_file_path(&self.index_folder, &location_id))?;
-        let (reconcile_requests, requests) = mpsc::channel();
-        let watcher_requests = reconcile_requests.clone();
-        let watcher = NotesFolderWatcher::start(root.clone(), move || {
-            let _ = watcher_requests.send(());
-        });
-        let stop = Arc::new(AtomicBool::new(false));
-        let job = IndexJob {
-            index,
-            folder: DiskNoteFolder::new(root.clone(), excluded.clone()),
-            stop: Arc::clone(&stop),
-            status: IndexStatus::building(&location_id, opening, watcher.is_watching()),
-        };
-        let thread = thread::Builder::new()
-            .name("notes-index".to_owned())
-            .spawn(move || keep_in_step(job, &requests, &report))?;
-        *self.shown.lock().unwrap_or_else(PoisonError::into_inner) = Some(ShownLocation {
-            location_id,
-            root,
-            excluded,
-            stop,
-            reconcile_requests,
-            _watcher: watcher,
-            thread,
-        });
+        let mut shown = self.lock_shown();
+        let windows = shown
+            .remove(&location.location_id)
+            .map(|earlier| {
+                earlier.stop.store(true, Ordering::Relaxed);
+                Arc::clone(&earlier.windows)
+            })
+            .unwrap_or_default();
+        stop_unshown(&mut shown, window_label);
+        let location_id = location.location_id.clone();
+        let started = start_location(&self.index_folder, location, Arc::clone(&windows), report)?;
+        lock(&windows).insert(window_label.to_owned());
+        shown.insert(location_id, started);
         Ok(())
     }
-    /// Stops watching and building; the thread ends once its current batch is written.
-    pub fn hide(&self) {
-        drop(self.take_shown());
+
+    /// The window shows no location any more; a location no window shows stops, and its thread ends
+    /// once its current batch is written.
+    pub fn hide(&self, window_label: &str) {
+        stop_unshown(&mut self.lock_shown(), window_label);
     }
 
     /// Removes every notes index, for Clear All Data; the notes themselves are never touched.
-    /// The shown index is closed first, so its file can be deleted; the count of files removed is returned.
+    /// The shown indexes are closed first, so their files can be deleted; the count of files removed
+    /// is returned.
     pub fn clear_all(&self) -> Result<usize, IndexError> {
-        if let Some(thread) = self.take_shown() {
+        let threads: Vec<_> = self
+            .lock_shown()
+            .drain()
+            .map(|(_, location)| {
+                location.stop.store(true, Ordering::Relaxed);
+                location.thread
+            })
+            .collect();
+        for thread in threads {
             let _ = thread.join();
         }
         remove_index_files_in(&self.index_folder)
     }
 
-    fn take_shown(&self) -> Option<thread::JoinHandle<()>> {
-        let location = self
-            .shown
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .take()?;
-        location.stop.store(true, Ordering::Relaxed);
-        let ShownLocation { thread, .. } = location;
-        Some(thread)
-    }
-
     /// Reconciles again, for a location that reports no changes, when the window gets the focus.
     pub fn refresh(&self, location_id: &str) {
-        let shown = self.shown.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Some(location) = shown
-            .as_ref()
-            .filter(|location| location.location_id == location_id)
-        {
+        if let Some(location) = self.lock_shown().get(location_id) {
             let _ = location.reconcile_requests.send(());
         }
+    }
+
+    #[cfg(test)]
+    /// The windows showing the location now.
+    pub fn windows_showing(&self, location_id: &str) -> Vec<String> {
+        self.lock_shown()
+            .get(location_id)
+            .map(|location| lock(&location.windows).iter().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    fn lock_shown(&self) -> std::sync::MutexGuard<'_, HashMap<String, ShownLocation>> {
+        lock(&self.shown)
     }
 
     /// Searches the shown workspace's notes, beside a reconcile that may still run.
@@ -240,12 +236,73 @@ impl NotesIndexes {
     }
 
     fn shown_folder(&self, location_id: &str) -> Option<DiskNoteFolder> {
-        let shown = self.shown.lock().unwrap_or_else(PoisonError::into_inner);
-        shown
-            .as_ref()
-            .filter(|location| location.location_id == location_id)
+        self.lock_shown()
+            .get(location_id)
             .map(|location| DiskNoteFolder::new(location.root.clone(), location.excluded.clone()))
     }
+}
+
+fn lock<Value>(mutex: &Mutex<Value>) -> std::sync::MutexGuard<'_, Value> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Takes the window off every location and stops the locations no window shows any more.
+fn stop_unshown(shown: &mut HashMap<String, ShownLocation>, window_label: &str) {
+    shown.retain(|_, location| {
+        let mut windows = lock(&location.windows);
+        windows.remove(window_label);
+        let is_shown = !windows.is_empty();
+        if !is_shown {
+            location.stop.store(true, Ordering::Relaxed);
+        }
+        is_shown
+    });
+}
+
+fn start_location(
+    index_folder: &Path,
+    location: NotesLocationToShow,
+    windows: ShowingWindows,
+    report: impl Fn(IndexEvent, &[String]) + Send + 'static,
+) -> Result<ShownLocation, IndexError> {
+    let NotesLocationToShow {
+        root,
+        location_id,
+        excluded,
+    } = location;
+    let root = dunce::canonicalize(&root).unwrap_or(root);
+    let (index, opening) = NotesIndex::open(&index_file_path(index_folder, &location_id))?;
+    let (reconcile_requests, requests) = mpsc::channel();
+    let watcher_requests = reconcile_requests.clone();
+    let watcher = NotesFolderWatcher::start(root.clone(), move || {
+        let _ = watcher_requests.send(());
+    });
+    let stop = Arc::new(AtomicBool::new(false));
+    let job = IndexJob {
+        index,
+        folder: DiskNoteFolder::new(root.clone(), excluded.clone()),
+        stop: Arc::clone(&stop),
+        status: IndexStatus::building(&location_id, opening, watcher.is_watching()),
+    };
+    let reporting_windows = Arc::clone(&windows);
+    let thread = thread::Builder::new()
+        .name("notes-index".to_owned())
+        .spawn(move || {
+            let report_to_windows = |event: IndexEvent| {
+                let labels: Vec<String> = lock(&reporting_windows).iter().cloned().collect();
+                report(event, &labels);
+            };
+            keep_in_step(job, &requests, &report_to_windows);
+        })?;
+    Ok(ShownLocation {
+        windows,
+        root,
+        excluded,
+        stop,
+        reconcile_requests,
+        _watcher: watcher,
+        thread,
+    })
 }
 
 /// The index of one shown location: the index it owns, the folder it reads and when to stop.
@@ -335,7 +392,7 @@ mod tests {
             excluded: ExcludedPaths::new(&excluded).unwrap(),
         };
         indexes
-            .show(location, move |event| {
+            .show("main", location, move |event, _| {
                 let _ = sender.send(event);
             })
             .unwrap();
@@ -497,8 +554,85 @@ mod tests {
         let _events = show(&indexes, location.path());
 
         assert_eq!(indexes.search("location-2", "venue").unwrap(), None);
-        indexes.hide();
+        indexes.hide("main");
         assert_eq!(indexes.search("location-1", "venue").unwrap(), None);
+    }
+
+    fn show_in_window(
+        indexes: &NotesIndexes,
+        window_label: &str,
+        location_id: &str,
+        root: &Path,
+    ) -> Receiver<Vec<String>> {
+        let (sender, receiver) = mpsc::channel();
+        let location = NotesLocationToShow {
+            root: root.to_path_buf(),
+            location_id: location_id.to_owned(),
+            excluded: ExcludedPaths::new(&[]).unwrap(),
+        };
+        indexes
+            .show(window_label, location, move |event, windows| {
+                if matches!(event, IndexEvent::Status(ref status) if !status.is_building) {
+                    let _ = sender.send(windows.to_vec());
+                }
+            })
+            .unwrap();
+        receiver
+    }
+
+    #[test]
+    fn two_windows_on_different_notes_workspaces_keep_their_own_indexes() {
+        let journal = tempfile::tempdir().unwrap();
+        let handbook = tempfile::tempdir().unwrap();
+        fs::write(journal.path().join("Day.md"), "# Day\n\nRain all day.\n").unwrap();
+        fs::write(handbook.path().join("Rules.md"), "# Rules\n\nBe kind.\n").unwrap();
+        let index_folder = tempfile::tempdir().unwrap();
+        let indexes = NotesIndexes::new(index_folder.path().to_path_buf());
+
+        let journal_events = show_in_window(&indexes, "main", "journal", journal.path());
+        let handbook_events = show_in_window(&indexes, "window-2", "handbook", handbook.path());
+
+        assert_eq!(journal_events.recv_timeout(WAIT).unwrap(), vec!["main"]);
+        assert_eq!(
+            handbook_events.recv_timeout(WAIT).unwrap(),
+            vec!["window-2"]
+        );
+        assert_eq!(
+            indexes
+                .search("journal", "rain")
+                .unwrap()
+                .unwrap()
+                .hits
+                .len(),
+            1
+        );
+        assert_eq!(
+            indexes
+                .search("handbook", "kind")
+                .unwrap()
+                .unwrap()
+                .hits
+                .len(),
+            1
+        );
+        indexes.hide("window-2");
+        assert_eq!(indexes.search("handbook", "kind").unwrap(), None);
+        assert_eq!(indexes.windows_showing("journal"), vec!["main"]);
+    }
+
+    #[test]
+    fn a_location_shown_in_two_windows_stays_until_both_hide_it() {
+        let location = tempfile::tempdir().unwrap();
+        let index_folder = tempfile::tempdir().unwrap();
+        let indexes = NotesIndexes::new(index_folder.path().to_path_buf());
+        let _first = show_in_window(&indexes, "main", "journal", location.path());
+        let second = show_in_window(&indexes, "window-2", "journal", location.path());
+
+        assert_eq!(second.recv_timeout(WAIT).unwrap(), vec!["main", "window-2"]);
+        indexes.hide("main");
+        assert_eq!(indexes.windows_showing("journal"), vec!["window-2"]);
+        indexes.hide("window-2");
+        assert!(indexes.windows_showing("journal").is_empty());
     }
 
     #[test]

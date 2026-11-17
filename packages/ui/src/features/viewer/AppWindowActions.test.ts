@@ -73,6 +73,30 @@ describe('app windows', () => {
     expect(appWindows.focusedWorkspaces).toEqual([]);
   });
 
+  it('files sent with a workspace open in it once it is shown', async () => {
+    const { controller, session, snapshot, appWindows } = await startWindow();
+    await controller.execute({ kind: 'createWorkspace', name: 'Handbook', kindId: 'markdownViewer' });
+    await controller.execute({ kind: 'switchWorkspace', workspaceId: 'default' });
+
+    appWindows.askToShow('workspace-1', [PLAN]);
+
+    await vi.waitFor(() => expect(snapshot().activeDocument?.fileName).toBe('Plan.md'));
+    expect(session.shownWorkspace()?.id).toBe('workspace-1');
+  });
+
+  it('a workspace deleted in another window moves this window and says why', async () => {
+    const { controller, session, snapshot, appWindows, workspaceStore } = await startWindow();
+    await controller.execute({ kind: 'createWorkspace', name: 'Handbook', kindId: 'markdownViewer' });
+    await workspaceStore.deleteWorkspace('workspace-1');
+
+    appWindows.deleteElsewhere('workspace-1');
+
+    await vi.waitFor(() => expect(session.shownWorkspace()?.id).toBe('default'));
+    expect(snapshot().notice).toBe(
+      'The workspace this window showed was deleted in another window, so it shows the workspace used before.',
+    );
+  });
+
   it('reports its workspace, documents and folders, once per change', async () => {
     const { controller, appWindows } = await startWindow();
     const reportsAtStart = appWindows.reports.length;
@@ -106,7 +130,7 @@ describe('app windows', () => {
     await other.controller.execute({ kind: 'toggleFavourite' });
     await other.controller.saveNow();
 
-    appWindows.changeListsElsewhere('default');
+    appWindows.changeListElsewhere('default', 'favourites');
 
     await vi.waitFor(() => expect(snapshot().viewer.favourites.favourites()).toHaveLength(1));
     controller.stop();

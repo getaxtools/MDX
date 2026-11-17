@@ -133,6 +133,12 @@ impl WorkspaceDatabase {
         })
     }
 
+    pub fn delete_window_sessions(&self, window_id: &WindowId) -> Result<(), DatabaseError> {
+        self.with_connection(|connection| {
+            workspace_tables::delete_window_sessions(connection, window_id)
+        })
+    }
+
     pub fn load_app_values(&self) -> Result<BTreeMap<String, String>, DatabaseError> {
         self.with_connection(workspace_tables::load_app_values)
     }

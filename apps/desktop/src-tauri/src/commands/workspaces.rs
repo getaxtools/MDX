@@ -42,6 +42,11 @@ impl From<DatabaseError> for WorkspaceCommandError {
 
 type CommandResult<T> = Result<T, WorkspaceCommandError>;
 
+/// A window's tabs and layout are kept under its own label, never one the webview names.
+fn window_id_of(window: &WebviewWindow) -> CommandResult<WindowId> {
+    Ok(WindowId::try_from(window.label().to_owned())?)
+}
+
 /// Moves the earlier state into the database once, after keeping a copy of the earlier file.
 #[tauri::command]
 pub fn import_legacy_state(
@@ -60,12 +65,12 @@ pub fn import_legacy_state(
 #[tauri::command]
 pub fn grant_workspace_access(
     workspace_id: String,
-    window_id: String,
+    window: WebviewWindow,
     database: State<'_, WorkspaceDatabase>,
     access: State<'_, Arc<DocumentAccessList>>,
 ) -> CommandResult<()> {
     let workspace_id = WorkspaceId::try_from(workspace_id)?;
-    let window_id = WindowId::try_from(window_id)?;
+    let window_id = window_id_of(&window)?;
     if let Some(saved_json) = database.saved_paths_json(&workspace_id, &window_id)? {
         grant_saved_paths(&saved_json, &access);
     }
@@ -87,11 +92,11 @@ pub fn load_workspace_registry(
 #[tauri::command]
 pub fn load_workspace(
     workspace_id: String,
-    window_id: String,
+    window: WebviewWindow,
     database: State<'_, WorkspaceDatabase>,
 ) -> CommandResult<Option<WorkspaceContents>> {
     let workspace_id = WorkspaceId::try_from(workspace_id)?;
-    let window_id = WindowId::try_from(window_id)?;
+    let window_id = window_id_of(&window)?;
     Ok(database.load_workspace(&workspace_id, &window_id)?)
 }
 
@@ -103,18 +108,40 @@ pub fn save_workspace(
     Ok(database.save_workspace(&WorkspaceRecord::try_from(workspace)?)?)
 }
 
+/// A workspace was deleted; the other windows drop it, and one showing it moves to another workspace.
+pub const WORKSPACE_DELETED_EVENT: &str = "workspace-deleted";
+
 #[tauri::command]
 pub fn delete_workspace(
     workspace_id: String,
+    window: WebviewWindow,
     database: State<'_, WorkspaceDatabase>,
 ) -> CommandResult<()> {
-    Ok(database.delete_workspace(&WorkspaceId::try_from(workspace_id)?)?)
+    let workspace_id = WorkspaceId::try_from(workspace_id)?;
+    database.delete_workspace(&workspace_id)?;
+    let windows = window.state::<Arc<OpenWindows>>();
+    for label in other_windows(&windows, window.label()) {
+        let _ = window.emit_to(
+            label.as_str(),
+            WORKSPACE_DELETED_EVENT,
+            workspace_id.as_str(),
+        );
+    }
+    Ok(())
+}
+
+fn other_windows(windows: &OpenWindows, sender: &str) -> Vec<String> {
+    windows
+        .labels()
+        .into_iter()
+        .filter(|label| label != sender)
+        .collect()
 }
 
 /// A list of one workspace changed, such as its favourites; the other windows showing it read it again.
 pub const WORKSPACE_LIST_CHANGED_EVENT: &str = "workspace-list-changed";
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ChangedList {
     workspace_id: String,
@@ -134,28 +161,42 @@ pub fn save_workspace_list(
     let database = window.state::<WorkspaceDatabase>();
     let windows = window.state::<Arc<OpenWindows>>();
     database.save_list(&workspace_id, list, &JsonText::try_from(value_json)?)?;
-    let changed = ChangedList {
-        workspace_id: workspace_id.as_str().to_owned(),
-        list_name,
-    };
-    for label in windows.others_showing(workspace_id.as_str(), window.label()) {
-        let _ = window.emit_to(
-            label.as_str(),
-            WORKSPACE_LIST_CHANGED_EVENT,
-            changed.clone(),
-        );
+    for (label, changed) in list_change_notices(&windows, &workspace_id, &list_name, window.label())
+    {
+        let _ = window.emit_to(label.as_str(), WORKSPACE_LIST_CHANGED_EVENT, changed);
     }
     Ok(())
 }
 
+/// The windows to tell about a saved list, with what to tell each: the other windows of that
+/// workspace only.
+fn list_change_notices(
+    windows: &OpenWindows,
+    workspace_id: &WorkspaceId,
+    list_name: &str,
+    sender: &str,
+) -> Vec<(String, ChangedList)> {
+    windows
+        .others_showing(workspace_id.as_str(), sender)
+        .into_iter()
+        .map(|label| {
+            let changed = ChangedList {
+                workspace_id: workspace_id.as_str().to_owned(),
+                list_name: list_name.to_owned(),
+            };
+            (label, changed)
+        })
+        .collect()
+}
+
 #[tauri::command]
 pub fn save_window_session(
-    window_id: String,
     workspace_id: String,
     session_json: String,
+    window: WebviewWindow,
     database: State<'_, WorkspaceDatabase>,
 ) -> CommandResult<()> {
-    let window_id = WindowId::try_from(window_id)?;
+    let window_id = window_id_of(&window)?;
     let workspace_id = WorkspaceId::try_from(workspace_id)?;
     Ok(database.save_window_session(
         &window_id,
@@ -184,6 +225,37 @@ pub fn save_app_value(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_saved_list_is_announced_to_the_other_windows_of_its_workspace_only() {
+        let windows = OpenWindows::default();
+        windows.add("main", "handbook");
+        windows.add("window-2", "handbook");
+        windows.add("window-3", "reading");
+        let handbook = WorkspaceId::try_from("handbook".to_owned()).unwrap();
+
+        let notices = list_change_notices(&windows, &handbook, "favourites", "main");
+
+        assert_eq!(
+            notices,
+            vec![(
+                "window-2".to_owned(),
+                ChangedList {
+                    workspace_id: "handbook".to_owned(),
+                    list_name: "favourites".to_owned(),
+                }
+            )]
+        );
+    }
+
+    #[test]
+    fn a_deleted_workspace_is_announced_to_every_other_window() {
+        let windows = OpenWindows::default();
+        windows.add("main", "handbook");
+        windows.add("window-2", "reading");
+
+        assert_eq!(other_windows(&windows, "main"), vec!["window-2"]);
+    }
 
     #[test]
     fn names_the_invalid_argument() {

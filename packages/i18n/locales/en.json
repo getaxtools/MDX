@@ -1419,5 +1419,6 @@
   "errors.document.importRunning": "Another import is still running. Wait for it to finish or stop it first.",
   "menu.file.newWindow": "New Window",
   "windows.startupWorkspaceMissing": "The workspace MDX was started with no longer exists, so this window shows the workspace used last.",
-  "windows.workspaceNotFound": "That workspace no longer exists."
+  "windows.workspaceNotFound": "That workspace no longer exists.",
+  "windows.workspaceDeletedElsewhere": "The workspace this window showed was deleted in another window, so it shows the workspace used before."
 }

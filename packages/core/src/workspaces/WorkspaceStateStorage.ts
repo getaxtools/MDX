@@ -117,9 +117,13 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
    * Saves the current workspace, then gives the target's tabs, layout and lists with the current app-wide
    * values: settings, kinds, shortcuts, word goals and snippets stay as they are.
    */
-  async switchTo(workspaceId: string, current: ViewerState): Promise<RestoredViewerState> {
+  async switchTo(
+    workspaceId: string,
+    current: ViewerState,
+    { shouldSaveCurrent = true } = {},
+  ): Promise<RestoredViewerState> {
     const { workspaceStore, kindRegistry, windowId, now } = this.options;
-    await this.save(current);
+    if (shouldSaveCurrent) await this.save(current);
     const shown = this.registry.markShown(workspaceId, now());
     if (shown?.outcome === 'changed') await this.saveWorkspace(shown.registry, shown.workspace);
     this.shownWorkspaceId = workspaceId;
@@ -138,21 +142,32 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
     return { ...restored, hasEarlierVersionChanges: false };
   }
 
-  /**
-   * The shown workspace's lists as stored, with the current tabs, layout and app values; they count as
-   * saved, so this window does not write them back.
-   */
-  async reloadLists(current: ViewerState): Promise<RestoredViewerState> {
-    const { workspaceStore, kindRegistry, windowId } = this.options;
-    const contents = await workspaceStore.loadWorkspace(this.shownWorkspaceId, windowId);
-    const { windowSession, appValues } = storedViewerStateOf(current);
+  /** False while the state holds a change to the list that this window has not saved yet. */
+  isListSaved(listName: WorkspaceListName, state: ViewerState): boolean {
+    const json = JSON.stringify(storedViewerStateOf(state).lists[listName]);
+    return this.savedJson.get(`list.${listName}`) === json;
+  }
+
+  /** One list of a workspace as stored, such as after another window saved it. */
+  async loadList(workspaceId: string, listName: WorkspaceListName): Promise<unknown> {
+    const { workspaceStore, windowId } = this.options;
+    return (await workspaceStore.loadWorkspace(workspaceId, windowId))?.lists[listName];
+  }
+
+  /** The state with one list replaced by a loaded value, which counts as saved, so it is not written back. */
+  withLoadedList(listName: WorkspaceListName, value: unknown, current: ViewerState): ViewerState {
+    const { lists, windowSession, appValues } = storedViewerStateOf(current);
     const reloaded = viewerStateFrom(
-      { lists: contents?.lists ?? {}, windowSession, appValues },
-      kindRegistry,
+      { lists: { ...lists, [listName]: value }, windowSession, appValues },
+      this.options.kindRegistry,
     );
-    const { lists } = storedViewerStateOf(reloaded);
-    for (const listName of WORKSPACE_LIST_NAMES) this.hasChanged(`list.${listName}`, lists[listName]);
-    return { ...reloaded, hasEarlierVersionChanges: false };
+    this.hasChanged(`list.${listName}`, storedViewerStateOf(reloaded).lists[listName]);
+    return { ...current, ...stateFieldsOf(listName, reloaded) };
+  }
+
+  /** Reads the registry again, such as after another window deleted a workspace. */
+  async reloadRegistry(): Promise<void> {
+    this.registry = WorkspaceRegistry.fromStored(await this.options.workspaceStore.loadRegistry());
   }
 
   private async migrate(): Promise<RestoredViewerState> {
@@ -295,6 +310,21 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
       position: 0,
       lastShownAtMs: this.options.now(),
     };
+  }
+}
+
+/** The parts of the viewer state a stored list is read into. */
+function stateFieldsOf(listName: WorkspaceListName, state: ViewerState): Partial<ViewerState> {
+  switch (listName) {
+    case 'recentFiles':
+      return { recentFiles: state.recentFiles };
+    case 'favourites':
+    case 'favouriteGroups':
+      return { favourites: state.favourites };
+    case 'explorerFolders':
+      return { explorerFolders: state.explorerFolders };
+    case 'settingsOverrides':
+      return { workspaceOverrides: state.workspaceOverrides ?? {} };
   }
 }
 

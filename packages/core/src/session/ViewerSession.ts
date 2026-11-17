@@ -36,7 +36,7 @@ import {
 } from '../workspace-kinds/workspaceKinds';
 import { WorkspaceKindsState } from '../workspace-kinds/WorkspaceKindsState';
 import type { NewerSavedState, ViewerState } from './persistedAppState';
-import { MAIN_WINDOW_ID } from '../workspaces/storedViewerState';
+import { DEFAULT_WORKSPACE_ID, MAIN_WINDOW_ID } from '../workspaces/storedViewerState';
 import { LegacyStateStorage, type ViewerStateStorage } from '../workspaces/ViewerStateStorage';
 import type {
   NewWorkspace,
@@ -256,23 +256,44 @@ export class ViewerSession {
     return removal;
   }
 
-  /** Takes the shown workspace's lists as another window saved them, keeping this window's tabs. */
-  async reloadWorkspaceLists(workspaceId: string): Promise<void> {
-    if (!this.workspaceStorage || this.shownWorkspace()?.id !== workspaceId) return;
-    const reloaded = await this.workspaceStorage.reloadLists(this.state);
-    this.replaceState({
-      ...this.state,
-      recentFiles: reloaded.recentFiles,
-      favourites: reloaded.favourites,
-      explorerFolders: reloaded.explorerFolders,
-      ...(reloaded.workspaceOverrides ? { workspaceOverrides: reloaded.workspaceOverrides } : {}),
-    });
+  /**
+   * Takes one list of the shown workspace as another window saved it, keeping this window's tabs. A
+   * change to that list this window has not saved yet wins: its save reaches the other windows in turn.
+   * Nothing changes when the window shows another workspace by the time the list is read.
+   */
+  async reloadWorkspaceList(workspaceId: string, listName: WorkspaceListName): Promise<void> {
+    const storage = this.workspaceStorage;
+    if (!storage) return;
+    const mayReload = () =>
+      this.shownWorkspace()?.id === workspaceId && storage.isListSaved(listName, this.state);
+    if (!mayReload()) return;
+    const value = await storage.loadList(workspaceId, listName);
+    if (!mayReload()) return;
+    this.replaceState(storage.withLoadedList(listName, value, this.state));
+  }
+
+  /**
+   * Another window deleted a workspace: the registry is read again, and a window showing it moves to
+   * the Markdown viewer workspace shown last. True when this window had to move.
+   */
+  async leaveDeletedWorkspace(workspaceId: string): Promise<boolean> {
+    const storage = this.workspaceStorage;
+    if (!storage || !this.workspaces()) return false;
+    const wasShown = this.shownWorkspace()?.id === workspaceId;
+    await storage.reloadRegistry();
+    if (!wasShown) {
+      this.replaceState(this.state);
+      return false;
+    }
+    const fallback = storage.workspaces().lastShownOfKind(DEFAULT_WORKSPACE_KIND_ID);
+    await this.switchWorkspace(fallback?.id ?? DEFAULT_WORKSPACE_ID, { shouldSaveCurrent: false });
+    return true;
   }
 
   /** Shows another workspace's tabs, lists and layout; the caller has dealt with unsaved edits. */
-  async switchWorkspace(workspaceId: string): Promise<void> {
+  async switchWorkspace(workspaceId: string, { shouldSaveCurrent = true } = {}): Promise<void> {
     if (!this.workspaceStorage || !this.workspaces()?.find(workspaceId)) return;
-    const restored = await this.workspaceStorage.switchTo(workspaceId, this.state);
+    const restored = await this.workspaceStorage.switchTo(workspaceId, this.state, { shouldSaveCurrent });
     this.openedDocuments.clear();
     this.untitledDocuments.clear();
     this.untitledCount = 0;

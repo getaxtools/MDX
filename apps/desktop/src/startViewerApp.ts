@@ -144,7 +144,11 @@ function saveOrAskBeforeClosing(controller: ViewerController): void {
       return;
     }
     event.preventDefault();
-    if (!(await controller.confirmClosingWindow())) return;
+    if (!(await controller.confirmClosingWindow())) {
+      // Exit may have asked every window to close; this one stays, so later closes count again.
+      await tauriCommands.closeCancelled();
+      return;
+    }
     await controller.saveNow();
     await appWindow.destroy();
   });

@@ -9,6 +9,7 @@ import {
 } from '@mdx/platform';
 import { tauriCommands, type StoredWorkspaceReply } from './tauriCommands';
 
+/** Rust keeps tabs and layout under the label of the window asking, so the window id is never sent. */
 export class TauriWorkspaceStore implements WorkspaceStorePort {
   async importLegacyState({
     workspace,
@@ -38,8 +39,8 @@ export class TauriWorkspaceStore implements WorkspaceStorePort {
     }));
   }
 
-  async loadWorkspace(workspaceId: string, windowId: string): Promise<StoredWorkspaceContents | undefined> {
-    const reply = await tauriCommands.loadWorkspace(workspaceId, windowId);
+  async loadWorkspace(workspaceId: string): Promise<StoredWorkspaceContents | undefined> {
+    const reply = await tauriCommands.loadWorkspace(workspaceId);
     return reply === null ? undefined : contentsOf(reply);
   }
 
@@ -60,9 +61,9 @@ export class TauriWorkspaceStore implements WorkspaceStorePort {
     );
   }
 
-  async saveWindowSession(windowId: string, workspaceId: string, session: unknown): Promise<void> {
+  async saveWindowSession(_windowId: string, workspaceId: string, session: unknown): Promise<void> {
     await withUnknownWorkspaceError(workspaceId, () =>
-      tauriCommands.saveWindowSession(windowId, workspaceId, JSON.stringify(session)),
+      tauriCommands.saveWindowSession(workspaceId, JSON.stringify(session)),
     );
   }
 
@@ -73,8 +74,8 @@ export class TauriWorkspaceStore implements WorkspaceStorePort {
     );
   }
 
-  async grantAccess(workspaceId: string, windowId: string): Promise<void> {
-    await tauriCommands.grantWorkspaceAccess(workspaceId, windowId);
+  async grantAccess(workspaceId: string): Promise<void> {
+    await tauriCommands.grantWorkspaceAccess(workspaceId);
   }
 
   async saveAppValue(key: string, value: unknown): Promise<void> {

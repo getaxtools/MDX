@@ -1,4 +1,3 @@
-import { listen } from '@tauri-apps/api/event';
 import type {
   Backlink,
   LinkUpdatePlan,
@@ -13,6 +12,7 @@ import type {
   TagCount,
 } from '@mdx/platform';
 import { NOTES_INDEX_CHANGES_EVENT, NOTES_INDEX_STATUS_EVENT, tauriCommands } from './tauriCommands';
+import { listenInThisWindow } from './windowEvents';
 
 export class TauriNotesIndex implements NotesIndexPort {
   async showIndex(shown: ShownNotesIndex): Promise<void> {
@@ -32,10 +32,7 @@ export class TauriNotesIndex implements NotesIndexPort {
   }
 
   onIndexStatus(listener: (status: NotesIndexStatus) => void): () => void {
-    const stopListening = listen<NotesIndexStatus>(NOTES_INDEX_STATUS_EVENT, (event) =>
-      listener(event.payload),
-    );
-    return () => void stopListening.then((unlisten) => unlisten());
+    return listenInThisWindow<NotesIndexStatus>(NOTES_INDEX_STATUS_EVENT, (event) => listener(event.payload));
   }
 
   backlinks(locationId: string, notePath: string): Promise<Backlink[]> {
@@ -63,7 +60,6 @@ export class TauriNotesIndex implements NotesIndexPort {
   }
 
   onNotesChanged(listener: (changes: NoteChanges) => void): () => void {
-    const stopListening = listen<NoteChanges>(NOTES_INDEX_CHANGES_EVENT, (event) => listener(event.payload));
-    return () => void stopListening.then((unlisten) => unlisten());
+    return listenInThisWindow<NoteChanges>(NOTES_INDEX_CHANGES_EVENT, (event) => listener(event.payload));
   }
 }

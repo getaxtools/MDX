@@ -89,15 +89,27 @@ const fn pause_after_each_moved_file() -> Duration {
     Duration::ZERO
 }
 
+/// Each window hears only of the changed documents it watches.
 fn start_document_watcher(app: AppHandle) -> DocumentWatcher {
     DocumentWatcher::start(move |display_paths| {
-        let _ = app.emit(DOCUMENTS_CHANGED_EVENT, display_paths);
+        let shares = app
+            .state::<WindowWatchSets<String>>()
+            .share_of(&display_paths, String::as_str);
+        for (window_label, changed) in shares {
+            let _ = app.emit_to(window_label.as_str(), DOCUMENTS_CHANGED_EVENT, changed);
+        }
     })
 }
 
+/// Each window hears only of the changed folders it shows expanded.
 fn start_folder_watcher(app: AppHandle) -> FolderWatcher {
     FolderWatcher::start(move |folder_paths| {
-        let _ = app.emit(FOLDERS_CHANGED_EVENT, folder_paths);
+        let shares = app
+            .state::<WindowWatchSets<WatchedFolder>>()
+            .share_of(&folder_paths, |folder| folder.requested_path.as_str());
+        for (window_label, changed) in shares {
+            let _ = app.emit_to(window_label.as_str(), FOLDERS_CHANGED_EVENT, changed);
+        }
     })
 }
 

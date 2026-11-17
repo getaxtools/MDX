@@ -187,6 +187,17 @@ pub fn save_window_session(
     Ok(())
 }
 
+/// Forgets every workspace's tabs and layout in a window, so a later window with its label starts empty.
+pub fn delete_window_sessions(
+    connection: &Connection,
+    window_id: &WindowId,
+) -> Result<(), DatabaseError> {
+    connection
+        .prepare_cached("DELETE FROM window_sessions WHERE window_id = ?1")?
+        .execute([window_id.as_str()])?;
+    Ok(())
+}
+
 pub fn load_app_values(connection: &Connection) -> Result<BTreeMap<String, String>, DatabaseError> {
     let mut statement = connection.prepare_cached("SELECT key, value_json FROM app_values")?;
     let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
@@ -314,6 +325,43 @@ mod tests {
                 lists: expected_lists,
                 window_session: Some("{}".to_owned())
             })
+        );
+    }
+
+    #[test]
+    fn a_forgotten_window_leaves_no_session_for_its_label() {
+        let connection = database();
+        save_workspace(&connection, &workspace("default", "Default", 0)).unwrap();
+        save_workspace(&connection, &workspace("reading", "Reading", 1)).unwrap();
+        save_window_session(
+            &connection,
+            &window("window-2"),
+            &id("default"),
+            &json("{}"),
+        )
+        .unwrap();
+        save_window_session(
+            &connection,
+            &window("window-2"),
+            &id("reading"),
+            &json("{}"),
+        )
+        .unwrap();
+        save_window_session(&connection, &window("main"), &id("default"), &json("{}")).unwrap();
+
+        delete_window_sessions(&connection, &window("window-2")).unwrap();
+
+        for workspace_id in ["default", "reading"] {
+            let contents = load_workspace(&connection, &id(workspace_id), &window("window-2"));
+            assert_eq!(
+                contents.unwrap().map(|contents| contents.window_session),
+                Some(None)
+            );
+        }
+        let kept = load_workspace(&connection, &id("default"), &window("main")).unwrap();
+        assert_eq!(
+            kept.map(|contents| contents.window_session),
+            Some(Some("{}".to_owned()))
         );
     }
 

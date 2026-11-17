@@ -1,12 +1,14 @@
 import type { ViewerSession } from '@mdx/core';
 import type { MessageKey } from '@mdx/i18n';
-import { hasFile, type AppWindowsPort, type WindowStateReport } from '@mdx/platform';
+import { hasFile, type AppWindowsPort, type WindowStateReport, type WorkspaceToShow } from '@mdx/platform';
 
 export interface AppWindowActionsDependencies {
   readonly appWindows: AppWindowsPort;
   readonly session: ViewerSession;
-  /** Shows the workspace in this window, asking about unsaved edits first. */
-  readonly showWorkspace: (workspaceId: string) => Promise<void>;
+  /** Shows the workspace in this window, asking about unsaved edits first, then opens the files. */
+  readonly showWorkspace: (request: WorkspaceToShow) => Promise<void>;
+  /** Shows the documents of the workspace the window moved to. */
+  readonly showSwitchedWorkspace: () => Promise<void>;
   readonly showNotice: (key: MessageKey) => void;
   readonly saveNow: () => Promise<void>;
 }
@@ -20,9 +22,12 @@ export class AppWindowActions {
   async start(): Promise<() => void> {
     const { appWindows, session, showWorkspace, showNotice } = this.dependencies;
     const stopActions = [
-      appWindows.onWorkspaceListChanged((workspaceId) => void session.reloadWorkspaceLists(workspaceId)),
-      appWindows.onShowWorkspaceRequested((workspaceId) => void showWorkspace(workspaceId)),
+      appWindows.onWorkspaceListChanged(
+        (workspaceId, listName) => void session.reloadWorkspaceList(workspaceId, listName),
+      ),
+      appWindows.onShowWorkspaceRequested((request) => void showWorkspace(request)),
       appWindows.onWorkspaceNotFound(() => showNotice('windows.workspaceNotFound')),
+      appWindows.onWorkspaceDeleted((workspaceId) => void this.leaveDeletedWorkspace(workspaceId)),
     ];
     this.reportState();
     if (await appWindows.takeStartupWorkspaceNotice()) showNotice('windows.startupWorkspaceMissing');
@@ -41,6 +46,12 @@ export class AppWindowActions {
     void this.dependencies.appWindows.reportState(report).catch(() => {
       this.reportedJson = undefined;
     });
+  }
+
+  private async leaveDeletedWorkspace(workspaceId: string): Promise<void> {
+    if (!(await this.dependencies.session.leaveDeletedWorkspace(workspaceId))) return;
+    await this.dependencies.showSwitchedWorkspace();
+    this.dependencies.showNotice('windows.workspaceDeletedElsewhere');
   }
 
   /** Saves first, so the new window starts from this window's lists. */

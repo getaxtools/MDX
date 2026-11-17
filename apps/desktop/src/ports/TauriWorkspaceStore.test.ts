@@ -32,15 +32,15 @@ function mockDatabaseCommands() {
       void workspaces.set((workspace as StoredWorkspace).id, workspace as StoredWorkspace),
     save_workspace_list: ({ workspaceId, listName, valueJson }) =>
       void lists.set(`${String(workspaceId)}/${String(listName)}`, String(valueJson)),
-    save_window_session: ({ windowId, workspaceId, sessionJson }) =>
-      void sessions.set(`${String(windowId)}/${String(workspaceId)}`, String(sessionJson)),
-    load_workspace: ({ workspaceId, windowId }) => ({
+    save_window_session: ({ workspaceId, sessionJson }) =>
+      void sessions.set(String(workspaceId), String(sessionJson)),
+    load_workspace: ({ workspaceId }) => ({
       lists: Object.fromEntries(
         [...lists]
           .filter(([key]) => key.startsWith(`${String(workspaceId)}/`))
           .map(([key, json]) => [key.slice(String(workspaceId).length + 1), json]),
       ),
-      windowSession: sessions.get(`${String(windowId)}/${String(workspaceId)}`) ?? null,
+      windowSession: sessions.get(String(workspaceId)) ?? null,
     }),
     load_app_values: () => Object.fromEntries(appValues),
     save_app_value: ({ key, valueJson }) => void appValues.set(String(key), String(valueJson)),
@@ -125,10 +125,29 @@ describe('TauriWorkspaceStore', () => {
     ]);
   });
 
+  it('never names the window, which Rust takes from the window asking', async () => {
+    const calls: { command: string; args: unknown }[] = [];
+    mockIPC((command, args) => {
+      calls.push({ command, args });
+      return null;
+    });
+    const store = new TauriWorkspaceStore();
+
+    await store.loadWorkspace('default');
+    await store.saveWindowSession('window-2', 'default', {});
+    await store.grantAccess('default');
+
+    expect(calls.map(({ args }) => Object.keys(args as object).sort())).toEqual([
+      ['workspaceId'],
+      ['sessionJson', 'workspaceId'],
+      ['workspaceId'],
+    ]);
+  });
+
   it('turns a missing workspace into undefined', async () => {
     mockIPC(() => null);
 
-    expect(await new TauriWorkspaceStore().loadWorkspace('missing', 'main')).toBeUndefined();
+    expect(await new TauriWorkspaceStore().loadWorkspace('missing')).toBeUndefined();
   });
 
   it('reports a list saved for an unknown workspace as an UnknownWorkspaceError', async () => {

@@ -14,8 +14,9 @@ use tauri::{App, AppHandle, Emitter, Manager, State, Wry};
 pub use menu_labels::MenuLabels;
 pub use view_menu_state::ViewMenuState;
 
-use crate::app_windows::{OpenWindows, target_window_label};
+use crate::app_windows::{OpenWindows, save_open_windows, target_window_label};
 use crate::documents::DocumentError;
+use crate::storage::WorkspaceDatabase;
 use recent_files_menu::{RecentMenuContents, fill_recent_menu};
 use view_menu_state::{
     EDITING_MODE_ITEM_PREFIX, READING_WIDTH_ITEM_PREFIX, THEME_ITEM_PREFIX,
@@ -427,7 +428,9 @@ fn are_valid_menu_labels(labels: &HashMap<String, String>) -> bool {
 /// Menu commands go to the window focused last; Exit closes every window, each asking about its edits.
 pub fn handle_menu_event(app: &AppHandle, event: &MenuEvent) {
     if event.id().as_ref() == EXIT_ITEM_ID {
-        app.state::<Arc<OpenWindows>>().start_exiting();
+        let windows = app.state::<Arc<OpenWindows>>();
+        save_open_windows(&windows, &app.state::<WorkspaceDatabase>());
+        windows.start_exiting();
         for window in app.webview_windows().into_values() {
             let _ = window.close();
         }

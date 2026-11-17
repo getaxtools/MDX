@@ -1,4 +1,3 @@
-import { listen } from '@tauri-apps/api/event';
 import type {
   ExportFolderChoice,
   NotesExportOutcome,
@@ -11,6 +10,7 @@ import type {
 import { knownCodeLanguages } from '@mdx/renderer';
 import { documentOpenErrorOf } from './documentOpenErrorOf';
 import { NOTES_IMPORT_PROGRESS_EVENT, tauriCommands } from './tauriCommands';
+import { listenInThisWindowWhenReady } from './windowEvents';
 
 export class TauriNoteTransfer implements NoteTransferPort {
   async pickImportFolder(): Promise<string | undefined> {
@@ -21,8 +21,9 @@ export class TauriNoteTransfer implements NoteTransferPort {
     request: NotesImportRequest,
     onProgress: (progress: NotesImportProgress) => void,
   ): Promise<NotesImportReport> {
-    const stopListening = await listen<NotesImportProgress>(NOTES_IMPORT_PROGRESS_EVENT, (event) =>
-      onProgress(event.payload),
+    const stopListening = await listenInThisWindowWhenReady<NotesImportProgress>(
+      NOTES_IMPORT_PROGRESS_EVENT,
+      (event) => onProgress(event.payload),
     );
     try {
       return await tauriCommands.importNotesFolder({

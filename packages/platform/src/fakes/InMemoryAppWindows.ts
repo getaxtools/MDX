@@ -1,4 +1,11 @@
-import type { AppWindowsPort, WindowStateReport, WorkspaceIdListener } from '../AppWindowsPort';
+import type {
+  AppWindowsPort,
+  WindowStateReport,
+  WorkspaceIdListener,
+  WorkspaceListChangeListener,
+  WorkspaceToShow,
+} from '../AppWindowsPort';
+import type { WorkspaceListName } from '../WorkspaceStorePort';
 
 export class InMemoryAppWindows implements AppWindowsPort {
   startupWorkspace: string | undefined;
@@ -8,9 +15,10 @@ export class InMemoryAppWindows implements AppWindowsPort {
   readonly focusedWorkspaces: string[] = [];
   readonly reports: WindowStateReport[] = [];
   openedWindowCount = 0;
-  private readonly listChangeListeners = new Set<WorkspaceIdListener>();
-  private readonly showListeners = new Set<WorkspaceIdListener>();
+  private readonly listChangeListeners = new Set<WorkspaceListChangeListener>();
+  private readonly showListeners = new Set<(request: WorkspaceToShow) => void>();
   private readonly notFoundListeners = new Set<() => void>();
+  private readonly deletedListeners = new Set<WorkspaceIdListener>();
 
   constructor(readonly windowId = 'main') {}
 
@@ -40,12 +48,12 @@ export class InMemoryAppWindows implements AppWindowsPort {
     return Promise.resolve(true);
   }
 
-  onWorkspaceListChanged(listener: WorkspaceIdListener): () => void {
+  onWorkspaceListChanged(listener: WorkspaceListChangeListener): () => void {
     this.listChangeListeners.add(listener);
     return () => this.listChangeListeners.delete(listener);
   }
 
-  onShowWorkspaceRequested(listener: WorkspaceIdListener): () => void {
+  onShowWorkspaceRequested(listener: (request: WorkspaceToShow) => void): () => void {
     this.showListeners.add(listener);
     return () => this.showListeners.delete(listener);
   }
@@ -55,16 +63,25 @@ export class InMemoryAppWindows implements AppWindowsPort {
     return () => this.notFoundListeners.delete(listener);
   }
 
-  /** Acts as another window saving a list of the workspace. */
-  changeListsElsewhere(workspaceId: string): void {
-    for (const listener of this.listChangeListeners) listener(workspaceId);
+  onWorkspaceDeleted(listener: WorkspaceIdListener): () => void {
+    this.deletedListeners.add(listener);
+    return () => this.deletedListeners.delete(listener);
   }
 
-  askToShow(workspaceId: string): void {
-    for (const listener of this.showListeners) listener(workspaceId);
+  /** Acts as another window saving a list of the workspace. */
+  changeListElsewhere(workspaceId: string, listName: WorkspaceListName): void {
+    for (const listener of this.listChangeListeners) listener(workspaceId, listName);
+  }
+
+  askToShow(workspaceId: string, documentPaths: readonly string[] = []): void {
+    for (const listener of this.showListeners) listener({ workspaceId, documentPaths });
   }
 
   askForMissingWorkspace(): void {
     for (const listener of this.notFoundListeners) listener();
+  }
+
+  deleteElsewhere(workspaceId: string): void {
+    for (const listener of this.deletedListeners) listener(workspaceId);
   }
 }

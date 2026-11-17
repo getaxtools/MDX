@@ -1,6 +1,15 @@
-import type { AppWindowsPort, WindowStateReport, WorkspaceIdListener } from '@mdx/platform';
+import {
+  WORKSPACE_LIST_NAMES,
+  type AppWindowsPort,
+  type WindowStateReport,
+  type WorkspaceIdListener,
+  type WorkspaceListChangeListener,
+  type WorkspaceListName,
+  type WorkspaceToShow,
+} from '@mdx/platform';
 import {
   SHOW_WORKSPACE_EVENT,
+  WORKSPACE_DELETED_EVENT,
   WORKSPACE_LIST_CHANGED_EVENT,
   WORKSPACE_NOT_FOUND_EVENT,
   tauriCommands,
@@ -10,6 +19,10 @@ import { listenInThisWindow, thisWindowLabel } from './windowEvents';
 interface ChangedList {
   readonly workspaceId: string;
   readonly listName: string;
+}
+
+function isWorkspaceListName(name: string): name is WorkspaceListName {
+  return WORKSPACE_LIST_NAMES.some((listName) => listName === name);
 }
 
 export class TauriAppWindows implements AppWindowsPort {
@@ -35,17 +48,21 @@ export class TauriAppWindows implements AppWindowsPort {
     return tauriCommands.focusWindowShowing(workspaceId);
   }
 
-  onWorkspaceListChanged(listener: WorkspaceIdListener): () => void {
-    return listenInThisWindow<ChangedList>(WORKSPACE_LIST_CHANGED_EVENT, (event) =>
-      listener(event.payload.workspaceId),
-    );
+  onWorkspaceListChanged(listener: WorkspaceListChangeListener): () => void {
+    return listenInThisWindow<ChangedList>(WORKSPACE_LIST_CHANGED_EVENT, ({ payload }) => {
+      if (isWorkspaceListName(payload.listName)) listener(payload.workspaceId, payload.listName);
+    });
   }
 
-  onShowWorkspaceRequested(listener: WorkspaceIdListener): () => void {
-    return listenInThisWindow<string>(SHOW_WORKSPACE_EVENT, (event) => listener(event.payload));
+  onShowWorkspaceRequested(listener: (request: WorkspaceToShow) => void): () => void {
+    return listenInThisWindow<WorkspaceToShow>(SHOW_WORKSPACE_EVENT, (event) => listener(event.payload));
   }
 
   onWorkspaceNotFound(listener: () => void): () => void {
     return listenInThisWindow<null>(WORKSPACE_NOT_FOUND_EVENT, () => listener());
+  }
+
+  onWorkspaceDeleted(listener: WorkspaceIdListener): () => void {
+    return listenInThisWindow<string>(WORKSPACE_DELETED_EVENT, (event) => listener(event.payload));
   }
 }

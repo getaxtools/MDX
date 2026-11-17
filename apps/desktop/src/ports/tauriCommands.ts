@@ -107,11 +107,10 @@ export const tauriCommands = {
   writeWorkspaceExport: (contents: string) => invoke<string>('write_workspace_export', { contents }),
   openWorkspaceFile: () => invoke<WorkspaceFileContents | null>('open_workspace_file'),
   takeStartupWorkspaceFile: () => invoke<WorkspaceFileContents | null>('take_startup_workspace_file'),
-  grantWorkspaceAccess: (workspaceId: string, windowId: string) =>
-    invoke<null>('grant_workspace_access', { workspaceId, windowId }),
+  grantWorkspaceAccess: (workspaceId: string) => invoke<null>('grant_workspace_access', { workspaceId }),
   loadWorkspaceRegistry: () => invoke<StoredWorkspaceRow[]>('load_workspace_registry'),
-  loadWorkspace: (workspaceId: string, windowId: string) =>
-    invoke<StoredWorkspaceReply | null>('load_workspace', { workspaceId, windowId }),
+  loadWorkspace: (workspaceId: string) =>
+    invoke<StoredWorkspaceReply | null>('load_workspace', { workspaceId }),
   saveWorkspace: (workspace: StoredWorkspaceRow) => invoke<null>('save_workspace', { workspace }),
   knownFolders: () => invoke<KnownFolders>('known_folders'),
   inspectNotesFolder: (path: string) => invoke<NotesFolderInspection>('inspect_notes_folder', { path }),
@@ -177,14 +176,15 @@ export const tauriCommands = {
   deleteWorkspace: (workspaceId: string) => invoke<null>('delete_workspace', { workspaceId }),
   saveWorkspaceList: (workspaceId: string, listName: string, valueJson: string) =>
     invoke<null>('save_workspace_list', { workspaceId, listName, valueJson }),
-  saveWindowSession: (windowId: string, workspaceId: string, sessionJson: string) =>
-    invoke<null>('save_window_session', { windowId, workspaceId, sessionJson }),
+  saveWindowSession: (workspaceId: string, sessionJson: string) =>
+    invoke<null>('save_window_session', { workspaceId, sessionJson }),
   loadAppValues: () => invoke<Record<string, string>>('load_app_values'),
   saveAppValue: (key: string, valueJson: string) => invoke<null>('save_app_value', { key, valueJson }),
   getAppInfo: () => invoke<AppInfo>('get_app_info'),
   windowStartupWorkspace: () => invoke<string | null>('window_startup_workspace'),
   takeStartupWorkspaceNotice: () => invoke<boolean>('take_startup_workspace_notice'),
   openNewWindow: () => invoke<null>('open_new_window'),
+  closeCancelled: () => invoke<null>('close_cancelled'),
   reportWindowState: (state: WindowStateReport) => invoke<null>('report_window_state', { state }),
   focusWindowShowing: (workspaceId: string) => invoke<boolean>('focus_window_showing', { workspaceId }),
   updateViewMenu: (state: ViewMenuState) => invoke<null>('update_view_menu', { state }),
@@ -237,3 +237,4 @@ export const NOTES_MOVE_PROGRESS_EVENT = 'notes-move-progress';
 export const WORKSPACE_LIST_CHANGED_EVENT = 'workspace-list-changed';
 export const SHOW_WORKSPACE_EVENT = 'show-workspace';
 export const WORKSPACE_NOT_FOUND_EVENT = 'workspace-not-found';
+export const WORKSPACE_DELETED_EVENT = 'workspace-deleted';

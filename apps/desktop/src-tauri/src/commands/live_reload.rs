@@ -25,10 +25,11 @@ pub async fn watch_documents(
         tauri::async_runtime::spawn_blocking(move || allowed_display_paths(&paths, &access))
             .await
             .map_err(|_| DocumentError::Unreadable)?;
-    let watched = window
-        .state::<WindowWatchSets<String>>()
-        .replace(window.label(), allowed_paths);
-    watcher.watch(&watched);
+    window.state::<WindowWatchSets<String>>().replace_and(
+        window.label(),
+        allowed_paths,
+        |watched| watcher.watch(&watched),
+    );
     Ok(())
 }
 
@@ -48,23 +49,24 @@ pub async fn watch_folders(
     let folders = tauri::async_runtime::spawn_blocking(move || allowed_folders(paths, &access))
         .await
         .map_err(|_| DocumentError::Unreadable)?;
-    let watched = window
+    window
         .state::<WindowWatchSets<WatchedFolder>>()
-        .replace(window.label(), folders);
-    watcher.watch(watched);
+        .replace_and(window.label(), folders, |watched| watcher.watch(watched));
     Ok(())
 }
 
 /// A closed window's documents and folders are watched no longer, unless another window shows them.
 pub fn stop_watching_for(window: &Window) {
-    let documents = window
+    let document_watcher = window.state::<DocumentWatcher>();
+    window
         .state::<WindowWatchSets<String>>()
-        .forget(window.label());
-    window.state::<DocumentWatcher>().watch(&documents);
-    let folders = window
+        .forget_and(window.label(), |documents| {
+            document_watcher.watch(&documents)
+        });
+    let folder_watcher = window.state::<FolderWatcher>();
+    window
         .state::<WindowWatchSets<WatchedFolder>>()
-        .forget(window.label());
-    window.state::<FolderWatcher>().watch(folders);
+        .forget_and(window.label(), |folders| folder_watcher.watch(folders));
 }
 
 fn allowed_folders(paths: Vec<String>, access: &DocumentAccessList) -> Vec<WatchedFolder> {
