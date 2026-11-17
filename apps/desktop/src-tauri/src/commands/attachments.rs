@@ -40,10 +40,20 @@ pub struct AttachmentRequest {
 #[serde(rename_all = "camelCase")]
 pub struct PictureFilesRequest {
     document_path: String,
-    /// A folder below the document's folder, such as `assets`.
+    /// A folder below the document's folder, such as `assets`, or below the notes folder.
     attachment_folder: String,
     /// The translated name of the dialog's picture filter, such as "Pictures".
     filter_name: String,
+    /// A Notes workspace's folder: the attachment folder lies in it, and links are relative to the note.
+    #[serde(default)]
+    notes_folder: Option<String>,
+}
+
+/// Where a document's pictures go: `base` holds the attachment folder, and links start from the
+/// document's own folder.
+struct AttachmentPlace {
+    document_folder: PathBuf,
+    base: PathBuf,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -95,20 +105,45 @@ pub async fn add_picture_files(
     .await?
 }
 
-/// Checks the document before anything is shown, then copies only what `choose_pictures` returns.
+/// Checks the document before anything is shown, then copies only what `choose_pictures` returns,
+/// to the same place and with the same checks as a pasted or dropped picture.
 fn add_chosen_pictures(
     request: &PictureFilesRequest,
     access: &DocumentAccessList,
     choose_pictures: impl FnOnce(&str) -> Vec<PathBuf>,
 ) -> Result<Vec<ChosenPictureOutcome>, DocumentError> {
-    let folder = opened_document_folder(&request.document_path, access)?;
+    let place = attachment_place(
+        &request.document_path,
+        request.notes_folder.as_deref(),
+        access,
+    )?;
     let filter_name = validated_filter_name(&request.filter_name)?;
     let chosen = choose_pictures(filter_name);
-    Ok(copy_chosen_pictures(
-        &folder,
-        &request.attachment_folder,
-        &chosen,
-    ))
+    let outcomes = copy_chosen_pictures(&place.base, &request.attachment_folder, &chosen);
+    Ok(outcomes
+        .into_iter()
+        .map(|outcome| linked_from_document(outcome, &place))
+        .collect())
+}
+
+fn linked_from_document(
+    outcome: ChosenPictureOutcome,
+    place: &AttachmentPlace,
+) -> ChosenPictureOutcome {
+    let ChosenPictureOutcome::Saved { relative_path } = outcome else {
+        return outcome;
+    };
+    match link_from(&place.document_folder, &place.base, &relative_path) {
+        Ok(relative_path) => ChosenPictureOutcome::Saved { relative_path },
+        Err(reason) => ChosenPictureOutcome::Failed {
+            file_name: relative_path
+                .rsplit('/')
+                .next()
+                .unwrap_or_default()
+                .to_owned(),
+            reason,
+        },
+    }
 }
 
 fn validated_filter_name(filter_name: &str) -> Result<&str, DocumentError> {
@@ -153,20 +188,33 @@ fn is_format_character(character: char) -> bool {
     )
 }
 
-/// The folder of a document the app opened from an allowed place; any other document is refused.
-fn opened_document_folder(
+/// Where pictures for a document go. The document must be one the app opened from an allowed place,
+/// outside a folder being moved; a note of a Notes workspace keeps them in its notes folder.
+fn attachment_place(
     document_path: &str,
+    notes_folder: Option<&str>,
     access: &DocumentAccessList,
-) -> Result<PathBuf, DocumentError> {
+) -> Result<AttachmentPlace, DocumentError> {
     let location = locate_document(&validated_path(document_path)?)?;
-    if !access.is_allowed(&location) || !access.was_opened(&location) {
+    if !access.is_allowed(&location)
+        || !access.was_opened(&location)
+        || access.is_read_only(&location)
+    {
         return Err(DocumentError::AccessDenied);
     }
-    location
+    let document_folder = location
         .path()
         .parent()
         .map(PathBuf::from)
-        .ok_or(DocumentError::InvalidRequest)
+        .ok_or(DocumentError::InvalidRequest)?;
+    let base = match notes_folder {
+        Some(notes_folder) => notes_folder_holding(&location, notes_folder, access)?,
+        None => document_folder.clone(),
+    };
+    Ok(AttachmentPlace {
+        document_folder,
+        base,
+    })
 }
 
 fn save_requested_attachment(
@@ -174,28 +222,20 @@ fn save_requested_attachment(
     access: &DocumentAccessList,
     dropped: &DroppedImages,
 ) -> Result<SavedAttachmentReply, DocumentError> {
-    let location = locate_document(&validated_path(&request.document_path)?)?;
-    if !access.is_allowed(&location)
-        || !access.was_opened(&location)
-        || access.is_read_only(&location)
-    {
-        return Err(DocumentError::AccessDenied);
-    }
-    let document = location.path();
-    let note_folder = document.parent().ok_or(DocumentError::InvalidRequest)?;
-    let base = match &request.notes_folder {
-        Some(notes_folder) => notes_folder_holding(&location, notes_folder, access)?,
-        None => note_folder.to_path_buf(),
-    };
+    let place = attachment_place(
+        &request.document_path,
+        request.notes_folder.as_deref(),
+        access,
+    )?;
     let bytes = source_bytes(request.source, dropped)?;
     let saved = save_attachment_bytes(
-        &base,
+        &place.base,
         &request.attachment_folder,
         &request.suggested_name,
         &bytes,
     )?;
     Ok(SavedAttachmentReply {
-        relative_path: link_from(note_folder, &base, &saved.relative_path)?,
+        relative_path: link_from(&place.document_folder, &place.base, &saved.relative_path)?,
     })
 }
 
@@ -467,7 +507,70 @@ mod tests {
             document_path: document_path.to_owned(),
             attachment_folder: "assets".to_owned(),
             filter_name: "Pictures".to_owned(),
+            notes_folder: None,
         }
+    }
+
+    fn chosen_for_note(note: &str, notes_folder: &Path) -> PictureFilesRequest {
+        PictureFilesRequest {
+            attachment_folder: "Attachments".to_owned(),
+            notes_folder: Some(notes_folder.to_string_lossy().into_owned()),
+            ..picture_files_request(note)
+        }
+    }
+
+    #[test]
+    fn pictures_chosen_for_a_note_go_to_the_notes_folder_attachments_linked_from_the_note() {
+        let (folder, note, access) = opened_note();
+        let pictures = tempfile::tempdir().unwrap();
+        let chosen = pictures.path().join("chart.png");
+        fs::write(&chosen, PNG).unwrap();
+
+        let outcomes = add_chosen_pictures(&chosen_for_note(&note, folder.path()), &access, |_| {
+            vec![chosen.clone()]
+        })
+        .unwrap();
+
+        assert_eq!(
+            outcomes,
+            vec![ChosenPictureOutcome::Saved {
+                relative_path: "../Attachments/chart.png".to_owned()
+            }]
+        );
+        assert_eq!(
+            fs::read(folder.path().join("Attachments").join("chart.png")).unwrap(),
+            PNG
+        );
+    }
+
+    #[test]
+    fn pictures_for_a_note_in_a_folder_being_moved_are_refused_before_the_dialog_shows() {
+        let (folder, note, access) = opened_note();
+        access.make_folder_read_only(folder.path());
+        let mut was_dialog_shown = false;
+
+        let refusal = add_chosen_pictures(&chosen_for_note(&note, folder.path()), &access, |_| {
+            was_dialog_shown = true;
+            Vec::new()
+        });
+
+        assert_eq!(refusal, Err(DocumentError::AccessDenied));
+        assert!(!was_dialog_shown);
+        assert!(!folder.path().join("Attachments").exists());
+    }
+
+    #[test]
+    fn chosen_pictures_refuse_a_notes_folder_that_does_not_hold_the_note() {
+        let (_folder, note, access) = opened_note();
+        let elsewhere = tempfile::tempdir().unwrap();
+        access.grant_folder(elsewhere.path()).unwrap();
+
+        let refusal =
+            add_chosen_pictures(&chosen_for_note(&note, elsewhere.path()), &access, |_| {
+                Vec::new()
+            });
+
+        assert_eq!(refusal, Err(DocumentError::AccessDenied));
     }
 
     #[test]

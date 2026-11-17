@@ -3,6 +3,7 @@ import { InMemoryDocumentFiles } from '@mdx/platform';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TauriAppMenu } from './TauriAppMenu';
 import { TauriAppState } from './TauriAppState';
+import { TauriAttachments } from './TauriAttachments';
 import { TauriDesktopShell } from './TauriDesktopShell';
 import { TauriDocumentFiles } from './TauriDocumentFiles';
 import { TauriDocumentRequests } from './TauriDocumentRequests';
@@ -341,6 +342,26 @@ describe('TauriFolders', () => {
     expect(found).toEqual(results);
     expect(calls).toEqual([
       { command: 'search_folder_documents', args: { folders: ['C:/Docs'], query: 'setup', options } },
+    ]);
+  });
+});
+
+describe('TauriAttachments', () => {
+  it('sends the notes folder with the pictures chosen in the dialog, as with a pasted picture', async () => {
+    const calls = mockCommands({
+      add_picture_files: () => [{ kind: 'saved', relativePath: '../Attachments/chart.png' }],
+    });
+    const target = {
+      documentPath: 'E:/Notes/Projects/Plan.md',
+      attachmentFolder: 'Attachments',
+      notesFolder: 'E:/Notes',
+    };
+
+    const chosen = await new TauriAttachments().addPictureFiles(target, 'Pictures');
+
+    expect(chosen).toEqual([{ kind: 'saved', relativePath: '../Attachments/chart.png' }]);
+    expect(calls).toEqual([
+      { command: 'add_picture_files', args: { request: { ...target, filterName: 'Pictures' } } },
     ]);
   });
 });

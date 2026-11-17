@@ -241,7 +241,7 @@ describe('DocumentAttachments in a Notes workspace', () => {
       notify: vi.fn(),
       askToSaveFirst: vi.fn(),
     };
-    return { attachments: new DocumentAttachments(session, port, callbacks), port, notesFolder };
+    return { attachments: new DocumentAttachments(session, port, callbacks), port, notesFolder, callbacks };
   }
 
   it('saves a pasted picture into the Attachments folder of the notes folder, linked from the note', async () => {
@@ -251,6 +251,18 @@ describe('DocumentAttachments in a Notes workspace', () => {
 
     expect(port.saved[0]?.target).toMatchObject({ attachmentFolder: 'Attachments', notesFolder });
     expect(link).toMatch(/^!\[Plan [^\]]+\]\(\.\.\/Attachments\/Plan%20/);
+  });
+
+  it('pictures chosen with the Image button go to the same Attachments folder as pasted ones', async () => {
+    const { attachments, port, notesFolder, callbacks } = await noteAttachments();
+    port.pictureChoice = [String.raw`C:\Pictures\chart.png`];
+
+    await attachments.addPictureFiles('Pictures');
+
+    expect(port.saved[0]?.target).toMatchObject({ attachmentFolder: 'Attachments', notesFolder });
+    expect(callbacks.insertLinks).toHaveBeenCalledWith(['![chart](../Attachments/chart.png)'], {
+      canonicalKey: String.raw`E:\Notes\Projects\Plan.md`.toLowerCase(),
+    });
   });
 
   it('uses the attachments folder chosen in the settings', async () => {
