@@ -7,7 +7,7 @@
     type FormulaWriteOutcome,
   } from '@mdx/editor';
   import type { Translator } from '@mdx/i18n';
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { editorPhrases } from '../editing/editorPhrases';
   import { equationDialogPlacement } from './equationPlacement';
   import { EQUATION_TEMPLATE_GROUPS, type EquationTemplate } from './equationTemplates';
@@ -21,6 +21,7 @@
   } from './formulaProblemText';
   import { SUPPORTED_TEX_COMMANDS } from './supportedTexCommands';
   import TemplateGallery from './TemplateGallery.svelte';
+  import type { CreateVisualFormulaEditor, VisualFormulaEditor } from './visual/visualFormulaEditor';
 
   interface Props {
     request: FormulaEditRequest;
@@ -36,6 +37,12 @@
     /** Writes the formula, or says why the source could not be written. */
     onInsert: (formula: { readonly tex: string; readonly kind: FormulaKind }) => FormulaWriteOutcome;
     onCancel: () => void;
+    /** Loads the visual formula editor, its own chunk, when the Visual tab first opens. */
+    loadVisualEditor?: () => Promise<CreateVisualFormulaEditor>;
+  }
+
+  function loadVisualFormulaEditor(): Promise<CreateVisualFormulaEditor> {
+    return import('./visual/visualFormulaEditor').then((module) => module.createVisualFormulaEditor);
   }
 
   const {
@@ -48,12 +55,15 @@
     onAutomaticFractionChange,
     onInsert,
     onCancel,
+    loadVisualEditor = loadVisualFormulaEditor,
   }: Props = $props();
 
   const TITLE_ID = 'equation-dialog-title';
   const PROBLEM_ID = 'equation-dialog-problem';
   const HINT_ID = 'equation-dialog-hint';
   const GALLERY_ID = 'equation-dialog-templates';
+  const SOURCE_TABS = ['tex', 'visual'] as const;
+  type SourceTab = (typeof SOURCE_TABS)[number];
 
   let kind: FormulaKind = $state(untrack(() => request.kind ?? lastKind));
   let tex = $state(untrack(() => request.source));
@@ -64,6 +74,11 @@
   let field: FormulaField | undefined;
   let isGalleryShown = $state(false);
   let isFractionOn = $state(untrack(() => isAutomaticFractionOn));
+  let activeTab: SourceTab = $state('tex');
+  let visualParent: HTMLElement | undefined = $state();
+  let visual: VisualFormulaEditor | undefined = $state();
+  let visualState: 'notLoaded' | 'loading' | 'shown' | 'unavailable' = $state('notLoaded');
+  let isDestroyed = false;
 
   const previewer = new FormulaPreviewer(
     (source, isDisplay) => previewFormula(source, isDisplay),
@@ -92,6 +107,63 @@
     return previewFormula(source, false).then((preview) =>
       preview.kind === 'typeset' ? preview.html : undefined,
     );
+  }
+
+  /** An edit in the visual editor is written once into the TeX field, which does not report it back. */
+  function changeFromVisual(source: string) {
+    tex = source;
+    refusal = undefined;
+    field?.replaceText(source);
+    previewer.request(source, kind === 'display');
+  }
+
+  async function openVisualEditor(parent: HTMLElement) {
+    visualState = 'loading';
+    try {
+      const create = await loadVisualEditor();
+      const opened = await create({
+        parent,
+        tex,
+        label: translator.translate('equation.visual.label'),
+        onChange: changeFromVisual,
+      });
+      if (isDestroyed) {
+        opened.destroy();
+        return;
+      }
+      opened.setTex(tex);
+      visual = opened;
+      visualState = 'shown';
+      if (activeTab === 'visual') opened.focus();
+    } catch {
+      visualState = 'unavailable';
+    }
+  }
+
+  /** The chosen tab's panel is shown first, as a hidden field cannot take the focus. */
+  async function showTab(tab: SourceTab) {
+    activeTab = tab;
+    await tick();
+    if (tab === 'tex') field?.focus();
+    else if (visual) visual.focus();
+    else if (visualState === 'notLoaded' && visualParent) await openVisualEditor(visualParent);
+  }
+
+  /** The arrow keys, Home and End move between the source tabs, as in any tab list. */
+  function moveBetweenTabs(event: KeyboardEvent) {
+    const index = SOURCE_TABS.indexOf(activeTab);
+    const moves: Record<string, number> = {
+      ArrowLeft: index - 1,
+      ArrowRight: index + 1,
+      Home: 0,
+      End: SOURCE_TABS.length - 1,
+    };
+    const target = moves[event.key];
+    if (target === undefined) return;
+    event.preventDefault();
+    const tab = SOURCE_TABS[(target + SOURCE_TABS.length) % SOURCE_TABS.length] ?? 'tex';
+    dialogElement?.querySelector<HTMLElement>(`#equation-tab-${tab}`)?.focus();
+    void showTab(tab);
   }
 
   function chooseKind(chosen: FormulaKind) {
@@ -138,6 +210,7 @@
       onChange: (text) => {
         tex = text;
         refusal = undefined;
+        visual?.setTex(text);
         previewer.request(text, kind === 'display');
       },
       onInsert: insert,
@@ -154,8 +227,10 @@
       untrack(() => kind) === 'display',
     );
     return () => {
+      isDestroyed = true;
       previewer.stop();
       field?.destroy();
+      visual?.destroy();
     };
   });
 
@@ -200,7 +275,44 @@
       </label>
     {/each}
   </div>
-  <div class="source" bind:this={fieldParent}></div>
+  <div class="tabs" role="tablist" aria-label={translator.translate('equation.sourceTabs')}>
+    {#each SOURCE_TABS as tab (tab)}
+      <button
+        id="equation-tab-{tab}"
+        role="tab"
+        aria-selected={activeTab === tab}
+        aria-controls="equation-panel-{tab}"
+        tabindex={activeTab === tab ? 0 : -1}
+        onclick={() => void showTab(tab)}
+        onkeydown={moveBetweenTabs}
+      >
+        {translator.translate(tab === 'tex' ? 'equation.tab.tex' : 'equation.tab.visual')}
+      </button>
+    {/each}
+  </div>
+  <div
+    id="equation-panel-tex"
+    role="tabpanel"
+    aria-labelledby="equation-tab-tex"
+    hidden={activeTab !== 'tex'}
+  >
+    <div class="source" bind:this={fieldParent}></div>
+  </div>
+  <div
+    id="equation-panel-visual"
+    role="tabpanel"
+    aria-labelledby="equation-tab-visual"
+    aria-busy={visualState === 'loading'}
+    hidden={activeTab !== 'visual'}
+  >
+    <div class="visual" bind:this={visualParent}></div>
+    {#if visualState === 'unavailable'}
+      <p class="problem">{translator.translate('equation.visual.unavailable')}</p>
+    {/if}
+    <button class="keyboard" disabled={!visual} onclick={() => visual?.showKeyboard()}>
+      {translator.translate('equation.visual.keyboard')}
+    </button>
+  </div>
   <div class="preview" role="group" aria-label={translator.translate('equation.preview')}>
     {#if shown.html}
       <!-- eslint-disable-next-line svelte/no-at-html-tags -- the renderer typeset and sanitized it -->
@@ -281,13 +393,63 @@
     margin-inline-start: auto;
   }
 
-  .source {
+  .tabs {
+    display: flex;
+    gap: var(--space-1);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .tabs button {
+    height: 28px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .tabs button[aria-selected='true'] {
+    border-bottom-color: var(--color-accent);
+    font-weight: 600;
+  }
+
+  [role='tabpanel'] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  [role='tabpanel'][hidden] {
+    display: none;
+  }
+
+  .source,
+  .visual {
     border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-medium);
   }
 
-  .source:focus-within {
+  .source:focus-within,
+  .visual:focus-within {
     outline: 2px solid var(--color-focus);
+  }
+
+  .visual :global(math-field) {
+    display: block;
+    width: 100%;
+    padding: var(--space-1) var(--space-2);
+    border: none;
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+    font-size: 1.25rem;
+  }
+
+  .visual :global(math-field::part(virtual-keyboard-toggle)),
+  .visual :global(math-field::part(menu-toggle)) {
+    display: none;
+  }
+
+  .keyboard {
+    align-self: flex-start;
   }
 
   .preview {

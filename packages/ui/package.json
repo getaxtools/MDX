@@ -21,6 +21,7 @@
     "@mdx/i18n": "workspace:*",
     "@mdx/platform": "workspace:*",
     "@mdx/renderer": "workspace:*",
+    "mathlive": "0.111.4",
     "svelte": "5.57.3"
   }
 }

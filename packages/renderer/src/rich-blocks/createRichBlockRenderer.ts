@@ -130,7 +130,15 @@ async function loadedOrUndefined<Library>(load: () => Promise<Library>): Promise
   }
 }
 
+/**
+ * Loads KaTeX's stylesheet, whose font faces the visual formula editor uses too, so both draw
+ * formulas with the same font files the app ships.
+ */
+export async function loadMathFonts(): Promise<void> {
+  await import('katex/dist/katex.min.css');
+}
+
 async function loadKatex(): Promise<MathTypesetter> {
-  const [katex] = await Promise.all([import('katex'), import('katex/dist/katex.min.css')]);
+  const [katex] = await Promise.all([import('katex'), loadMathFonts()]);
   return katex.default;
 }

@@ -1,6 +1,6 @@
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import { EditorState, StateEffect, StateField, type Extension } from '@codemirror/state';
+import { Annotation, EditorState, StateEffect, StateField, type Extension } from '@codemirror/state';
 import { Decoration, EditorView, keymap, type DecorationSet } from '@codemirror/view';
 import { formulaFieldPaste, type FormulaTypesetCheck } from '../formula-paste/formulaFieldPaste';
 import { isComposing } from '../rich-text/compositionHold';
@@ -39,10 +39,13 @@ export interface FormulaField {
   markError(position: number | undefined): void;
   /** Writes a template, its placeholders written `#{}`, over the selection and selects its first placeholder. */
   insertTemplate(template: string): void;
+  /** Shows a source written elsewhere, such as in the visual editor, without reporting it to `onChange`. */
+  replaceText(text: string): void;
   destroy(): void;
 }
 
 const ERROR_CLASS = 'cm-formula-error';
+const writtenElsewhere = Annotation.define<boolean>();
 const markErrorAt = StateEffect.define<number | undefined>();
 const errorMark = Decoration.mark({ class: ERROR_CLASS });
 
@@ -118,7 +121,8 @@ function fieldExtensions(options: FormulaFieldOptions): Extension[] {
     fieldKeymap(options),
     formulaFieldPaste(options.isFormulaTypeset),
     EditorView.updateListener.of((update) => {
-      if (update.docChanged) options.onChange(update.state.doc.toString());
+      const isOwnEdit = update.transactions.every((transaction) => !transaction.annotation(writtenElsewhere));
+      if (update.docChanged && isOwnEdit) options.onChange(update.state.doc.toString());
     }),
   ];
 }
@@ -139,6 +143,14 @@ export function createFormulaField(options: FormulaFieldOptions): FormulaField {
     insertTemplate: (template) => {
       view.dispatch(snippetInsertion(view.state, view.state.selection.main, () => texWithFields(template)));
       view.focus();
+    },
+    replaceText: (text) => {
+      if (text === view.state.doc.toString()) return;
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: text },
+        selection: { anchor: text.length },
+        annotations: writtenElsewhere.of(true),
+      });
     },
     destroy: () => view.destroy(),
   };

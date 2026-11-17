@@ -7,6 +7,7 @@ import {
 } from '@mdx/renderer';
 import { describe, expect, it, vi } from 'vitest';
 import { texOfMathml } from '../../packages/editor/src/formula-paste/mathmlToTex';
+import { stubWhatMathfieldsNeed } from '../../packages/ui/src/features/equation/visual/mathfieldTestEnvironment';
 
 const DOCUMENT_WITH_EVERY_PLUGIN = [
   '# Title',
@@ -100,5 +101,24 @@ describe('runtime dependencies with a frozen prototype', () => {
     const fraction = '<math><mfrac><mi>x</mi><mn>2</mn></mfrac></math>';
 
     expect(await texOfMathml(fraction)).toBe(String.raw`\frac{x}{2}`);
+  });
+
+  it('visual formula editor loads and edits with the prototype frozen', async () => {
+    const restoreJsdom = stubWhatMathfieldsNeed();
+    const { createVisualFormulaEditor } =
+      await import('../../packages/ui/src/features/equation/visual/visualFormulaEditor');
+    const parent = document.createElement('div');
+    document.body.append(parent);
+    const onChange = vi.fn();
+    const visual = await createVisualFormulaEditor({ parent, tex: 'x^2', label: 'Visual', onChange });
+    const field = parent.querySelector<HTMLElement & { getValue(): string }>('math-field');
+    const shown = field?.getValue();
+
+    visual.setTex('x^3');
+
+    expect(shown).toBe('x^2');
+    expect(field?.getValue()).toBe('x^3');
+    visual.destroy();
+    restoreJsdom();
   });
 });

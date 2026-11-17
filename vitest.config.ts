@@ -5,11 +5,16 @@ import { defineConfig } from 'vitest/config';
 
 // The MathML converter runs with a shim over the browser's parser in place of `@xmldom/xmldom`, as
 // in the app; inlining the converter lets the alias reach its import.
-const XMLDOM_SHIM = {
+// Tests run under Node, whose export condition gives MathLive's server build without its editor;
+// the browser build is the one the app bundles.
+const BROWSER_BUILDS = {
   resolve: {
     alias: {
       '@xmldom/xmldom': fileURLToPath(
         new URL('./packages/editor/src/formula-paste/xmldomShim.ts', import.meta.url),
+      ),
+      mathlive: fileURLToPath(
+        new URL('./packages/ui/node_modules/mathlive/mathlive.min.mjs', import.meta.url),
       ),
     },
   },
@@ -31,7 +36,7 @@ export default defineConfig({
         },
       },
       {
-        ...XMLDOM_SHIM,
+        ...BROWSER_BUILDS,
         test: {
           name: 'editor',
           include: ['packages/editor/src/**/*.test.ts'],
@@ -40,7 +45,7 @@ export default defineConfig({
         },
       },
       {
-        ...XMLDOM_SHIM,
+        ...BROWSER_BUILDS,
         test: {
           ...CONVERTER_INLINED,
           name: 'freeze-compat',
@@ -51,7 +56,7 @@ export default defineConfig({
         },
       },
       {
-        ...XMLDOM_SHIM,
+        ...BROWSER_BUILDS,
         plugins: [svelte(), svelteTesting()],
         test: {
           ...CONVERTER_INLINED,

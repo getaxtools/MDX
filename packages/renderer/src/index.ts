@@ -35,6 +35,7 @@ export { knownCodeLanguages } from './highlight/knownCodeLanguages';
 export { readFrontMatterProperties, type DocumentProperty } from './front-matter/readFrontMatterProperties';
 export {
   createRichBlockRenderer,
+  loadMathFonts,
   type MathTypesetter,
   type FormulaPreview,
   type RichBlockRenderer,
