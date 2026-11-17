@@ -978,13 +978,15 @@ export class ViewerController {
 
   /**
    * Edit > Paste as Plain Text and the palette: the one place the app reads the clipboard, and only
-   * while the active document is being edited.
+   * while the active document is being edited. The text goes to the document the command was for,
+   * and is dropped when another document became active during the read.
    */
   async pastePlainText(): Promise<void> {
     const shell = this.dependencies.desktopShell;
-    if (!shell || !this.editingActions.isActiveDocumentEditing()) return;
+    const targetKey = this.editingActions.activeEditingDocumentKey();
+    if (!shell || targetKey === undefined) return;
     try {
-      this.editingActions.insertPlainText(await shell.readClipboardText());
+      this.editingActions.insertPlainText(targetKey, await shell.readClipboardText());
     } catch (error) {
       const isTooLarge = error instanceof DocumentOpenError && error.failure === 'tooLarge';
       this.showNotice(isTooLarge ? 'editor.pastePlainText.tooLarge' : 'editor.pastePlainText.failed');

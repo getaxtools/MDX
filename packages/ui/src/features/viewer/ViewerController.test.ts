@@ -850,6 +850,23 @@ describe('ViewerController', () => {
       expect(snapshot().editorRequest).toMatchObject({ kind: 'insertPlainText', text: 'Area \\(x\\)' });
     });
 
+    it('Paste as Plain Text drops the text when another document became active during the read', async () => {
+      const { controller, desktopShell, snapshot } = createViewer({ startupPaths: [GUIDE, NOTES] });
+      await controller.start();
+      controller.activateTab(guideKey);
+      await controller.execute({ kind: 'toggleEditing' });
+      controller.activateTab(InMemoryDocumentFiles.locationOf(NOTES).canonicalKey);
+      await controller.execute({ kind: 'toggleEditing' });
+      vi.spyOn(desktopShell, 'readClipboardText').mockImplementation(() => {
+        controller.activateTab(guideKey);
+        return Promise.resolve('meant for Notes');
+      });
+
+      await controller.execute({ kind: 'pastePlainText' });
+
+      expect(snapshot().editorRequest?.kind).not.toBe('insertPlainText');
+    });
+
     it('Paste as Plain Text names a clipboard over the editor limit', async () => {
       const { controller, desktopShell, snapshot } = createViewer({ startupPaths: [GUIDE] });
       vi.spyOn(desktopShell, 'readClipboardText').mockRejectedValue(new DocumentOpenError('tooLarge', ''));

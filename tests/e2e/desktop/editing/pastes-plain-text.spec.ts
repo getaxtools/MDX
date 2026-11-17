@@ -1,26 +1,26 @@
-import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MainWindowPage } from '../../pages/MainWindowPage';
 import { DesktopApp } from '../../support/DesktopApp';
 import { findAccessibilityViolations } from '../../support/findAccessibilityViolations';
 import { TestWorkspace } from '../../support/TestWorkspace';
+import { WindowsClipboard } from '../../support/WindowsClipboard';
 
 const DOCUMENT = 'paste.md';
-
-/** Puts plain text on the Windows clipboard as another program would. */
-function setClipboardText(text: string): void {
-  execFileSync('powershell', [
-    '-NoProfile',
-    '-Command',
-    `Set-Clipboard -Value '${text.replaceAll("'", "''")}'`,
-  ]);
-}
 
 describe('Paste as Plain Text', () => {
   let workspace: TestWorkspace;
   let app: DesktopApp;
   let mainWindow: MainWindowPage;
+  let clipboard: WindowsClipboard;
+
+  beforeAll(() => {
+    clipboard = WindowsClipboard.save();
+  });
+
+  afterAll(() => {
+    clipboard.restore();
+  });
 
   beforeEach(async () => {
     workspace = TestWorkspace.create();
@@ -38,7 +38,7 @@ describe('Paste as Plain Text', () => {
   });
 
   it('Edit menu Paste as Plain Text inserts the plain text', async () => {
-    setClipboardText(String.raw`Area \(x\)`);
+    clipboard.setText(String.raw`Area \(x\)`);
 
     // Native menus are out of reach of the driver; the palette runs the same command.
     await mainWindow.searchInCommandPalette('>Paste as Plain Text');

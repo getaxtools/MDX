@@ -1,4 +1,5 @@
 use std::io;
+use std::marker::PhantomData;
 use std::thread;
 use std::time::Duration;
 
@@ -16,17 +17,24 @@ const OPEN_ATTEMPTS: u32 = 5;
 const OPEN_RETRY_DELAY: Duration = Duration::from_millis(20);
 const UTF16_UNIT_BYTES: usize = 2;
 
-/// The clipboard is open while this lives and closed when it is dropped, on every path.
-struct OpenedClipboard;
+/// The clipboard is open while this lives and closed when it is dropped, on every path. It stays
+/// on the thread that opened it, as the clipboard is opened for one thread.
+struct OpenedClipboard {
+    _not_send: PhantomData<*const ()>,
+}
 
 impl OpenedClipboard {
     fn open() -> io::Result<Self> {
         let mut attempt = 1;
         loop {
-            // SAFETY: no window owns the clipboard here, which OpenClipboard allows; it is closed
-            // by the guard returned on success.
+            // SAFETY: a null window ties the open clipboard to this thread, which OpenClipboard
+            // allows; it is closed by the guard returned on success.
             match unsafe { OpenClipboard(None) } {
-                Ok(()) => return Ok(Self),
+                Ok(()) => {
+                    return Ok(Self {
+                        _not_send: PhantomData,
+                    });
+                }
                 Err(_) if attempt < OPEN_ATTEMPTS => {
                     attempt += 1;
                     thread::sleep(OPEN_RETRY_DELAY);
@@ -69,22 +77,27 @@ impl Drop for LockedMemory {
     }
 }
 
-/// Whether text of this many bytes, with its closing zero, stays within a limit of UTF-16 units.
-fn is_within_limit(size_bytes: usize, max_units: usize) -> bool {
-    size_bytes / UTF16_UNIT_BYTES <= max_units.saturating_add(1)
-}
-
-/// Clipboard text ends at its first zero; anything after it is not part of the text.
-fn text_before_zero(units: &[u16]) -> String {
-    let end = units
+/// Where clipboard text ends: at its first zero, or at the end of its memory block.
+fn text_length(units: &[u16]) -> usize {
+    units
         .iter()
         .position(|&unit| unit == 0)
-        .unwrap_or(units.len());
-    String::from_utf16_lossy(units.get(..end).unwrap_or_default())
+        .unwrap_or(units.len())
 }
 
-/// The clipboard's Unicode text, or `None` when it holds no text. Text longer than `max_units`
-/// UTF-16 units is refused with `FileTooLarge` before any of it is copied.
+/// The text of a block of UTF-16 units, refused with `FileTooLarge` when longer than `max_units`.
+fn text_within_limit(units: &[u16], max_units: usize) -> io::Result<String> {
+    let length = text_length(units);
+    if length > max_units {
+        return Err(io::Error::from(io::ErrorKind::FileTooLarge));
+    }
+    Ok(String::from_utf16_lossy(
+        units.get(..length).unwrap_or_default(),
+    ))
+}
+
+/// The clipboard's Unicode text, or `None` when it holds no text. The text ends at its first zero,
+/// and text longer than `max_units` UTF-16 units is refused with `FileTooLarge` before it is copied.
 pub fn read_clipboard_text(max_units: usize) -> io::Result<Option<String>> {
     let _clipboard = OpenedClipboard::open()?;
     let format = u32::from(CF_UNICODETEXT.0);
@@ -97,19 +110,22 @@ pub fn read_clipboard_text(max_units: usize) -> io::Result<Option<String>> {
     let handle: HANDLE =
         unsafe { GetClipboardData(format) }.map_err(|error| io_error_of(&error))?;
     let memory = HGLOBAL(handle.0);
-    // SAFETY: `memory` is the clipboard's handle for its text; a size of 0 means it failed.
+    // SAFETY: `memory` is the clipboard's handle for its text; a size of 0 is either an empty
+    // block or a failure, which the last error tells apart.
     let size_bytes = unsafe { GlobalSize(memory) };
     if size_bytes == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    if !is_within_limit(size_bytes, max_units) {
-        return Err(io::Error::from(io::ErrorKind::FileTooLarge));
+        let error = io::Error::last_os_error();
+        return if error.raw_os_error() == Some(0) {
+            Ok(Some(String::new()))
+        } else {
+            Err(error)
+        };
     }
     let locked = LockedMemory::lock(memory)?;
     // SAFETY: the locked block is at least `size_bytes` long, its start is aligned for `u16` as
     // all global memory is, and it is only read while `locked` keeps it locked.
     let units = unsafe { std::slice::from_raw_parts(locked.units, size_bytes / UTF16_UNIT_BYTES) };
-    Ok(Some(text_before_zero(units)))
+    text_within_limit(units, max_units).map(Some)
 }
 
 #[cfg(test)]
@@ -128,20 +144,36 @@ mod tests {
         let mut units = units_of("plain");
         units.extend([0, u16::from(b'x')]);
 
-        assert_eq!(text_before_zero(&units), "plain");
-        assert_eq!(text_before_zero(&units_of("no zero")), "no zero");
+        assert_eq!(text_within_limit(&units, 100).unwrap(), "plain");
+        assert_eq!(
+            text_within_limit(&units_of("no zero"), 100).unwrap(),
+            "no zero"
+        );
     }
 
     #[test]
     fn keeps_text_outside_the_basic_plane() {
-        assert_eq!(text_before_zero(&units_of("日本語 👩‍💻")), "日本語 👩‍💻");
+        assert_eq!(
+            text_within_limit(&units_of("日本語 👩‍💻"), 100).unwrap(),
+            "日本語 👩‍💻"
+        );
     }
 
     #[test]
-    fn the_limit_counts_units_and_allows_the_closing_zero() {
-        assert!(is_within_limit(12, 5));
-        assert!(!is_within_limit(14, 5));
-        assert!(is_within_limit(usize::MAX, usize::MAX));
+    fn the_limit_counts_the_text_up_to_its_first_zero_not_the_block() {
+        let mut short_text_in_a_large_block = units_of("short");
+        short_text_in_a_large_block.extend([0; 1000]);
+
+        assert_eq!(
+            text_within_limit(&short_text_in_a_large_block, 5).unwrap(),
+            "short"
+        );
+        assert_eq!(
+            text_within_limit(&units_of("longer"), 5)
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::FileTooLarge
+        );
     }
 
     /// Puts text on the clipboard the way another program would, or clears it.
@@ -158,13 +190,16 @@ mod tests {
         unsafe {
             let memory = GlobalAlloc(GMEM_MOVEABLE, bytes).unwrap();
             let target = GlobalLock(memory).cast::<u16>();
+            assert!(!target.is_null(), "the new block could not be locked");
             std::ptr::copy_nonoverlapping(units.as_ptr(), target, units.len());
             let _ = GlobalUnlock(memory);
             SetClipboardData(u32::from(CF_UNICODETEXT.0), Some(HANDLE(memory.0))).unwrap();
         }
     }
 
+    // It replaces the user's clipboard for a moment, so it runs only when asked for, as CI does.
     #[test]
+    #[ignore = "uses the real clipboard"]
     fn reads_back_text_put_on_the_clipboard_and_refuses_text_over_the_limit() {
         let earlier = read_clipboard_text(usize::MAX).unwrap_or_default();
         set_clipboard_text(Some("Area \\(x\\)\tdone\r\nnext"));

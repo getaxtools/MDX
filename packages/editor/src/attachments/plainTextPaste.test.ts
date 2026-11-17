@@ -88,6 +88,25 @@ describe('paste as plain text', () => {
     expect(textAfterTheKey).toBe('Text');
   });
 
+  it('Ctrl+Shift+V writes line breaks and leaves out control characters as the Edit menu does', () => {
+    const view = openEditor('');
+
+    pressCtrlShiftV(view);
+    paste(view, { 'text/plain': 'one\r\ntwo\rthree\u0007\u001b[31m\u0085\tfour\n' });
+
+    expect(view.state.doc.toString()).toBe('one\ntwo\nthree[31m\tfour\n');
+  });
+
+  it('plain paste keeps the direction marks of right-to-left text', () => {
+    const rightToLeft = '‏שלום ‫abc‬ ⁧x⁩';
+    const view = openEditor('');
+
+    pressCtrlShiftV(view);
+    paste(view, { 'text/plain': rightToLeft });
+
+    expect(view.state.doc.toString()).toBe(rightToLeft);
+  });
+
   it('one undo removes the plain paste', () => {
     const view = openEditor('Area: ');
     pressCtrlShiftV(view);

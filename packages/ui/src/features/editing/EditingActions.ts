@@ -36,8 +36,13 @@ export class EditingActions {
   }
 
   isActiveDocumentEditing(): boolean {
+    return this.activeEditingDocumentKey() !== undefined;
+  }
+
+  /** The canonical key of the active document while it is being edited. */
+  activeEditingDocumentKey(): string | undefined {
     const key = this.activeLocation()?.canonicalKey;
-    return key !== undefined && this.editing.isEditing(key);
+    return key !== undefined && this.editing.isEditing(key) ? key : undefined;
   }
 
   /** Opens the active document in the editor unless it is already there. */
@@ -164,11 +169,12 @@ export class EditingActions {
     this.callbacks.onChange();
   }
 
-  /** Asks the active document's editor to insert text at the selection; false when it is not being edited. */
-  insertPlainText(text: string): boolean {
-    const location = this.activeLocation();
-    if (!location || !this.editing.isEditing(location.canonicalKey)) return false;
-    const { canonicalKey } = location;
+  /**
+   * Asks a document's editor to insert text at the selection, only while that document is still the
+   * active one being edited; false otherwise.
+   */
+  insertPlainText(canonicalKey: string, text: string): boolean {
+    if (this.activeEditingDocumentKey() !== canonicalKey) return false;
     this.requests.set(canonicalKey, {
       id: this.nextRequestId(),
       canonicalKey,
