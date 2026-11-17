@@ -33,6 +33,7 @@ import {
   hasFile,
   isUntitledLocation,
   type AppMenuPort,
+  type AppWindowsPort,
   type DesktopShellPort,
   type DocumentExportPort,
   type ExportFormat,
@@ -71,6 +72,7 @@ import {
   type PropertiesEditability,
 } from '../document-view/PropertyEditing';
 import { DocumentAttachments } from '../editing/DocumentAttachments';
+import { AppWindowActions } from './AppWindowActions';
 import { DocumentEditing } from '../editing/DocumentEditing';
 import type { FindQuery } from '../find/findTextRanges';
 import { EditingActions } from '../editing/EditingActions';
@@ -205,6 +207,8 @@ export interface ViewerControllerDependencies {
   readonly noteTransfer?: NoteTransferPort;
   readonly notesIndex?: NotesIndexPort;
   readonly specProjects?: SpecProjectPort;
+  /** The other windows of the app; absent where there is only one, such as in the browser. */
+  readonly appWindows?: AppWindowsPort;
   /** The clock for daily notes and templates; the real one unless a test sets it. */
   readonly now?: () => Date;
   /** Starts the worker that checks large documents for prompt injection; tests pass a fake. */
@@ -426,6 +430,7 @@ export class ViewerController {
   private readonly injectionChecks: InjectionCheckActions;
   private sourceRangeRequest: SourceRangeRequest | undefined;
   private revealedFindingKey: string | undefined;
+  private readonly appWindowActions: AppWindowActions | undefined;
 
   constructor(private readonly dependencies: ViewerControllerDependencies) {
     this.snapshot = {
@@ -435,13 +440,7 @@ export class ViewerController {
       unsavedDocumentKeys: new Set(),
     };
     this.saving = this.createDocumentSaving();
-    this.editingActions = new EditingActions(dependencies.session, this.editing, {
-      onChange: () => {
-        this.publish(this.composeSnapshot(this.snapshot.notice));
-        void this.refreshActiveDocument();
-      },
-      onConflict: (location) => this.showChangedOnDiskNotice(location, 'editing.conflict.message'),
-    });
+    this.editingActions = this.createEditingActions();
     this.propertyEditing = this.createPropertyEditing();
     this.editingModes = this.createEditingModes();
     this.liveReload = dependencies.watcher
@@ -458,6 +457,7 @@ export class ViewerController {
     });
     this.documentAttachments = this.createDocumentAttachments();
     this.workspaceActions = this.createWorkspaceActions();
+    this.appWindowActions = this.createAppWindowActions();
     this.workspaceFileActions = this.createWorkspaceFileActions();
     this.notesLocationActions = this.createNotesLocationActions();
     this.notesMoveActions = this.createNotesMoveActions();
@@ -466,6 +466,16 @@ export class ViewerController {
     this.specDocumentRenderings = this.createSpecDocumentRenderings();
     this.specViewerActions = this.createSpecViewerActions();
     this.injectionChecks = this.createInjectionCheckActions();
+  }
+
+  private createEditingActions(): EditingActions {
+    return new EditingActions(this.dependencies.session, this.editing, {
+      onChange: () => {
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+        void this.refreshActiveDocument();
+      },
+      onConflict: (location) => this.showChangedOnDiskNotice(location, 'editing.conflict.message'),
+    });
   }
 
   private createEditingModes(): EditingModeActions {
@@ -857,6 +867,10 @@ export class ViewerController {
       },
       showNotice: (key, values) => this.showNotice(key, values),
       showSwitchedWorkspace: () => this.showSwitchedWorkspace(),
+      focusWindowShowing: this.dependencies.appWindows
+        ? (workspaceId) =>
+            this.dependencies.appWindows?.focusWindowShowing(workspaceId) ?? Promise.resolve(false)
+        : undefined,
       addFolder: () => this.explorerFolderActions.openFolder(),
       notesLocations: this.dependencies.notesLocations,
     });
@@ -924,8 +938,8 @@ export class ViewerController {
   }
 
   async start(): Promise<void> {
-    const { session, requests } = this.dependencies;
-    const restoreOutcome = await session.restore();
+    const { session, requests, appWindows } = this.dependencies;
+    const restoreOutcome = await session.restore(await appWindows?.startupWorkspaceId());
     this.navigation.recordActiveDocument();
     this.publish(this.composeSnapshot(undefined));
     this.reportRestoreOutcome(restoreOutcome);
@@ -946,6 +960,7 @@ export class ViewerController {
     this.showSpecProjects();
     await this.notesMoveActions?.offerUnfinishedMoves();
     await this.offerWorkspaceFiles();
+    if (this.appWindowActions) this.stopActions.push(await this.appWindowActions.start());
   }
 
   private reportRestoreOutcome({
@@ -1290,6 +1305,7 @@ export class ViewerController {
     copyPath: ({ path }) => this.copyPath(path),
     revealInFileManager: ({ path }) => this.revealInFileManager(path),
     toggleFullScreen: () => this.dependencies.desktopShell?.toggleFullScreen(),
+    openNewWindow: () => this.openNewWindow(),
     toggleControlWheel: () => this.toggleControlWheel(),
     setWordGoal: ({ goal }) => this.changeWordGoal((goals, key) => setWordGoal(goals, key, goal)),
     clearWordGoal: () => this.changeWordGoal(clearWordGoal),
@@ -1779,7 +1795,25 @@ export class ViewerController {
     );
     this.scheduleSave();
     this.injectionChecks.viewChanged();
+    this.appWindowActions?.reportState();
     void this.refreshActiveDocument();
+  }
+
+  private createAppWindowActions(): AppWindowActions | undefined {
+    const { appWindows, session } = this.dependencies;
+    if (!appWindows) return undefined;
+    return new AppWindowActions({
+      appWindows,
+      session,
+      showWorkspace: (workspaceId) =>
+        this.workspaceActions.switchTo(workspaceId, { mayFocusOtherWindow: false }),
+      showNotice: (key) => this.showNotice(key),
+      saveNow: () => this.saveNow(),
+    });
+  }
+
+  private async openNewWindow(): Promise<void> {
+    await this.appWindowActions?.openNewWindow();
   }
 
   private scheduleSave(): void {

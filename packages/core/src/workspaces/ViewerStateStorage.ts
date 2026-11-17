@@ -14,7 +14,8 @@ export interface RestoredViewerState extends RestoredAppState {
 
 /** Where the viewer state is kept between starts. */
 export interface ViewerStateStorage {
-  restore(): Promise<RestoredViewerState>;
+  /** The preferred workspace is shown when it exists; storage without workspaces ignores it. */
+  restore(preferredWorkspaceId?: string): Promise<RestoredViewerState>;
   save(state: ViewerState): Promise<void>;
   /** Forgets everything stored, including backup copies, as on a first start. */
   clearAll(): Promise<void>;

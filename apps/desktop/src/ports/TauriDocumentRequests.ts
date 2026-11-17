@@ -1,6 +1,6 @@
-import { listen } from '@tauri-apps/api/event';
 import type { DocumentRequestListener, DocumentRequestsPort } from '@mdx/platform';
 import { OPEN_DOCUMENTS_EVENT, tauriCommands } from './tauriCommands';
+import { listenInThisWindow } from './windowEvents';
 
 export class TauriDocumentRequests implements DocumentRequestsPort {
   pickDocuments(): Promise<readonly string[]> {
@@ -12,7 +12,6 @@ export class TauriDocumentRequests implements DocumentRequestsPort {
   }
 
   onDocumentsRequested(listener: DocumentRequestListener): () => void {
-    const stopListening = listen<string[]>(OPEN_DOCUMENTS_EVENT, (event) => listener(event.payload));
-    return () => void stopListening.then((unlisten) => unlisten());
+    return listenInThisWindow<string[]>(OPEN_DOCUMENTS_EVENT, (event) => listener(event.payload));
   }
 }

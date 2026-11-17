@@ -1,6 +1,6 @@
-import { listen } from '@tauri-apps/api/event';
 import type { WorkspaceFileContents, WorkspaceFileListener, WorkspaceFilePort } from '@mdx/platform';
 import { OPEN_WORKSPACE_FILE_EVENT, tauriCommands } from './tauriCommands';
+import { listenInThisWindow } from './windowEvents';
 
 export class TauriWorkspaceFiles implements WorkspaceFilePort {
   async chooseExportPlace(suggestedFileName: string): Promise<{ readonly folder: string } | undefined> {
@@ -20,9 +20,8 @@ export class TauriWorkspaceFiles implements WorkspaceFilePort {
   }
 
   onWorkspaceFileOpened(listener: WorkspaceFileListener): () => void {
-    const stopListening = listen<WorkspaceFileContents>(OPEN_WORKSPACE_FILE_EVENT, (event) =>
+    return listenInThisWindow<WorkspaceFileContents>(OPEN_WORKSPACE_FILE_EVENT, (event) =>
       listener(event.payload),
     );
-    return () => void stopListening.then((stop) => stop());
   }
 }

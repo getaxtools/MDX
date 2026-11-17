@@ -4,14 +4,16 @@ use std::time::Duration;
 
 use tauri::{App, AppHandle, Emitter, Manager};
 
+use crate::app_windows::OpenWindows;
 use crate::attachments::DroppedImages;
+use crate::commands::app_windows::StartupWorkspaceNotice;
 use crate::commands::notes_move::NotesMoves;
 use crate::commands::notes_transfer::{NotesImports, PendingImportSource};
 use crate::commands::spec_project_link::LinkQuestions;
 use crate::documents::DocumentAccessList;
 use crate::live_reload::{
     DOCUMENTS_CHANGED_EVENT, DocumentWatcher, FOLDERS_CHANGED_EVENT, FolderWatcher,
-    SPEC_PROJECTS_CHANGED_EVENT, SpecProjectWatcher,
+    SPEC_PROJECTS_CHANGED_EVENT, SpecProjectWatcher, WatchedFolder, WindowWatchSets,
 };
 use crate::notes_index::NotesIndexes;
 use crate::open_requests::{
@@ -57,6 +59,10 @@ pub fn initialize(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     ));
     app.manage(Arc::new(NotesImports::default()));
     app.manage(Arc::new(PendingImportSource::default()));
+    app.manage(Arc::new(OpenWindows::default()));
+    app.manage(StartupWorkspaceNotice::default());
+    app.manage(WindowWatchSets::<String>::default());
+    app.manage(WindowWatchSets::<WatchedFolder>::default());
     Ok(())
 }
 
@@ -85,17 +91,13 @@ const fn pause_after_each_moved_file() -> Duration {
 
 fn start_document_watcher(app: AppHandle) -> DocumentWatcher {
     DocumentWatcher::start(move |display_paths| {
-        if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-            let _ = window.emit(DOCUMENTS_CHANGED_EVENT, display_paths);
-        }
+        let _ = app.emit(DOCUMENTS_CHANGED_EVENT, display_paths);
     })
 }
 
 fn start_folder_watcher(app: AppHandle) -> FolderWatcher {
     FolderWatcher::start(move |folder_paths| {
-        if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-            let _ = window.emit(FOLDERS_CHANGED_EVENT, folder_paths);
-        }
+        let _ = app.emit(FOLDERS_CHANGED_EVENT, folder_paths);
     })
 }
 

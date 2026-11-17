@@ -2,8 +2,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::State;
+use tauri::{Emitter, Manager, State, WebviewWindow};
 
+use crate::app_windows::OpenWindows;
 use crate::documents::DocumentAccessList;
 use crate::open_requests::grant_saved_paths;
 
@@ -110,16 +111,41 @@ pub fn delete_workspace(
     Ok(database.delete_workspace(&WorkspaceId::try_from(workspace_id)?)?)
 }
 
+/// A list of one workspace changed, such as its favourites; the other windows showing it read it again.
+pub const WORKSPACE_LIST_CHANGED_EVENT: &str = "workspace-list-changed";
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ChangedList {
+    workspace_id: String,
+    list_name: String,
+}
+
+/// Saves one list and tells the other windows of that workspace, never windows of other workspaces.
 #[tauri::command]
 pub fn save_workspace_list(
     workspace_id: String,
     list_name: String,
     value_json: String,
-    database: State<'_, WorkspaceDatabase>,
+    window: WebviewWindow,
 ) -> CommandResult<()> {
     let workspace_id = WorkspaceId::try_from(workspace_id)?;
-    let list_name = ListName::parse(&list_name)?;
-    Ok(database.save_list(&workspace_id, list_name, &JsonText::try_from(value_json)?)?)
+    let list = ListName::parse(&list_name)?;
+    let database = window.state::<WorkspaceDatabase>();
+    let windows = window.state::<Arc<OpenWindows>>();
+    database.save_list(&workspace_id, list, &JsonText::try_from(value_json)?)?;
+    let changed = ChangedList {
+        workspace_id: workspace_id.as_str().to_owned(),
+        list_name,
+    };
+    for label in windows.others_showing(workspace_id.as_str(), window.label()) {
+        let _ = window.emit_to(
+            label.as_str(),
+            WORKSPACE_LIST_CHANGED_EVENT,
+            changed.clone(),
+        );
+    }
+    Ok(())
 }
 
 #[tauri::command]

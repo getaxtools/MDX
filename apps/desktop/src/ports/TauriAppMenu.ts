@@ -1,4 +1,3 @@
-import { listen } from '@tauri-apps/api/event';
 import type {
   AppMenuPort,
   MenuCommandListener,
@@ -6,11 +5,11 @@ import type {
   ViewMenuState,
 } from '@mdx/platform';
 import { MENU_COMMAND_EVENT, tauriCommands } from './tauriCommands';
+import { listenInThisWindow } from './windowEvents';
 
 export class TauriAppMenu implements AppMenuPort {
   onMenuCommand(listener: MenuCommandListener): () => void {
-    const stopListening = listen<string>(MENU_COMMAND_EVENT, (event) => listener(event.payload));
-    return () => void stopListening.then((unlisten) => unlisten());
+    return listenInThisWindow<string>(MENU_COMMAND_EVENT, (event) => listener(event.payload));
   }
 
   async showViewState(state: ViewMenuState): Promise<void> {

@@ -6,6 +6,7 @@ import { ViewerApp, ViewerController, translatedAlertTitles, type AppInfo } from
 import type { DisplayLanguage, StartupProgress } from '@mdx/ui/startup';
 import { mount } from 'svelte';
 import { TauriAppMenu } from './ports/TauriAppMenu';
+import { TauriAppWindows } from './ports/TauriAppWindows';
 import { TauriAttachments } from './ports/TauriAttachments';
 import type { TauriAppState } from './ports/TauriAppState';
 import { TauriDocumentFiles } from './ports/TauriDocumentFiles';
@@ -85,17 +86,10 @@ function createViewerController({
   translator,
   appInfo,
 }: ViewerControllerSources): ViewerController {
+  const appWindows = new TauriAppWindows();
   return new ViewerController({
-    session: new ViewerSession({
-      documentFiles: new TauriDocumentFiles(),
-      appState,
-      now: () => Date.now(),
-      kindRegistry: workspaceKindsFor({
-        allowsPlannedKindPreview: appInfo.allowsPlannedKindPreview ?? false,
-      }),
-      appVersion: appInfo.version,
-      workspaceStore: new TauriWorkspaceStore(),
-    }),
+    session: createViewerSession(appState, appInfo, appWindows.windowId),
+    appWindows,
     requests: new TauriDocumentRequests(),
     renderer: createMarkdownRenderer({ window, alertTitles: translatedAlertTitles(translator) }),
     translator,
@@ -117,6 +111,20 @@ function createViewerController({
     noteTransfer: new TauriNoteTransfer(),
     specProjects: new TauriSpecProjects(),
     notesIndex: new TauriNotesIndex(),
+  });
+}
+
+function createViewerSession(appState: TauriAppState, appInfo: AppInfo, windowId: string): ViewerSession {
+  return new ViewerSession({
+    documentFiles: new TauriDocumentFiles(),
+    appState,
+    now: () => Date.now(),
+    kindRegistry: workspaceKindsFor({
+      allowsPlannedKindPreview: appInfo.allowsPlannedKindPreview ?? false,
+    }),
+    appVersion: appInfo.version,
+    workspaceStore: new TauriWorkspaceStore(),
+    windowId,
   });
 }
 

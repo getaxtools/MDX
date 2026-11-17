@@ -3,7 +3,7 @@ pub mod recent_files_menu;
 mod view_menu_state;
 
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::menu::{
     CheckMenuItem, CheckMenuItemBuilder, Menu, MenuEvent, MenuItem, MenuItemBuilder,
     PredefinedMenuItem, Submenu, SubmenuBuilder,
@@ -14,8 +14,8 @@ use tauri::{App, AppHandle, Emitter, Manager, State, Wry};
 pub use menu_labels::MenuLabels;
 pub use view_menu_state::ViewMenuState;
 
+use crate::app_windows::{OpenWindows, target_window_label};
 use crate::documents::DocumentError;
-use crate::open_requests::MAIN_WINDOW_LABEL;
 use recent_files_menu::{RecentMenuContents, fill_recent_menu};
 use view_menu_state::{
     EDITING_MODE_ITEM_PREFIX, READING_WIDTH_ITEM_PREFIX, THEME_ITEM_PREFIX,
@@ -69,8 +69,9 @@ const TYPOGRAPHY_CHOICES: CheckChoices = CheckChoices {
 /// Menu item id, label key and the shortcut shown next to it.
 type CommandItem = (&'static str, &'static str, Option<&'static str>);
 
-const FILE_OPEN_ITEMS: [CommandItem; 3] = [
+const FILE_OPEN_ITEMS: [CommandItem; 4] = [
     ("newDocument", "menu.file.newDocument", Some("Ctrl+N")),
+    ("openNewWindow", "menu.file.newWindow", Some("Ctrl+Shift+N")),
     ("openDocuments", "menu.file.open", Some("Ctrl+O")),
     ("openFolder", "menu.file.openFolder", None),
 ];
@@ -423,15 +424,20 @@ fn are_valid_menu_labels(labels: &HashMap<String, String>) -> bool {
         })
 }
 
+/// Menu commands go to the window focused last; Exit closes every window, each asking about its edits.
 pub fn handle_menu_event(app: &AppHandle, event: &MenuEvent) {
-    let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
-        return;
-    };
     if event.id().as_ref() == EXIT_ITEM_ID {
-        let _ = window.close();
+        app.state::<Arc<OpenWindows>>().start_exiting();
+        for window in app.webview_windows().into_values() {
+            let _ = window.close();
+        }
         return;
     }
-    let _ = window.emit(MENU_COMMAND_EVENT, event.id().as_ref());
+    let _ = app.emit_to(
+        target_window_label(app).as_str(),
+        MENU_COMMAND_EVENT,
+        event.id().as_ref(),
+    );
 }
 
 #[tauri::command]

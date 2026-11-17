@@ -1395,5 +1395,8 @@
   "notes.import.unreadableHeading": "Folders that could not be read",
   "errors.document.sourceOverlapsLocation": "That folder is the notes folder, holds it or is inside it. Choose a folder outside the notes folder to import.",
   "errors.document.destinationOverlapsLocation": "The export would write into the notes folder. Choose a folder outside it.",
-  "errors.document.importRunning": "Another import is still running. Wait for it to finish or stop it first."
+  "errors.document.importRunning": "Another import is still running. Wait for it to finish or stop it first.",
+  "menu.file.newWindow": "New Window",
+  "windows.startupWorkspaceMissing": "The workspace MDX was started with no longer exists, so this window shows the workspace used last.",
+  "windows.workspaceNotFound": "That workspace no longer exists."
 }

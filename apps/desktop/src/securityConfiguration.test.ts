@@ -56,12 +56,12 @@ describe('content security policy', () => {
 });
 
 describe('main window capability', () => {
-  it('grants only event listening and closing the window', () => {
+  it('grants only event listening and closing the window, to the windows the app opens', () => {
     const capability = JSON.parse(
       readFileSync(join(TAURI_FOLDER, 'capabilities', 'main-window.json'), 'utf8'),
     ) as Capability;
 
-    expect(capability.windows).toEqual(['main']);
+    expect(capability.windows).toEqual(['main', 'window-*']);
     expect(capability.permissions).toEqual([
       'core:event:allow-listen',
       'core:event:allow-unlisten',

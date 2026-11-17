@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::documents::{
     DocumentAccessList, DocumentError, validated_file_name, write_text_atomically,
 };
-use crate::open_requests::StartupWorkspaceFile;
+use crate::open_requests::{MAIN_WINDOW_LABEL, StartupWorkspaceFile};
 use crate::storage::{
     PendingWorkspaceExport, WORKSPACE_FILE_EXTENSION, WorkspaceFileContents, read_workspace_file,
     validated_workspace_json, with_extension,
@@ -69,8 +69,12 @@ pub fn write_workspace_export(
 /// The workspace file the app was started with, read once; nothing is granted until the user confirms it.
 #[tauri::command]
 pub fn take_startup_workspace_file(
+    window: WebviewWindow,
     startup: State<'_, StartupWorkspaceFile>,
 ) -> Result<Option<WorkspaceFileContents>, DocumentError> {
+    if window.label() != MAIN_WINDOW_LABEL {
+        return Ok(None);
+    }
     startup
         .take()
         .map(|path| read_workspace_file(&path))

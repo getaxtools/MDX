@@ -46,12 +46,12 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
 
   constructor(private readonly options: WorkspaceStateStorageOptions) {}
 
-  async restore(): Promise<RestoredViewerState> {
+  async restore(preferredWorkspaceId?: string): Promise<RestoredViewerState> {
     try {
       const workspaces = await this.options.workspaceStore.loadRegistry();
       if (workspaces.length === 0) return await this.migrate();
       this.registry = WorkspaceRegistry.fromStored(workspaces);
-      this.shownWorkspaceId = this.workspaceToRestore();
+      this.shownWorkspaceId = this.workspaceToRestore(preferredWorkspaceId);
       return await this.restoreShownWorkspace();
     } catch {
       return await this.startOnEarlierState(await this.options.appState.load());
@@ -138,6 +138,23 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
     return { ...restored, hasEarlierVersionChanges: false };
   }
 
+  /**
+   * The shown workspace's lists as stored, with the current tabs, layout and app values; they count as
+   * saved, so this window does not write them back.
+   */
+  async reloadLists(current: ViewerState): Promise<RestoredViewerState> {
+    const { workspaceStore, kindRegistry, windowId } = this.options;
+    const contents = await workspaceStore.loadWorkspace(this.shownWorkspaceId, windowId);
+    const { windowSession, appValues } = storedViewerStateOf(current);
+    const reloaded = viewerStateFrom(
+      { lists: contents?.lists ?? {}, windowSession, appValues },
+      kindRegistry,
+    );
+    const { lists } = storedViewerStateOf(reloaded);
+    for (const listName of WORKSPACE_LIST_NAMES) this.hasChanged(`list.${listName}`, lists[listName]);
+    return { ...reloaded, hasEarlierVersionChanges: false };
+  }
+
   private async migrate(): Promise<RestoredViewerState> {
     const { workspaceStore, appState, kindRegistry, windowId, now } = this.options;
     const earlierState = await appState.load();
@@ -196,11 +213,13 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
     return JSON.stringify(earlierLists) === JSON.stringify(storedLists) ? undefined : earlierLists;
   }
 
-  /** The workspace shown last, among those whose kind this version has built. */
-  private workspaceToRestore(): string {
+  /** The preferred workspace, or else the one shown last, among those whose kind this version has built. */
+  private workspaceToRestore(preferredWorkspaceId: string | undefined): string {
     const openable = this.registry
       .workspaces()
       .filter((workspace) => isBuiltKind(this.options.kindRegistry, workspace.kindId));
+    if (openable.some((workspace) => workspace.id === preferredWorkspaceId))
+      return preferredWorkspaceId ?? DEFAULT_WORKSPACE_ID;
     const lastShown = openable.reduce<StoredWorkspace | undefined>(
       (latest, workspace) =>
         latest === undefined || (workspace.lastShownAtMs ?? 0) > (latest.lastShownAtMs ?? 0)

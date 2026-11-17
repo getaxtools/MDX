@@ -45,6 +45,8 @@ export interface WorkspaceActionsDependencies {
   readonly showNotice: (key: MessageKey, values?: Readonly<Record<string, string>>) => void;
   /** Shows the documents of the workspace the window switched to. */
   readonly showSwitchedWorkspace: () => Promise<void>;
+  /** Brings forward another window showing the workspace; false when none does. */
+  readonly focusWindowShowing?: ((workspaceId: string) => Promise<boolean>) | undefined;
   /** The folder picker that adds a folder to the Explorer of the shown workspace. */
   readonly addFolder: () => Promise<void>;
   /** Absent where Notes workspaces cannot be made, such as outside the desktop app. */
@@ -212,9 +214,14 @@ export class WorkspaceActions {
     showNotice('workspaces.deleted', { name: workspaceNameOf(shown, translator) });
   }
 
-  async switchTo(workspaceId: string): Promise<void> {
-    const { session } = this.dependencies;
+  /** A workspace another window shows is brought forward there instead, unless Windows chose this window. */
+  async switchTo(workspaceId: string, { mayFocusOtherWindow = true } = {}): Promise<void> {
+    const { session, focusWindowShowing } = this.dependencies;
     if (session.shownWorkspace()?.id === workspaceId) return;
+    if (mayFocusOtherWindow && focusWindowShowing && (await focusWindowShowing(workspaceId))) {
+      this.dependencies.showDialog(undefined);
+      return;
+    }
     if (!(await this.dependencies.confirmLeavingDocuments())) return;
     await session.switchWorkspace(workspaceId);
     this.dependencies.showDialog(undefined);

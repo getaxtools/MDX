@@ -58,6 +58,8 @@ export interface ViewerSessionDependencies {
   readonly workspaceStore?: WorkspaceStorePort;
   /** Ids for new workspaces; random UUIDs unless a test needs fixed ones. */
   readonly createId?: () => string;
+  /** Names this window's tabs and layout in the store; each window keeps its own. */
+  readonly windowId?: string;
 }
 
 /** What the user enters for a new workspace; the session adds the id and the time. */
@@ -92,7 +94,7 @@ function emptyState(kindRegistry: readonly WorkspaceKind[]): ViewerState {
 }
 
 function workspaceStorageFor(
-  { appState, workspaceStore, now, appVersion }: ViewerSessionDependencies,
+  { appState, workspaceStore, now, appVersion, windowId }: ViewerSessionDependencies,
   kindRegistry: readonly WorkspaceKind[],
 ): WorkspaceStateStorage | undefined {
   if (!workspaceStore) return undefined;
@@ -100,7 +102,7 @@ function workspaceStorageFor(
     workspaceStore,
     appState,
     kindRegistry,
-    windowId: MAIN_WINDOW_ID,
+    windowId: windowId ?? MAIN_WINDOW_ID,
     now,
     appVersion,
   });
@@ -165,8 +167,9 @@ export class ViewerSession {
     return this.shownState.shown;
   }
 
-  async restore(): Promise<RestoreOutcome> {
-    const restored = await this.storage.restore();
+  /** Shows the preferred workspace when it exists, such as the one a new window was opened on. */
+  async restore(preferredWorkspaceId?: string): Promise<RestoreOutcome> {
+    const restored = await this.storage.restore(preferredWorkspaceId);
     this.openedDocuments.clear();
     this.replaceState(viewerStateOf(restored));
     const { wasReset, newerSavedState, hasEarlierVersionChanges } = restored;
@@ -251,6 +254,19 @@ export class ViewerSession {
     await this.workspaceStorage.deleteWorkspace(removal.registry, workspaceId);
     this.replaceState(this.state);
     return removal;
+  }
+
+  /** Takes the shown workspace's lists as another window saved them, keeping this window's tabs. */
+  async reloadWorkspaceLists(workspaceId: string): Promise<void> {
+    if (!this.workspaceStorage || this.shownWorkspace()?.id !== workspaceId) return;
+    const reloaded = await this.workspaceStorage.reloadLists(this.state);
+    this.replaceState({
+      ...this.state,
+      recentFiles: reloaded.recentFiles,
+      favourites: reloaded.favourites,
+      explorerFolders: reloaded.explorerFolders,
+      ...(reloaded.workspaceOverrides ? { workspaceOverrides: reloaded.workspaceOverrides } : {}),
+    });
   }
 
   /** Shows another workspace's tabs, lists and layout; the caller has dealt with unsaved edits. */

@@ -1,4 +1,5 @@
 mod app_setup;
+mod app_windows;
 mod attachments;
 mod commands;
 mod document_images;
@@ -28,11 +29,15 @@ pub fn run() {
         .setup(|app| {
             main_window::create_main_window(app)?;
             app_setup::initialize(app)?;
+            app_windows::restore_windows(app, &std::env::args().collect::<Vec<_>>())?;
             menu::install_main_menu(app)?;
             Ok(())
         })
         .on_menu_event(|app, event| menu::handle_menu_event(app, &event))
-        .on_window_event(open_requests::handle_window_event);
+        .on_window_event(|window, event| {
+            open_requests::handle_window_event(window, event);
+            app_windows::handle_window_event(window, event);
+        });
 
     let result = with_commands(with_startup_page_protocol(with_image_protocol(builder)))
         .build(tauri::generate_context!());
@@ -161,6 +166,11 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::spec_projects::watch_spec_projects,
         commands::spec_projects::search_spec_project_documents,
         commands::workspaces::load_workspace_registry,
+        commands::app_windows::open_new_window,
+        commands::app_windows::report_window_state,
+        commands::app_windows::focus_window_showing,
+        commands::app_windows::window_startup_workspace,
+        commands::app_windows::take_startup_workspace_notice,
         commands::workspaces::load_workspace,
         commands::workspaces::save_workspace,
         commands::workspaces::delete_workspace,

@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde::Deserialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, WebviewWindow};
 use tauri_plugin_dialog::{DialogExt, FileDialogBuilder};
 
 use crate::documents::{
@@ -11,7 +11,7 @@ use crate::documents::{
     open_allowed_document_as, status_of_path, validated_file_name, with_markdown_extension,
     write_text_atomically,
 };
-use crate::open_requests::{StartupDocuments, grant_documents};
+use crate::open_requests::{MAIN_WINDOW_LABEL, StartupDocuments, grant_documents};
 
 const MAX_PATH_CHARACTERS: usize = 32_767;
 const MAX_STATUS_CHECKS: usize = 500;
@@ -70,8 +70,15 @@ pub async fn check_path_statuses(paths: Vec<String>) -> Result<Vec<PathStatus>, 
     run_blocking(move || paths.iter().map(|path| status_of_path(path)).collect()).await
 }
 
+/// The files the app was started with go to the first window, whichever window asks first.
 #[tauri::command]
-pub fn take_startup_documents(startup: State<'_, StartupDocuments>) -> Vec<String> {
+pub fn take_startup_documents(
+    window: WebviewWindow,
+    startup: State<'_, StartupDocuments>,
+) -> Vec<String> {
+    if window.label() != MAIN_WINDOW_LABEL {
+        return Vec::new();
+    }
     startup.take()
 }
 

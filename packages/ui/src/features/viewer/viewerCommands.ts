@@ -47,6 +47,7 @@ export type ViewerCommand =
   | SpecViewerCommand
   | InjectionCheckCommand
   | { readonly kind: 'toggleFullScreen' }
+  | { readonly kind: 'openNewWindow' }
   | { readonly kind: 'toggleControlWheel' }
   | { readonly kind: 'showWorkspaceKindSettings' }
   | { readonly kind: 'showWordGoal' }
@@ -126,6 +127,7 @@ const COMMANDS_BY_MENU_ITEM: Readonly<Record<string, ViewerCommand>> = {
   goBack: { kind: 'goBack' },
   goForward: { kind: 'goForward' },
   toggleFullScreen: { kind: 'toggleFullScreen' },
+  openNewWindow: { kind: 'openNewWindow' },
   toggleControlWheel: { kind: 'toggleControlWheel' },
   revertDocument: { kind: 'revertDocument' },
   reloadActiveDocument: { kind: 'reloadActiveDocument' },

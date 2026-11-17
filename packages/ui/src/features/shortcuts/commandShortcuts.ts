@@ -15,6 +15,11 @@ export type ShortcutKeyEvent = Pick<
 
 export const COMMAND_SHORTCUTS: readonly CommandShortcut[] = [
   { command: { kind: 'newDocument' }, combinations: [['ctrl', 'N']], actionKey: 'menu.file.newDocument' },
+  {
+    command: { kind: 'openNewWindow' },
+    combinations: [['ctrl', 'shift', 'N']],
+    actionKey: 'menu.file.newWindow',
+  },
   { command: { kind: 'openDocuments' }, combinations: [['ctrl', 'O']], actionKey: 'menu.file.open' },
   { command: { kind: 'saveDocument' }, combinations: [['ctrl', 'S']], actionKey: 'menu.file.save' },
   {

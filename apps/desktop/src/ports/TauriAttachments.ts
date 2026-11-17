@@ -1,4 +1,3 @@
-import { listen } from '@tauri-apps/api/event';
 import type {
   AttachmentPort,
   AttachmentTarget,
@@ -8,6 +7,7 @@ import type {
 } from '@mdx/platform';
 import { documentOpenErrorOf } from './documentOpenErrorOf';
 import { IMAGES_DROPPED_EVENT, tauriCommands, type ChosenPictureReply } from './tauriCommands';
+import { listenInThisWindow } from './windowEvents';
 
 export class TauriAttachments implements AttachmentPort {
   async saveDroppedImage(target: AttachmentTarget, path: string): Promise<string> {
@@ -49,8 +49,7 @@ export class TauriAttachments implements AttachmentPort {
   }
 
   onImagesDropped(listener: ImagesDropListener): () => void {
-    const stopListening = listen<ImagesDrop>(IMAGES_DROPPED_EVENT, (event) => listener(event.payload));
-    return () => void stopListening.then((unlisten) => unlisten());
+    return listenInThisWindow<ImagesDrop>(IMAGES_DROPPED_EVENT, (event) => listener(event.payload));
   }
 }
 

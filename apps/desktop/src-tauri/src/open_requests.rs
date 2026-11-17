@@ -4,13 +4,21 @@ use std::sync::{Arc, Mutex, PoisonError};
 use serde::Serialize;
 use tauri::{AppHandle, DragDropEvent, Emitter, Manager, PhysicalPosition, Window, WindowEvent};
 
+use crate::app_windows::{
+    FileRoute, OpenWindows, WorkspaceArgument, is_known_workspace, target_window_label,
+    workspace_argument,
+};
 use crate::attachments::{DroppedImages, is_image_path};
+use crate::documents::canonical_key_of;
 use crate::documents::{DocumentAccessList, is_markdown_path};
-use crate::storage::{is_workspace_file_path, read_workspace_file};
+use crate::storage::{WorkspaceDatabase, is_workspace_file_path, read_workspace_file};
 
 pub const OPEN_DOCUMENTS_EVENT: &str = "open-documents";
 pub const OPEN_WORKSPACE_FILE_EVENT: &str = "open-workspace-file";
 pub const IMAGES_DROPPED_EVENT: &str = "images-dropped";
+/// A second launch named a workspace no window shows; the window focused last shows it.
+pub const SHOW_WORKSPACE_EVENT: &str = "show-workspace";
+pub const WORKSPACE_NOT_FOUND_EVENT: &str = "workspace-not-found";
 
 /// Pictures dropped on the window and where, in CSS pixels, so the editor can place their links.
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -97,19 +105,68 @@ pub fn grant_documents(paths: &[PathBuf], access: &DocumentAccessList) -> Vec<St
         .collect()
 }
 
+/// A second launch hands its files to the running app: each goes to the window that has it open, else to
+/// the window whose workspace has the deepest root containing it, else to the window focused last. No
+/// window switches its workspace for a file; only an explicit workspace argument does that.
 pub fn forward_second_instance(app: &AppHandle, arguments: &[String], working_folder: &str) {
     let paths = markdown_paths_from_arguments(arguments, Path::new(working_folder));
     let display_paths = grant_documents(&paths, &app.state::<Arc<DocumentAccessList>>());
-    let workspace_file = workspace_file_from_arguments(arguments, Path::new(working_folder))
-        .and_then(|path| read_workspace_file(&path).ok());
-    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+    let mut focused = forward_documents(app, display_paths);
+    if let Some(argument) = workspace_argument(arguments) {
+        focused = Some(forward_workspace_argument(app, argument));
+    }
+    if let Some(contents) = workspace_file_from_arguments(arguments, Path::new(working_folder))
+        .and_then(|path| read_workspace_file(&path).ok())
+    {
+        let label = focused.clone().unwrap_or_else(|| target_window_label(app));
+        let _ = app.emit_to(label.as_str(), OPEN_WORKSPACE_FILE_EVENT, contents);
+        focused = Some(label);
+    }
+    let label = focused.unwrap_or_else(|| target_window_label(app));
+    if let Some(window) = app.get_webview_window(&label) {
         let _ = window.unminimize();
         let _ = window.set_focus();
-        let _ = window.emit(OPEN_DOCUMENTS_EVENT, display_paths);
-        if let Some(contents) = workspace_file {
-            let _ = window.emit(OPEN_WORKSPACE_FILE_EVENT, contents);
-        }
     }
+}
+
+/// Sends each document to its window and returns the window of the last one.
+fn forward_documents(app: &AppHandle, display_paths: Vec<String>) -> Option<String> {
+    let windows = app.state::<Arc<OpenWindows>>();
+    let mut last = None;
+    for display_path in display_paths {
+        let label = match windows.route(&canonical_key_of(&display_path)) {
+            FileRoute::OpenTab(label)
+            | FileRoute::ContainingRoot(label)
+            | FileRoute::LastFocused(label) => label,
+            FileRoute::NoWindow => MAIN_WINDOW_LABEL.to_owned(),
+        };
+        let _ = app.emit_to(label.as_str(), OPEN_DOCUMENTS_EVENT, vec![display_path]);
+        last = Some(label);
+    }
+    last
+}
+
+/// Shows a named workspace: in a window that shows it already, else in the window focused last. A
+/// malformed or unknown id only makes that window say the workspace was not found.
+fn forward_workspace_argument(app: &AppHandle, argument: WorkspaceArgument) -> String {
+    let windows = app.state::<Arc<OpenWindows>>();
+    let target = target_window_label(app);
+    let known = match argument {
+        WorkspaceArgument::Named(id)
+            if is_known_workspace(&app.state::<WorkspaceDatabase>(), &id) =>
+        {
+            id
+        }
+        WorkspaceArgument::Named(_) | WorkspaceArgument::Malformed => {
+            let _ = app.emit_to(target.as_str(), WORKSPACE_NOT_FOUND_EVENT, ());
+            return target;
+        }
+    };
+    if let Some(label) = windows.other_window_showing(known.as_str(), "") {
+        return label;
+    }
+    let _ = app.emit_to(target.as_str(), SHOW_WORKSPACE_EVENT, known.as_str());
+    target
 }
 
 /// Markdown files dropped on the window open as tabs; pictures go to the editor as attachments.
@@ -121,14 +178,15 @@ pub fn handle_window_event(window: &Window, event: &WindowEvent) {
     let display_paths =
         grant_documents(&markdown_paths, &window.state::<Arc<DocumentAccessList>>());
     if !display_paths.is_empty() {
-        let _ = window.emit(OPEN_DOCUMENTS_EVENT, display_paths);
+        let _ = window.emit_to(window.label(), OPEN_DOCUMENTS_EVENT, display_paths);
     }
     if !image_paths.is_empty() {
         window
             .state::<Arc<DroppedImages>>()
             .remember(image_paths.iter().cloned());
         let scale = window.scale_factor().unwrap_or(1.0);
-        let _ = window.emit(
+        let _ = window.emit_to(
+            window.label(),
             IMAGES_DROPPED_EVENT,
             dropped_images_event(&image_paths, *position, scale),
         );

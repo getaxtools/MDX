@@ -7,6 +7,7 @@ import type {
   NotesExportRequest,
   NotesImportReport,
   NotesImportRequest,
+  WindowStateReport,
   Backlink,
   DocumentLocation,
   EditedDocumentSave,
@@ -181,6 +182,11 @@ export const tauriCommands = {
   loadAppValues: () => invoke<Record<string, string>>('load_app_values'),
   saveAppValue: (key: string, valueJson: string) => invoke<null>('save_app_value', { key, valueJson }),
   getAppInfo: () => invoke<AppInfo>('get_app_info'),
+  windowStartupWorkspace: () => invoke<string | null>('window_startup_workspace'),
+  takeStartupWorkspaceNotice: () => invoke<boolean>('take_startup_workspace_notice'),
+  openNewWindow: () => invoke<null>('open_new_window'),
+  reportWindowState: (state: WindowStateReport) => invoke<null>('report_window_state', { state }),
+  focusWindowShowing: (workspaceId: string) => invoke<boolean>('focus_window_showing', { workspaceId }),
   updateViewMenu: (state: ViewMenuState) => invoke<null>('update_view_menu', { state }),
   updateRecentMenu: (displayPaths: readonly string[], workspaces: readonly RecentWorkspaceMenuEntry[]) =>
     invoke<null>('update_recent_menu', { displayPaths, workspaces }),
@@ -228,3 +234,6 @@ export const NOTES_INDEX_STATUS_EVENT = 'notes-index-status';
 export const NOTES_IMPORT_PROGRESS_EVENT = 'notes-import-progress';
 export const NOTES_INDEX_CHANGES_EVENT = 'notes-index-changes';
 export const NOTES_MOVE_PROGRESS_EVENT = 'notes-move-progress';
+export const WORKSPACE_LIST_CHANGED_EVENT = 'workspace-list-changed';
+export const SHOW_WORKSPACE_EVENT = 'show-workspace';
+export const WORKSPACE_NOT_FOUND_EVENT = 'workspace-not-found';
