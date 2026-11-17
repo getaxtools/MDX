@@ -1,8 +1,25 @@
-import { InMemorySpecProjects } from '@mdx/platform';
+import { InMemorySpecProjects, type SpecProjectManifest } from '@mdx/platform';
 import { describe, expect, it, vi } from 'vitest';
+import { ProjectTextCache } from './ProjectTextCache';
 import { SpecViewerActions } from './SpecViewerActions';
 
 const ROOT = 'C:\\Projects\\shop';
+
+/** Holds back scans while gated, as a slow share does, until the gates open. */
+class GatedSpecProjects extends InMemorySpecProjects {
+  isGated = false;
+  private readonly gates: (() => void)[] = [];
+
+  override scanProject(root: string): Promise<SpecProjectManifest> {
+    const scan = super.scanProject(root);
+    if (!this.isGated) return scan;
+    return new Promise((resolve) => this.gates.push(() => resolve(scan)));
+  }
+
+  openGates(): void {
+    for (const open of this.gates.splice(0)) open();
+  }
+}
 
 function actionsWith(specProjects: InMemorySpecProjects) {
   const onChange = vi.fn();
@@ -96,5 +113,61 @@ describe('SpecViewerActions', () => {
     actions.hide();
 
     expect(actions.view()).toBeUndefined();
+  });
+
+  it('shows only the newest scan of a folder when an older one finishes last', async () => {
+    const specProjects = new GatedSpecProjects({
+      [ROOT]: { files: { 'openspec/changes/add-pins/tasks.md': '- [ ] 1.1' } },
+    });
+    const { actions } = actionsWith(specProjects);
+    await actions.show([ROOT]);
+    const changeNames = () =>
+      actions.view()?.roots?.[0]?.projects[0]?.activeChanges.map((change) => change.name);
+
+    specProjects.isGated = true;
+    const olderRefresh = actions.refresh([ROOT]);
+    specProjects.isGated = false;
+    specProjects.removeFile(ROOT, 'openspec/changes/add-pins/tasks.md');
+    specProjects.writeFile(ROOT, 'openspec/changes/add-tabs/tasks.md', '- [ ] 1.1');
+    await actions.refresh([ROOT]);
+    specProjects.openGates();
+    await olderRefresh;
+
+    expect(changeNames()).toEqual(['add-tabs']);
+  });
+
+  it('watches the scanned folders with the links their scans followed, in the order asked', async () => {
+    const specProjects = new InMemorySpecProjects({
+      [ROOT]: {
+        files: { 'openspec/specs/tabs/spec.md': '# tabs' },
+        links: [{ path: 'shared', isFollowed: true }],
+      },
+    });
+    const { actions } = actionsWith(specProjects);
+
+    await actions.show([ROOT]);
+    actions.hide();
+    await vi.waitFor(() => expect(specProjects.watchCalls).toHaveLength(2));
+
+    expect(specProjects.watchCalls).toEqual([[{ root: ROOT, followedLinks: ['shared'] }], []]);
+  });
+});
+
+describe('ProjectTextCache', () => {
+  it('reads a file again after a failed read, though its modified time is the same', async () => {
+    const specProjects = new InMemorySpecProjects({ [ROOT]: { files: {} } });
+    const cache = new ProjectTextCache(specProjects);
+    const manifest = {
+      root: { canonicalKey: ROOT.toLowerCase(), displayPath: ROOT, fileName: 'shop' },
+      folders: [],
+      files: [{ path: 'a.md', sizeBytes: 3, modifiedAtMs: 5, text: null }],
+      links: [],
+      isIncomplete: false,
+    };
+
+    expect(await cache.readerFor(ROOT, manifest)('a.md')).toBeUndefined();
+    specProjects.writeFile(ROOT, 'a.md', '# A');
+
+    expect(await cache.readerFor(ROOT, manifest)('a.md')).toBe('# A');
   });
 });

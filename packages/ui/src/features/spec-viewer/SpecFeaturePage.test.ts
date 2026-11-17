@@ -103,7 +103,7 @@ describe('feature pages', () => {
       onOpenDocument: vi.fn(),
     });
 
-    expect(screen.getByRole('treeitem', { name: '002-sharing, the current feature' })).toBeTruthy();
+    expect(screen.getByRole('treeitem', { name: /^002-sharing, current/ })).toBeTruthy();
     expect(screen.getByRole('treeitem', { name: '001-photo-albums' })).toBeTruthy();
     expect(screen.getByRole('treeitem', { name: 'Constitution' })).toBeTruthy();
   });

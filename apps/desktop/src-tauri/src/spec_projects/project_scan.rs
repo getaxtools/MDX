@@ -15,7 +15,16 @@ const MAX_SCANNED_FOLDERS: usize = 10_000;
 const MAX_CONFIGURATION_FILE_BYTES: u64 = 64 * 1024;
 const MAX_CONFIGURATION_TEXT_BYTES: usize = 4 * 1024 * 1024;
 const CONFIGURATION_EXTENSIONS: [&str; 3] = ["yaml", "yml", "json"];
-const NEVER_ENTERED_FOLDERS: [&str; 3] = ["node_modules", ".git", "target"];
+/// Build output, package and environment folders: never part of a spec project, often huge and busy.
+const NEVER_ENTERED_FOLDERS: [&str; 7] = [
+    "node_modules",
+    ".git",
+    "target",
+    "dist",
+    "venv",
+    ".venv",
+    "__pycache__",
+];
 const GIT_FOLDER: &str = ".git";
 const GIT_HEAD_FILE: &str = "HEAD";
 
@@ -318,10 +327,7 @@ fn states_inside<'pattern>(
     states: &[PatternState<'pattern>],
 ) -> Vec<PatternState<'pattern>> {
     let name = file_name_of(folder);
-    if NEVER_ENTERED_FOLDERS
-        .iter()
-        .any(|skipped| skipped.eq_ignore_ascii_case(&name))
-    {
+    if is_never_entered(&name) {
         return Vec::new();
     }
     let mut next_states: Vec<PatternState<'pattern>> = Vec::new();
@@ -346,6 +352,57 @@ fn sorted_entries(folder: &Path) -> Vec<DirEntry> {
     entries
 }
 
+fn is_never_entered(folder_name: &str) -> bool {
+    NEVER_ENTERED_FOLDERS
+        .iter()
+        .any(|skipped| skipped.eq_ignore_ascii_case(folder_name))
+}
+
+/// What a changed path is now: a path that is gone may have been a file or a folder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChangedEntry {
+    File,
+    Folder,
+    Gone,
+}
+
+/// Whether a change to a path below a project root can change what a scan lists: a file a location
+/// matches, or a folder inside a location. A folder outside the locations changes on every save below it.
+pub fn may_hold_project_files(
+    relative_path: &Path,
+    entry: ChangedEntry,
+    additional_locations: &[ScanPattern],
+) -> bool {
+    let names: Vec<String> = relative_path
+        .components()
+        .map(|part| part.as_os_str().to_string_lossy().into_owned())
+        .collect();
+    let Some((last, folders)) = names.split_last() else {
+        return true;
+    };
+    let patterns = project_patterns(additional_locations);
+    let mut states: Vec<PatternState<'_>> = patterns.iter().map(ScanPattern::start).collect();
+    for folder in folders {
+        if is_never_entered(folder) {
+            return false;
+        }
+        states = states
+            .iter()
+            .flat_map(|state| state.enter_folder(folder))
+            .collect();
+    }
+    if is_never_entered(last) {
+        return false;
+    }
+    let is_listed_file = || states.iter().any(|state| state.matches_file(last));
+    let inner_states = || states.iter().flat_map(|state| state.enter_folder(last));
+    match entry {
+        ChangedEntry::File => is_listed_file(),
+        ChangedEntry::Folder => inner_states().any(|state| state.is_whole_tree()),
+        ChangedEntry::Gone => is_listed_file() || inner_states().next().is_some(),
+    }
+}
+
 fn file_name_of(path: &Path) -> String {
     path.file_name()
         .map(|name| name.to_string_lossy().into_owned())
@@ -353,10 +410,10 @@ fn file_name_of(path: &Path) -> String {
 }
 
 #[cfg(test)]
-pub(super) mod tests {
+pub(crate) mod tests {
     use super::*;
 
-    pub(in crate::spec_projects) fn write_files(root: &Path, files: &[&str]) {
+    pub(crate) fn write_files(root: &Path, files: &[&str]) {
         for file in files {
             let path = root.join(file);
             fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -364,14 +421,14 @@ pub(super) mod tests {
         }
     }
 
-    pub(in crate::spec_projects) fn granted(root: &Path) -> DocumentAccessList {
+    pub(crate) fn granted(root: &Path) -> DocumentAccessList {
         let access = DocumentAccessList::default();
         access.grant_folder(root).unwrap();
         access
     }
 
     /// Makes a folder link the way the platform does without extra rights: a junction on Windows.
-    pub(in crate::spec_projects) fn link_folder(link: &Path, target: &Path) {
+    pub(crate) fn link_folder(link: &Path, target: &Path) {
         #[cfg(windows)]
         {
             let status = std::process::Command::new("cmd")

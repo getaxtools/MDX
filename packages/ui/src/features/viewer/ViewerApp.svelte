@@ -16,6 +16,7 @@
     notesLocationOf,
     noteNameOf,
     notesSettingsOf,
+    type SpecSearchFilter,
   } from '@mdx/core';
   import type {
     FormattingState,
@@ -417,11 +418,12 @@
               {translator}
               focusRequest={snapshot.folderSearchFocusRequest}
               hasFolders={controller.hasSearchableFolders()}
-              onSearch={(query: string, options: TextSearchOptions) =>
-                controller.searchFolders(query, options)}
+              onSearch={(query: string, options: TextSearchOptions, specFilter?: SpecSearchFilter) =>
+                controller.searchFolders(query, options, specFilter)}
               onOpenMatch={(path: string, query: string, options: TextSearchOptions) =>
                 void controller.execute({ kind: 'openSearchMatch', path, query, options })}
               isNotesSearch={snapshot.notes !== undefined}
+              isSpecSearch={snapshot.specProjects !== undefined}
               requestedQuery={snapshot.folderSearchQuery}
               notesIndexStatus={snapshot.notes?.indexStatus}
             />
@@ -780,6 +782,18 @@
       cancelLabel={translator.translate('document.openExternalLink.cancel')}
       onConfirm={() => controller.answerExternalLink(true)}
       onCancel={() => controller.answerExternalLink(false)}
+    />
+  {/if}
+  {#if snapshot.outsideLinkRequest !== undefined}
+    <ConfirmDialog
+      title={translator.translate('specViewer.outsideLink.title')}
+      message={translator.translate('specViewer.outsideLink.body', {
+        path: snapshot.outsideLinkRequest.targetPath,
+      })}
+      confirmLabel={translator.translate('specViewer.outsideLink.open')}
+      cancelLabel={translator.translate('specViewer.outsideLink.cancel')}
+      onConfirm={() => void controller.answerOutsideLink(true)}
+      onCancel={() => void controller.answerOutsideLink(false)}
     />
   {/if}
   {#if snapshot.openDialog === 'about'}

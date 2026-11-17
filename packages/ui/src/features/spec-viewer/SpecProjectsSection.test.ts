@@ -152,6 +152,39 @@ describe('SpecProjectsSection', () => {
     expect(link.classList.contains('unavailable')).toBe(true);
   });
 
+  it('offers to follow a linked folder that is not read', async () => {
+    const onFollowLink = vi.fn<(rootKey: string, linkPath: string) => void>();
+    render(SpecProjectsSection, {
+      roots: [scanned(manifestOf([], { links: [{ path: 'openspec', isFollowed: false }] }))],
+      translator: createTranslator(),
+      isExpanded: true,
+      onToggleExpanded: vi.fn(),
+      onOpenDocument: vi.fn(),
+      onFollowLink,
+    });
+    await userEvent.click(screen.getByRole('treeitem', { name: 'Linked folders, 1 item' }));
+
+    await userEvent.click(screen.getByRole('treeitem', { name: /^openspec, a linked folder/ }));
+
+    expect(onFollowLink).toHaveBeenCalledWith('c:\\projects\\shop', 'openspec');
+  });
+
+  it('scans again when the user asks for a refresh', async () => {
+    const onRefresh = vi.fn();
+    render(SpecProjectsSection, {
+      roots: [scanned(manifestOf(PROJECT_FILES))],
+      translator: createTranslator(),
+      isExpanded: true,
+      onToggleExpanded: vi.fn(),
+      onOpenDocument: vi.fn(),
+      onRefresh,
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh spec projects' }));
+
+    expect(onRefresh).toHaveBeenCalledOnce();
+  });
+
   it('says when a scan limit stopped the scan', () => {
     renderSection([scanned(manifestOf(PROJECT_FILES, { isIncomplete: true }))]);
 

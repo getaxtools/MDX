@@ -1,4 +1,10 @@
 <script lang="ts">
+  import {
+    DEFAULT_SPEC_SEARCH_FILTER,
+    SPEC_SEARCH_SCOPES,
+    type SpecSearchFilter,
+    type SpecSearchScope,
+  } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
   import type { FolderSearchResults, LineMatch, NotesIndexStatus, TextSearchOptions } from '@mdx/platform';
   import { untrack } from 'svelte';
@@ -9,10 +15,17 @@
     /** Goes up each time the search box should get the keyboard focus. */
     focusRequest?: number | undefined;
     hasFolders: boolean;
-    onSearch: (query: string, options: TextSearchOptions) => Promise<FolderSearchResults>;
+    /** `specFilter` is given only in a Spec viewer workspace. */
+    onSearch: (
+      query: string,
+      options: TextSearchOptions,
+      specFilter?: SpecSearchFilter,
+    ) => Promise<FolderSearchResults>;
     onOpenMatch: (path: string, query: string, options: TextSearchOptions) => void;
     /** A Notes workspace searches its index, which ignores case and accents and takes filters. */
     isNotesSearch?: boolean;
+    /** A Spec viewer workspace searches the documents of its spec projects, limited to a scope. */
+    isSpecSearch?: boolean;
     notesIndexStatus?: NotesIndexStatus | undefined;
     /** Put in the search box and searched when the box next gets the focus, such as `tag:work`. */
     requestedQuery?: string | undefined;
@@ -25,6 +38,7 @@
     onSearch,
     onOpenMatch,
     isNotesSearch = false,
+    isSpecSearch = false,
     notesIndexStatus,
     requestedQuery,
   }: Props = $props();
@@ -40,6 +54,8 @@
   let query = $state('');
   let isCaseSensitive = $state(false);
   let isWholeWord = $state(false);
+  let specScope = $state<SpecSearchScope>(DEFAULT_SPEC_SEARCH_FILTER.scope);
+  let isArchiveIncluded = $state(DEFAULT_SPEC_SEARCH_FILTER.isArchiveIncluded);
   let searchState = $state.raw<SearchState>({ kind: 'idle' });
   let input: HTMLInputElement | undefined = $state();
   let latestSearch = 0;
@@ -83,7 +99,9 @@
     }
     searchState = { kind: 'searching' };
     try {
-      const results = await onSearch(searchedQuery, options);
+      const results = await (isSpecSearch
+        ? onSearch(searchedQuery, options, { scope: specScope, isArchiveIncluded })
+        : onSearch(searchedQuery, options));
       if (searchNumber === latestSearch) searchState = { kind: 'done', results, query: searchedQuery };
     } catch {
       if (searchNumber === latestSearch) searchState = { kind: 'failed' };
@@ -155,6 +173,27 @@
       >
     {/if}
   </div>
+  {#if isSpecSearch}
+    <div class="spec-filter">
+      <label>
+        {translator.translate('specViewer.search.scope.label')}
+        <select bind:value={specScope} disabled={!hasFolders} onchange={() => void search()}>
+          {#each SPEC_SEARCH_SCOPES as scope (scope)}
+            <option value={scope}>{translator.translate(`specViewer.search.scope.${scope}`)}</option>
+          {/each}
+        </select>
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          bind:checked={isArchiveIncluded}
+          disabled={!hasFolders}
+          onchange={() => void search()}
+        />
+        {translator.translate('specViewer.search.archive')}
+      </label>
+    </div>
+  {/if}
   {#if isNotesSearch}
     <p class="hint">{translator.translate('notes.search.hint')}</p>
     {#if notesIndexStatus?.isBuilding}
@@ -247,6 +286,15 @@
 
   .hint {
     margin: var(--space-1) 0 0;
+    color: var(--color-text-secondary);
+    font-size: var(--text-size-small);
+  }
+
+  .spec-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
+    margin-top: var(--space-2);
     color: var(--color-text-secondary);
     font-size: var(--text-size-small);
   }

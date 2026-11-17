@@ -163,6 +163,9 @@
           onCommand({ kind: 'openSpecChange', rootKey, changeFolder })}
         onOpenFeature={(rootKey: string, featureFolder: string) =>
           onCommand({ kind: 'openSpecFeature', rootKey, featureFolder })}
+        onFollowLink={(rootKey: string, linkPath: string) =>
+          onCommand({ kind: 'followSpecLink', rootKey, linkPath })}
+        onRefresh={() => onCommand({ kind: 'refreshSpecProjects' })}
         {activeDocumentKey}
       />
     {:else}

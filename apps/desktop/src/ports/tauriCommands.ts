@@ -32,6 +32,9 @@ import type {
   StoredWorkspace,
   ShownNotesIndex,
   SpecProjectManifest,
+  InspectedLink,
+  WatchedSpecProject,
+  ProjectDocuments,
   TagCount,
   TextSearchOptions,
   ViewMenuState,
@@ -135,6 +138,10 @@ export const tauriCommands = {
     invoke<SpecProjectManifest>('scan_spec_project', { root, additionalLocations }),
   readSpecProjectFile: (root: string, relativePath: string) =>
     invoke<OpenedDocument>('read_spec_project_file', { root, relativePath }),
+  followSpecProjectLink: (root: string, linkPath: string) =>
+    invoke<boolean>('follow_spec_project_link', { link: { root, linkPath } }),
+  searchSpecProjectDocuments: (documents: ProjectDocuments, query: string, options: TextSearchOptions) =>
+    invoke<FolderSearchResults>('search_spec_project_documents', { documents, query, options }),
   deleteWorkspace: (workspaceId: string) => invoke<null>('delete_workspace', { workspaceId }),
   saveWorkspaceList: (workspaceId: string, listName: string, valueJson: string) =>
     invoke<null>('save_workspace_list', { workspaceId, listName, valueJson }),
@@ -156,8 +163,12 @@ export const tauriCommands = {
     invoke<ChosenPictureReply[]>('add_picture_files', { request }),
   watchDocuments: (paths: readonly string[]) => invoke<null>('watch_documents', { paths }),
   watchFolders: (paths: readonly string[]) => invoke<null>('watch_folders', { paths }),
-  resolveDocumentLink: (document: string, href: string) =>
-    invoke<string>('resolve_document_link', { document, href }),
+  watchSpecProjects: (projects: readonly WatchedSpecProject[], additionalLocations: readonly string[]) =>
+    invoke<null>('watch_spec_projects', { projects, additionalLocations }),
+  resolveDocumentLink: (document: string, href: string, expectedTarget?: string) =>
+    invoke<string>('resolve_document_link', { document, href, expectedTarget }),
+  inspectDocumentLink: (document: string, href: string) =>
+    invoke<InspectedLink>('inspect_document_link', { document, href }),
   openExternalLink: (url: string) => invoke<null>('open_external_link', { url }),
   revealInFileManager: (path: string) => invoke<null>('reveal_in_file_manager', { path }),
   toggleFullScreen: () => invoke<null>('toggle_full_screen'),
@@ -181,5 +192,6 @@ export const IMAGES_DROPPED_EVENT = 'images-dropped';
 export const MENU_COMMAND_EVENT = 'menu-command';
 export const DOCUMENTS_CHANGED_EVENT = 'documents-changed';
 export const FOLDERS_CHANGED_EVENT = 'folders-changed';
+export const SPEC_PROJECTS_CHANGED_EVENT = 'spec-projects-changed';
 export const NOTES_INDEX_STATUS_EVENT = 'notes-index-status';
 export const NOTES_INDEX_CHANGES_EVENT = 'notes-index-changes';

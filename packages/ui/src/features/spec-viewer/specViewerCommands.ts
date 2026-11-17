@@ -39,13 +39,28 @@ export interface OpenSpecPreviewCommand {
   readonly capability: string;
 }
 
+/** Follows a linked folder of a project that leads outside the workspace's folders, after asking. */
+export interface FollowSpecLinkCommand {
+  readonly kind: 'followSpecLink';
+  readonly rootKey: string;
+  /** The link relative to the root. */
+  readonly linkPath: string;
+}
+
+/** Scans the workspace's folders again, for shares that do not report their changes. */
+export interface RefreshSpecProjectsCommand {
+  readonly kind: 'refreshSpecProjects';
+}
+
 /** Commands of the Spec viewer kind, sent by its sidebar and pages. */
 export type SpecViewerCommand =
   | OpenSpecDashboardCommand
   | OpenSpecChangeCommand
   | OpenSpecFeatureCommand
   | OpenSpecFindingCommand
-  | OpenSpecPreviewCommand;
+  | OpenSpecPreviewCommand
+  | FollowSpecLinkCommand
+  | RefreshSpecProjectsCommand;
 
 const SPEC_VIEWER_COMMAND_KINDS: ReadonlySet<string> = new Set([
   'openSpecDashboard',
@@ -53,6 +68,8 @@ const SPEC_VIEWER_COMMAND_KINDS: ReadonlySet<string> = new Set([
   'openSpecFeature',
   'openSpecFinding',
   'openSpecPreview',
+  'followSpecLink',
+  'refreshSpecProjects',
 ]);
 
 export function isSpecViewerCommand(command: { readonly kind: string }): command is SpecViewerCommand {

@@ -4,9 +4,11 @@ use std::sync::Arc;
 use tauri::{App, AppHandle, Emitter, Manager};
 
 use crate::attachments::DroppedImages;
+use crate::commands::spec_project_link::LinkQuestions;
 use crate::documents::DocumentAccessList;
 use crate::live_reload::{
     DOCUMENTS_CHANGED_EVENT, DocumentWatcher, FOLDERS_CHANGED_EVENT, FolderWatcher,
+    SPEC_PROJECTS_CHANGED_EVENT, SpecProjectWatcher,
 };
 use crate::notes_index::NotesIndexes;
 use crate::open_requests::{
@@ -37,8 +39,10 @@ pub fn initialize(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(startup_documents);
     app.manage(startup_workspace_file);
     app.manage(Arc::new(DroppedImages::default()));
+    app.manage(Arc::new(LinkQuestions::default()));
     app.manage(start_document_watcher(app.handle().clone()));
     app.manage(start_folder_watcher(app.handle().clone()));
+    app.manage(start_spec_project_watcher(app.handle().clone()));
     app.manage(Arc::new(NotesIndexes::new(notes_index_folder(app)?)));
     Ok(())
 }
@@ -55,6 +59,14 @@ fn start_folder_watcher(app: AppHandle) -> FolderWatcher {
     FolderWatcher::start(move |folder_paths| {
         if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
             let _ = window.emit(FOLDERS_CHANGED_EVENT, folder_paths);
+        }
+    })
+}
+
+fn start_spec_project_watcher(app: AppHandle) -> SpecProjectWatcher {
+    SpecProjectWatcher::start(move |root_paths| {
+        if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+            let _ = window.emit(SPEC_PROJECTS_CHANGED_EVENT, root_paths);
         }
     })
 }

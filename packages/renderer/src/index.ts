@@ -43,5 +43,5 @@ export type { NotesRendering } from './plugins/wikiLinksPlugin';
 export { previewLinkHref, type WrittenLink, type WrittenLinkForm } from './links/previewLinkHref';
 export { collectDocumentStructure } from './structure/collectDocumentStructure';
 export { MATH_DISPLAY_CLASS, MATH_INLINE_CLASS } from './plugins/mathPlugin';
-export type { DeltaSectionKind, SpecStructureRendering } from './plugins/specStructurePlugin';
+export type { DeltaSectionKind, SpecCrossLinks, SpecStructureRendering } from './plugins/specStructurePlugin';
 export type { OutlineRole } from './plugins/headingAnchorsPlugin';

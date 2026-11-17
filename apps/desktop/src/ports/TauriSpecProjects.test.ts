@@ -1,6 +1,7 @@
+import { emit } from '@tauri-apps/api/event';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { DocumentOpenError } from '@mdx/platform';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TauriSpecProjects } from './TauriSpecProjects';
 
 const ROOT = 'C:\\Projects\\shop';
@@ -29,6 +30,73 @@ describe('TauriSpecProjects', () => {
     ]);
   });
 
+  it('asks to follow a linked folder through its command', async () => {
+    const calls: { command: string; args: unknown }[] = [];
+    mockIPC((command, args) => {
+      calls.push({ command, args });
+      return true;
+    });
+    const isFollowed = await new TauriSpecProjects().followLink(ROOT, 'openspec');
+
+    expect(isFollowed).toBe(true);
+    expect(calls).toEqual([
+      { command: 'follow_spec_project_link', args: { link: { root: ROOT, linkPath: 'openspec' } } },
+    ]);
+  });
+
+  it('searches the documents of a project through its command', async () => {
+    const calls: { command: string; args: unknown }[] = [];
+    mockIPC((command, args) => {
+      calls.push({ command, args });
+      return { documents: [], isIncomplete: false };
+    });
+    const options = { isCaseSensitive: true, isWholeWord: false };
+
+    await new TauriSpecProjects().searchProjectDocuments(
+      { root: ROOT, relativePaths: ['.specify/memory/constitution.md'] },
+      'pin',
+      options,
+    );
+
+    expect(calls).toEqual([
+      {
+        command: 'search_spec_project_documents',
+        args: {
+          documents: { root: ROOT, relativePaths: ['.specify/memory/constitution.md'] },
+          query: 'pin',
+          options,
+        },
+      },
+    ]);
+  });
+
+  it('watches project folders and passes on their changes', async () => {
+    const calls: { command: string; args: unknown }[] = [];
+    mockIPC(
+      (command, args) => {
+        calls.push({ command, args });
+        return null;
+      },
+      { shouldMockEvents: true },
+    );
+    const specProjects = new TauriSpecProjects();
+    const listener = vi.fn();
+    const stop = specProjects.onProjectsChanged(listener);
+
+    const projects = [{ root: ROOT, followedLinks: ['openspec'] }];
+    await specProjects.watchProjects(projects, ['GEMINI.md']);
+    await vi.waitFor(async () => {
+      await emit('spec-projects-changed', [ROOT]);
+      expect(listener).toHaveBeenCalledWith([ROOT]);
+    });
+    stop();
+
+    expect(calls[0]).toEqual({
+      command: 'watch_spec_projects',
+      args: { projects, additionalLocations: ['GEMINI.md'] },
+    });
+  });
+
   it('turns a refused request into a typed error', async () => {
     mockIPC(() => {
       throw Object.assign(new Error('backend error'), { code: 'accessDenied' });
@@ -40,6 +108,9 @@ describe('TauriSpecProjects', () => {
     );
     await expect(specProjects.readProjectFile(ROOT, 'specs/a.md')).rejects.toEqual(
       new DocumentOpenError('accessDenied', 'specs/a.md'),
+    );
+    await expect(specProjects.followLink(ROOT, 'openspec')).rejects.toEqual(
+      new DocumentOpenError('accessDenied', 'openspec'),
     );
   });
 });

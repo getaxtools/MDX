@@ -264,6 +264,13 @@ export {
   type TaskProgress,
 } from './spec-projects/tasks/countTaskProgress';
 export {
+  DEFAULT_SPEC_SEARCH_FILTER,
+  SPEC_SEARCH_SCOPES,
+  specSearchPathsOf,
+  type SpecSearchFilter,
+  type SpecSearchScope,
+} from './spec-projects/search/specSearchScope';
+export {
   AGENT_INSTRUCTION_LOCATIONS,
   isAgentInstructionFile,
 } from './spec-projects/agent-files/agentInstructionLocations';

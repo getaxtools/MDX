@@ -22,6 +22,8 @@ import {
   notesSettingsOf,
   type FrontMatterEdit,
   type EditingModeSetting,
+  DEFAULT_SPEC_SEARCH_FILTER,
+  type SpecSearchFilter,
 } from '@mdx/core';
 import type { WikiLinkSuggester } from '@mdx/editor';
 import type { MessageKey, Translator } from '@mdx/i18n';
@@ -100,12 +102,14 @@ import { NotesLocationActions, isNotesLocationCommand } from '../notes-location/
 import { NotesActions, isNotesCommand, type NotesCommand, type NotesView } from '../notes/NotesActions';
 import { NotesIndexActions, type NoteBacklinks } from '../notes/NotesIndexActions';
 import { SpecViewerActions, type SpecProjectsView } from '../spec-viewer/SpecViewerActions';
-import { specStructureFor } from '../spec-viewer/specDocumentRendering';
+import { SpecDocumentRenderings } from '../spec-viewer/SpecDocumentRenderings';
 import type { SpecPreview } from '../spec-viewer/specPreview';
 import { specPreviewFor, viewLocationFor } from '../spec-viewer/specViewLocations';
+import type { OutsideLinkRequest } from '../spec-viewer/outsideLinkRequest';
 import {
   isRefusedInReadOnlyWorkspace,
   isSpecViewerCommand,
+  type FollowSpecLinkCommand,
   type SpecViewerCommand,
 } from '../spec-viewer/specViewerCommands';
 import { windowTitleFor } from '../workspaces/windowTitle';
@@ -219,6 +223,8 @@ export interface ViewerSnapshot {
   /** The format the shown document should export to, numbered so the same format can be asked again. */
   readonly exportRequest?: ExportRequest;
   readonly externalLinkRequest?: string;
+  /** A link of a Spec viewer workspace that leads outside its folders, opened only once the user agrees. */
+  readonly outsideLinkRequest?: OutsideLinkRequest;
   /** A heading to show once the document a link opened is shown. */
   readonly linkedHeadingRequest?: LinkedHeadingRequest;
   readonly isSourceView?: boolean;
@@ -327,6 +333,8 @@ export class ViewerController {
   private pendingSave: ReturnType<typeof setTimeout> | undefined;
   private renderedDocument: OpenedDocument | undefined;
   private renderedNoteList: object | undefined;
+  private renderedSpecRendering: object | undefined;
+  private readonly specDocumentRenderings: SpecDocumentRenderings;
   private renderedText: string | undefined;
   private hasRenderedSourceLines = false;
   private pendingLivePreview: ReturnType<typeof setTimeout> | undefined;
@@ -350,6 +358,7 @@ export class ViewerController {
   private copyAsHtmlRequest = 0;
   private exportRequest: ExportRequest | undefined;
   private externalLinkRequest: string | undefined;
+  private outsideLinkRequest: OutsideLinkRequest | undefined;
   private linkedHeadingRequest: LinkedHeadingRequest | undefined;
   private isSourceView = false;
   private shownMenuViewState = '';
@@ -408,6 +417,7 @@ export class ViewerController {
     this.notesLocationActions = this.createNotesLocationActions();
     this.notesActions = this.createNotesActions();
     this.notesIndexActions = this.createNotesIndexActions();
+    this.specDocumentRenderings = this.createSpecDocumentRenderings();
     this.specViewerActions = this.createSpecViewerActions();
     this.injectionChecks = this.createInjectionCheckActions();
   }
@@ -432,6 +442,16 @@ export class ViewerController {
       afterPaint,
       now: () => (this.dependencies.now?.() ?? new Date()).getTime(),
       onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+    });
+  }
+
+  private createSpecDocumentRenderings(): SpecDocumentRenderings {
+    const { translator, renderer } = this.dependencies;
+    return new SpecDocumentRenderings({
+      translator,
+      readText: (rootPath, relativePath) =>
+        this.specViewerActions?.readProjectText(rootPath, relativePath) ?? Promise.resolve(undefined),
+      outlineOf: (text) => renderer.outlineOf(text),
     });
   }
 
@@ -490,6 +510,14 @@ export class ViewerController {
     };
     this.publish(this.composeSnapshot(this.snapshot.notice));
     this.showViewStateInMenu();
+  }
+
+  /** In a Spec viewer workspace, what a document's cross-links need is read before it renders. */
+  private specPreparationFor(document: OpenedDocument | undefined): Promise<void> | undefined {
+    const view = this.specViewerActions?.view();
+    if (!document || !this.isSpecViewerShown()) return undefined;
+    if (!this.specDocumentRenderings.needsPreparing(document.location, view)) return undefined;
+    return this.specDocumentRenderings.prepare(document.location, view);
   }
 
   private createNotesActions(): NotesActions | undefined {
@@ -575,6 +603,14 @@ export class ViewerController {
 
   private async runSpecViewerCommand(command: SpecViewerCommand): Promise<void> {
     const { session, renderer, translator } = this.dependencies;
+    if (command.kind === 'refreshSpecProjects') {
+      await this.specViewerActions?.refresh();
+      return;
+    }
+    if (command.kind === 'followSpecLink') {
+      await this.followSpecLink(command);
+      return;
+    }
     if (command.kind === 'openSpecFinding') {
       await this.openDocumentAtLine(command.documentPath, command.line);
       return;
@@ -589,6 +625,18 @@ export class ViewerController {
     if (!opened) return;
     this.specPreviews.set(opened.location.canonicalKey, opened.preview);
     session.openView(opened.location);
+  }
+
+  /** Follows a linked folder only after the user agrees in a system dialog that names its real target. */
+  private async followSpecLink(command: FollowSpecLinkCommand): Promise<void> {
+    const actions = this.specViewerActions;
+    const scanned = actions?.view()?.roots?.find((root) => root.root.canonicalKey === command.rootKey);
+    if (!actions || !scanned) return;
+    try {
+      await actions.followLink(scanned.root.displayPath, command.linkPath);
+    } catch (error) {
+      this.showOpenFailure(error, command.linkPath);
+    }
   }
 
   /** Opens a document at the heading that holds a line, as the viewer shows headings, not lines. */
@@ -750,6 +798,7 @@ export class ViewerController {
     if (this.liveReload) this.stopActions.push(this.liveReload.start());
     this.stopActions.push(this.folderRefresh.start());
     if (this.notesIndexActions) this.stopActions.push(this.notesIndexActions.start());
+    if (this.specViewerActions) this.stopActions.push(this.specViewerActions.start());
     if (this.documentAttachments) this.stopActions.push(this.documentAttachments.start());
     await this.openDocuments(await requests.takeStartupDocuments());
     await this.refreshActiveDocument();
@@ -921,13 +970,44 @@ export class ViewerController {
       this.notesActions?.offerNoteFor(link.href, activeLocation);
       return;
     }
+    if (!links || (await this.asksBeforeLeavingGrantedFolders(activeLocation.displayPath, link.href))) {
+      return;
+    }
+    await this.openDocumentLink(activeLocation.displayPath, link.href);
+  }
+
+  async answerOutsideLink(shouldOpen: boolean): Promise<void> {
+    const request = this.outsideLinkRequest;
+    this.outsideLinkRequest = undefined;
+    this.publish(this.composeSnapshot(this.snapshot.notice));
+    if (shouldOpen && request) {
+      await this.openDocumentLink(request.documentPath, request.href, request.targetPath);
+    }
+  }
+
+  private async openDocumentLink(documentPath: string, href: string, expectedTarget?: string): Promise<void> {
+    const { links } = this.dependencies;
     if (!links) return;
     try {
-      await this.openDocuments([await links.resolveDocumentLink(activeLocation.displayPath, link.href)]);
-      this.revealLinkedHeading(link.href);
+      await this.openDocuments([await links.resolveDocumentLink(documentPath, href, expectedTarget)]);
+      this.revealLinkedHeading(href);
     } catch (error) {
-      this.showOpenFailure(error, link.href);
+      this.showOpenFailure(error, href);
     }
+  }
+
+  /**
+   * A Spec viewer workspace reads only granted folders unless the user agrees to follow a link out of them;
+   * the app resolves the link, through any folder links, and names the document it really leads to.
+   */
+  private async asksBeforeLeavingGrantedFolders(documentPath: string, href: string): Promise<boolean> {
+    const { links } = this.dependencies;
+    if (!links || !this.isSpecViewerShown()) return false;
+    const inspected = await links.inspectDocumentLink(documentPath, href).catch(() => undefined);
+    if (!inspected || inspected.isGranted) return false;
+    this.outsideLinkRequest = { documentPath, href, targetPath: inspected.path };
+    this.publish(this.composeSnapshot(this.snapshot.notice));
+    return true;
   }
 
   /** A link such as `plan.md#next-steps` opens the document at that heading. */
@@ -945,7 +1025,7 @@ export class ViewerController {
 
   private specRenderingFor(location: DocumentLocation): Pick<RenderOptions, 'specStructure'> {
     if (!this.isSpecViewerShown()) return {};
-    const specStructure = specStructureFor(location, this.dependencies.translator);
+    const specStructure = this.specDocumentRenderings.renderingFor(location);
     return specStructure ? { specStructure } : {};
   }
 
@@ -1044,7 +1124,10 @@ export class ViewerController {
     toggleFavourite: () => this.toggleActiveFavourite(),
     exportFavourites: () => this.exportFavourites(),
     importFavourites: () => this.importFavourites(),
-    refreshFolders: () => this.folderRefresh.refreshShownFolders(),
+    refreshFolders: () => {
+      this.folderRefresh.refreshShownFolders();
+      void this.specViewerActions?.refresh();
+    },
     toggleEditing: () => {
       this.editingActions.toggleActiveDocument();
       const location = this.editedLocation();
@@ -1245,8 +1328,15 @@ export class ViewerController {
   }
 
   /** Finds text in the opened and favourite folders, for the Search view. */
-  searchFolders(query: string, options: TextSearchOptions): Promise<FolderSearchResults> {
+  searchFolders(
+    query: string,
+    options: TextSearchOptions,
+    specFilter: SpecSearchFilter = DEFAULT_SPEC_SEARCH_FILTER,
+  ): Promise<FolderSearchResults> {
     if (this.notesIndexActions?.isShown()) return this.notesIndexActions.search(query);
+    if (this.specViewerActions && this.isSpecViewerShown()) {
+      return this.specViewerActions.searchDocuments(query, options, specFilter);
+    }
     return this.explorerFolderActions.searchDocuments(query, options);
   }
 
@@ -1545,19 +1635,30 @@ export class ViewerController {
     const document = await this.loadActiveDocument();
     void this.notesIndexActions?.showBacklinksOf(document?.location);
     if (document) await this.notesActions?.prepareRendering(document.location);
+    const specPreparation = this.specPreparationFor(document);
+    if (specPreparation) await specPreparation;
     const text = document ? this.textShownFor(document) : undefined;
     const shouldMarkSourceLines = this.isPreviewBesideEditor();
     const noteList = this.notesActions?.noteListVersion();
-    if (!this.isRenderUpToDate({ document, text, shouldMarkSourceLines, noteList })) {
+    const specRendering = this.specDocumentRenderings.version();
+    if (!this.isRenderUpToDate({ document, text, shouldMarkSourceLines, noteList, specRendering })) {
+      this.renderedSpecRendering = specRendering;
       this.renderedNoteList = noteList;
       this.renderedDocument = document;
       this.renderedText = text;
       this.hasRenderedSourceLines = shouldMarkSourceLines;
-      this.activeDocument =
-        document && text !== undefined ? this.render(document, text, shouldMarkSourceLines) : undefined;
+      this.activeDocument = this.renderedActiveDocument(document, text, shouldMarkSourceLines);
       this.publish(this.composeSnapshot(this.snapshot.notice));
     }
     this.injectionChecks.documentShown(document, text);
+  }
+
+  private renderedActiveDocument(
+    document: OpenedDocument | undefined,
+    text: string | undefined,
+    shouldMarkSourceLines: boolean,
+  ): RenderedActiveDocument | undefined {
+    return document && text !== undefined ? this.render(document, text, shouldMarkSourceLines) : undefined;
   }
 
   private isRenderUpToDate(next: {
@@ -1565,12 +1666,14 @@ export class ViewerController {
     readonly text: string | undefined;
     readonly shouldMarkSourceLines: boolean;
     readonly noteList: object | undefined;
+    readonly specRendering: object | undefined;
   }): boolean {
     return (
       next.document === this.renderedDocument &&
       next.text === this.renderedText &&
       next.shouldMarkSourceLines === this.hasRenderedSourceLines &&
-      next.noteList === this.renderedNoteList
+      next.noteList === this.renderedNoteList &&
+      next.specRendering === this.renderedSpecRendering
     );
   }
   /** While the document is edited without a preview beside it, its last rendered text is enough. */
@@ -1690,7 +1793,7 @@ export class ViewerController {
       ...(notice !== undefined && this.noticeActions.length > 0 ? { noticeActions: this.noticeActions } : {}),
       ...(this.openDialog === undefined ? {} : { openDialog: this.openDialog }),
       ...this.documentRequestsPart(),
-      ...(this.externalLinkRequest === undefined ? {} : { externalLinkRequest: this.externalLinkRequest }),
+      ...this.linkRequestsPart(),
       ...(this.linkedHeadingRequest ? { linkedHeadingRequest: this.linkedHeadingRequest } : {}),
       ...(this.isSourceView ? { isSourceView: true } : {}),
       ...this.unsavedChangesPart(),
@@ -1791,6 +1894,13 @@ export class ViewerController {
         ...(this.pendingWorkspaceFile ? { pendingFile: this.pendingWorkspaceFile } : {}),
         ...this.notesSetupPart(),
       },
+    };
+  }
+
+  private linkRequestsPart(): Pick<ViewerSnapshot, 'externalLinkRequest' | 'outsideLinkRequest'> {
+    return {
+      ...(this.externalLinkRequest === undefined ? {} : { externalLinkRequest: this.externalLinkRequest }),
+      ...(this.outsideLinkRequest ? { outsideLinkRequest: this.outsideLinkRequest } : {}),
     };
   }
 

@@ -7,6 +7,7 @@ import type {
   SpecLayoutKind,
   SpecProjectSummary,
   StructuralFinding,
+  TaskProgress,
 } from '@mdx/core';
 import type { MessageKey, Translator } from '@mdx/i18n';
 import type { DocumentLocation, SpecProjectLink } from '@mdx/platform';
@@ -33,6 +34,8 @@ export interface SpecTreeNode {
   readonly isUnavailable?: boolean | undefined;
   /** The project whose dashboard the row opens. */
   readonly dashboard?: { readonly rootKey: string; readonly folder: string } | undefined;
+  /** A linked folder not followed yet, which the row offers to follow. */
+  readonly linkToFollow?: { readonly rootKey: string; readonly linkPath: string } | undefined;
   /** The feature whose page the row opens. */
   readonly featurePage?: { readonly rootKey: string; readonly featureFolder: string } | undefined;
   /** The active change whose page the row opens. */
@@ -168,9 +171,21 @@ function linkNode(context: TreeContext, link: SpecProjectLink): SpecTreeNode {
     label: link.path,
     accessibleName: context.translator.translate(key, { path: link.path }),
     isUnavailable: !link.isFollowed,
+    linkToFollow: link.isFollowed ? undefined : { rootKey: context.root.canonicalKey, linkPath: link.path },
     isInitiallyExpanded: false,
     children: [],
   };
+}
+
+/** The name with the task count the row shows, so what is read out starts with what is seen. */
+function withProgressName(translator: Translator, name: string, progress: TaskProgress | undefined): string {
+  return progress
+    ? translator.translate('specViewer.change.progressName', {
+        name,
+        current: progress.done,
+        total: progress.total,
+      })
+    : name;
 }
 
 function featureNode(context: TreeContext, feature: FeatureSummary): SpecTreeNode {
@@ -186,9 +201,13 @@ function featureNode(context: TreeContext, feature: FeatureSummary): SpecTreeNod
   return {
     id: `${context.idPrefix}|${feature.folder}`,
     label: feature.name,
-    accessibleName: feature.isCurrent
-      ? translator.translate('specViewer.feature.current', { name: feature.name })
-      : feature.name,
+    accessibleName: withProgressName(
+      translator,
+      feature.isCurrent
+        ? translator.translate('specViewer.feature.current', { name: feature.name })
+        : feature.name,
+      progress,
+    ),
     detail: [currentText, progressText].filter(Boolean).join(' - ') || undefined,
     featurePage: { rootKey: context.root.canonicalKey, featureFolder: feature.folder },
     isInitiallyExpanded: false,
@@ -205,8 +224,10 @@ function folderSpecNode(context: TreeContext, spec: FolderSpecSummary): SpecTree
     id: `${context.idPrefix}|${spec.folder}`,
     label: spec.name,
     accessibleName: spec.isBugfix
-      ? translator.translate('specViewer.folderSpec.bugfixName', { name: spec.name })
-      : spec.name,
+      ? translator.translate('specViewer.folderSpec.bugfixName', {
+          name: withProgressName(translator, spec.name, progress),
+        })
+      : withProgressName(translator, spec.name, progress),
     detail:
       progress &&
       translator.translate('specViewer.change.progress', { current: progress.done, total: progress.total }),

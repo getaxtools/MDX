@@ -10,7 +10,7 @@ use crate::documents::{
 };
 
 const MAX_SEARCHED_FOLDERS: usize = 100;
-const MAX_QUERY_CHARACTERS: usize = 200;
+pub(crate) const MAX_QUERY_CHARACTERS: usize = 200;
 const MAX_SEARCHED_DOCUMENT_BYTES: u64 = 5 * 1024 * 1024;
 const MAX_MATCHES: usize = 2_000;
 const MAX_MATCHES_PER_DOCUMENT: usize = 100;
@@ -70,7 +70,7 @@ pub async fn search_folder_documents(
     .map_err(|_| DocumentError::Unreadable)
 }
 
-fn search_documents(
+pub(crate) fn search_documents(
     documents: Vec<DocumentLocation>,
     query: &str,
     options: TextSearchOptions,

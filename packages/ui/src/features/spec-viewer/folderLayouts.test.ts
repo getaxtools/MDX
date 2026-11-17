@@ -48,7 +48,7 @@ describe('requirements, design and tasks folders and decision records', () => {
       onOpenDocument,
     });
 
-    const checkout = screen.getByRole('treeitem', { name: 'checkout' });
+    const checkout = screen.getByRole('treeitem', { name: 'checkout, 1 of 2 tasks done' });
     expect(checkout.textContent).toContain('1 of 2');
     expect(screen.getByRole('treeitem', { name: 'login-crash, a bug fix' })).toBeTruthy();
     checkout.focus();

@@ -1,11 +1,14 @@
 use std::path::{Path, PathBuf};
 
 use crate::documents::{
-    DocumentAccessList, DocumentError, OpenedDocument, locate_document, read_located_text_file,
+    DocumentAccessList, DocumentError, DocumentLocation, OpenedDocument, locate_document,
+    read_located_text_file,
 };
+use crate::spec_projects::project_scan::MAX_SCANNED_FILES;
 
 pub const MAX_SPEC_FILE_BYTES: u64 = 5 * 1024 * 1024;
 const MAX_RELATIVE_PATH_CHARACTERS: usize = 1_024;
+const MARKDOWN_EXTENSIONS: [&str; 3] = ["md", "markdown", "mdc"];
 const READABLE_EXTENSIONS: [&str; 6] = ["md", "markdown", "mdc", "yaml", "yml", "json"];
 /// Instruction files that some coding assistants read although their names have no extension.
 const READABLE_FILE_NAMES: [&str; 2] = [".cursorrules", ".windsurfrules"];
@@ -32,6 +35,34 @@ pub fn read_granted_project_file(
     read_located_text_file(location, MAX_SPEC_FILE_BYTES)
 }
 
+/// The Markdown documents of a granted project root to search, by their paths relative to the root.
+/// A document gone since the scan, or one a link leads out of the granted folders, is left out.
+pub fn granted_project_documents(
+    root: &Path,
+    relative_paths: &[String],
+    access: &DocumentAccessList,
+) -> Result<Vec<DocumentLocation>, DocumentError> {
+    if relative_paths.len() > MAX_SCANNED_FILES {
+        return Err(DocumentError::InvalidRequest);
+    }
+    let relatives = relative_paths
+        .iter()
+        .map(|path| validated_relative_path(path))
+        .collect::<Result<Vec<_>, _>>()?;
+    let root_location = locate_document(root)?;
+    if !access.is_folder_allowed(&root_location) {
+        return Err(DocumentError::AccessDenied);
+    }
+    let mut seen_keys = std::collections::HashSet::new();
+    Ok(relatives
+        .into_iter()
+        .filter(|relative| has_extension_in(relative, &MARKDOWN_EXTENSIONS))
+        .filter_map(|relative| locate_document(&root_location.path().join(relative)).ok())
+        .filter(|location| access.is_allowed(location))
+        .filter(|location| seen_keys.insert(location.canonical_key.clone()))
+        .collect())
+}
+
 fn validated_relative_path(relative_path: &str) -> Result<PathBuf, DocumentError> {
     if relative_path.chars().count() > MAX_RELATIVE_PATH_CHARACTERS {
         return Err(DocumentError::InvalidRequest);
@@ -51,11 +82,14 @@ fn validated_relative_path(relative_path: &str) -> Result<PathBuf, DocumentError
     Ok(relative)
 }
 
-fn is_readable_file(path: &Path) -> bool {
-    let has_readable_extension = path
-        .extension()
+fn has_extension_in(path: &Path, extensions: &[&str]) -> bool {
+    path.extension()
         .and_then(|extension| extension.to_str())
-        .is_some_and(|extension| READABLE_EXTENSIONS.contains(&extension.to_lowercase().as_str()));
+        .is_some_and(|extension| extensions.contains(&extension.to_lowercase().as_str()))
+}
+
+fn is_readable_file(path: &Path) -> bool {
+    let has_readable_extension = has_extension_in(path, &READABLE_EXTENSIONS);
     let has_readable_name = path
         .file_name()
         .and_then(|name| name.to_str())
@@ -68,7 +102,7 @@ mod tests {
     use std::fs;
 
     use super::*;
-    use crate::spec_projects::project_scan::tests::{granted, link_folder, write_files};
+    use crate::spec_projects::test_support::{granted, link_folder, write_files};
 
     #[test]
     fn reads_a_markdown_file_and_keeps_its_byte_order_mark() {
@@ -87,6 +121,86 @@ mod tests {
         assert_eq!(file.text, "# Tabs\r\n");
         assert!(file.has_byte_order_mark);
         assert_eq!(file.location.file_name, "spec.md");
+    }
+
+    #[test]
+    fn finds_text_in_documents_of_hidden_spec_folders() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = [
+            ".specify/memory/constitution.md",
+            ".kiro/specs/albums/requirements.md",
+            "openspec/specs/tabs/spec.md",
+        ];
+        write_files(root.path(), &paths);
+        let access = granted(root.path());
+        let relative_paths = paths.map(str::to_owned);
+
+        let documents = granted_project_documents(root.path(), &relative_paths, &access).unwrap();
+        let results = crate::commands::folder_text_search::search_documents(
+            documents,
+            "Text",
+            crate::commands::folder_text_search::TextSearchOptions::default(),
+        );
+
+        let found: Vec<String> = results
+            .documents
+            .iter()
+            .map(|document| document.location.file_name.clone())
+            .collect();
+        assert_eq!(found, ["constitution.md", "requirements.md", "spec.md"]);
+    }
+
+    #[test]
+    fn searches_only_markdown_inside_the_granted_root() {
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        write_files(
+            root.path(),
+            &["openspec/config.yaml", "openspec/specs/a/spec.md"],
+        );
+        write_files(outside.path(), &["b/spec.md"]);
+        link_folder(&root.path().join("linked"), outside.path());
+        let access = granted(root.path());
+        let paths = [
+            "openspec/config.yaml",
+            "openspec/specs/a/spec.md",
+            "linked/b/spec.md",
+            "gone.md",
+        ]
+        .map(str::to_owned);
+
+        let documents = granted_project_documents(root.path(), &paths, &access).unwrap();
+
+        let names: Vec<&str> = documents
+            .iter()
+            .map(|document| document.file_name.as_str())
+            .collect();
+        assert_eq!(names, ["spec.md"]);
+        assert_eq!(
+            granted_project_documents(root.path(), &["../x.md".to_owned()], &access),
+            Err(DocumentError::InvalidRequest)
+        );
+        assert_eq!(
+            granted_project_documents(root.path(), &[], &DocumentAccessList::default()),
+            Err(DocumentError::AccessDenied)
+        );
+    }
+
+    #[test]
+    fn searches_a_document_named_twice_once_and_refuses_more_than_the_scan_lists() {
+        let root = tempfile::tempdir().unwrap();
+        write_files(root.path(), &["specs/a/spec.md"]);
+        let access = granted(root.path());
+        let twice = ["specs/a/spec.md", "specs\\a\\spec.md", "SPECS/a/spec.md"].map(str::to_owned);
+
+        let documents = granted_project_documents(root.path(), &twice, &access).unwrap();
+
+        assert_eq!(documents.len(), 1);
+        let too_many = vec!["specs/a/spec.md".to_owned(); MAX_SCANNED_FILES + 1];
+        assert_eq!(
+            granted_project_documents(root.path(), &too_many, &access),
+            Err(DocumentError::InvalidRequest)
+        );
     }
 
     #[test]

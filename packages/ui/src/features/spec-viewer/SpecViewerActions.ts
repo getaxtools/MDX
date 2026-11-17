@@ -1,6 +1,19 @@
-import { activeTaskDocumentsOf, AGENT_INSTRUCTION_LOCATIONS, specProjectsOverview } from '@mdx/core';
-import type { SpecProjectManifest, SpecProjectPort } from '@mdx/platform';
-import { activeChangeFindings, type ProjectTextReader } from './activeChangeFindings';
+import {
+  activeTaskDocumentsOf,
+  AGENT_INSTRUCTION_LOCATIONS,
+  specProjectsOverview,
+  specSearchPathsOf,
+  type SpecSearchFilter,
+} from '@mdx/core';
+import type {
+  FolderSearchResults,
+  SpecProjectManifest,
+  SpecProjectPort,
+  TextSearchOptions,
+  WatchedSpecProject,
+} from '@mdx/platform';
+import { activeChangeFindings } from './activeChangeFindings';
+import { ProjectTextCache } from './ProjectTextCache';
 import type { ScannedSpecRoot } from './specProjectTree';
 
 /** What the Spec viewer's sidebar shows for the folders of the shown workspace. */
@@ -18,7 +31,12 @@ export interface SpecViewerActionsDependencies {
 }
 
 interface RootScan {
+  readonly folderPath: string;
   readonly scanned?: ScannedSpecRoot;
+  /** Every file the scan listed, by its path relative to the folder. */
+  readonly paths?: readonly string[];
+  /** The linked folders the scan followed, by their paths relative to the folder. */
+  readonly followedLinks?: readonly string[];
   readonly unreadableFolder?: string;
 }
 
@@ -26,8 +44,21 @@ interface RootScan {
 export class SpecViewerActions {
   private current: SpecProjectsView | undefined;
   private shownFolders: readonly string[] = [];
+  private scans: readonly RootScan[] = [];
+  /** Goes up each time a folder's scan starts, so only the newest scan of a folder is shown. */
+  private readonly scanNumbers = new Map<string, number>();
+  private readonly texts: ProjectTextCache;
+  /** Each watch request waits for the one before, so the folders asked for last are the ones watched. */
+  private watching: Promise<void> = Promise.resolve();
 
-  constructor(private readonly dependencies: SpecViewerActionsDependencies) {}
+  constructor(private readonly dependencies: SpecViewerActionsDependencies) {
+    this.texts = new ProjectTextCache(dependencies.specProjects);
+  }
+
+  /** Scans a folder again whenever the watcher reports a change below it; returns how to stop. */
+  start(): () => void {
+    return this.dependencies.specProjects.onProjectsChanged((folderPaths) => void this.refresh(folderPaths));
+  }
 
   view(): SpecProjectsView | undefined {
     return this.current;
@@ -37,20 +68,99 @@ export class SpecViewerActions {
   async show(folderPaths: readonly string[]): Promise<void> {
     this.shownFolders = folderPaths;
     this.current = { roots: undefined, unreadableFolders: [] };
+    this.scans = [];
     this.dependencies.onChange();
-    const scans = await Promise.all(folderPaths.map((folderPath) => this.scanRoot(folderPath)));
+    const scans = await Promise.all(folderPaths.map((folderPath) => this.numberedScanOf(folderPath)));
     if (this.shownFolders !== folderPaths) return;
+    this.useScans(scans.map((scan) => scan.scan));
+  }
+
+  /** Asks before following a linked folder of a scanned folder, and scans that folder again once the user agrees. */
+  async followLink(folderPath: string, linkPath: string): Promise<boolean> {
+    const isFollowed = await this.dependencies.specProjects.followLink(folderPath, linkPath);
+    if (isFollowed) await this.refresh([folderPath]);
+    return isFollowed;
+  }
+
+  /** Finds text in the scanned documents that the filter keeps, in every scanned folder. */
+  async searchDocuments(
+    query: string,
+    options: TextSearchOptions,
+    filter: SpecSearchFilter,
+  ): Promise<FolderSearchResults> {
+    const searches = this.scans.flatMap(({ folderPath, paths = [] }) => {
+      const searchedPaths = specSearchPathsOf(paths, filter);
+      return searchedPaths.length === 0
+        ? []
+        : [
+            this.dependencies.specProjects.searchProjectDocuments(
+              { root: folderPath, relativePaths: searchedPaths },
+              query,
+              options,
+            ),
+          ];
+    });
+    const results = await Promise.all(searches);
+    return {
+      documents: results.flatMap((result) => result.documents),
+      isIncomplete: results.some((result) => result.isIncomplete),
+    };
+  }
+
+  /**
+   * Scans shown folders again in place, so the sidebar keeps its open rows, scroll and selection;
+   * only files whose modified time changed are read again. With no folders given, every one is.
+   */
+  async refresh(folderPaths: readonly string[] = this.shownFolders): Promise<void> {
+    const shownFolders = this.shownFolders;
+    const changed = shownFolders.filter((folderPath) => folderPaths.includes(folderPath));
+    if (changed.length === 0 || this.current?.roots === undefined) return;
+    const rescans = await Promise.all(changed.map((folderPath) => this.numberedScanOf(folderPath)));
+    if (this.shownFolders !== shownFolders) return;
+    const newest = new Map(
+      rescans
+        .filter((rescan) => this.scanNumbers.get(rescan.scan.folderPath) === rescan.number)
+        .map((rescan) => [rescan.scan.folderPath, rescan.scan]),
+    );
+    this.useScans(this.scans.map((scan) => newest.get(scan.folderPath) ?? scan));
+  }
+
+  hide(): void {
+    this.watch([]);
+    this.texts.clear();
+    this.shownFolders = [];
+    this.scans = [];
+    this.current = undefined;
+    this.dependencies.onChange();
+  }
+
+  private useScans(scans: readonly RootScan[]): void {
+    this.scans = scans;
     this.current = {
       roots: scans.flatMap((scan) => scan.scanned ?? []),
       unreadableFolders: scans.flatMap((scan) => scan.unreadableFolder ?? []),
     };
     this.dependencies.onChange();
+    this.watch(
+      scans.flatMap((scan) =>
+        scan.scanned ? [{ root: scan.folderPath, followedLinks: scan.followedLinks ?? [] }] : [],
+      ),
+    );
   }
 
-  hide(): void {
-    this.shownFolders = [];
-    this.current = undefined;
-    this.dependencies.onChange();
+  private watch(projects: readonly WatchedSpecProject[]): void {
+    const { specProjects } = this.dependencies;
+    this.watching = this.watching
+      .then(() => specProjects.watchProjects(projects, AGENT_INSTRUCTION_LOCATIONS))
+      .catch(() => undefined);
+  }
+
+  private async numberedScanOf(
+    folderPath: string,
+  ): Promise<{ readonly number: number; readonly scan: RootScan }> {
+    const number = (this.scanNumbers.get(folderPath) ?? 0) + 1;
+    this.scanNumbers.set(folderPath, number);
+    return { number, scan: await this.scanRoot(folderPath) };
   }
 
   private async scanRoot(folderPath: string): Promise<RootScan> {
@@ -59,14 +169,19 @@ export class SpecViewerActions {
         folderPath,
         AGENT_INSTRUCTION_LOCATIONS,
       );
-      return { scanned: await this.overviewOf(folderPath, manifest) };
+      return {
+        folderPath,
+        scanned: await this.overviewOf(folderPath, manifest),
+        paths: manifest.files.map((file) => file.path),
+        followedLinks: manifest.links.filter((link) => link.isFollowed).map((link) => link.path),
+      };
     } catch {
-      return { unreadableFolder: folderPath };
+      return { folderPath, unreadableFolder: folderPath };
     }
   }
 
   private async overviewOf(folderPath: string, manifest: SpecProjectManifest): Promise<ScannedSpecRoot> {
-    const readText = this.cachedReaderFor(folderPath);
+    const readText = this.texts.readerFor(folderPath, manifest);
     const taskTexts = new Map<string, string>();
     for (const path of activeTaskDocumentsOf(specProjectsOverview(manifest))) {
       const text = await readText(path);
@@ -83,20 +198,5 @@ export class SpecViewerActions {
       .readProjectFile(folderPath, relativePath)
       .then((document) => document.text)
       .catch(() => undefined);
-  }
-
-  /** Reads each file of a scan once, however many views need it. */
-  private cachedReaderFor(folderPath: string): ProjectTextReader {
-    const texts = new Map<string, Promise<string | undefined>>();
-    return (relativePath) => {
-      const known = texts.get(relativePath);
-      if (known) return known;
-      const reading = this.dependencies.specProjects
-        .readProjectFile(folderPath, relativePath)
-        .then((document) => document.text)
-        .catch(() => undefined);
-      texts.set(relativePath, reading);
-      return reading;
-    };
   }
 }

@@ -17,6 +17,11 @@ impl DocumentAccessList {
         Ok(())
     }
 
+    /// Grants a folder already located, by exactly its canonical key.
+    pub fn grant_located_folder(&self, folder: &DocumentLocation) {
+        self.grant_folder_key(folder.canonical_key.clone());
+    }
+
     pub fn grant_folder_of(&self, document: &Path) -> Result<DocumentLocation, DocumentError> {
         let location = locate_document(document)?;
         if let Some(folder) = location.path().parent() {

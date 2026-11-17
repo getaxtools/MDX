@@ -1,7 +1,11 @@
 import type { LineEnding, OpenedDocument } from '../DocumentFilePort';
+import type { FolderSearchResults, TextSearchOptions } from '../FolderPort';
 import { DocumentOpenError } from '../DocumentOpenError';
 import {
   MAX_SCANNED_SPEC_FILES,
+  type WatchedSpecProject,
+  type ProjectDocuments,
+  type SpecProjectsChangedListener,
   type SpecProjectFile,
   type SpecProjectLink,
   type SpecProjectManifest,
@@ -46,6 +50,18 @@ export class InMemorySpecProjects implements SpecProjectPort {
   private readonly emptyFolders = new Map<string, readonly string[]>();
   private readonly links = new Map<string, readonly SpecProjectLink[]>();
   private writeCount = 0;
+  /** Each search, so tests can tell which documents a scope searched. */
+  readonly searches: { readonly root: string; readonly relativePaths: readonly string[] }[] = [];
+  /** The folders being watched, as the last call to `watchProjects` gave them. */
+  watchedFolders: readonly string[] = [];
+  watchedProjects: readonly WatchedSpecProject[] = [];
+  /** Each call to `watchProjects`, in order. */
+  readonly watchCalls: (readonly WatchedSpecProject[])[] = [];
+  private readonly changeListeners = new Set<SpecProjectsChangedListener>();
+  /** What the user answers when asked to follow a linked folder. */
+  isLinkFollowingAgreed = true;
+  /** Every link the user was asked to follow. */
+  readonly linkQuestions: { readonly root: string; readonly linkPath: string }[] = [];
 
   constructor(projects: Readonly<Record<string, InMemorySpecProject>> = {}) {
     for (const [root, project] of Object.entries(projects)) {
@@ -100,6 +116,60 @@ export class InMemorySpecProjects implements SpecProjectPort {
       lineEnding: lineEndingOf(file.text),
       modifiedAtMs: file.modifiedAtMs,
     });
+  }
+
+  followLink(root: string, linkPath: string): Promise<boolean> {
+    this.linkQuestions.push({ root, linkPath });
+    if (!this.isLinkFollowingAgreed) return Promise.resolve(false);
+    const links = this.links.get(root) ?? [];
+    this.links.set(
+      root,
+      links.map((link) => (link.path === linkPath ? { ...link, isFollowed: true } : link)),
+    );
+    return Promise.resolve(true);
+  }
+
+  /** Matches whole lines, ignoring case unless asked not to; whole words are not told apart. */
+  searchProjectDocuments(
+    documents: ProjectDocuments,
+    query: string,
+    options: TextSearchOptions,
+  ): Promise<FolderSearchResults> {
+    const { root, relativePaths } = documents;
+    this.searches.push({ root, relativePaths });
+    const comparable = (text: string) => (options.isCaseSensitive ? text : text.toLowerCase());
+    const needle = comparable(query);
+    const found = relativePaths.flatMap((path) => {
+      const text = this.projects.get(root)?.get(path)?.text ?? '';
+      const matches = text.split('\n').flatMap((line, index) => {
+        const start = comparable(line).indexOf(needle);
+        return needle && start !== -1
+          ? [{ lineNumber: index + 1, preview: line, ranges: [[start, start + needle.length] as const] }]
+          : [];
+      });
+      const location = InMemoryDocumentFiles.locationOf(`${root}\\${path.replaceAll('/', '\\')}`);
+      return matches.length > 0 ? [{ location, matches }] : [];
+    });
+    return Promise.resolve({ documents: found, isIncomplete: false });
+  }
+
+  watchProjects(projects: readonly WatchedSpecProject[]): Promise<void> {
+    this.watchedProjects = projects;
+    this.watchCalls.push(projects);
+    this.watchedFolders = projects.map((project) => project.root);
+    return Promise.resolve();
+  }
+
+  onProjectsChanged(listener: SpecProjectsChangedListener): () => void {
+    this.changeListeners.add(listener);
+    return () => this.changeListeners.delete(listener);
+  }
+
+  /** Reports changes below watched folders, as the watcher does once other programs stop writing. */
+  reportChanges(folderPaths: readonly string[]): void {
+    const watched = folderPaths.filter((folderPath) => this.watchedFolders.includes(folderPath));
+    if (watched.length === 0) return;
+    for (const listener of this.changeListeners) listener(watched);
   }
 
   private manifestFileOf(path: string, files: ReadonlyMap<string, StoredFile>): SpecProjectFile {

@@ -204,4 +204,70 @@ describe('FolderSearchPanel', () => {
       isWholeWord: false,
     });
   });
+
+  describe('in a Spec viewer workspace', () => {
+    function renderSpecSearch() {
+      const onSearch = vi.fn(() => Promise.resolve(RESULTS));
+      render(FolderSearchPanel, {
+        translator: createTranslator(),
+        focusRequest: 1,
+        hasFolders: true,
+        onSearch,
+        onOpenMatch: vi.fn(),
+        isSpecSearch: true,
+      });
+      return { onSearch, input: screen.getByRole('searchbox', { name: 'Search in folders' }) };
+    }
+
+    it('searches every spec document but archived changes until a scope is chosen', async () => {
+      const { onSearch, input } = renderSpecSearch();
+
+      await userEvent.type(input, 'pin{Enter}');
+
+      expect(onSearch).toHaveBeenLastCalledWith(
+        'pin',
+        { isCaseSensitive: false, isWholeWord: false },
+        { scope: 'all', isArchiveIncluded: false },
+      );
+    });
+
+    it('searches again in each scope the user chooses', async () => {
+      const { onSearch, input } = renderSpecSearch();
+      await userEvent.type(input, 'pin{Enter}');
+      const scopes = screen.getByRole('combobox', { name: 'Search in' });
+
+      for (const [label, scope] of [
+        ['Specs', 'specs'],
+        ['Changes', 'changes'],
+        ['Tasks', 'tasks'],
+        ['Agent instructions', 'instructions'],
+        ['All spec documents', 'all'],
+      ] as const) {
+        await userEvent.selectOptions(scopes, label);
+        expect(onSearch).toHaveBeenLastCalledWith('pin', expect.anything(), {
+          scope,
+          isArchiveIncluded: false,
+        });
+      }
+    });
+
+    it('includes archived changes once the switch is on', async () => {
+      const { onSearch, input } = renderSpecSearch();
+      await userEvent.type(input, 'pin{Enter}');
+
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Include archived changes' }));
+
+      expect(onSearch).toHaveBeenLastCalledWith('pin', expect.anything(), {
+        scope: 'all',
+        isArchiveIncluded: true,
+      });
+    });
+
+    it('offers no scope outside a Spec viewer workspace', () => {
+      renderPanel();
+
+      expect(screen.queryByRole('combobox', { name: 'Search in' })).toBeNull();
+      expect(screen.queryByRole('checkbox', { name: 'Include archived changes' })).toBeNull();
+    });
+  });
 });

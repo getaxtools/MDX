@@ -18,6 +18,8 @@
     onOpenDashboard?: (rootKey: string, folder: string) => void;
     onOpenChange?: (rootKey: string, changeFolder: string) => void;
     onOpenFeature?: (rootKey: string, featureFolder: string) => void;
+    onFollowLink?: (rootKey: string, linkPath: string) => void;
+    onRefresh?: () => void;
     activeDocumentKey?: string | undefined;
   }
 
@@ -31,6 +33,8 @@
     onOpenDashboard = () => undefined,
     onOpenChange = () => undefined,
     onOpenFeature = () => undefined,
+    onFollowLink = () => undefined,
+    onRefresh = () => undefined,
     activeDocumentKey,
   }: Props = $props();
 
@@ -59,6 +63,7 @@
     if (node.dashboard) onOpenDashboard(node.dashboard.rootKey, node.dashboard.folder);
     else if (node.changePage) onOpenChange(node.changePage.rootKey, node.changePage.changeFolder);
     else if (node.featurePage) onOpenFeature(node.featurePage.rootKey, node.featurePage.featureFolder);
+    else if (node.linkToFollow) onFollowLink(node.linkToFollow.rootKey, node.linkToFollow.linkPath);
     else if (node.documentPath !== undefined) onOpenDocument(node.documentPath);
     else if (node.children.length > 0) toggleRow(node);
   }
@@ -122,7 +127,18 @@
     title={translator.translate('specViewer.sidebar.title')}
     {isExpanded}
     onToggle={onToggleExpanded}
-  />
+  >
+    {#snippet actions()}
+      <button
+        class="refresh"
+        aria-label={translator.translate('specViewer.sidebar.refresh')}
+        title={translator.translate('specViewer.sidebar.refresh')}
+        onclick={onRefresh}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.05-4.95M19 4.5v4h-4" /></svg>
+      </button>
+    {/snippet}
+  </ExplorerSectionHeader>
   {#if isExpanded}
     {#each partlyReadRoots as scanned (scanned.root.canonicalKey)}
       <p class="notice" role="status">
@@ -149,6 +165,39 @@
 </section>
 
 <style>
+  .refresh {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    min-height: 24px;
+    margin-inline-end: var(--space-1);
+    padding: var(--space-1);
+    border: 0;
+    border-radius: var(--radius-small);
+    background: none;
+    color: var(--color-text-secondary);
+  }
+
+  .refresh:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+  }
+
+  .refresh:focus-visible {
+    outline: 2px solid var(--color-focus);
+  }
+
+  .refresh svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
   .nested {
     margin-inline-start: calc(var(--space-2) + 8px) !important;
     padding-inline-start: var(--space-1) !important;

@@ -3,11 +3,28 @@ import type { OutlineEnvironment, OutlineRole } from './headingAnchorsPlugin';
 
 export type DeltaSectionKind = 'added' | 'modified' | 'removed' | 'renamed';
 
-/** How a spec document is marked: a capability's spec, or a change's delta of one. */
+/**
+ * How a document of a spec project is marked: a capability's spec, a change's delta of one, a feature's spec
+ * with its user stories, or another project document that only gets cross-links.
+ */
 export interface SpecStructureRendering {
-  readonly kind: 'mainSpec' | 'deltaSpec';
+  readonly kind: 'mainSpec' | 'deltaSpec' | 'featureSpec' | 'specDocument';
   /** The visible names of the delta sections, in the language of the app. */
   readonly sectionLabels: Readonly<Record<DeltaSectionKind, string>>;
+  /** Where the references in the document lead, by what the document writes. */
+  readonly links?: SpecCrossLinks | undefined;
+}
+
+/** Targets of the references a spec document makes, as relative document links with a heading anchor. */
+export interface SpecCrossLinks {
+  /** User story labels such as `US2`. */
+  readonly storyLinks?: ReadonlyMap<string, string> | undefined;
+  /** Requirement and success criterion identifiers such as `FR-001`. */
+  readonly requirementIdLinks?: ReadonlyMap<string, string> | undefined;
+  /** Names of the current spec's requirements, for a delta's modified, removed and renamed ones. */
+  readonly requirementLinks?: ReadonlyMap<string, string> | undefined;
+  /** Capability names, written as code. */
+  readonly capabilityLinks?: ReadonlyMap<string, string> | undefined;
 }
 
 export type SpecStructureEnvironment = OutlineEnvironment & { specStructure?: SpecStructureRendering };
@@ -16,6 +33,7 @@ export type SpecStructureEnvironment = OutlineEnvironment & { specStructure?: Sp
 const DELTA_SECTION_LINE = /^##\s+(ADDED|MODIFIED|REMOVED|RENAMED)\s+Requirements(?:[ \t]+#+)?\s*$/i;
 const REQUIREMENT_LINE = /^###\s*Requirement:\s*\S/i;
 const SCENARIO_LINE = /^####\s+\S/;
+const USER_STORY_LINE = /^###\s+User Story\s+\d+/i;
 const CLASS_PREFIX = 'mdx-spec-';
 
 interface MarkingState {
@@ -86,15 +104,20 @@ function markHeading(state: MarkingState, index: number): DeltaSectionKind | und
   return undefined;
 }
 
+function isRequirementHeading(state: MarkingState, line: string): boolean {
+  return (state.rendering.kind === 'featureSpec' ? USER_STORY_LINE : REQUIREMENT_LINE).test(line);
+}
+
 function markRequirementOrScenario(state: MarkingState, token: Token): void {
+  if (state.rendering.kind === 'specDocument') return;
   const line = sourceLineOf(state, token);
-  if (token.tag === 'h3') state.isInRequirement = REQUIREMENT_LINE.test(line);
+  if (token.tag === 'h3') state.isInRequirement = isRequirementHeading(state, line);
   if (token.tag === 'h1' || token.tag === 'h2') state.isInRequirement = false;
   if (!state.isInRequirement) return;
   if (token.tag === 'h3') {
     addClass(token, 'requirement');
     giveRole(state, token, 'requirement');
-  } else if (token.tag === 'h4' && SCENARIO_LINE.test(line)) {
+  } else if (token.tag === 'h4' && state.rendering.kind !== 'featureSpec' && SCENARIO_LINE.test(line)) {
     addClass(token, 'scenario');
     giveRole(state, token, 'scenario');
   }

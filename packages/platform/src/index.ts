@@ -34,7 +34,7 @@ export type { DocumentsChangedListener, DocumentWatcherPort } from './DocumentWa
 export { InMemoryDocumentWatcher } from './fakes/InMemoryDocumentWatcher';
 export type { DocumentResourcesPort } from './DocumentResourcesPort';
 export type { DocumentPrinterPort } from './DocumentPrinterPort';
-export type { DocumentLinksPort } from './DocumentLinksPort';
+export type { DocumentLinksPort, InspectedLink } from './DocumentLinksPort';
 export { InMemoryDocumentLinks } from './fakes/InMemoryDocumentLinks';
 export type {
   DocumentMatches,
@@ -118,6 +118,9 @@ export type {
 } from './NoteFilesPort';
 export {
   MAX_SCANNED_SPEC_FILES,
+  type WatchedSpecProject,
+  type ProjectDocuments,
+  type SpecProjectsChangedListener,
   type SpecProjectFile,
   type SpecProjectLink,
   type SpecProjectManifest,

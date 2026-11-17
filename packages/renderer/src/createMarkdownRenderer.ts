@@ -23,6 +23,7 @@ import {
   type SpecStructureEnvironment,
   type SpecStructureRendering,
 } from './plugins/specStructurePlugin';
+import { specCrossLinksPlugin } from './plugins/specCrossLinksPlugin';
 import {
   createHtmlSanitizer,
   type BrowserWindow,
@@ -117,6 +118,7 @@ export function createMarkdownParser(alertTitles: AlertTitles): MarkdownParser {
       .use(mathPlugin)
       .use(headingAnchorsPlugin)
       .use(specStructurePlugin)
+      .use(specCrossLinksPlugin)
       .use(sourceLinesPlugin)
   );
 }

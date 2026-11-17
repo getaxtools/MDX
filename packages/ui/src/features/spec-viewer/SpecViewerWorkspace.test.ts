@@ -2,6 +2,7 @@ import { ViewerSession, WorkspaceKindsState, workspaceKindsFor } from '@mdx/core
 import { createTranslator } from '@mdx/i18n';
 import {
   InMemoryAppState,
+  InMemoryDocumentLinks,
   InMemoryDocumentFiles,
   InMemoryDocumentRequests,
   InMemoryFolders,
@@ -11,6 +12,7 @@ import {
 import { createMarkdownRenderer } from '@mdx/renderer';
 import { describe, expect, it } from 'vitest';
 import { ViewerController, type ViewerSnapshot } from '../viewer/ViewerController';
+import { dashboardRowsOf, shownDashboardOf } from './specDashboard';
 
 const ALL_KINDS_BUILT = workspaceKindsFor({ allowsPlannedKindPreview: true });
 const PROJECT = 'C:\\Projects\\shop';
@@ -30,6 +32,7 @@ async function startWithSpecProjects(
 ) {
   const documentFiles = new InMemoryDocumentFiles(documents);
   const folders = new InMemoryFolders();
+  const links = new InMemoryDocumentLinks();
   let nextId = 0;
   const session = new ViewerSession({
     documentFiles,
@@ -46,6 +49,7 @@ async function startWithSpecProjects(
     translator: createTranslator(),
     folders,
     specProjects,
+    links,
   });
   let latest: ViewerSnapshot | undefined;
   controller.subscribe((snapshot) => (latest = snapshot));
@@ -60,7 +64,7 @@ async function startWithSpecProjects(
     if (!latest) throw new Error('no snapshot published');
     return latest;
   };
-  return { controller, folders, specProjects, snapshot, documentFiles };
+  return { controller, folders, specProjects, snapshot, documentFiles, links };
 }
 
 async function settled(): Promise<void> {
@@ -192,6 +196,209 @@ describe('a Spec viewer workspace', () => {
     await controller.execute({ kind: 'openSpecFeature', rootKey, featureFolder: 'specs/001-albums' });
 
     expect(snapshot().viewer.tabStrip.activeTab()?.location.fileName).toBe('Feature: 001-albums');
+  });
+
+  it('links the story labels of a feature task list to the feature spec', async () => {
+    const featureSpec = '# Albums\n\n### User Story 1 - Create an album (Priority: P1)\n\nText.\n';
+    const tasks = '- [ ] T010 [US1] Add the album model\n';
+    const specProjects = new InMemorySpecProjects({
+      [PROJECT]: {
+        files: {
+          '.specify/memory/constitution.md': '# C',
+          'specs/001-albums/spec.md': featureSpec,
+          'specs/001-albums/tasks.md': tasks,
+        },
+      },
+    });
+    const tasksPath = `${PROJECT}\\specs\\001-albums\\tasks.md`;
+    const { controller, folders, snapshot } = await startWithSpecProjects(
+      { [tasksPath]: tasks },
+      specProjects,
+    );
+    await controller.execute({ kind: 'createWorkspace', name: 'Plans', kindId: 'specViewer' });
+    folders.pickedFolder = PROJECT;
+    await controller.execute({ kind: 'openFolder' });
+    await settled();
+
+    await controller.openDocuments([tasksPath]);
+    await settled();
+
+    const page = new DOMParser().parseFromString(snapshot().activeDocument?.html ?? '', 'text/html');
+    const link = page.querySelector('a[data-mdx-link="document"]');
+    expect(link?.textContent).toBe('[US1]');
+    expect(link?.getAttribute('href')).toBe('spec.md#mdx-user-story-1---create-an-album-priority-p1');
+  });
+
+  it('follows a linked folder only after the user agrees to its question', async () => {
+    const specProjects = new InMemorySpecProjects({
+      [PROJECT]: {
+        files: { 'openspec/specs/tabs/spec.md': '# tabs' },
+        links: [{ path: 'openspec/shared', isFollowed: false }],
+      },
+    });
+    const { controller, folders, snapshot } = await startWithSpecProjects({}, specProjects);
+    await controller.execute({ kind: 'createWorkspace', name: 'Plans', kindId: 'specViewer' });
+    folders.pickedFolder = PROJECT;
+    await controller.execute({ kind: 'openFolder' });
+    await settled();
+    const rootKey = snapshot().specProjects?.roots?.[0]?.root.canonicalKey ?? '';
+    const linkedFolders = () => snapshot().specProjects?.roots?.[0]?.projects[0]?.linkedFolders;
+
+    specProjects.isLinkFollowingAgreed = false;
+    await controller.execute({ kind: 'followSpecLink', rootKey, linkPath: 'openspec/shared' });
+    await settled();
+    expect(linkedFolders()).toEqual([{ path: 'openspec/shared', isFollowed: false }]);
+
+    specProjects.isLinkFollowingAgreed = true;
+    await controller.execute({ kind: 'followSpecLink', rootKey, linkPath: 'openspec/shared' });
+    await settled();
+
+    expect(linkedFolders()).toEqual([{ path: 'openspec/shared', isFollowed: true }]);
+    expect(specProjects.linkQuestions).toEqual([
+      { root: PROJECT, linkPath: 'openspec/shared' },
+      { root: PROJECT, linkPath: 'openspec/shared' },
+    ]);
+    expect(specProjects.watchedProjects).toEqual([{ root: PROJECT, followedLinks: ['openspec/shared'] }]);
+  });
+
+  it('asks before following a document link out of the granted folders, naming its real target', async () => {
+    const elsewhere = 'C:\\Elsewhere\\readme.md';
+    const { controller, folders, snapshot, links } = await startWithSpecProjects({
+      [elsewhere]: '[plan](plan.md)',
+      'C:\\Elsewhere\\plan.md': '# Plan',
+    });
+    await controller.execute({ kind: 'createWorkspace', name: 'Plans', kindId: 'specViewer' });
+    folders.pickedFolder = PROJECT;
+    await controller.execute({ kind: 'openFolder' });
+    await controller.openDocuments([elsewhere]);
+    links.ungrantedFolders = ['C:\\Elsewhere'];
+
+    await controller.openLink({ kind: 'document', href: 'plan.md' });
+    expect(snapshot().outsideLinkRequest?.targetPath).toBe('C:\\Elsewhere\\plan.md');
+    await controller.answerOutsideLink(false);
+    expect(snapshot().viewer.tabStrip.activeTab()?.location.fileName).toBe('readme.md');
+
+    await controller.openLink({ kind: 'document', href: 'plan.md' });
+    await controller.answerOutsideLink(true);
+
+    expect(snapshot().outsideLinkRequest).toBeUndefined();
+    expect(snapshot().viewer.tabStrip.activeTab()?.location.fileName).toBe('plan.md');
+  });
+
+  it('follows a document link inside the granted folders without asking', async () => {
+    const designPath = 'C:\\Projects\\shop\\openspec\\specs\\tabs\\design.md';
+    const { controller, folders, snapshot } = await startWithSpecProjects({
+      [SPEC_PATH]: '[design](design.md)',
+      [designPath]: '# Design',
+    });
+    await controller.execute({ kind: 'createWorkspace', name: 'Plans', kindId: 'specViewer' });
+    folders.pickedFolder = PROJECT;
+    await controller.execute({ kind: 'openFolder' });
+    await controller.openDocuments([SPEC_PATH]);
+
+    await controller.openLink({ kind: 'document', href: 'design.md' });
+
+    expect(snapshot().outsideLinkRequest).toBeUndefined();
+    expect(snapshot().viewer.tabStrip.activeTab()?.location.fileName).toBe('design.md');
+  });
+
+  it('finds text in hidden spec folders and leaves archived changes out of Find in Folders', async () => {
+    const specProjects = new InMemorySpecProjects({
+      [PROJECT]: {
+        files: {
+          '.specify/memory/constitution.md': 'Pinned tabs stay.',
+          'openspec/specs/tabs/spec.md': '# tabs',
+          'openspec/changes/archive/2026-10-01-add-pins/proposal.md': 'Pin tabs.',
+        },
+      },
+    });
+    const { controller, folders } = await startWithSpecProjects({}, specProjects);
+    await controller.execute({ kind: 'createWorkspace', name: 'Plans', kindId: 'specViewer' });
+    folders.pickedFolder = PROJECT;
+    await controller.execute({ kind: 'openFolder' });
+    await settled();
+
+    const results = await controller.searchFolders('pin', { isCaseSensitive: false, isWholeWord: false });
+
+    expect(results.documents.map((document) => document.location.fileName)).toEqual(['constitution.md']);
+    expect(specProjects.searches).toEqual([
+      { root: PROJECT, relativePaths: ['.specify/memory/constitution.md', 'openspec/specs/tabs/spec.md'] },
+    ]);
+  });
+
+  describe('live reload', () => {
+    const PINS_TASKS = 'openspec/changes/add-pins/tasks.md';
+    const TABS_TASKS = 'openspec/changes/add-tabs/tasks.md';
+
+    async function showTwoChanges() {
+      const specProjects = new InMemorySpecProjects({
+        [PROJECT]: { files: { [PINS_TASKS]: '- [ ] 1.1\n- [ ] 1.2\n', [TABS_TASKS]: '- [ ] 1.1\n' } },
+      });
+      const started = await startWithSpecProjects({}, specProjects);
+      await started.controller.execute({ kind: 'createWorkspace', name: 'Plans', kindId: 'specViewer' });
+      started.folders.pickedFolder = PROJECT;
+      await started.controller.execute({ kind: 'openFolder' });
+      await settled();
+      const progressOf = (name: string) =>
+        started
+          .snapshot()
+          .specProjects?.roots?.[0]?.projects[0]?.activeChanges.find((change) => change.name === name)
+          ?.progress;
+      const readsOf = (path: string) =>
+        specProjects.readFiles.filter((read) => read === `${PROJECT}|${path}`);
+      return { ...started, specProjects, progressOf, readsOf };
+    }
+
+    it('watches the folders it shows', async () => {
+      const { specProjects } = await showTwoChanges();
+
+      expect(specProjects.watchedFolders).toEqual([PROJECT]);
+    });
+
+    it('updates the dashboard once a task is ticked, without clearing the sidebar', async () => {
+      const { controller, specProjects, progressOf, snapshot } = await showTwoChanges();
+      const rootKey = snapshot().specProjects?.roots?.[0]?.root.canonicalKey ?? '';
+      await controller.execute({ kind: 'openSpecDashboard', rootKey, folder: '' });
+      const wasCleared: boolean[] = [];
+      controller.subscribe((shown) => wasCleared.push(shown.specProjects?.roots === undefined));
+
+      specProjects.writeFile(PROJECT, PINS_TASKS, '- [x] 1.1\n- [ ] 1.2\n');
+      specProjects.reportChanges([PROJECT]);
+      await settled();
+
+      const dashboard = shownDashboardOf(
+        snapshot().specProjects,
+        snapshot().viewer.tabStrip.activeTab()?.location,
+      );
+      const translator = createTranslator();
+      const pinsRow =
+        dashboard && dashboardRowsOf(dashboard, translator).find((row) => row.name === 'add-pins');
+      expect(pinsRow?.tasks).toBe(
+        translator.translate('specViewer.change.progress', { current: 1, total: 2 }),
+      );
+      expect(progressOf('add-pins')).toEqual({ done: 1, total: 2 });
+      expect(wasCleared).not.toContain(true);
+    });
+
+    it('reads again only the files that changed', async () => {
+      const { specProjects, readsOf } = await showTwoChanges();
+
+      specProjects.writeFile(PROJECT, PINS_TASKS, '- [x] 1.1\n- [x] 1.2\n');
+      specProjects.reportChanges([PROJECT]);
+      await settled();
+
+      expect(readsOf(PINS_TASKS)).toHaveLength(2);
+      expect(readsOf(TABS_TASKS)).toHaveLength(1);
+    });
+
+    it('scans again when the user refreshes, for folders that report no changes', async () => {
+      const { controller, specProjects, progressOf } = await showTwoChanges();
+
+      specProjects.writeFile(PROJECT, TABS_TASKS, '- [x] 1.1\n');
+      await controller.execute({ kind: 'refreshSpecProjects' });
+
+      expect(progressOf('add-tabs')).toEqual({ done: 1, total: 1 });
+    });
   });
 
   it('does not scan the folders of a Markdown viewer workspace', async () => {
