@@ -160,6 +160,15 @@ function notesCommands(translator: Translator): PaletteCommand[] {
     { command: { kind: 'openTodaysNote' }, label: translator.translate('notes.today') },
     { command: { kind: 'showNewNoteFromTemplate' }, label: translator.translate('notes.fromTemplate') },
     { command: { kind: 'showNoteTrash' }, label: translator.translate('notes.tree.showTrash') },
+    { command: { kind: 'importNotesFolder' }, label: translator.translate('notes.import.command') },
+    {
+      command: {
+        kind: 'showNotesExport',
+        notes: { kind: 'location' },
+        name: translator.translate('notes.export.allNotes'),
+      },
+      label: translator.translate('notes.export.allCommand'),
+    },
   ];
 }
 

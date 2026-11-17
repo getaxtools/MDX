@@ -15,6 +15,7 @@ interface ViewOptions {
   readonly richBlocks?: RichBlockRenderer;
   readonly copyAsHtmlRequest?: number;
   readonly sourceRangeRequest?: SourceRangeRequest;
+  readonly onPrint?: () => void;
 }
 
 function renderDocument(
@@ -28,6 +29,7 @@ function renderDocument(
     richBlocks,
     copyAsHtmlRequest,
     sourceRangeRequest,
+    onPrint = () => undefined,
   }: ViewOptions = {},
 ) {
   const onOpenLink = vi.fn();
@@ -61,6 +63,7 @@ function renderDocument(
     onCommand,
     richBlocks,
     sourceRangeRequest,
+    onPrint,
   });
   return { onOpenLink, onCommand, rerender: view.rerender };
 }
@@ -260,7 +263,9 @@ describe('DocumentView', () => {
     const { onCommand, rerender } = renderDocument('<h1>Guide</h1>');
 
     await rerender({ exportRequest: { format: 'html', number: 1 } });
+    await vi.waitFor(() => expect(onCommand).toHaveBeenCalledOnce());
     await rerender({ exportRequest: { format: 'plainText', number: 2 } });
+    await vi.waitFor(() => expect(onCommand).toHaveBeenCalledTimes(2));
 
     const [[htmlExport], [textExport]] = onCommand.mock.calls as [
       [{ contents: string }],
@@ -342,5 +347,33 @@ describe('DocumentView', () => {
 
     expect(highlights.get('mdx-source-range')?.ranges[0]?.toString()).toBe('Source');
     vi.unstubAllGlobals();
+  });
+
+  it('prints only once the math has been typeset', async () => {
+    const typesetting: { finish?: () => void } = {};
+    const renderInto = vi.fn<RichBlockRenderer['renderInto']>(
+      () =>
+        new Promise<void>((resolve) => {
+          typesetting.finish = resolve;
+        }),
+    );
+    const onPrint = vi.fn();
+    const { rerender } = renderDocument('<p><span class="mdx-math-inline">x</span></p>', {
+      richBlocks: {
+        renderInto,
+        typesetMath: () => Promise.resolve(undefined),
+        previewFormula: () => Promise.resolve({ kind: 'unavailable' }),
+      },
+      onPrint,
+    });
+    await vi.waitFor(() => expect(renderInto).toHaveBeenCalled());
+
+    await rerender({ printRequest: 1 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const wasPrintedEarly = onPrint.mock.calls.length > 0;
+    typesetting.finish?.();
+
+    await vi.waitFor(() => expect(onPrint).toHaveBeenCalledOnce());
+    expect(wasPrintedEarly).toBe(false);
   });
 });

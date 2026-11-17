@@ -31,6 +31,7 @@ export {
   type HighlightedLine,
   type HighlightedToken,
 } from './highlight/createCodeHighlighter';
+export { knownCodeLanguages } from './highlight/knownCodeLanguages';
 export { readFrontMatterProperties, type DocumentProperty } from './front-matter/readFrontMatterProperties';
 export {
   createRichBlockRenderer,

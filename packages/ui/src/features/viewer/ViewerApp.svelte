@@ -74,6 +74,8 @@
   import NoteBacklinks from '../notes/NoteBacklinks.svelte';
   import NoteFromTemplateDialog from '../notes/NoteFromTemplateDialog.svelte';
   import NoteLinkUpdatesDialog from '../notes/NoteLinkUpdatesDialog.svelte';
+  import NoteImportDialog from '../notes/NoteImportDialog.svelte';
+  import NoteExportDialog from '../notes/NoteExportDialog.svelte';
   import { workspaceNameOf } from '../workspaces/workspaceCommands';
   import { recentWorkspaceLinks } from '../workspaces/recentWorkspaceLinks';
   import { SessionWordCounts } from '../word-goals/SessionWordCounts';
@@ -710,6 +712,8 @@
               findQuery={snapshot.findQuery}
               copyAsHtmlRequest={snapshot.copyAsHtmlRequest}
               exportRequest={snapshot.exportRequest}
+              printRequest={snapshot.printRequest}
+              onPrint={() => controller.printShownDocument()}
               {headingRequest}
               linkedHeadingRequest={snapshot.linkedHeadingRequest}
               sourceRangeRequest={snapshot.sourceRangeRequest}
@@ -840,6 +844,18 @@
       {translator}
       onCommand={(command: ViewerCommand) => void controller.execute(command)}
       onClose={() => void controller.execute({ kind: 'skipNoteLinkUpdates' })}
+    />
+  {:else if snapshot.openDialog === 'noteImport' && snapshot.notes?.noteImport}
+    <NoteImportDialog
+      view={snapshot.notes.noteImport}
+      {translator}
+      onCommand={(command: ViewerCommand) => void controller.execute(command)}
+    />
+  {:else if snapshot.openDialog === 'noteExport' && snapshot.notes?.noteExport}
+    <NoteExportDialog
+      view={snapshot.notes.noteExport}
+      {translator}
+      onCommand={(command: ViewerCommand) => void controller.execute(command)}
     />
   {:else if snapshot.openDialog === 'keyboardShortcuts'}
     <KeyboardShortcutsDialog {translator} {shortcuts} onClose={() => controller.closeDialog()} />

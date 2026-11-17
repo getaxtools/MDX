@@ -19,6 +19,7 @@ import {
   type NotesIndexStatus,
   type TagCount,
   type NoteTrashEntry,
+  type NoteTransferPort,
 } from '@mdx/platform';
 import type { NotesRendering } from '@mdx/renderer';
 import type { NoticeAction } from '../viewer/ViewerController';
@@ -29,6 +30,14 @@ import {
   type NoteLinkUpdatePreview,
 } from './NoteLinkUpdateActions';
 import { NOTE_TRASH_COMMAND_KINDS, NoteTrashActions, type NoteTrashCommand } from './NoteTrashActions';
+import {
+  NOTE_TRANSFER_COMMAND_KINDS,
+  NoteTransferActions,
+  type NoteExportView,
+  type NoteImportView,
+  type NoteTransferCommand,
+  type NoteTransferDialog,
+} from './NoteTransferActions';
 import {
   NOTE_TEMPLATE_COMMAND_KINDS,
   NoteTemplateActions,
@@ -41,7 +50,8 @@ export type NotesCommand =
   | { readonly kind: 'moveNote'; readonly note: DocumentLocation; readonly into: string }
   | NoteTrashCommand
   | NoteTemplateCommand
-  | NoteLinkUpdateCommand;
+  | NoteLinkUpdateCommand
+  | NoteTransferCommand;
 
 const NOTES_COMMAND_KINDS: ReadonlySet<string> = new Set([
   'createNote',
@@ -50,7 +60,9 @@ const NOTES_COMMAND_KINDS: ReadonlySet<string> = new Set([
   ...NOTE_TRASH_COMMAND_KINDS,
   ...NOTE_TEMPLATE_COMMAND_KINDS,
   ...NOTE_LINK_UPDATE_COMMAND_KINDS,
+  ...NOTE_TRANSFER_COMMAND_KINDS,
 ]);
+const TRANSFER_COMMAND_KINDS: ReadonlySet<string> = new Set(NOTE_TRANSFER_COMMAND_KINDS);
 const TEMPLATE_COMMAND_KINDS: ReadonlySet<string> = new Set(NOTE_TEMPLATE_COMMAND_KINDS);
 const TRASH_COMMAND_KINDS: ReadonlySet<string> = new Set(NOTE_TRASH_COMMAND_KINDS);
 const LINK_UPDATE_COMMAND_KINDS: ReadonlySet<string> = new Set(NOTE_LINK_UPDATE_COMMAND_KINDS);
@@ -71,6 +83,10 @@ function isLinkUpdateCommand(command: NotesCommand): command is NoteLinkUpdateCo
   return LINK_UPDATE_COMMAND_KINDS.has(command.kind);
 }
 
+function isTransferCommand(command: NotesCommand): command is NoteTransferCommand {
+  return TRANSFER_COMMAND_KINDS.has(command.kind);
+}
+
 /** The note tree of the shown Notes workspace. */
 export interface NotesView {
   readonly locationPath: string;
@@ -86,11 +102,17 @@ export interface NotesView {
   readonly templates?: readonly string[];
   /** The link changes a rename or move would make, while the user is asked about them. */
   readonly linkUpdates?: NoteLinkUpdatePreview;
+  /** An import of a vault-style folder, while it runs and once it reported. */
+  readonly noteImport?: NoteImportView;
+  /** The export the user is choosing and running. */
+  readonly noteExport?: NoteExportView;
 }
 
 export interface NotesActionsDependencies {
   readonly session: ViewerSession;
   readonly noteFiles: NoteFilesPort;
+  /** Imports and exports notes; without it neither is offered. */
+  readonly noteTransfer?: NoteTransferPort;
   /** Plans the link updates after a rename or move; without it links are left as they are. */
   readonly notesIndex?: NotesIndexPort;
   readonly translator: Translator;
@@ -108,6 +130,10 @@ export interface NotesActionsDependencies {
   readonly showTemplateDialog: () => void;
   readonly showLinkUpdatesDialog: () => void;
   readonly closeLinkUpdatesDialog: () => void;
+  readonly showTransferDialog: (dialog: NoteTransferDialog) => void;
+  readonly closeTransferDialog: () => void;
+  /** Exports or prints one note through the app's own HTML export and printing. */
+  readonly showNoteAs: (note: DocumentLocation, output: 'html' | 'print') => Promise<void>;
   readonly now: () => Date;
   readonly openDocument: (path: string) => Promise<void>;
   readonly onChange: () => void;
@@ -119,6 +145,7 @@ export class NotesActions {
   private readonly trash: NoteTrashActions;
   private readonly templates: NoteTemplateActions;
   private readonly linkUpdates: NoteLinkUpdateActions;
+  private readonly transfer: NoteTransferActions | undefined;
   private noteList:
     | { readonly location: string; readonly revision: number; readonly notes: readonly NoteEntry[] }
     | undefined;
@@ -127,6 +154,15 @@ export class NotesActions {
     this.trash = new NoteTrashActions({ ...dependencies, onNotesChanged: () => this.changed() });
     this.templates = new NoteTemplateActions({ ...dependencies, onNotesChanged: () => this.changed() });
     this.linkUpdates = new NoteLinkUpdateActions({ ...dependencies, onNotesChanged: () => this.changed() });
+    const { noteTransfer } = dependencies;
+    this.transfer = noteTransfer
+      ? new NoteTransferActions({ ...dependencies, noteTransfer, onNotesChanged: () => this.changed() })
+      : undefined;
+  }
+
+  /** Whether notes can be imported and exported here. */
+  canTransferNotes(): boolean {
+    return this.transfer !== undefined;
   }
 
   view(): NotesView | undefined {
@@ -135,12 +171,16 @@ export class NotesActions {
     const trash = this.trash.shownEntries(locationPath);
     const templates = this.templates.templates();
     const linkUpdates = this.linkUpdates.preview();
+    const noteImport = this.transfer?.importing();
+    const noteExport = this.transfer?.exporting();
     return {
       locationPath,
       revision: this.revision,
       ...(trash ? { trash } : {}),
       ...(templates ? { templates } : {}),
       ...(linkUpdates ? { linkUpdates } : {}),
+      ...(noteImport ? { noteImport } : {}),
+      ...(noteExport ? { noteExport } : {}),
     };
   }
 
@@ -223,6 +263,10 @@ export class NotesActions {
     }
     if (isLinkUpdateCommand(command)) {
       await this.linkUpdates.run(command);
+      return;
+    }
+    if (isTransferCommand(command)) {
+      await this.transfer?.run(command, location);
       return;
     }
     if (command.kind === 'createNote') {

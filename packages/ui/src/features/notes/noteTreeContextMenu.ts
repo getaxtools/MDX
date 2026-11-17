@@ -5,7 +5,16 @@ import { pathMenuItems, type PathMenuItemId } from '../file-paths/pathCommands';
 import { describeCombination } from '../shortcuts/describeCombination';
 
 export type NoteTreeMenuItemId =
-  'newNote' | 'rename' | 'cut' | 'pasteHere' | 'pasteAsChild' | 'delete' | PathMenuItemId;
+  | 'newNote'
+  | 'rename'
+  | 'cut'
+  | 'pasteHere'
+  | 'pasteAsChild'
+  | 'export'
+  | 'exportAsHtml'
+  | 'print'
+  | 'delete'
+  | PathMenuItemId;
 
 type MenuItems = ContextMenuItem<NoteTreeMenuItemId>[];
 
@@ -23,8 +32,24 @@ export function noteTreeMenuItems(
     },
     ...(isNote ? noteItems(translator) : []),
     ...pasteItems({ isNote, hasCutNote }, translator),
+    ...exportItems(isNote, translator),
     ...pathMenuItems(translator),
     ...(isNote ? [deleteItem(translator)] : []),
+  ];
+}
+
+/** Export as Markdown for notes and folders; a note also goes out as HTML or on paper through the app's own export and print. */
+function exportItems(isNote: boolean, translator: Translator): MenuItems {
+  const exportItem: ContextMenuItem<NoteTreeMenuItemId> = {
+    id: 'export',
+    label: translator.translate('notes.tree.export'),
+    hasSeparatorBefore: true,
+  };
+  if (!isNote) return [exportItem];
+  return [
+    exportItem,
+    { id: 'exportAsHtml', label: translator.translate('notes.tree.exportAsHtml') },
+    { id: 'print', label: translator.translate('notes.tree.print') },
   ];
 }
 

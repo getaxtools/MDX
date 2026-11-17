@@ -347,6 +347,38 @@ fn scan_wiki_links(text: &str, skipped: &[Range<usize>], lines: &LineStarts) -> 
         .collect()
 }
 
+/// A `[[…]]` outside front matter and code, with the bytes it spans, as the renderer reads it.
+pub(super) struct WikiLinkOccurrence {
+    /// From `[[` to `]]`; an embed's `!` is the byte before.
+    pub outer: Range<usize>,
+    pub inner: Range<usize>,
+    pub is_embed: bool,
+    pub line: usize,
+}
+
+pub(super) fn wiki_link_occurrences(text: &str) -> Vec<WikiLinkOccurrence> {
+    let body_start = read_front_matter(text).body_start;
+    let lines = LineStarts::of(text);
+    let parsed = parse_body(
+        &NoteText {
+            text,
+            lines: &lines,
+        },
+        body_start,
+    );
+    let skipped: Vec<Range<usize>> = std::iter::once(0..body_start).chain(parsed.code).collect();
+    wiki_link_spans(text)
+        .filter(|span| !is_inside_any(span.outer.start, &skipped))
+        .map(|span| WikiLinkOccurrence {
+            is_embed: span.outer.start > 0
+                && text.as_bytes().get(span.outer.start - 1) == Some(&b'!'),
+            line: lines.line_of(span.outer.start),
+            outer: span.outer,
+            inner: span.inner,
+        })
+        .collect()
+}
+
 /// The note part of `Note#Heading|text`, without the spaces around it; none for `#Heading` alone.
 fn wiki_target_bytes(inner: &str) -> Option<Range<usize>> {
     let destination_end = inner.find('|').unwrap_or(inner.len());
@@ -385,7 +417,7 @@ fn wiki_link_spans(text: &str) -> impl Iterator<Item = WikiLinkSpan> + '_ {
 }
 
 /// The note and heading of `[[Note#Heading|text]]`, without a typed Markdown extension.
-fn wiki_link_parts(inner: &str) -> Option<(String, Option<String>)> {
+pub(super) fn wiki_link_parts(inner: &str) -> Option<(String, Option<String>)> {
     let destination = inner.split('|').next().unwrap_or_default();
     let (target, heading) = match destination.split_once('#') {
         Some((target, heading)) => (target, Some(heading.trim().to_owned())),

@@ -401,7 +401,7 @@ describe('ViewerController', () => {
     expect(unknown).not.toContain('src=');
   });
 
-  it('prints only when a document is open', async () => {
+  it('prints only when a document is open, once the shown document has drawn', async () => {
     const printer = { printActiveDocument: vi.fn() };
     const empty = new ViewerController({
       session: new ViewerSession({
@@ -429,9 +429,15 @@ describe('ViewerController', () => {
       translator: createTranslator(),
       printer,
     });
+    let printRequest: number | undefined;
+    withDocument.subscribe((snapshot) => (printRequest = snapshot.printRequest));
     await withDocument.start();
     await withDocument.execute({ kind: 'print' });
+    const wasPrintedBeforeDrawing = printer.printActiveDocument.mock.calls.length > 0;
+    withDocument.printShownDocument();
 
+    expect(printRequest).toBe(1);
+    expect(wasPrintedBeforeDrawing).toBe(false);
     expect(printer.printActiveDocument).toHaveBeenCalledOnce();
   });
 

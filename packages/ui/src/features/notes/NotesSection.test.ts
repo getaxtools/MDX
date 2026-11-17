@@ -130,6 +130,9 @@ describe('NotesSection', () => {
       'Cut',
       'Paste Here',
       'Paste as Child Note',
+      'Export…',
+      'Export as HTML…',
+      'Print or Save as PDF…',
       'Copy Path',
       'Reveal in File Explorer',
       'Move to Trash',
@@ -140,6 +143,24 @@ describe('NotesSection', () => {
       name: 'Budget',
     });
   });
+  it('exports a folder or a note from its menu, and prints a note through the app', async () => {
+    const { row, onCommand } = renderTree();
+    (await row('Daily')).focus();
+    await userEvent.keyboard('{Shift>}{F10}{/Shift}');
+    await userEvent.click(screen.getByRole('menuitem', { name: /^Export…/ }));
+    (await row('Inbox')).focus();
+    await userEvent.keyboard('{Shift>}{F10}{/Shift}');
+    await userEvent.click(screen.getByRole('menuitem', { name: /Print or Save as PDF/ }));
+
+    expect(onCommand.mock.calls.map(([command]) => command)).toEqual([
+      { kind: 'showNotesExport', notes: { kind: 'folder', path: 'E:\\Journal\\Daily' }, name: 'Daily' },
+      {
+        kind: 'printNote',
+        note: expect.objectContaining({ displayPath: 'E:\\Journal\\Inbox.md' }) as unknown,
+      },
+    ]);
+  });
+
   it('Delete asks first and moves the note and its child notes to the trash', async () => {
     const { row, onCommand } = renderTree();
     (await row('Projects')).focus();

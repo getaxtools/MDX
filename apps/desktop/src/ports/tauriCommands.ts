@@ -2,6 +2,11 @@ import { invoke } from '@tauri-apps/api/core';
 import type {
   AppliedLinkUpdates,
   AttachmentTarget,
+  ExportFolderChoice,
+  NotesExportOutcome,
+  NotesExportRequest,
+  NotesImportReport,
+  NotesImportRequest,
   Backlink,
   DocumentLocation,
   EditedDocumentSave,
@@ -137,6 +142,14 @@ export const tauriCommands = {
   emptyNoteTrash: (location: string) => invoke<number>('empty_note_trash', { location }),
   applyNoteLinkUpdates: ({ location, updates }: LinkUpdatesToApply) =>
     invoke<AppliedLinkUpdates>('apply_note_link_updates', { location, updates }),
+  pickNotesImportFolder: () => invoke<string | null>('pick_notes_import_folder'),
+  importNotesFolder: (request: NotesImportRequest & { readonly knownCodeLanguages: readonly string[] }) =>
+    invoke<NotesImportReport>('import_notes_folder', { request }),
+  cancelNotesImport: () => invoke<null>('cancel_notes_import'),
+  pickNotesExportFolder: (location: string) =>
+    invoke<ExportFolderChoice>('pick_notes_export_folder', { location }),
+  exportNotesToFolder: (request: NotesExportRequest) =>
+    invoke<NotesExportOutcome>('export_notes_to_folder', { request }),
   showNotesIndex: (location: ShownNotesIndex) => invoke<null>('show_notes_index', { location }),
   hideNotesIndex: () => invoke<null>('hide_notes_index'),
   clearNotesIndexes: () => invoke<number>('clear_notes_indexes'),
@@ -212,5 +225,6 @@ export const DOCUMENTS_CHANGED_EVENT = 'documents-changed';
 export const FOLDERS_CHANGED_EVENT = 'folders-changed';
 export const SPEC_PROJECTS_CHANGED_EVENT = 'spec-projects-changed';
 export const NOTES_INDEX_STATUS_EVENT = 'notes-index-status';
+export const NOTES_IMPORT_PROGRESS_EVENT = 'notes-import-progress';
 export const NOTES_INDEX_CHANGES_EVENT = 'notes-index-changes';
 export const NOTES_MOVE_PROGRESS_EVENT = 'notes-move-progress';

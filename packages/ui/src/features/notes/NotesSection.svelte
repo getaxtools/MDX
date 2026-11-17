@@ -180,9 +180,23 @@
       cut: () => (cutNote = note),
       pasteAsChild: () => void paste(path, { isUnderNote: true }),
       pasteHere: () => void paste(note ? folderPath : path, { isUnderNote: false }),
+      export: () => void onCommand(exportCommandFor(node, path)),
+      exportAsHtml: () => {
+        if (note) void onCommand({ kind: 'exportNoteAsHtml', note });
+      },
+      print: () => {
+        if (note) void onCommand({ kind: 'printNote', note });
+      },
       delete: () => requestDeletion(node),
     };
     actions[itemId]();
+  }
+
+  function exportCommandFor(node: NoteTreeNode, path: string): NotesCommand {
+    const { note } = node;
+    return note
+      ? { kind: 'showNotesExport', notes: { kind: 'note', path: note.displayPath }, name: node.name }
+      : { kind: 'showNotesExport', notes: { kind: 'folder', path }, name: node.name };
   }
 
   function requestDeletion(node: NoteTreeNode) {

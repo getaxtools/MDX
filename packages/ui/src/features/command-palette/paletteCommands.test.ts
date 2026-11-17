@@ -131,7 +131,13 @@ describe('paletteCommands', () => {
 
     expect(kinds).not.toContain('openTodaysNote');
     expect(inNotes.map((entry) => entry.label)).toEqual(
-      expect.arrayContaining(["Open Today's Note", 'New Note from Template…', 'Show Trash']),
+      expect.arrayContaining([
+        "Open Today's Note",
+        'New Note from Template…',
+        'Show Trash',
+        'Import Notes from a Folder…',
+        'Export All Notes…',
+      ]),
     );
   });
 

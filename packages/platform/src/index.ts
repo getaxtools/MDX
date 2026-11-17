@@ -95,6 +95,7 @@ export {
 } from './NotesMovePort';
 export { InMemoryNotesMoves } from './fakes/InMemoryNotesMoves';
 export { InMemoryNoteFiles } from './fakes/InMemoryNoteFiles';
+export { EMPTY_IMPORT_REPORT, InMemoryNoteTransfer } from './fakes/InMemoryNoteTransfer';
 export { InMemoryNotesIndex } from './fakes/InMemoryNotesIndex';
 export type {
   Backlink,
@@ -142,3 +143,17 @@ export {
   type SpecProjectPort,
 } from './SpecProjectPort';
 export { InMemorySpecProjects, type InMemorySpecProject } from './fakes/InMemorySpecProjects';
+export type {
+  ExportedNotes,
+  ExportFolderChoice,
+  NotesExportOutcome,
+  NotesExportRequest,
+  NotesExportSummary,
+  NotesImportProgress,
+  NotesImportReport,
+  NotesImportRequest,
+  NoteTransferPort,
+  RenamedImportFile,
+  ReportedSyntax,
+  UnsupportedSyntaxKind,
+} from './NoteTransferPort';

@@ -55,6 +55,7 @@ import {
   type RecentWorkspaceMenuEntry,
   type WorkspaceFilePort,
   type NoteFilesPort,
+  type NoteTransferPort,
   type NotesIndexPort,
   type SpecProjectPort,
   type NotesFolderInspection,
@@ -109,7 +110,14 @@ import {
 } from '../notes-location/NotesMoveActions';
 import { notesMoveStatusText } from '../notes-location/notesMoveText';
 import type { MoveNotice } from '../notes-location/moveProblemNotice';
-import { NotesActions, isNotesCommand, type NotesCommand, type NotesView } from '../notes/NotesActions';
+import {
+  NotesActions,
+  isNotesCommand,
+  type NotesActionsDependencies,
+  type NotesCommand,
+  type NotesView,
+} from '../notes/NotesActions';
+import type { NoteTransferDialog } from '../notes/NoteTransferActions';
 import { NotesIndexActions, type NoteBacklinks } from '../notes/NotesIndexActions';
 import { SpecViewerActions, type SpecProjectsView } from '../spec-viewer/SpecViewerActions';
 import { SpecDocumentRenderings } from '../spec-viewer/SpecDocumentRenderings';
@@ -193,6 +201,8 @@ export interface ViewerControllerDependencies {
   readonly notesLocations?: NotesLocationPort;
   readonly notesMoves?: NotesMovePort;
   readonly noteFiles?: NoteFilesPort;
+  /** Imports a vault-style folder into a Notes location and exports notes out of it. */
+  readonly noteTransfer?: NoteTransferPort;
   readonly notesIndex?: NotesIndexPort;
   readonly specProjects?: SpecProjectPort;
   /** The clock for daily notes and templates; the real one unless a test sets it. */
@@ -246,6 +256,8 @@ export interface ViewerSnapshot {
   readonly copyAsHtmlRequest?: number;
   /** The format the shown document should export to, numbered so the same format can be asked again. */
   readonly exportRequest?: ExportRequest;
+  /** Goes up each time the shown document should be printed, once it has finished drawing. */
+  readonly printRequest?: number;
   readonly externalLinkRequest?: string;
   /** A link of a Spec viewer workspace that leads outside its folders, opened only once the user agrees. */
   readonly outsideLinkRequest?: OutsideLinkRequest;
@@ -337,6 +349,7 @@ export type ViewerDialog =
   | 'noteTrash'
   | 'noteFromTemplate'
   | 'noteLinkUpdates'
+  | NoteTransferDialog
   | WorkspaceDialog;
 
 const DIALOGS_BY_COMMAND: Partial<Record<ViewerCommand['kind'], ViewerDialog>> = {
@@ -388,6 +401,7 @@ export class ViewerController {
   private folderSearchQuery: string | undefined;
   private copyAsHtmlRequest = 0;
   private exportRequest: ExportRequest | undefined;
+  private printRequest = 0;
   private externalLinkRequest: string | undefined;
   private outsideLinkRequest: OutsideLinkRequest | undefined;
   private linkedHeadingRequest: LinkedHeadingRequest | undefined;
@@ -584,10 +598,42 @@ export class ViewerController {
         this.openDialog = undefined;
         this.publish(this.composeSnapshot(this.snapshot.notice));
       },
+      ...this.noteTransferPart(),
       now: this.dependencies.now ?? (() => new Date()),
       openDocument: (path) => this.openDocument(path),
       onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
     });
+  }
+
+  private noteTransferPart(): Pick<
+    NotesActionsDependencies,
+    'noteTransfer' | 'showTransferDialog' | 'closeTransferDialog' | 'showNoteAs'
+  > {
+    const { noteTransfer } = this.dependencies;
+    return {
+      ...(noteTransfer ? { noteTransfer } : {}),
+      showTransferDialog: (dialog) => {
+        this.openDialog = dialog;
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+      },
+      closeTransferDialog: () => {
+        if (this.openDialog === 'noteImport' || this.openDialog === 'noteExport') this.openDialog = undefined;
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+      },
+      // The app's own HTML export and printing work on the shown document, so the note is shown first.
+      showNoteAs: async (note, output) => {
+        await this.openDocument(note.displayPath);
+        await this.refreshActiveDocument();
+        await this.execute(
+          output === 'html' ? { kind: 'exportDocument', format: 'html' } : { kind: 'print' },
+        );
+      },
+    };
+  }
+
+  /** The shown document has finished drawing after a print request, so the window is printed now. */
+  printShownDocument(): void {
+    if (this.activeDocument) this.dependencies.printer?.printActiveDocument();
   }
 
   /** The notes and folders directly inside a folder of the shown Notes workspace. */
@@ -1273,7 +1319,13 @@ export class ViewerController {
     reloadFromDisk: ({ canonicalKey }) => this.editingActions.reloadFromDisk(canonicalKey),
     overwriteChangesOnDisk: ({ canonicalKey }) => this.saving.overwriteChangesOnDisk(canonicalKey),
     print: () => {
-      if (this.activeDocument) this.dependencies.printer?.printActiveDocument();
+      if (!this.activeDocument) return;
+      if (this.editingActions.isActiveDocumentEditing()) {
+        this.dependencies.printer?.printActiveDocument();
+        return;
+      }
+      this.printRequest += 1;
+      this.publish(this.composeSnapshot(this.snapshot.notice));
     },
     showFolderSearch: () => {
       this.folderSearchQuery = undefined;
@@ -2038,6 +2090,7 @@ export class ViewerController {
     | 'findQuery'
     | 'copyAsHtmlRequest'
     | 'exportRequest'
+    | 'printRequest'
     | 'folderSearchFocusRequest'
     | 'folderSearchQuery'
   > {
@@ -2050,6 +2103,7 @@ export class ViewerController {
       ...(this.folderSearchQuery === undefined ? {} : { folderSearchQuery: this.folderSearchQuery }),
       ...(this.copyAsHtmlRequest > 0 ? { copyAsHtmlRequest: this.copyAsHtmlRequest } : {}),
       ...(this.exportRequest ? { exportRequest: this.exportRequest } : {}),
+      ...(this.printRequest > 0 ? { printRequest: this.printRequest } : {}),
     };
   }
 

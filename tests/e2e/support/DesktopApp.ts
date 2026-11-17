@@ -19,7 +19,7 @@ const APP_EXIT_TIMEOUT_MS = 10_000;
 export interface LaunchOptions {
   readonly workspace: TestWorkspace;
   readonly documentFileNames?: readonly string[];
-  /** Extra settings the debug build reads, such as the folder its folder picker answers with. */
+  /** More environment variables for the app, such as the folders a debug build answers its folder picker with. */
   readonly environment?: Readonly<Record<string, string>>;
 }
 

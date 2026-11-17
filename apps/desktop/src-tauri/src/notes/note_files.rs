@@ -35,7 +35,7 @@ impl NotesRoot {
     }
 
     /// An existing path inside the location, and not inside a dot entry such as the app folder.
-    pub(super) fn resolve_inside(&self, path: &Path) -> Result<PathBuf, DocumentError> {
+    pub(crate) fn resolve_inside(&self, path: &Path) -> Result<PathBuf, DocumentError> {
         let resolved = dunce::canonicalize(path)?;
         let relative = resolved
             .strip_prefix(&self.folder)

@@ -6,6 +6,7 @@ use tauri::{App, AppHandle, Emitter, Manager};
 
 use crate::attachments::DroppedImages;
 use crate::commands::notes_move::NotesMoves;
+use crate::commands::notes_transfer::{NotesImports, PendingImportSource};
 use crate::commands::spec_project_link::LinkQuestions;
 use crate::documents::DocumentAccessList;
 use crate::live_reload::{
@@ -54,6 +55,8 @@ pub fn initialize(app: &App) -> Result<(), Box<dyn std::error::Error>> {
         &data_folder,
         &app.state::<Arc<DocumentAccessList>>(),
     ));
+    app.manage(Arc::new(NotesImports::default()));
+    app.manage(Arc::new(PendingImportSource::default()));
     Ok(())
 }
 

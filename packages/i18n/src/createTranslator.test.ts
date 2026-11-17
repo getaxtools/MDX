@@ -62,6 +62,10 @@ const SAMPLE_VALUES = {
   recycled: 3,
   expected: 1240,
   found: 1241,
+  note: 'Plan.md',
+  wanted: 'Plan.md',
+  savedAs: 'Plan (imported).md',
+  detail: 'Plan#^a1b2',
 };
 
 describe('createTranslator', () => {

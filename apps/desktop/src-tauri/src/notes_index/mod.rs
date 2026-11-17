@@ -9,6 +9,8 @@ mod note_extraction;
 mod note_links;
 mod note_search;
 mod notes_indexes;
+mod relative_links;
+mod unsupported_syntax;
 
 pub use excluded_paths::ExcludedPaths;
 pub use index_build::NoteChange;
@@ -19,6 +21,8 @@ pub use link_updates::{
     LinkUpdatePlan, MAX_LINK_EDITS_PER_NOTE, MAX_LINK_TARGET_BYTES, MAX_LINK_UPDATE_NOTES,
     NotUpdatedNote, NotUpdatedReason, NoteLinkEdits, NoteMove, content_hash_of, with_edits_made,
 };
-pub use note_links::{Backlink, NoteHeading, NoteSuggestion, TagCount};
+pub use note_links::{Backlink, KnownNote, NoteHeading, NoteSuggestion, TagCount};
 pub use note_search::NoteSearchResults;
 pub use notes_indexes::{IndexEvent, NotesIndexes, NotesLocationToShow};
+pub use relative_links::{LinkTargets, aliases_of, attachment_references_of, with_relative_links};
+pub use unsupported_syntax::{UnsupportedKind, unsupported_syntax_of};

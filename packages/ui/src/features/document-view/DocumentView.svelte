@@ -14,7 +14,7 @@
   import PropertiesPanel from './PropertiesPanel.svelte';
   import type { PropertyFieldsState } from './PropertyEditing';
   import { renderedFormulaAt, type RenderedFormula } from './renderedFormulaAt';
-  import { untrack, type Snippet } from 'svelte';
+  import { tick, untrack, type Snippet } from 'svelte';
   import type { ExportFormat } from '@mdx/platform';
   import { standaloneDocumentHtml } from '../document-export/standaloneDocumentHtml';
   import type { ExportRequest, LinkedHeadingRequest, SourceRangeRequest } from '../viewer/ViewerController';
@@ -47,6 +47,10 @@
     copyAsHtmlRequest?: number | undefined;
     /** Asks for an exported copy of the document; the request it starts with is ignored. */
     exportRequest?: ExportRequest | undefined;
+    /** Goes up each time the document should be printed; the value it starts with is ignored. */
+    printRequest?: number | undefined;
+    /** Prints the window once the document has finished drawing. */
+    onPrint?: () => void;
     /** A heading chosen in the outline; the request it starts with is ignored. */
     headingRequest?: HeadingRequest | undefined;
     /** A heading a link from another document points to; the request it starts with is ignored. */
@@ -87,6 +91,8 @@
     findQuery,
     copyAsHtmlRequest,
     exportRequest,
+    printRequest,
+    onPrint = () => undefined,
     headingRequest,
     linkedHeadingRequest,
     sourceRangeRequest,
@@ -213,7 +219,7 @@
     const article = articleElement;
     if (!document?.html || !article || (isSourceView && !document.source)) return;
     let isStillShown = true;
-    void enhanceCodeBlocks(article, {
+    pendingCodeBlocks = enhanceCodeBlocks(article, {
       highlighter: codeHighlighter,
       translator,
       isStillShown: () => isStillShown,
@@ -232,18 +238,50 @@
     const article = articleElement;
     if (!document?.html || !article || isSourceView || !richBlocks) return;
     let isStillShown = true;
-    void richBlocks.renderInto(article, { isStillShown: () => isStillShown });
+    pendingRichBlocks = richBlocks.renderInto(article, { isStillShown: () => isStillShown });
     return () => (isStillShown = false);
   });
 
   let handledCopyRequest = untrack(() => copyAsHtmlRequest);
   let handledExportRequest = untrack(() => exportRequest);
+  let handledPrintRequest = untrack(() => printRequest);
+  /** The latest highlighting and typesetting, which printing and exporting wait for. */
+  let pendingCodeBlocks: Promise<unknown> = Promise.resolve();
+  let pendingRichBlocks: Promise<unknown> = Promise.resolve();
+
+  /**
+   * Waits until the shown document has drawn: the new HTML is in place, code is highlighted, math is
+   * typeset, fonts are loaded and pictures are decoded. A picture that fails to load does not hold it up.
+   */
+  async function renderingSettled(): Promise<void> {
+    await tick();
+    await Promise.allSettled([pendingCodeBlocks, pendingRichBlocks]);
+    // Some engines, and the test DOM, lack the font and decode APIs; waiting then simply ends.
+    await Promise.resolve()
+      .then(() => globalThis.document.fonts.ready)
+      .catch(() => undefined);
+    const pictures = [...(articleElement?.querySelectorAll('img') ?? [])];
+    await Promise.all(
+      pictures.map((picture) =>
+        Promise.resolve()
+          .then(() => picture.decode())
+          .catch(() => undefined),
+      ),
+    );
+  }
+
+  $effect(() => {
+    const request = printRequest;
+    if (request === undefined || request === handledPrintRequest) return;
+    handledPrintRequest = request;
+    void renderingSettled().then(() => onPrint());
+  });
 
   $effect(() => {
     const request = exportRequest;
     if (request === undefined || request === handledExportRequest) return;
     handledExportRequest = request;
-    exportDocument(request.format);
+    void renderingSettled().then(() => exportDocument(request.format));
   });
 
   function exportDocument(format: ExportFormat) {

@@ -16,7 +16,7 @@ const MARKDOWN_EXTENSIONS: [&str; 5] = [".md", ".markdown", ".mdown", ".mkd", ".
 
 /// A note the index knows, by its path inside the location and the other names it answers to.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct KnownNote {
+pub struct KnownNote {
     pub path: String,
     pub aliases: Vec<String>,
 }

@@ -9,6 +9,7 @@ mod menu;
 mod notes;
 mod notes_index;
 mod notes_location;
+mod notes_transfer;
 mod open_requests;
 mod platform;
 mod spec_projects;
@@ -139,6 +140,11 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::notes::restore_note,
         commands::notes::empty_note_trash,
         commands::notes::apply_note_link_updates,
+        commands::notes_transfer::pick_notes_import_folder,
+        commands::notes_transfer::import_notes_folder,
+        commands::notes_transfer::cancel_notes_import,
+        commands::notes_transfer::pick_notes_export_folder,
+        commands::notes_transfer::export_notes_to_folder,
         commands::notes_index::show_notes_index,
         commands::notes_index::hide_notes_index,
         commands::notes_index::refresh_notes_index,

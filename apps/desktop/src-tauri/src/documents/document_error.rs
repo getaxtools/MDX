@@ -31,6 +31,12 @@ pub enum DocumentError {
     NameTaken,
     #[error("the name cannot be used for a file")]
     InvalidName,
+    #[error("the folder to import is the notes folder, holds it or is inside it")]
+    SourceOverlapsLocation,
+    #[error("the export would write into the notes folder")]
+    DestinationOverlapsLocation,
+    #[error("another import is still running")]
+    ImportRunning,
 }
 
 impl From<io::Error> for DocumentError {
