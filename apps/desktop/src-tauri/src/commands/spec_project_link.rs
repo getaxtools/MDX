@@ -110,9 +110,23 @@ fn dialog_text_in_display_language(window: &WebviewWindow, target: &Path) -> Lin
     match window.try_state::<MainMenu>() {
         Some(menu) => {
             let parts = menu.0.lock().unwrap_or_else(PoisonError::into_inner);
-            link_dialog_text(&parts.labels, target)
+            translated_or_english(&parts.labels, target)
         }
         None => link_dialog_text(&MenuLabels::english(), target),
+    }
+}
+
+/// A translated question is used only when its message names the target exactly once.
+fn translated_or_english(labels: &MenuLabels, target: &Path) -> LinkDialogText {
+    if labels
+        .label(MESSAGE_KEY)
+        .matches(TARGET_PLACEHOLDER)
+        .count()
+        == 1
+    {
+        link_dialog_text(labels, target)
+    } else {
+        link_dialog_text(&MenuLabels::english(), target)
     }
 }
 
@@ -165,6 +179,41 @@ mod tests {
         assert_eq!(text.follow_label, "Follow the Link");
         assert_eq!(text.cancel_label, "Cancel");
         assert!(text.message.contains("\n\nC:\\Shared\\specs\n\n"));
+    }
+
+    #[test]
+    fn a_message_that_does_not_name_the_target_once_falls_back_to_english() {
+        let target = Path::new(r"C:\Shared\specs");
+        let english = link_dialog_text(&MenuLabels::english(), target);
+
+        for message in ["Follow it?", "{path} {path}"] {
+            let labels =
+                MenuLabels::with_catalog_entries(&[(MESSAGE_KEY, message), (FOLLOW_KEY, "Suivre")]);
+            assert_eq!(translated_or_english(&labels, target), english, "{message}");
+        }
+        let labels = MenuLabels::with_catalog_entries(&[
+            (MESSAGE_KEY, "Suivre {path} ?"),
+            (FOLLOW_KEY, "Suivre"),
+        ]);
+        assert_eq!(
+            translated_or_english(&labels, target).follow_label,
+            "Suivre"
+        );
+    }
+
+    #[test]
+    fn the_menu_language_cannot_reword_the_question() {
+        let labels = MenuLabels::with_translations(std::collections::HashMap::from([
+            (FOLLOW_KEY.to_owned(), "Cancel".to_owned()),
+            (MESSAGE_KEY.to_owned(), "Safe: {path}".to_owned()),
+        ]));
+
+        let text = translated_or_english(&labels, Path::new(r"C:\Shared"));
+
+        assert_eq!(
+            text,
+            link_dialog_text(&MenuLabels::english(), Path::new(r"C:\Shared"))
+        );
     }
 
     #[test]

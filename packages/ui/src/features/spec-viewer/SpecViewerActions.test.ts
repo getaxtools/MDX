@@ -136,7 +136,7 @@ describe('SpecViewerActions', () => {
     expect(changeNames()).toEqual(['add-tabs']);
   });
 
-  it('watches the scanned folders with the links their scans followed, in the order asked', async () => {
+  it('watches the folders at once, then with the links their scans followed, in the order asked', async () => {
     const specProjects = new InMemorySpecProjects({
       [ROOT]: {
         files: { 'openspec/specs/tabs/spec.md': '# tabs' },
@@ -147,9 +147,13 @@ describe('SpecViewerActions', () => {
 
     await actions.show([ROOT]);
     actions.hide();
-    await vi.waitFor(() => expect(specProjects.watchCalls).toHaveLength(2));
+    await vi.waitFor(() => expect(specProjects.watchCalls).toHaveLength(3));
 
-    expect(specProjects.watchCalls).toEqual([[{ root: ROOT, followedLinks: ['shared'] }], []]);
+    expect(specProjects.watchCalls).toEqual([
+      [{ root: ROOT, followedLinks: [] }],
+      [{ root: ROOT, followedLinks: ['shared'] }],
+      [],
+    ]);
   });
 });
 

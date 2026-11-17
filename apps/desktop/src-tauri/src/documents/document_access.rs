@@ -1,12 +1,16 @@
 use std::collections::HashSet;
-use std::path::{MAIN_SEPARATOR, Path};
+use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
 
+#[cfg(test)]
+use super::location_of_resolved_path;
 use super::{DocumentError, DocumentLocation, canonical_key_of, locate_document};
 
 #[derive(Debug, Default)]
 pub struct DocumentAccessList {
     granted_folder_keys: Mutex<Vec<String>>,
+    /// Documents granted one by one, where granting their folder would grant too much.
+    granted_document_keys: Mutex<HashSet<String>>,
     opened_document_keys: Mutex<HashSet<String>>,
     /// Notes folders being moved: readable, but nothing in them may be written until the move ends.
     read_only_folder_keys: Mutex<HashSet<String>>,
@@ -32,12 +36,35 @@ impl DocumentAccessList {
         Ok(location)
     }
 
+    /// Grants the folder of a document already located, by its canonical key; when that folder is a
+    /// drive root, the user's profile folder or a folder holding it, only the document is granted.
+    pub fn grant_linked_document(&self, document: &DocumentLocation) {
+        match document.path().parent() {
+            Some(folder) if !is_too_broad_to_grant(folder) => {
+                self.grant_folder_key(canonical_key_of(&folder.to_string_lossy()));
+            }
+            _ => {
+                self.granted_document_keys
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .insert(document.canonical_key.clone());
+            }
+        }
+    }
+
     pub fn is_allowed(&self, location: &DocumentLocation) -> bool {
-        self.granted_folder_keys
+        let is_granted_alone = self
+            .granted_document_keys
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .iter()
-            .any(|folder_key| is_inside_folder(&location.canonical_key, folder_key))
+            .contains(&location.canonical_key);
+        is_granted_alone
+            || self
+                .granted_folder_keys
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .iter()
+                .any(|folder_key| is_inside_folder(&location.canonical_key, folder_key))
     }
 
     pub fn is_folder_allowed(&self, folder: &DocumentLocation) -> bool {
@@ -125,6 +152,16 @@ impl DocumentAccessList {
     }
 }
 
+/// A drive root, the user's profile folder or a folder holding it would grant far more than a project.
+pub fn is_too_broad_to_grant(folder: &Path) -> bool {
+    folder.parent().is_none() || profile_folder().is_some_and(|profile| profile.starts_with(folder))
+}
+
+fn profile_folder() -> Option<PathBuf> {
+    let variable = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
+    dunce::canonicalize(std::env::var_os(variable)?).ok()
+}
+
 fn is_inside_folder(document_key: &str, folder_key: &str) -> bool {
     let folder_with_separator = if folder_key.ends_with(MAIN_SEPARATOR) {
         folder_key.to_owned()
@@ -139,6 +176,25 @@ mod tests {
     use std::fs;
 
     use super::*;
+
+    #[test]
+    fn a_linked_document_grants_its_folder_unless_that_folder_is_too_broad() {
+        let access = DocumentAccessList::default();
+        let in_drive_root = location_of_resolved_path(Path::new(r"C:\plan.md"));
+        let profile = profile_folder().unwrap();
+        let in_profile = location_of_resolved_path(&profile.join("plan.md"));
+        let in_project = location_of_resolved_path(Path::new(r"C:\Projects\shop\plan.md"));
+
+        for document in [&in_drive_root, &in_profile, &in_project] {
+            access.grant_linked_document(document);
+        }
+
+        let sibling = |path: &Path| location_of_resolved_path(&path.with_file_name("other.md"));
+        assert!(access.is_allowed(&in_drive_root) && access.is_allowed(&in_profile));
+        assert!(!access.is_allowed(&sibling(&in_drive_root.path())));
+        assert!(!access.is_allowed(&sibling(&in_profile.path())));
+        assert!(access.is_allowed(&sibling(&in_project.path())));
+    }
 
     fn tree() -> tempfile::TempDir {
         let root = tempfile::tempdir().unwrap();

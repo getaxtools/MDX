@@ -116,7 +116,8 @@ fn linked_document(
     if is_other_target {
         return Err(DocumentError::InvalidRequest);
     }
-    Ok(access.grant_folder_of(&location.path())?.display_path)
+    access.grant_linked_document(&location);
+    Ok(location.display_path)
 }
 
 fn linked_path(document: &Path, href: &str) -> Option<PathBuf> {

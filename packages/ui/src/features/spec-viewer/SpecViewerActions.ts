@@ -70,6 +70,7 @@ export class SpecViewerActions {
     this.current = { roots: undefined, unreadableFolders: [] };
     this.scans = [];
     this.dependencies.onChange();
+    this.watch(folderPaths.map((root) => ({ root, followedLinks: [] })));
     const scans = await Promise.all(folderPaths.map((folderPath) => this.numberedScanOf(folderPath)));
     if (this.shownFolders !== folderPaths) return;
     this.useScans(scans.map((scan) => scan.scan));

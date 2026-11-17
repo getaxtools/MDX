@@ -23,7 +23,10 @@ impl WatchedProjects {
     /// The roots below which a changed path could change a scan; an empty path stands for a watcher
     /// error, after which anything may have changed. Each root is reported once.
     fn roots_holding(&self, changed_paths: &[PathBuf]) -> Vec<String> {
-        let changes = meaningful_changes(changed_paths);
+        let changes: Vec<(&PathBuf, ChangedEntry)> = changed_paths
+            .iter()
+            .map(|path| (path, entry_at(path)))
+            .collect();
         let mut roots: Vec<String> = Vec::new();
         for tree in &self.trees {
             let is_changed = changes.iter().any(|(path, entry)| {
@@ -44,21 +47,6 @@ impl WatchedProjects {
         }
         roots
     }
-}
-
-/// Each changed path with what it is now. A folder is left out when a path below it changed in the same
-/// batch: the file system reports such folders too, and the change below tells what happened.
-fn meaningful_changes(changed_paths: &[PathBuf]) -> Vec<(&PathBuf, ChangedEntry)> {
-    changed_paths
-        .iter()
-        .map(|path| (path, entry_at(path)))
-        .filter(|(path, entry)| {
-            *entry != ChangedEntry::Folder
-                || !changed_paths
-                    .iter()
-                    .any(|other| other != *path && other.starts_with(path))
-        })
-        .collect()
 }
 
 fn entry_at(path: &std::path::Path) -> ChangedEntry {
@@ -214,19 +202,14 @@ mod tests {
     #[test]
     fn stays_quiet_about_files_no_scan_lists() {
         let root = tempfile::tempdir().unwrap();
-        for folder in [
-            ".git/refs",
-            "openspec/node_modules/x",
-            "openspec/dist",
-            "src",
-        ] {
+        for folder in [".git/refs", "node_modules/x", "dist", "src"] {
             fs::create_dir_all(root.path().join(folder)).unwrap();
         }
         let (_watcher, changes) = watch(root.path());
 
         fs::write(root.path().join(".git/refs/head"), "1").unwrap();
-        fs::write(root.path().join("openspec/node_modules/x/a.md"), "#").unwrap();
-        fs::write(root.path().join("openspec/dist/a.md"), "#").unwrap();
+        fs::write(root.path().join("node_modules/x/a.md"), "#").unwrap();
+        fs::write(root.path().join("dist/a.md"), "#").unwrap();
         fs::write(root.path().join("src/main.rs"), "fn main() {}").unwrap();
 
         assert_eq!(
@@ -263,23 +246,23 @@ mod tests {
     }
 
     #[test]
-    fn a_folder_moved_in_alone_counts_but_one_reported_with_a_change_below_it_does_not() {
+    fn a_new_change_folder_counts_even_with_an_ignored_file_below_it() {
         let root = tempfile::tempdir().unwrap();
-        fs::create_dir_all(root.path().join("openspec").join("changes").join("add-x")).unwrap();
+        let change = root.path().join("openspec").join("changes").join("add-x");
+        fs::create_dir_all(change.join("node_modules")).unwrap();
         let watched = WatchedProjects {
             trees: vec![tree(root.path(), "")],
             additional_locations: Vec::new(),
         };
-        let root_path = dunce::canonicalize(root.path()).unwrap();
-        let openspec = root_path.join("openspec");
+        let change = dunce::canonicalize(&change).unwrap();
 
         assert_eq!(
-            watched.roots_holding(&[openspec.join("changes").join("add-x")]),
+            watched.roots_holding(&[change.clone(), change.join("node_modules").join("a.md")]),
             ["shop"]
         );
         assert!(
             watched
-                .roots_holding(&[openspec.clone(), openspec.join("dist").join("a.md")])
+                .roots_holding(&[change.join("node_modules").join("a.md")])
                 .is_empty()
         );
     }

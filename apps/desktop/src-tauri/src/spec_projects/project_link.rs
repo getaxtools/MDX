@@ -1,7 +1,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::documents::{DocumentAccessList, DocumentError, DocumentLocation, locate_document};
+use crate::documents::{
+    DocumentAccessList, DocumentError, DocumentLocation, is_too_broad_to_grant, locate_document,
+};
 
 const MAX_LINK_PATH_CHARACTERS: usize = 1_024;
 
@@ -22,7 +24,8 @@ pub fn linked_folder_target(
     else {
         return Err(DocumentError::InvalidRequest);
     };
-    let parent_location = locate_document(parent)?;
+    // A missing folder answers as an ungranted one does, so nothing about the disk outside a grant shows.
+    let parent_location = locate_document(parent).map_err(|_| DocumentError::AccessDenied)?;
     if !access.is_folder_allowed(&parent_location) {
         return Err(DocumentError::AccessDenied);
     }
@@ -68,16 +71,6 @@ pub fn validated_link_path(link_path: &str) -> Result<PathBuf, DocumentError> {
         relative.push(part);
     }
     Ok(relative)
-}
-
-/// A drive root, the user's profile folder or a folder holding it would grant far more than a project.
-fn is_too_broad_to_grant(folder: &Path) -> bool {
-    folder.parent().is_none() || profile_folder().is_some_and(|profile| profile.starts_with(folder))
-}
-
-fn profile_folder() -> Option<PathBuf> {
-    let variable = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
-    dunce::canonicalize(std::env::var_os(variable)?).ok()
 }
 
 #[cfg(test)]
@@ -163,12 +156,19 @@ mod tests {
             follow_linked_folder(root.path(), "openspec/further", &access, never_asked),
             Err(DocumentError::AccessDenied)
         );
+        assert_eq!(
+            follow_linked_folder(root.path(), "missing/further", &access, never_asked),
+            Err(DocumentError::AccessDenied)
+        );
     }
 
     #[test]
     fn refuses_a_link_to_a_drive_root_or_the_profile_folder() {
         let root = tempfile::tempdir().unwrap();
-        let profile = profile_folder().unwrap();
+        let profile = dunce::canonicalize(
+            std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).unwrap(),
+        )
+        .unwrap();
         link_folder(&root.path().join("home"), &profile);
         let access = granted(root.path());
         let never_asked = |_: &DocumentLocation| -> bool { panic!("the user must not be asked") };

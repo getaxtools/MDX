@@ -7,7 +7,7 @@ mod path_status;
 mod text_decoding;
 mod text_encoding;
 
-pub use document_access::DocumentAccessList;
+pub use document_access::{DocumentAccessList, is_too_broad_to_grant};
 pub use document_error::DocumentError;
 pub use document_location::{
     DocumentLocation, canonical_key_of, locate_document, location_of_resolved_path,

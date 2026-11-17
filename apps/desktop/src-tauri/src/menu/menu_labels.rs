@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
 const ENGLISH_CATALOG: &str = include_str!("../../../../../packages/i18n/locales/en.json");
+/// The catalog keys the native menu shows. A translation the window sends for any other key is dropped,
+/// so the window cannot reword text the app shows elsewhere, such as its own questions.
+const MENU_KEY_PREFIXES: [&str; 5] = ["menu.", "workspaces.", "tabs.", "encoding.", "recentFiles."];
 
 pub struct MenuLabels(HashMap<String, String>);
 
@@ -9,11 +12,16 @@ impl MenuLabels {
         Self(serde_json::from_str(ENGLISH_CATALOG).unwrap_or_default())
     }
 
-    /// English labels replaced by the given translations; keys English does not have are ignored.
+    /// English labels replaced by the given translations of menu keys; other keys, and keys English
+    /// does not have, are ignored.
     pub fn with_translations(translations: HashMap<String, String>) -> Self {
         let mut labels = Self::english();
         for (key, label) in translations {
-            if !label.is_empty()
+            let is_menu_key = MENU_KEY_PREFIXES
+                .iter()
+                .any(|prefix| key.starts_with(prefix));
+            if is_menu_key
+                && !label.is_empty()
                 && let Some(english) = labels.0.get_mut(&key)
             {
                 *english = label;
@@ -35,6 +43,16 @@ impl MenuLabels {
         } else {
             label
         }
+    }
+
+    /// Labels set directly, for tests of text the app words from the catalog.
+    #[cfg(test)]
+    pub fn with_catalog_entries(entries: &[(&str, &str)]) -> Self {
+        let mut labels = Self::english();
+        for (key, label) in entries {
+            labels.0.insert((*key).to_owned(), (*label).to_owned());
+        }
+        labels
     }
 
     #[cfg(test)]
@@ -65,6 +83,23 @@ mod tests {
         assert_eq!(labels.label("menu.file"), "फ़ाइल");
         assert_eq!(labels.label("menu.edit"), "Edit");
         assert!(!labels.has("menu.invented"));
+    }
+
+    #[test]
+    fn keeps_english_for_keys_the_menu_does_not_show() {
+        let labels = MenuLabels::with_translations(HashMap::from([
+            (
+                "specViewer.link.question.follow".to_owned(),
+                "Cancel".to_owned(),
+            ),
+            ("encoding.reopen".to_owned(), "Rouvrir".to_owned()),
+        ]));
+
+        assert_eq!(
+            labels.label("specViewer.link.question.follow"),
+            "Follow the Link"
+        );
+        assert_eq!(labels.label("encoding.reopen"), "Rouvrir");
     }
 
     #[test]
