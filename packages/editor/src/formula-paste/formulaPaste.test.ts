@@ -135,6 +135,22 @@ describe('pasting formulas safely', () => {
     );
   });
 
+  it('a document changed while the conversion loads gets the plain text where the paste was', async () => {
+    let finishTypesetting: (html: string) => void = () => undefined;
+    const typesetMath = () =>
+      new Promise<string | undefined>((resolve) => {
+        finishTypesetting = resolve;
+      });
+    const editor = open('Start ', { richTextRendering: fakeRichTextRendering({ typesetMath }) });
+    pasteInto(editor.view, { 'text/plain': 'Area \\(x\\)' });
+
+    editor.view.dispatch({ changes: { from: 0, insert: 'Typed ' }, selection: EditorSelection.cursor(6) });
+    finishTypesetting('<span></span>');
+
+    await vi.waitFor(() => expect(documentText(editor)).toBe('Typed Start Area \\(x\\)'));
+    expect(notice(editor)).toBeNull();
+  });
+
   it('dollars that would pair up with the text around the formula paste as text', async () => {
     const editor = open();
 

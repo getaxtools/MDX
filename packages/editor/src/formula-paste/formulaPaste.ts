@@ -41,6 +41,41 @@ const noticeField = StateField.define<PasteNotice | undefined>({
   provide: (field) => showTooltip.from(field, (notice) => (notice ? noticeTooltip(notice) : null)),
 });
 
+/** A paste whose conversion is still loading or typesetting, with where it goes, mapped through later changes. */
+interface PendingPaste {
+  readonly id: number;
+  readonly selection: EditorSelection;
+  readonly isDocumentChanged: boolean;
+}
+
+const startPendingPaste = StateEffect.define<number>();
+const endPendingPaste = StateEffect.define<number>();
+
+const pendingPastes = StateField.define<readonly PendingPaste[]>({
+  create: () => [],
+  update: (pastes, transaction) => {
+    let updated = transaction.docChanged
+      ? pastes.map((paste) => ({
+          ...paste,
+          selection: paste.selection.map(transaction.changes),
+          isDocumentChanged: true,
+        }))
+      : pastes;
+    for (const effect of transaction.effects) {
+      if (effect.is(startPendingPaste)) {
+        updated = [
+          ...updated,
+          { id: effect.value, selection: transaction.state.selection, isDocumentChanged: false },
+        ];
+      }
+      if (effect.is(endPendingPaste)) updated = updated.filter((paste) => paste.id !== effect.value);
+    }
+    return updated;
+  },
+});
+
+let lastPasteId = 0;
+
 /** One undo removes the paste, so it never joins the typing before or after it. */
 const PASTE_HISTORY = isolateHistory.of('full');
 
@@ -84,7 +119,7 @@ function insertClipboardText(view: EditorView, text: string): void {
 }
 
 /** Display math needs lines of its own, so a line break goes between it and text on the same line. */
-function conversionAt(state: EditorState, markdown: string) {
+function conversionOver(state: EditorState, markdown: string) {
   return state.changeByRange((range) => {
     const line = state.doc.lineAt(range.from);
     const endLine = state.doc.lineAt(range.to);
@@ -107,22 +142,42 @@ function conversionWith(rendering: RichTextRendering): FormulaConversion {
   };
 }
 
+/**
+ * Writes the conversion where the paste was. When the document changed while the conversion
+ * loaded, the plain text goes there instead, at that place mapped through the changes.
+ */
 async function insertConversion(
   view: EditorView,
   pieces: Parameters<typeof formulaMarkdown>[0],
   { plainText, rendering }: { readonly plainText: string; readonly rendering: RichTextRendering },
 ): Promise<void> {
+  lastPasteId += 1;
+  const id = lastPasteId;
+  view.dispatch({ effects: startPendingPaste.of(id) });
   const markdown = await formulaMarkdown(pieces, conversionWith(rendering));
-  if (markdown === undefined) {
-    insertClipboardText(view, plainText);
+  const pending = view.state.field(pendingPastes).find((paste) => paste.id === id);
+  if (!pending) return;
+  const atPaste = view.state.update({ selection: pending.selection }).state;
+  const isConverted = markdown !== undefined && !pending.isDocumentChanged;
+  if (!isConverted) {
+    const plainPaste = plainText === '' ? {} : atPaste.replaceSelection(plainText);
+    view.dispatch(plainPaste, {
+      userEvent: 'input.paste',
+      effects: endPendingPaste.of(id),
+      scrollIntoView: true,
+    });
     return;
   }
-  const conversion = conversionAt(view.state, markdown);
+  const conversion = conversionOver(atPaste, markdown);
   const notice = { position: conversion.selection.main.head, plainText };
   view.dispatch(conversion, {
     userEvent: 'input.paste',
     annotations: PASTE_HISTORY,
-    effects: [showNotice.of(notice), EditorView.announce.of(view.state.phrase(FORMULA_PASTE_PHRASES.notice))],
+    effects: [
+      endPendingPaste.of(id),
+      showNotice.of(notice),
+      EditorView.announce.of(view.state.phrase(FORMULA_PASTE_PHRASES.notice)),
+    ],
     scrollIntoView: true,
   });
 }
@@ -165,14 +220,18 @@ const noticeTheme = EditorView.theme({
   },
 });
 
-/** The Pasted as equation notice: Escape, typing and the focus leaving the editor close it. */
-export function formulaPasteNotice(): Extension {
+/**
+ * The state formula pastes need: the pastes still converting, and the Pasted as equation notice,
+ * which Escape, typing and the focus leaving the editor close.
+ */
+export function formulaPasteState(): Extension {
   const close = (view: EditorView): boolean => {
     if (!view.state.field(noticeField)) return false;
     view.dispatch({ effects: closeNotice.of(null) });
     return true;
   };
   return [
+    pendingPastes,
     noticeField,
     noticeTheme,
     Prec.highest(keymap.of([{ key: 'Escape', run: close }])),

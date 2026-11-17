@@ -76,6 +76,25 @@ describe('pasting into the equation field', () => {
     expect(isFormulaTypeset).toHaveBeenCalledWith('\\frac{1', false);
   });
 
+  it('a field typed in while the conversion loads keeps what was typed', async () => {
+    let finishCheck: (isTypeset: boolean) => void = () => undefined;
+    const isFormulaTypeset = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishCheck = resolve;
+        }),
+    );
+    const view = openField({ isFormulaTypeset });
+    pasteInto(view, { 'text/plain': '\\(a+b\\)' });
+    await vi.waitFor(() => expect(isFormulaTypeset).toHaveBeenCalledOnce());
+
+    view.dispatch(view.state.replaceSelection('typed'));
+    finishCheck(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(field?.text()).toBe('typed');
+  });
+
   it('text around the formula leaves the paste as usual', () => {
     const view = openField();
 

@@ -34,7 +34,7 @@ import { nearestLineStart, pictureLinksAt, remotePictureMarkdown } from './attac
 import { pictureChooserFacet } from './attachments/pictureRequests';
 import { insertPlainText, plainTextPaste } from './attachments/plainTextPaste';
 import { blockMenuOpener } from './blocks/blockHandle';
-import { formulaPasteNotice, pasteFormulas } from './formula-paste/formulaPaste';
+import { formulaPasteState, pasteFormulas } from './formula-paste/formulaPaste';
 import { calloutTypeChange, type CalloutFoldSign } from './rich-text/calloutMarker';
 import { calloutTypeMenuOpener } from './rich-text/calloutTitleWidget';
 import {
@@ -657,7 +657,7 @@ function editorExtensions(options: SourceEditorOptions): Extension[] {
     // An explicit tab stop lets checkers see that the scrolling editor can be reached with the keyboard.
     EditorView.contentAttributes.of({ 'aria-label': options.label, spellcheck: 'false', tabindex: '0' }),
     ...editorKeymaps(),
-    formulaPasteNotice(),
+    formulaPasteState(),
     EditorView.domEventHandlers({ paste: (event, view) => pasteInOrder(event, view, options) }),
     EditorView.updateListener.of((update) => reportChanges(update, options)),
   ];

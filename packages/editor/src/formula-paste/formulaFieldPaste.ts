@@ -35,7 +35,11 @@ export function formulaFieldPaste(isTypeset: FormulaTypesetCheck = IS_TYPESET_UN
       const formula = formulas.kind === 'formulas' ? onlyFormulaOf(formulas.pieces) : undefined;
       if (!formula) return false;
       event.preventDefault();
-      void checkedTex(formula, { texOfMathml, isTypeset }).then((tex) => insertText(view, tex ?? plainText));
+      const textAtPaste = view.state.doc;
+      void checkedTex(formula, { texOfMathml, isTypeset }).then((tex) => {
+        // A field typed in while the conversion loaded keeps what was typed; the paste is dropped.
+        if (view.state.doc === textAtPaste) insertText(view, tex ?? plainText);
+      });
       return true;
     },
   });
