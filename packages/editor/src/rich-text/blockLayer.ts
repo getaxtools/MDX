@@ -57,6 +57,8 @@ function blockDecorations(block: RichTextBlock): readonly Range<Decoration>[] {
     if (isRevealed) return withoutFailures(() => provider.decorationsWhileRevealed?.(block) ?? [], []);
     const widget = withoutFailures(() => provider.widgetFor(block), undefined);
     if (widget) return [Decoration.replace({ widget, block: true }).range(block.from, block.to)];
+    const textDecorations = withoutFailures(() => provider.decorationsWithoutWidget?.(block) ?? [], []);
+    if (textDecorations.length > 0) return textDecorations;
   }
   return [];
 }

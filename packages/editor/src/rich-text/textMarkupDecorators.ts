@@ -1,6 +1,6 @@
 import { Decoration } from '@codemirror/view';
 import { FormulaWidget, ImageWidget, RuleWidget } from './blockWidgets';
-import { MAX_RENDERED_FORMULA_LENGTH } from './builtInBlockProviders';
+import { MAX_RENDERED_FORMULA_LENGTH } from './renderLimits';
 import { hasLinkTarget, isBareUrl } from './linkTargets';
 import { decorate, decorateLines, hide, isRevealed, type MarkupContext } from './markupContext';
 import {

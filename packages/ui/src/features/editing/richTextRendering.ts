@@ -46,6 +46,7 @@ export function createRichTextRendering({
       properties: (count) => translator.translate('editor.richText.properties', { count }),
       diagram: (type) => translator.translate('editor.richText.diagram', { type }),
       task: () => translator.translate('editor.richText.task'),
+      tableTooLarge: () => translator.translate('editor.richText.tableTooLarge'),
     },
   };
 }

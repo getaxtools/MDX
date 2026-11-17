@@ -48,7 +48,8 @@ function enclosingTable(start: SyntaxNode): SyntaxNode | undefined {
   return undefined;
 }
 
-function tableOf(state: EditorState, table: SyntaxNode): MarkdownTable {
+/** The cells and rows of a `Table` syntax node. */
+export function tableOf(state: EditorState, table: SyntaxNode): MarkdownTable {
   const rowNodes = childrenOf(table).filter(
     (child) => child.name === 'TableHeader' || child.name === 'TableRow',
   );

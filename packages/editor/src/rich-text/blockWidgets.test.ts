@@ -87,16 +87,6 @@ describe('Rich text tables and diagrams', () => {
     expect(editor.view.contentDOM.querySelector('.cm-rich-table')).toBeNull();
   });
 
-  it('caret in a table shows its source', () => {
-    const editor = open(`${tableWithCells(2)}\n\nEnd`);
-    const shownAway = editor.view.contentDOM.querySelector('.cm-rich-table');
-
-    placeCaret(editor.view, 4);
-
-    expect(shownAway).not.toBeNull();
-    expect(shownLines(editor.view).slice(0, 2)).toEqual(['| A | B | C |', '|---|---|---|']);
-  });
-
   it('diagram block without a drawing port shows as code', () => {
     const editor = open('```mermaid\ngraph TD; A-->B\n```\n\nEnd');
 

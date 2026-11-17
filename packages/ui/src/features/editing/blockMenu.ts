@@ -19,15 +19,27 @@ function calloutStartItems(
   return items.map((item, index) => ({ ...item, hasSeparatorBefore: index === 0 }));
 }
 
+/** The block at the caret as the menu needs it. */
+export interface MenuBlock {
+  /** For a callout, how it is written to start. */
+  readonly calloutFold?: CalloutFoldSign | undefined;
+  /** A table shown as a grid in Rich text, which can be edited as text instead. */
+  readonly isGridTable?: boolean;
+}
+
 /**
- * The block menu: move, duplicate and delete the block at the caret, choose how a callout starts,
- * or turn the block into another kind.
+ * The block menu: edit a grid table as text, move, duplicate and delete the block at the caret,
+ * choose how a callout starts, or turn the block into another kind.
  */
 export function blockMenuItems(
   translator: Translator,
-  calloutFold?: CalloutFoldSign,
+  { calloutFold, isGridTable = false }: MenuBlock = {},
 ): ContextMenuItem<BlockAction>[] {
+  const tableItems: ContextMenuItem<BlockAction>[] = isGridTable
+    ? [{ id: 'editTableAsText', label: translator.translate('editor.blockMenu.editTableAsText') }]
+    : [];
   return [
+    ...tableItems,
     { id: 'moveUp', label: translator.translate('editor.action.moveBlockUp'), shortcut: 'Alt+Shift+↑' },
     { id: 'moveDown', label: translator.translate('editor.action.moveBlockDown'), shortcut: 'Alt+Shift+↓' },
     { id: 'duplicate', label: translator.translate('editor.blockMenu.duplicate') },
@@ -44,12 +56,9 @@ export function blockMenuItems(
 /** The block menu, led by Open Link while the caret is in a link. */
 export function editorMenuItems(
   translator: Translator,
-  {
-    isCaretInLink,
-    calloutFold,
-  }: { readonly isCaretInLink: boolean; readonly calloutFold?: CalloutFoldSign | undefined },
+  { isCaretInLink, ...block }: { readonly isCaretInLink: boolean } & MenuBlock,
 ): ContextMenuItem<EditorMenuChoice>[] {
-  const blockItems = blockMenuItems(translator, calloutFold);
+  const blockItems = blockMenuItems(translator, block);
   if (!isCaretInLink) return blockItems;
   const [firstBlockItem, ...otherBlockItems] = blockItems;
   return [

@@ -3,6 +3,7 @@ import { blockMove } from './moveBlocks';
 import { siblingBlocksAt, type MarkdownBlock } from './markdownBlocks';
 import { calloutStartChange } from '../rich-text/calloutFolds';
 import { calloutLineAt, type CalloutFoldSign } from '../rich-text/calloutMarker';
+import { tableAsTextAtCaret } from '../tables/grid/tablesAsText';
 
 export type TurnIntoKind =
   'paragraph' | 'heading1' | 'heading2' | 'heading3' | 'quote' | 'bulletList' | 'codeBlock';
@@ -14,6 +15,7 @@ export type BlockAction =
   | 'delete'
   | 'startCollapsed'
   | 'startExpanded'
+  | 'editTableAsText'
   | `turnInto.${TurnIntoKind}`;
 
 export const TURN_INTO_KINDS: readonly TurnIntoKind[] = [
@@ -51,6 +53,7 @@ export function blockAction(state: EditorState, action: BlockAction): Transactio
     const move = blockMove(state, action === 'moveUp' ? 'up' : 'down');
     return move?.outcome === 'moved' ? move.spec : undefined;
   }
+  if (action === 'editTableAsText') return tableAsTextAtCaret(state);
   const block = blockAtCaret(state);
   if (!block) return undefined;
   if (isBlockEdit(action)) return BLOCK_EDITS[action](state, block);

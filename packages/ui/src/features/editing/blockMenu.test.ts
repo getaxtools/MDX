@@ -27,6 +27,14 @@ describe('block menu', () => {
     expect(labelsFor(undefined).some((label) => label.startsWith('Start '))).toBe(false);
   });
 
+  it('a table shown as a grid offers Edit table as text first, other blocks do not', () => {
+    const forTable = editorMenuItems(translator, { isCaretInLink: false, isGridTable: true });
+    const forParagraph = editorMenuItems(translator, { isCaretInLink: false });
+
+    expect(forTable[0]).toMatchObject({ id: 'editTableAsText', label: 'Edit table as text' });
+    expect(forParagraph.some((item) => item.id === 'editTableAsText')).toBe(false);
+  });
+
   it('the callout type menu names the five looks as the preview does', () => {
     expect(calloutTypeMenuItems(translator).map(({ id, label }) => [id, label])).toEqual([
       ['note', 'Note'],

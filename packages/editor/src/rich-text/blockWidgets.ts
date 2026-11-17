@@ -66,6 +66,24 @@ export class TableWidget extends RenderedWidget {
   }
 }
 
+/** A line above a block that stays Markdown text, saying why, such as a table too large for a grid. */
+export class TextNoticeWidget extends WidgetType {
+  constructor(readonly text: string) {
+    super();
+  }
+
+  override eq(other: WidgetType): boolean {
+    return other instanceof TextNoticeWidget && other.text === this.text;
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    const notice = view.dom.ownerDocument.createElement('div');
+    notice.className = 'cm-text-notice';
+    notice.textContent = this.text;
+    return notice;
+  }
+}
+
 /** An HTML block as the preview shows it, after the preview's sanitizer. */
 export class HtmlBlockWidget extends RenderedWidget {
   toDOM(view: EditorView): HTMLElement {

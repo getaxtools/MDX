@@ -10,6 +10,8 @@ export interface RichTextLabels {
   diagram(type: string): string;
   /** The name of a task checkbox whose item has no text. */
   task(): string;
+  /** Says a table is too large to show as a grid, so it shows as Markdown text. */
+  tableTooLarge(): string;
 }
 
 /** A callout's look, one of the preview's five, and the title it shows. */

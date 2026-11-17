@@ -5,7 +5,9 @@ import type { RichTextBlockProvider } from './richTextProviders';
 
 const TABLE = '| A | B |\n|---|---|\n| 1 | 2 |';
 const DOCUMENT_WITH_TABLE = `Intro\n\n${TABLE}\n\nEnd`;
-const TABLE_START = 'Intro\n\n'.length;
+const HTML_BLOCK = '<div>\nhello\n</div>';
+const DOCUMENT_WITH_HTML_BLOCK = `Intro\n\n${HTML_BLOCK}\n\nEnd`;
+const HTML_BLOCK_START = 'Intro\n\n'.length;
 
 let opened: TestEditor | undefined;
 
@@ -40,25 +42,25 @@ describe('Rich text block widgets', () => {
   });
 
   it('widget replaced by source when the caret enters', () => {
-    const { view } = open(DOCUMENT_WITH_TABLE);
-    const shownAway = view.contentDOM.querySelector('.cm-rich-table');
+    const { view } = open(DOCUMENT_WITH_HTML_BLOCK);
+    const shownAway = view.contentDOM.querySelector('.cm-rich-html');
 
-    placeCaret(view, TABLE_START + 3);
+    placeCaret(view, HTML_BLOCK_START + 3);
 
-    expect(shownAway?.textContent).toBe(`${String(TABLE.length)} characters`);
-    expect(view.contentDOM.querySelector('.cm-rich-table')).toBeNull();
-    expect(shownLines(view)).toContain('| 1 | 2 |');
+    expect(shownAway?.textContent).toBe(`${String(HTML_BLOCK.length)} characters`);
+    expect(view.contentDOM.querySelector('.cm-rich-html')).toBeNull();
+    expect(shownLines(view)).toContain('hello');
   });
 
   it('arrow key into a widget lands in its source', () => {
-    const editor = open(DOCUMENT_WITH_TABLE);
-    placeCaret(editor.view, TABLE_START - 1);
+    const editor = open(DOCUMENT_WITH_HTML_BLOCK);
+    placeCaret(editor.view, HTML_BLOCK_START - 1);
 
     press(editor, 'ArrowRight');
 
-    expect(editor.view.state.selection.main.head).toBe(TABLE_START);
-    expect(editor.view.contentDOM.querySelector('.cm-rich-table')).toBeNull();
-    expect(shownLines(editor.view)).toContain('| A | B |');
+    expect(editor.view.state.selection.main.head).toBe(HTML_BLOCK_START);
+    expect(editor.view.contentDOM.querySelector('.cm-rich-html')).toBeNull();
+    expect(shownLines(editor.view)).toContain('<div>');
   });
 
   it('widget is not redrawn when its source is unchanged', () => {

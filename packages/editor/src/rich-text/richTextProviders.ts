@@ -27,6 +27,8 @@ export interface RichTextBlockProvider {
   widgetFor(block: RichTextBlock): WidgetType | undefined;
   /** Decorations kept while a selection is in the block, such as a grid's highlight of the live cell. */
   decorationsWhileRevealed?(block: RichTextBlock): readonly Range<Decoration>[];
+  /** Decorations of a block that stays text without a selection in it, such as a notice saying why. */
+  decorationsWithoutWidget?(block: RichTextBlock): readonly Range<Decoration>[];
 }
 
 /** Adds decorations to the lines in view; replacing decorations are dropped where a selection touches them. */

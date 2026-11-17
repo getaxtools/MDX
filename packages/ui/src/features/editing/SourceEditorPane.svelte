@@ -10,9 +10,9 @@
     editorMenuItems,
     type CalloutTypeChoice,
     type EditorMenuChoice,
+    type MenuBlock,
   } from './blockMenu';
   import type {
-    CalloutFoldSign,
     EmbedResolver,
     EditorTextRange,
     FormattingState,
@@ -112,12 +112,20 @@
   }: Props = $props();
 
   let container: HTMLDivElement | undefined = $state();
-  let blockMenuRequest:
-    (ContextMenuRequest & { readonly calloutFold?: CalloutFoldSign | undefined }) | undefined = $state();
+  let blockMenuRequest: (ContextMenuRequest & MenuBlock) | undefined = $state();
   let calloutTypeMenu:
     | { readonly position: ContextMenuRequest; readonly type: { readonly from: number; readonly to: number } }
     | undefined = $state();
   let isCaretInLink = $state(false);
+
+  /** The block at the caret as the block menu offers it: a table in Rich text can be edited as text. */
+  function menuBlockAtCaret(): MenuBlock {
+    const block = editor?.blockAtCaret();
+    return {
+      calloutFold: block?.calloutFold,
+      isGridTable: block?.kind === 'table' && editor?.editingMode() === 'richText',
+    };
+  }
 
   /** Shift+F10 or the Menu key in the editor open the block menu at the caret. */
   function openBlockMenu(event: KeyboardEvent) {
@@ -126,7 +134,7 @@
     if (!block) return;
     event.preventDefault();
     event.stopPropagation();
-    blockMenuRequest = { x: block.x, y: block.y, calloutFold: block.calloutFold };
+    blockMenuRequest = { x: block.x, y: block.y, ...menuBlockAtCaret() };
   }
 
   function chooseCalloutType(type: CalloutTypeChoice) {
@@ -191,7 +199,7 @@
       ...(onEditFormula ? { onEditFormula: (request: FormulaEditRequest) => onEditFormula(request) } : {}),
       ...(onChoosePictures ? { onChoosePictures: () => onChoosePictures() } : {}),
       onOpenBlockMenu: (point: { readonly x: number; readonly y: number }) =>
-        (blockMenuRequest = { ...point, calloutFold: editor?.blockAtCaret()?.calloutFold }),
+        (blockMenuRequest = { ...point, ...menuBlockAtCaret() }),
       onOpenCalloutTypeMenu: (
         position: { readonly x: number; readonly y: number },
         type: { readonly from: number; readonly to: number },
@@ -298,7 +306,7 @@
 {#if blockMenuRequest}
   <ContextMenu
     label={translator.translate('editor.blockMenu.label')}
-    items={editorMenuItems(translator, { isCaretInLink, calloutFold: blockMenuRequest.calloutFold })}
+    items={editorMenuItems(translator, { isCaretInLink, ...blockMenuRequest })}
     position={blockMenuRequest}
     onChoose={chooseEditorMenuItem}
     onClose={closeBlockMenu}

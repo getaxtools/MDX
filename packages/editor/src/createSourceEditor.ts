@@ -34,6 +34,7 @@ import { nearestLineStart, pictureLinksAt, remotePictureMarkdown } from './attac
 import { pictureChooserFacet } from './attachments/pictureRequests';
 import { insertPlainText, plainTextPaste } from './attachments/plainTextPaste';
 import { blockMenuOpener } from './blocks/blockHandle';
+import { tableAsTextAtCaret } from './tables/grid/tablesAsText';
 import { formulaPasteState, pasteFormulas } from './formula-paste/formulaPaste';
 import { calloutTypeChange, type CalloutFoldSign } from './rich-text/calloutMarker';
 import { calloutTypeMenuOpener } from './rich-text/calloutTitleWidget';
@@ -105,7 +106,8 @@ export type EditorMenuCommand =
   | 'copyLineDown'
   | 'addNextOccurrence'
   | 'openLink'
-  | 'insertEquation';
+  | 'insertEquation'
+  | 'editTableAsText';
 
 export interface SourceEditorOptions {
   readonly parent: HTMLElement;
@@ -659,6 +661,11 @@ function menuCommandsOf(view: EditorView): Readonly<Record<EditorMenuCommand, ()
     addNextOccurrence: () => selectNextOccurrence(view),
     openLink: () => openLinkAtCaret(view) || openEmbedAtCaret(view),
     insertEquation: () => startFormula(undefined)(view),
+    editTableAsText: () => {
+      const spec = tableAsTextAtCaret(view.state);
+      if (spec) view.dispatch(spec);
+      return spec !== undefined;
+    },
   };
 }
 

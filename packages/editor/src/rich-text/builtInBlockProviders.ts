@@ -4,27 +4,23 @@ import {
   HtmlBlockWidget,
   PropertiesChipWidget,
   TableWidget,
+  TextNoticeWidget,
 } from './blockWidgets';
 import { EMBED_BLOCKS } from './embeds';
 import { lineCountOf } from './renderedWidgets';
 import type { RichTextBlock, RichTextBlockProvider } from './richTextProviders';
 import { richTextRenderingFacet } from './richTextRendering';
+import { hasOverlongLine, MAX_RENDERED_FORMULA_LENGTH, MAX_RENDERED_TABLE_CELLS } from './renderLimits';
 import type { SyntaxNode } from '../syntax/syntaxNode';
-
-/** The preview's limits: larger tables and longer lines and formulas stay Markdown text. */
-export const MAX_RENDERED_TABLE_CELLS = 2_000;
-export const MAX_RENDERED_LINE_LENGTH = 10_000;
-export const MAX_RENDERED_FORMULA_LENGTH = 10_000;
+import { TABLE_GRID } from '../tables/grid/liveCellGrid';
+import { Decoration } from '@codemirror/view';
+import type { Range } from '@codemirror/state';
 
 /** A front matter line that names a property: a YAML `key:` or a TOML `key =` at the start of the line. */
 const PROPERTY_LINE = /^[^\s#-][^:=]*(?::|\s*=)/;
 
 function hasRendering(block: RichTextBlock): boolean {
   return block.state.facet(richTextRenderingFacet) !== undefined;
-}
-
-function hasOverlongLine(source: string): boolean {
-  return source.split('\n').some((line) => line.length > MAX_RENDERED_LINE_LENGTH);
 }
 
 function tableSizeOf(table: SyntaxNode): { rows: number; columns: number; cells: number } {
@@ -37,14 +33,26 @@ function tableSizeOf(table: SyntaxNode): { rows: number; columns: number; cells:
   };
 }
 
+function isTooLargeForGrid(block: RichTextBlock): boolean {
+  return hasOverlongLine(block.source) || tableSizeOf(block.node).cells > MAX_RENDERED_TABLE_CELLS;
+}
+
+function tooLargeNotice(block: RichTextBlock): readonly Range<Decoration>[] {
+  const rendering = block.state.facet(richTextRenderingFacet);
+  if (!rendering || !isTooLargeForGrid(block)) return [];
+  const widget = new TextNoticeWidget(rendering.labels.tableTooLarge());
+  return [Decoration.widget({ widget, block: true, side: -1 }).range(block.from)];
+}
+
 const tables: RichTextBlockProvider = {
   nodeNames: ['Table'],
-  widgetFor: (block) => {
-    if (!hasRendering(block) || hasOverlongLine(block.source)) return undefined;
-    const size = tableSizeOf(block.node);
-    if (size.cells > MAX_RENDERED_TABLE_CELLS) return undefined;
-    return new TableWidget(block.source, size);
-  },
+  widgetFor: (block) =>
+    hasRendering(block) && !isTooLargeForGrid(block)
+      ? new TableWidget(block.source, tableSizeOf(block.node))
+      : undefined,
+  decorationsWhileRevealed: (block) =>
+    isTooLargeForGrid(block) ? tooLargeNotice(block) : TABLE_GRID.decorationsWhileRevealed(block),
+  decorationsWithoutWidget: tooLargeNotice,
 };
 
 const displayFormulas: RichTextBlockProvider = {

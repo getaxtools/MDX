@@ -25,6 +25,7 @@ export function fakeRichTextRendering(overrides: Partial<RichTextRendering> = {}
       properties: (count) => `${String(count)} properties`,
       diagram: (type) => `Diagram, ${type}`,
       task: () => 'Task',
+      tableTooLarge: () => 'Too large for a grid',
     },
     ...overrides,
   };

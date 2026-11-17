@@ -10,6 +10,7 @@ import { RICH_TEXT_CLASS } from './richTextClasses';
 import { richTextTheme } from './richTextTheme';
 import { keepCaretOnCheckbox, toggleClickedTask, toggleTasksAtCaret } from './taskToggle';
 import { widgetTheme } from './widgetTheme';
+import { TABLE_GRID } from '../tables/grid/liveCellGrid';
 
 /** What Rich text adds to the editor: its decoration layer, its look, and its keys and clicks. */
 export function richTextExtensions(): Extension {
@@ -19,6 +20,7 @@ export function richTextExtensions(): Extension {
     widgetTheme,
     inlineMarkupLayer,
     blockLayer,
+    TABLE_GRID.extension(),
     blockHandle(),
     calloutFolding(),
     Prec.high(keymap.of([{ key: 'Mod-Enter', run: toggleTasksAtCaret }])),
