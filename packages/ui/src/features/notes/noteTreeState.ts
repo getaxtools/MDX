@@ -8,6 +8,9 @@ export interface NoteTreeState {
   readonly revision: number;
   readonly folderRevisions: ReadonlyMap<string, number>;
   readonly expandedKeys: ReadonlySet<string>;
+  /** The rows of each folder listed so far, kept while the side bar is hidden. */
+  readonly listedNodes: ReadonlyMap<string, readonly NoteTreeNode[]>;
+  readonly onListed: (folderPath: string, nodes: NoteTreeNode[]) => void;
   readonly activeDocumentKey: string | undefined;
   readonly renamingKey: string | undefined;
   /** The folder or note a new note is being named under. */

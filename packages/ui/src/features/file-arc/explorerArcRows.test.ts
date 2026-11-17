@@ -78,6 +78,12 @@ describe('fileArcWordingFor', () => {
     ).toBe('files');
   });
 
+  it('Notes moves between notes', () => {
+    expect(fileArcWordingFor({ activeKindId: 'notes', isNotesShown: true, isSpecViewerShown: false })).toBe(
+      'notes',
+    );
+  });
+
   it('the spec viewer has no arc, so Ctrl with the wheel keeps zooming there', () => {
     expect(
       fileArcWordingFor({ activeKindId: 'specViewer', isNotesShown: false, isSpecViewerShown: true }),

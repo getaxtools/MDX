@@ -1,11 +1,12 @@
-import type { FileArcTreeRow } from '@mdx/core';
+import type { FileArcTreeRow, WorkspaceKindId } from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
 import { InMemoryDocumentFiles } from '@mdx/platform';
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 import type { FileArcControls } from './fileArcCommands';
 import FileArcHost from './FileArcHost.svelte';
 import type { FileArcList } from './FileArcSession';
+import type { FileArcWording } from './fileArcText';
 
 const LAZY_LOAD_WAIT = { timeout: 10_000 };
 const NOW_MS = new Date(2026, 10, 16, 9).getTime();
@@ -27,11 +28,17 @@ function list(): FileArcList {
   };
 }
 
-function renderHost(readModifiedTime: (path: string) => Promise<number | undefined>) {
+function renderHost(
+  readModifiedTime: (path: string) => Promise<number | undefined>,
+  {
+    wording = 'files',
+    kindId = 'markdownViewer',
+  }: { wording?: FileArcWording; kindId?: WorkspaceKindId } = {},
+) {
   let controls: FileArcControls | undefined;
   render(FileArcHost, {
-    wording: 'files',
-    kindId: 'markdownViewer',
+    wording,
+    kindId,
     ctrlWheelAction: 'moveBetweenFiles',
     list,
     translator: createTranslator(),
@@ -44,6 +51,8 @@ function renderHost(readModifiedTime: (path: string) => Promise<number | undefin
   });
   return () => controls?.step('forward');
 }
+
+const NO_TIME = () => Promise.resolve(undefined);
 
 describe('FileArcHost', () => {
   it('the card says when the highlighted file was last edited', async () => {
@@ -62,5 +71,15 @@ describe('FileArcHost', () => {
     step();
 
     expect(await screen.findByText('Handbook › docs', {}, LAZY_LOAD_WAIT)).toBeTruthy();
+  });
+
+  it('the notes arc uses note wording', async () => {
+    const step = renderHost(NO_TIME, { wording: 'notes', kindId: 'notes' });
+
+    step();
+    await screen.findByRole('listbox', { name: 'Switch note' }, LAZY_LOAD_WAIT);
+    await fireEvent.keyDown(globalThis.window, { key: 'Escape' });
+
+    expect(screen.getByText('Kept the current note.')).toBeTruthy();
   });
 });

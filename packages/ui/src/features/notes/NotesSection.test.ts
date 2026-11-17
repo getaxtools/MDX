@@ -5,17 +5,18 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { NotesCommand } from './NotesActions';
 import NotesSection from './NotesSection.svelte';
+import { NoteTreeMemory } from './NoteTreeMemory';
 
 const JOURNAL = 'E:\\Journal';
 
-function renderTree({ isDeletionConfirmed = true } = {}) {
+function renderTree({ isDeletionConfirmed = true, memory = new NoteTreeMemory() } = {}) {
   const noteFiles = new InMemoryNoteFiles({
     folders: ['E:\\Journal\\Projects', 'E:\\Journal\\Daily'],
     notes: ['E:\\Journal\\Projects.md', 'E:\\Journal\\Projects\\Plan.md', 'E:\\Journal\\Inbox.md'],
   });
   const onCommand = vi.fn<(command: NotesCommand | { kind: string }) => void>();
   const onOpenDocument = vi.fn<(path: string) => void>();
-  render(NotesSection, {
+  const { unmount } = render(NotesSection, {
     locationPath: JOURNAL,
     revision: 0,
     isDeletionConfirmed,
@@ -27,12 +28,27 @@ function renderTree({ isDeletionConfirmed = true } = {}) {
     onShowFolder: () => () => undefined,
     onOpenDocument,
     onCommand,
+    memory,
   });
   const row = (name: string) => screen.findByRole('treeitem', { name });
-  return { onCommand, onOpenDocument, row };
+  return { onCommand, onOpenDocument, row, unmount };
 }
 
 describe('NotesSection', () => {
+  it('shows the tree as it was after the side bar was hidden and shown again', async () => {
+    const memory = new NoteTreeMemory();
+    const first = renderTree({ memory });
+    (await first.row('Projects')).focus();
+    await userEvent.keyboard('{ArrowRight}');
+    await first.row('Plan');
+
+    first.unmount();
+    const second = renderTree({ memory });
+
+    expect(await second.row('Plan')).toBeTruthy();
+    expect((await second.row('Projects')).getAttribute('aria-expanded')).toBe('true');
+  });
+
   it('lists folders first, then notes, with a note and its folder as one row', async () => {
     const { row } = renderTree();
     await row('Inbox');

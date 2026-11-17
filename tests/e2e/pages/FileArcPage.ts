@@ -1,9 +1,7 @@
 import { createTranslator } from '@mdx/i18n';
 
 const translator = createTranslator();
-const ARC_SELECTOR = `[role="listbox"][aria-label="${translator.translate('fileArc.label')}"]`;
-const OPEN_ARC_SELECTOR = `${ARC_SELECTOR}:not([inert])`;
-const HIGHLIGHTED_SELECTOR = `${OPEN_ARC_SELECTOR} [role="option"][aria-selected="true"]`;
+const ARC_LABEL_KEYS = { files: 'fileArc.label', notes: 'fileArc.notes.label' } as const;
 const DOCUMENT_AREA_SELECTOR = '.reading-area main';
 /** Longer than any open, so an arc that never shows fails the test instead of hanging it. */
 const OPEN_WAIT_LIMIT_MS = 2000;
@@ -13,7 +11,19 @@ const OPEN_WAIT_LIMIT_MS = 2000;
  * the modifier state for special keys, and Ctrl has to stay held between steps.
  */
 export class FileArcPage {
-  constructor(private readonly browser: WebdriverIO.Browser) {}
+  private readonly arcSelector: string;
+  private readonly openArcSelector: string;
+  private readonly highlightedSelector: string;
+
+  /** The arc of a Markdown viewer workspace moves between files, a Notes workspace's between notes. */
+  constructor(
+    private readonly browser: WebdriverIO.Browser,
+    wording: keyof typeof ARC_LABEL_KEYS = 'files',
+  ) {
+    this.arcSelector = `[role="listbox"][aria-label="${translator.translate(ARC_LABEL_KEYS[wording])}"]`;
+    this.openArcSelector = `${this.arcSelector}:not([inert])`;
+    this.highlightedSelector = `${this.openArcSelector} [role="option"][aria-selected="true"]`;
+  }
 
   async holdControl(): Promise<void> {
     await this.dispatchKey('keydown', { key: 'Control', ctrlKey: true });
@@ -47,22 +57,22 @@ export class FileArcPage {
   }
 
   async waitForOpen(): Promise<void> {
-    await this.browser.$(OPEN_ARC_SELECTOR).waitForDisplayed({ timeout: OPEN_WAIT_LIMIT_MS });
+    await this.browser.$(this.openArcSelector).waitForDisplayed({ timeout: OPEN_WAIT_LIMIT_MS });
   }
 
   async waitForClosed(): Promise<void> {
-    await this.browser.waitUntil(async () => !(await this.browser.$(ARC_SELECTOR).isExisting()), {
+    await this.browser.waitUntil(async () => !(await this.browser.$(this.arcSelector).isExisting()), {
       timeoutMsg: 'The file arc never closed',
     });
   }
 
   async isOpen(): Promise<boolean> {
-    return this.browser.$(OPEN_ARC_SELECTOR).isExisting();
+    return this.browser.$(this.openArcSelector).isExisting();
   }
 
   /** The highlighted entry's file name, read from its accessible name `name, n of N`. */
   async highlightedName(): Promise<string> {
-    const label = (await this.browser.$(HIGHLIGHTED_SELECTOR).getAttribute('aria-label')) ?? '';
+    const label = (await this.browser.$(this.highlightedSelector).getAttribute('aria-label')) ?? '';
     return label.split(', ')[0] ?? '';
   }
 
@@ -91,7 +101,7 @@ export class FileArcPage {
           };
           waitForCard();
         }),
-      HIGHLIGHTED_SELECTOR,
+      this.highlightedSelector,
     );
   }
 

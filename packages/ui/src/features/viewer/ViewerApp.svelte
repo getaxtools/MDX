@@ -45,6 +45,7 @@
   } from '../file-arc/fileArcCommands';
   import { fileArcListOf, fileArcWordingOf } from '../file-arc/viewerFileArc';
   import { FolderTreeState } from '../folder-tree/FolderTreeState';
+  import { NoteTreeMemory } from '../notes/NoteTreeMemory';
   import FolderSearchPanel from '../folder-search/FolderSearchPanel.svelte';
   import EditingLayout from '../editing/EditingLayout.svelte';
   import type { ScrollSync } from '../editing/ScrollSync';
@@ -272,7 +273,7 @@
   }
 
   /** Kept here rather than in the tree, so the arc lists the tree as it was while the side bar is hidden. */
-  const explorerTree = new FolderTreeState();
+  const sideBarTrees = { folders: new FolderTreeState(), notes: new NoteTreeMemory() };
   let fileArcControls: FileArcControls | undefined;
   const fileArcWording = $derived(snapshot ? fileArcWordingOf(snapshot) : undefined);
 
@@ -525,7 +526,8 @@
               {translator}
               onOpenFavourite={(favourite: Favourite) => void controller.openFavourite(favourite)}
               onOpenRecentFile={(recentFile: RecentFile) => void controller.openRecentFile(recentFile)}
-              folderTreeState={explorerTree}
+              folderTreeState={sideBarTrees.folders}
+              noteTreeMemory={sideBarTrees.notes}
             />
           {/if}
         </div>
@@ -804,7 +806,7 @@
             wording={fileArcWording}
             kindId={shownWorkspaceKindId}
             ctrlWheelAction={viewSettings.ctrlWheelAction}
-            list={() => fileArcListOf(listedSnapshot, explorerTree)}
+            list={() => fileArcListOf(listedSnapshot, sideBarTrees)}
             {translator}
             onOpen={(location: DocumentLocation) => controller.openDocuments([location.displayPath])}
             onNotice={(key: MessageKey) => controller.showNotice(key)}

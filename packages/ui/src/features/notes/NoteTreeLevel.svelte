@@ -23,7 +23,7 @@
 
   const EMPTY_LISTING: FolderListing = { folders: [], documents: [] };
   const revision = $derived((tree.folderRevisions.get(folderPath) ?? 0) + tree.revision);
-  let nodes: NoteTreeNode[] | undefined = $state();
+  const nodes = $derived(tree.listedNodes.get(folderPath));
 
   // Untracked, so a change elsewhere in the tree, such as cutting a note, does not list the folder again.
   $effect(() => {
@@ -37,7 +37,7 @@
     void untrack(() => tree.onListFolder(path))
       .catch(() => EMPTY_LISTING)
       .then((listing) => {
-        if (requestedRevision === revision) nodes = noteTreeNodes(listing, translator.locale);
+        if (requestedRevision === revision) tree.onListed(path, noteTreeNodes(listing, translator.locale));
       });
   });
 

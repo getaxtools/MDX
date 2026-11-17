@@ -2,7 +2,6 @@
   import { noteNameOf, type NoteTreeNode } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
   import type { DocumentLocation, FolderListing } from '@mdx/platform';
-  import { SvelteSet } from 'svelte/reactivity';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
   import ContextMenu from '../../components/ContextMenu.svelte';
   import { contextMenuPosition, isContextMenuKey } from '../../components/ContextMenuItem';
@@ -16,6 +15,7 @@
   import ExplorerSectionHeader from '../explorer/ExplorerSectionHeader.svelte';
   import type { NotesCommand } from './NotesActions';
   import NoteTreeLevel from './NoteTreeLevel.svelte';
+  import { NoteTreeMemory } from './NoteTreeMemory';
   import { noteTreeMenuItems, type NoteTreeMenuItemId } from './noteTreeContextMenu';
   import { dropPathOf, keyOfNode, type NoteTreeState } from './noteTreeState';
 
@@ -33,6 +33,8 @@
     onShowFolder: (folderPath: string) => () => void;
     onOpenDocument: (documentPath: string) => void;
     onCommand: (command: NotesCommand | PathCommand) => Promise<void> | void;
+    /** What the tree has expanded and listed, kept while the side bar is hidden. */
+    memory?: NoteTreeMemory;
   }
 
   const {
@@ -48,6 +50,7 @@
     onShowFolder,
     onOpenDocument,
     onCommand,
+    memory = new NoteTreeMemory(),
   }: Props = $props();
 
   const DRAG_START_DISTANCE_PX = 5;
@@ -59,7 +62,6 @@
     readonly y: number;
   }
 
-  const expandedKeys = new SvelteSet<string>();
   let renamingKey: string | undefined = $state();
   let creatingIn: string | undefined = $state();
   let cutNote: DocumentLocation | undefined = $state();
@@ -72,7 +74,9 @@
   const tree: NoteTreeState = $derived({
     revision,
     folderRevisions,
-    expandedKeys,
+    expandedKeys: memory.expandedKeys,
+    listedNodes: memory.nodesByFolder,
+    onListed: (folderPath: string, nodes: NoteTreeNode[]) => memory.nodesByFolder.set(folderPath, nodes),
     activeDocumentKey,
     renamingKey,
     creatingIn,
@@ -83,7 +87,7 @@
     onListFolder,
     onShowFolder,
     onOpenNote: onOpenDocument,
-    onToggle: toggle,
+    onToggle: (key: string) => memory.toggle(key),
     onRowKeydown: handleRowKeydown,
     onRowContextMenu: openMenu,
     onRowPointerdown: startDrag,
@@ -91,14 +95,9 @@
     onFinishCreate: finishCreate,
   });
 
-  function toggle(key: string) {
-    if (expandedKeys.has(key)) expandedKeys.delete(key);
-    else expandedKeys.add(key);
-  }
-
   function startCreating(parent: string, expandKey?: string) {
     if (!isExpanded) onToggleExpanded();
-    if (expandKey !== undefined) expandedKeys.add(expandKey);
+    if (expandKey !== undefined) memory.expandedKeys.add(expandKey);
     creatingIn = parent;
   }
 

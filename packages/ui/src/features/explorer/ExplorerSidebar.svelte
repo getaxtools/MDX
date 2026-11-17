@@ -11,6 +11,7 @@
   import SpecProjectsSection from '../spec-viewer/SpecProjectsSection.svelte';
   import type { SpecProjectsView } from '../spec-viewer/SpecViewerActions';
   import { FolderTreeState } from '../folder-tree/FolderTreeState';
+  import { NoteTreeMemory } from '../notes/NoteTreeMemory';
   import ExplorerFoldersSection from './ExplorerFoldersSection.svelte';
   import SectionResizer from './SectionResizer.svelte';
 
@@ -40,6 +41,8 @@
     onListNoteFolder?: (folderPath: string) => Promise<FolderListing>;
     /** What the Folders section has expanded and read, kept while the side bar is hidden. */
     folderTreeState?: FolderTreeState;
+    /** What the note tree has expanded and listed, kept while the side bar is hidden. */
+    noteTreeMemory?: NoteTreeMemory;
   }
 
   const {
@@ -68,6 +71,7 @@
     },
     onListNoteFolder = onListFolder,
     folderTreeState = new FolderTreeState(),
+    noteTreeMemory = new NoteTreeMemory(),
   }: Props = $props();
 
   const favouriteKeys = $derived(new Set(favourites.map((favourite) => favourite.location.canonicalKey)));
@@ -152,6 +156,7 @@
         {onShowFolder}
         {onOpenDocument}
         onCommand={onNotesCommand}
+        memory={noteTreeMemory}
       />
     {:else if specProjects}
       <SpecProjectsSection
