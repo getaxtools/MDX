@@ -1,5 +1,6 @@
 import {
   AUTOMATIC_INJECTION_CHECKS,
+  CTRL_WHEEL_ACTIONS,
   isSidebarViewShown,
   KIND_SWITCHERS,
   READING_WIDTHS,
@@ -39,6 +40,8 @@ interface SettingBase {
   readonly section: SettingSection;
   readonly labelKey: MessageKey;
   readonly descriptionKey: MessageKey;
+  /** A description that changes with another setting; `descriptionKey` is the one searched. */
+  readonly descriptionKeyIn?: (settings: ViewSettings) => MessageKey;
 }
 
 export interface ChoiceSetting extends SettingBase {
@@ -134,6 +137,10 @@ const zoomSetting: ChoiceSetting = {
   section: 'appearance',
   labelKey: 'settings.zoom.label',
   descriptionKey: 'settings.zoom.description',
+  descriptionKeyIn: (settings) =>
+    settings.ctrlWheelAction === 'zoom'
+      ? 'settings.zoom.description'
+      : 'settings.zoom.descriptionWithoutWheel',
   choices: (translator) =>
     ZOOM_LEVELS_PERCENT.map((percent) => ({
       value: String(percent),
@@ -317,7 +324,26 @@ const PROMPT_INJECTION_SETTINGS: readonly SettingDefinition[] = [
   },
 ];
 
+const ctrlWheelSetting: ChoiceSetting = {
+  id: 'ctrlWheel',
+  kind: 'choice',
+  section: 'keyboard',
+  labelKey: 'settings.ctrlWheel.label',
+  descriptionKey: 'settings.ctrlWheel.description',
+  choices: (translator) =>
+    CTRL_WHEEL_ACTIONS.map((action) => ({
+      value: action,
+      label: translator.translate(`settings.ctrlWheel.${action}`),
+    })),
+  valueIn: (settings) => settings.ctrlWheelAction,
+  commandFor: (value) => {
+    const ctrlWheelAction = CTRL_WHEEL_ACTIONS.find((action) => action === value);
+    return ctrlWheelAction ? { kind: 'setCtrlWheelAction', ctrlWheelAction } : undefined;
+  },
+};
+
 const KEYBOARD_SETTINGS: readonly SettingDefinition[] = [
+  ctrlWheelSetting,
   {
     id: 'controlWheelShortcut',
     kind: 'shortcut',
@@ -404,6 +430,11 @@ export function matchesQuery(query: string, text: string): boolean {
   const words = foldForSearch(query).split(/\s+/u).filter(Boolean);
   const searchable = foldForSearch(text);
   return words.every((word) => searchable.includes(word));
+}
+
+/** The description shown now, which may follow another setting. */
+export function descriptionKeyOf(setting: SettingDefinition, settings: ViewSettings): MessageKey {
+  return setting.descriptionKeyIn?.(settings) ?? setting.descriptionKey;
 }
 
 function searchableTextOf(setting: SettingDefinition, translator: Translator): string {

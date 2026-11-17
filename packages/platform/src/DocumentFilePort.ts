@@ -41,4 +41,9 @@ export interface DocumentFilePort {
    */
   save(document: EditedDocumentSave): Promise<number>;
   checkPathStatuses(locations: readonly DocumentLocation[]): Promise<ReadonlyMap<string, PathStatus>>;
+  /**
+   * When a file the app may read was last changed, in milliseconds since 1970, without reading it;
+   * undefined when that is not known.
+   */
+  readModifiedTime(path: string): Promise<number | undefined>;
 }

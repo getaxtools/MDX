@@ -36,4 +36,13 @@ export class TauriDocumentFiles implements DocumentFilePort {
       locations.map((location, index) => [location.canonicalKey, statuses[index] ?? 'unreachable']),
     );
   }
+
+  async readModifiedTime(path: string): Promise<number | undefined> {
+    try {
+      const modifiedAtMs = await tauriCommands.readModifiedTime(path);
+      return modifiedAtMs > 0 ? modifiedAtMs : undefined;
+    } catch {
+      return undefined;
+    }
+  }
 }

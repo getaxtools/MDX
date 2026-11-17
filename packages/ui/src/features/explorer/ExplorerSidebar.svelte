@@ -10,6 +10,7 @@
   import type { NotesView } from '../notes/NotesActions';
   import SpecProjectsSection from '../spec-viewer/SpecProjectsSection.svelte';
   import type { SpecProjectsView } from '../spec-viewer/SpecViewerActions';
+  import { FolderTreeState } from '../folder-tree/FolderTreeState';
   import ExplorerFoldersSection from './ExplorerFoldersSection.svelte';
   import SectionResizer from './SectionResizer.svelte';
 
@@ -37,6 +38,8 @@
     isNoteDeletionConfirmed?: boolean;
     onNotesCommand?: (command: ViewerCommand) => Promise<void>;
     onListNoteFolder?: (folderPath: string) => Promise<FolderListing>;
+    /** What the Folders section has expanded and read, kept while the side bar is hidden. */
+    folderTreeState?: FolderTreeState;
   }
 
   const {
@@ -64,6 +67,7 @@
       return Promise.resolve();
     },
     onListNoteFolder = onListFolder,
+    folderTreeState = new FolderTreeState(),
   }: Props = $props();
 
   const favouriteKeys = $derived(new Set(favourites.map((favourite) => favourite.location.canonicalKey)));
@@ -184,6 +188,7 @@
         {onShowFolder}
         {onOpenDocument}
         {onCommand}
+        treeState={folderTreeState}
       />
     {/if}
   </div>

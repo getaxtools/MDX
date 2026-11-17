@@ -16,6 +16,7 @@ interface ViewOptions {
   readonly copyAsHtmlRequest?: number;
   readonly sourceRangeRequest?: SourceRangeRequest;
   readonly onPrint?: () => void;
+  readonly onMoveWithWheel?: (event: WheelEvent) => boolean;
 }
 
 function renderDocument(
@@ -30,6 +31,7 @@ function renderDocument(
     copyAsHtmlRequest,
     sourceRangeRequest,
     onPrint = () => undefined,
+    onMoveWithWheel,
   }: ViewOptions = {},
 ) {
   const onOpenLink = vi.fn();
@@ -64,6 +66,7 @@ function renderDocument(
     richBlocks,
     sourceRangeRequest,
     onPrint,
+    ...(onMoveWithWheel ? { onMoveWithWheel } : {}),
   });
   return { onOpenLink, onCommand, rerender: view.rerender };
 }
@@ -295,6 +298,25 @@ describe('DocumentView', () => {
     await fireEvent.wheel(area, { deltaY: 100 });
 
     expect(onCommand.mock.calls).toEqual([[{ kind: 'zoomIn' }], [{ kind: 'zoomOut' }]]);
+  });
+
+  it('lets Ctrl and the wheel move between files instead of zooming when the arc takes it', async () => {
+    const onMoveWithWheel = vi.fn(() => true);
+    const { onCommand } = renderDocument('<p>Text</p>', { onMoveWithWheel });
+
+    const isScrolling = await fireEvent.wheel(screen.getByRole('main'), { deltaY: 100, ctrlKey: true });
+
+    expect(onMoveWithWheel).toHaveBeenCalledOnce();
+    expect(onCommand).not.toHaveBeenCalled();
+    expect(isScrolling).toBe(false);
+  });
+
+  it('zooms when the arc does not take the wheel', async () => {
+    const { onCommand } = renderDocument('<p>Text</p>', { onMoveWithWheel: () => false });
+
+    await fireEvent.wheel(screen.getByRole('main'), { deltaY: -100, ctrlKey: true });
+
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'zoomIn' });
   });
 
   it('typesets the math in the rendered document', async () => {

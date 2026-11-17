@@ -485,6 +485,10 @@ export class ViewerSession {
     return this.dependencies.documentFiles.checkPathStatuses(locations);
   }
 
+  readModifiedTime(path: string): Promise<number | undefined> {
+    return this.dependencies.documentFiles.readModifiedTime(path);
+  }
+
   /** Changes the settings the window shows; a field the workspace overrides changes its override. */
   updateViewSettings(change: (viewSettings: ViewSettings) => ViewSettings): void {
     const { appSettings, overrides } = changeShownSettings(

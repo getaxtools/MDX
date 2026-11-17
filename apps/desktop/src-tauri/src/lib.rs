@@ -105,6 +105,7 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::documents::open_document,
         commands::documents::pick_documents,
         commands::documents::check_path_statuses,
+        commands::documents::read_modified_time,
         commands::documents::take_startup_documents,
         commands::documents::save_document_as,
         commands::document_saving::save_document,

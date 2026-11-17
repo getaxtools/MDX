@@ -11,6 +11,7 @@ import {
   zoomIn,
   zoomOut,
   type AutomaticInjectionCheck,
+  type CtrlWheelAction,
   type ExplorerSection,
   type KindSwitcher,
   type LanguagePreference,
@@ -47,6 +48,7 @@ export type ViewCommand =
   | { readonly kind: 'setEditorShare'; readonly sharePercent: number }
   | { readonly kind: 'setKindSwitcher'; readonly kindSwitcher: KindSwitcher }
   | { readonly kind: 'setWheelDock'; readonly wheelDock: WheelDock }
+  | { readonly kind: 'setCtrlWheelAction'; readonly ctrlWheelAction: CtrlWheelAction }
   | { readonly kind: 'toggleWheelOpenedAtPointer' }
   | { readonly kind: 'toggleWheelButtonInStatusBar' }
   | { readonly kind: 'toggleSlashMenuInRichText' }
@@ -88,6 +90,7 @@ const VIEW_COMMAND_HANDLERS: ViewCommandHandlers = {
   setEditorShare: (settings, { sharePercent }) => setEditorShare(settings, sharePercent),
   setKindSwitcher: (settings, { kindSwitcher }) => ({ ...settings, kindSwitcher }),
   setWheelDock: (settings, { wheelDock }) => ({ ...settings, wheelDock }),
+  setCtrlWheelAction: (settings, { ctrlWheelAction }) => ({ ...settings, ctrlWheelAction }),
   toggleWheelOpenedAtPointer: (settings) => ({
     ...settings,
     isWheelOpenedAtPointer: !settings.isWheelOpenedAtPointer,

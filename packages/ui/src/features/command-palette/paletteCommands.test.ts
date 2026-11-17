@@ -33,6 +33,10 @@ describe('paletteCommands', () => {
     });
   });
 
+  it('leaves out the file arc keys, which need Ctrl held', () => {
+    expect(labels).not.toContain('Move between files');
+  });
+
   it('includes commands that have no shortcut', () => {
     expect(commands).toContainEqual({ command: { kind: 'openFolder' }, label: 'Open Folder…' });
   });

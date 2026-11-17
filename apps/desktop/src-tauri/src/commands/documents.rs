@@ -7,9 +7,9 @@ use tauri_plugin_dialog::{DialogExt, FileDialogBuilder};
 
 use crate::documents::{
     DocumentAccessList, DocumentError, MAX_DOCUMENT_BYTES, OpenedDocument, PathStatus,
-    copy_document, encoding_for_label, is_markdown_path, locate_document, open_allowed_document,
-    open_allowed_document_as, status_of_path, validated_file_name, with_markdown_extension,
-    write_text_atomically,
+    copy_document, encoding_for_label, is_markdown_path, locate_document, modified_at_ms_of,
+    open_allowed_document, open_allowed_document_as, status_of_path, validated_file_name,
+    with_markdown_extension, write_text_atomically,
 };
 use crate::open_requests::{MAIN_WINDOW_LABEL, StartupDocuments, grant_documents};
 
@@ -68,6 +68,28 @@ pub async fn check_path_statuses(paths: Vec<String>) -> Result<Vec<PathStatus>, 
         .map(|path| validated_path(path))
         .collect::<Result<Vec<_>, _>>()?;
     run_blocking(move || paths.iter().map(|path| status_of_path(path)).collect()).await
+}
+
+/// When a file the app may read was last changed, in milliseconds since 1970, without reading it.
+#[tauri::command]
+pub async fn read_modified_time(
+    path: String,
+    access: State<'_, Arc<DocumentAccessList>>,
+) -> Result<u64, DocumentError> {
+    let path = validated_path(&path)?;
+    let access = Arc::clone(&access);
+    run_blocking(move || modified_time_of_allowed(&path, &access)).await?
+}
+
+fn modified_time_of_allowed(
+    path: &Path,
+    access: &DocumentAccessList,
+) -> Result<u64, DocumentError> {
+    let location = locate_document(path)?;
+    if !access.is_allowed(&location) {
+        return Err(DocumentError::AccessDenied);
+    }
+    modified_at_ms_of(&location.path())
 }
 
 /// The files the app was started with go to the first window, whichever window asks first.
@@ -237,6 +259,41 @@ mod tests {
             SaveRequest::validated(copy(), &access),
             Ok(SaveRequest::Copy { file_name, .. }) if file_name == "guide.md"
         ));
+    }
+
+    #[test]
+    fn reads_the_modified_time_only_inside_an_allowed_folder() {
+        let (_folder, document, access) = folder_with_document();
+
+        assert_eq!(
+            modified_time_of_allowed(&document, &access),
+            Err(DocumentError::AccessDenied)
+        );
+        access.grant_folder_of(&document).unwrap();
+        assert_eq!(
+            modified_time_of_allowed(&document, &access),
+            Ok(modified_at_ms_of(&document).unwrap())
+        );
+    }
+
+    #[test]
+    fn resolves_the_path_before_checking_access() {
+        let (folder, document, access) = folder_with_document();
+        let outside = tempfile::tempdir().unwrap();
+        let elsewhere = outside.path().join("other.md");
+        std::fs::write(&elsewhere, "# Other").unwrap();
+        access.grant_folder_of(&document).unwrap();
+
+        let escaping = folder
+            .path()
+            .join("..")
+            .join(outside.path().file_name().unwrap())
+            .join("other.md");
+        assert_eq!(
+            modified_time_of_allowed(&escaping, &access),
+            Err(DocumentError::AccessDenied)
+        );
+        assert!(modified_time_of_allowed(&folder.path().join("missing.md"), &access).is_err());
     }
 
     #[test]

@@ -5,6 +5,7 @@ import type { WorkspaceKindCommand } from '../control-wheel/workspaceKindCommand
 import type { EditingCommand } from '../editing/editingCommands';
 import type { ExplorerActionCommand, RemoveExplorerFolderCommand } from '../explorer/explorerCommands';
 import type { FavouriteCommand, FavouritesFileCommand } from '../favourites/favouriteCommands';
+import type { FileArcCommand } from '../file-arc/fileArcCommands';
 import type { PathCommand } from '../file-paths/pathCommands';
 import type { FolderTreeCommand } from '../folder-tree/folderTreeCommands';
 import type { NavigationCommand } from '../navigation/DocumentNavigation';
@@ -46,6 +47,7 @@ export type ViewerCommand =
   | PropertyCommand
   | SpecViewerCommand
   | InjectionCheckCommand
+  | FileArcCommand
   | { readonly kind: 'toggleFullScreen' }
   | { readonly kind: 'openNewWindow' }
   | { readonly kind: 'toggleControlWheel' }

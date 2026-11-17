@@ -127,6 +127,25 @@ describe('TauriDocumentFiles', () => {
       ['b.md', 'missing'],
     ]);
   });
+
+  it('reads a modified time through the read_modified_time command', async () => {
+    const calls = mockCommands({ read_modified_time: () => 1_700_000_000_000 });
+
+    await expect(new TauriDocumentFiles().readModifiedTime('C:\\a.md')).resolves.toBe(1_700_000_000_000);
+    expect(calls).toEqual([{ command: 'read_modified_time', args: { path: 'C:\\a.md' } }]);
+  });
+
+  it('knows no modified time when the read is refused or the time is missing', async () => {
+    mockCommands({
+      read_modified_time: ({ path }) => {
+        if (path === 'outside.md') throw new Error('accessDenied');
+        return 0;
+      },
+    });
+
+    await expect(new TauriDocumentFiles().readModifiedTime('outside.md')).resolves.toBeUndefined();
+    await expect(new TauriDocumentFiles().readModifiedTime('a.md')).resolves.toBeUndefined();
+  });
 });
 
 describe('TauriAppState', () => {

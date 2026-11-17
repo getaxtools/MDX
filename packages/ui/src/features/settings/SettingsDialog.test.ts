@@ -231,6 +231,25 @@ describe('SettingsDialog', () => {
     );
   });
 
+  it('the zoom description follows the setting', () => {
+    renderSettings({ ...DEFAULT_VIEW_SETTINGS, ctrlWheelAction: 'zoom' });
+    const zoomDescription = () => globalThis.document.getElementById('setting-zoom-description')?.textContent;
+    expect(zoomDescription()).toContain('Ctrl with the mouse wheel');
+
+    const keyboard = within(screen.getByRole('region', { name: 'Keyboard' }));
+    const wheel = keyboard.getByRole<HTMLSelectElement>('combobox', { name: 'Ctrl with the mouse wheel' });
+
+    expect(wheel.value).toBe('zoom');
+  });
+
+  it('the zoom description leaves the wheel out while it moves between files', () => {
+    renderSettings();
+
+    expect(globalThis.document.getElementById('setting-zoom-description')?.textContent).not.toContain(
+      'wheel',
+    );
+  });
+
   it('closes with Escape', async () => {
     const { onClose } = renderSettings();
 

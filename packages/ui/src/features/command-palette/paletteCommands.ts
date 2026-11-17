@@ -10,6 +10,7 @@ import {
 } from '@mdx/core';
 import type { MessageKey, Translator } from '@mdx/i18n';
 import { kindNameOf } from '../control-wheel/kindPresentation';
+import { isFileArcCommand } from '../file-arc/fileArcCommands';
 import { COMMAND_SHORTCUTS, type CommandShortcut } from '../shortcuts/commandShortcuts';
 import { describeCombination } from '../shortcuts/describeCombination';
 import type { ViewerCommand } from '../viewer/viewerCommands';
@@ -113,7 +114,7 @@ export function paletteCommands(
 
 function menuCommands(shortcuts: PaletteContext['shortcuts'], translator: Translator): PaletteCommand[] {
   const withShortcuts = shortcuts
-    .filter(({ command }) => command.kind !== 'showCommandPalette')
+    .filter(({ command }) => command.kind !== 'showCommandPalette' && !isFileArcCommand(command))
     .map(({ command, combinations, actionKey }) => {
       const [combination] = combinations;
       return {

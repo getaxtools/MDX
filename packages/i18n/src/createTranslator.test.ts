@@ -67,6 +67,7 @@ const SAMPLE_VALUES = {
   savedAs: 'Plan (imported).md',
   detail: 'Plan#^a1b2',
   entry: 'install.md, 3 of 12',
+  details: 'Handbook › docs',
   when: 'yesterday',
   ctrl: 'Ctrl',
 };

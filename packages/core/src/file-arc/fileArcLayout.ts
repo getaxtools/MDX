@@ -18,7 +18,8 @@ const DOT_HALF_SIZE_PX = 5;
 /** The hint at the bottom of the area, and its margin, which no name may cover. */
 const HINT_CLEARANCE_PX = 64;
 const SCALE_LOSS_PER_STEP = 0.06;
-const OPACITY_LOSS_PER_STEP = 0.19;
+/** Faint enough to rank the names, never so faint that the furthest drops below 4.5:1 on the dial. */
+const OPACITY_LOSS_PER_STEP = 0.05;
 const DOT_OPACITY_NEAR = 0.55;
 const DOT_OPACITY_LOSS_PER_STEP = 0.08;
 const DEGREES_PER_HALF_TURN = 180;

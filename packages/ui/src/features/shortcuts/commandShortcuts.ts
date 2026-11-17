@@ -133,6 +133,16 @@ export const COMMAND_SHORTCUTS: readonly CommandShortcut[] = [
     combinations: [['ctrl', 'shift', 'P']],
     actionKey: 'menu.view.commandPalette',
   },
+  {
+    command: { kind: 'stepFileArcForward' },
+    combinations: [['ctrl', 'ArrowDown']],
+    actionKey: 'shortcuts.moveBetweenFiles',
+  },
+  {
+    command: { kind: 'stepFileArcBack' },
+    combinations: [['ctrl', 'ArrowUp']],
+    actionKey: 'shortcuts.moveBetweenFiles',
+  },
   { command: { kind: 'goBack' }, combinations: [['alt', 'ArrowLeft']], actionKey: 'menu.view.goBack' },
   { command: { kind: 'goForward' }, combinations: [['alt', 'ArrowRight']], actionKey: 'menu.view.goForward' },
   { command: { kind: 'toggleFullScreen' }, combinations: [['F11']], actionKey: 'menu.view.fullScreen' },

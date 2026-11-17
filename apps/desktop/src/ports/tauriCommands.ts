@@ -96,6 +96,7 @@ export const tauriCommands = {
   saveDocument: (document: EditedDocumentSave) => invoke<number>('save_document', { document }),
   pickDocuments: () => invoke<string[]>('pick_documents'),
   checkPathStatuses: (paths: readonly string[]) => invoke<PathStatus[]>('check_path_statuses', { paths }),
+  readModifiedTime: (path: string) => invoke<number>('read_modified_time', { path }),
   takeStartupDocuments: () => invoke<string[]>('take_startup_documents'),
   loadAppState: () => invoke<string | null>('load_app_state'),
   saveAppState: (stateJson: string) => invoke<null>('save_app_state', { stateJson }),

@@ -19,7 +19,7 @@ describe('fileArcLayout', () => {
     const rounded = (values: readonly number[]) => values.map((value) => Math.round(value * 100) / 100);
 
     expect(rounded(after.map((name) => name.scale))).toEqual([0.94, 0.88, 0.82, 0.76]);
-    expect(rounded(after.map((name) => name.opacity))).toEqual([0.81, 0.62, 0.43, 0.24]);
+    expect(rounded(after.map((name) => name.opacity))).toEqual([0.95, 0.9, 0.85, 0.8]);
   });
 
   it('a short window shows fewer names', () => {

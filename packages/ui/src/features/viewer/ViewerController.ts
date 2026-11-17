@@ -1570,6 +1570,11 @@ export class ViewerController {
     });
   }
 
+  /** When a file was last changed, read without opening it; undefined when that is not known. */
+  readModifiedTime(path: string): Promise<number | undefined> {
+    return this.dependencies.session.readModifiedTime(path);
+  }
+
   /** The subfolders and Markdown documents in a folder; empty when the folder cannot be read. */
   listFolderContents(folderPath: string): Promise<FolderListing> {
     return this.explorerFolderActions.listFolderContents(folderPath);

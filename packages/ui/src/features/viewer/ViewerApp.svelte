@@ -29,12 +29,22 @@
     ToolboxAction,
     WrittenLink,
   } from '@mdx/editor';
-  import type { Translator } from '@mdx/i18n';
+  import type { MessageKey, Translator } from '@mdx/i18n';
   import type { CodeHighlighter, OutlineEntry, RichBlockRenderer } from '@mdx/renderer';
   import { tick, untrack } from 'svelte';
   import CommandPalette from '../command-palette/CommandPalette.svelte';
   import { paletteCommands } from '../command-palette/paletteCommands';
   import ExplorerSidebar from '../explorer/ExplorerSidebar.svelte';
+  import FileArcHost from '../file-arc/FileArcHost.svelte';
+  import {
+    fileArcDirectionOf,
+    isFileArcCommand,
+    isOverlayOpenIn,
+    type FileArcCommand,
+    type FileArcControls,
+  } from '../file-arc/fileArcCommands';
+  import { fileArcListOf, fileArcWordingOf } from '../file-arc/viewerFileArc';
+  import { FolderTreeState } from '../folder-tree/FolderTreeState';
   import FolderSearchPanel from '../folder-search/FolderSearchPanel.svelte';
   import EditingLayout from '../editing/EditingLayout.svelte';
   import type { ScrollSync } from '../editing/ScrollSync';
@@ -62,7 +72,7 @@
   import type { DocumentLink } from '../document-view/DocumentLink';
   import DocumentView from '../document-view/DocumentView.svelte';
   import { propertyFieldsStateOf } from '../document-view/PropertyEditing';
-  import { isUntitledLocation, type TextSearchOptions } from '@mdx/platform';
+  import { isUntitledLocation, type DocumentLocation, type TextSearchOptions } from '@mdx/platform';
   import KeyboardShortcutsDialog from '../help/KeyboardShortcutsDialog.svelte';
   import WordGoalDialog from '../word-goals/WordGoalDialog.svelte';
   import WorkspaceDialogs from '../workspaces/WorkspaceDialogs.svelte';
@@ -254,8 +264,17 @@
     await controller.execute({ kind: 'hideSidebar' });
     if (!isFromKeyboard) return;
     await tick();
+    focusDocument();
+  }
+
+  function focusDocument() {
     focusRegionOf(globalThis.document.querySelector('.reading-area'));
   }
+
+  /** Kept here rather than in the tree, so the arc lists the tree as it was while the side bar is hidden. */
+  const explorerTree = new FolderTreeState();
+  let fileArcControls: FileArcControls | undefined;
+  const fileArcWording = $derived(snapshot ? fileArcWordingOf(snapshot) : undefined);
 
   function shownPanelWidth(panel: ResizablePanel): number {
     const dragged = draggedPanelWidths[panel];
@@ -373,8 +392,18 @@
     }
     const command = commandForShortcut(event, platform, shortcuts);
     if (!command) return;
+    if (isFileArcCommand(command)) {
+      stepFileArc(event, command);
+      return;
+    }
     event.preventDefault();
     void controller.execute(command);
+  }
+
+  /** The arc keys do nothing while a dialog, a menu, the palette or the control wheel is open. */
+  function stepFileArc(event: KeyboardEvent, command: FileArcCommand) {
+    if (snapshot?.openDialog !== undefined || isOverlayOpenIn(globalThis.document)) return;
+    if (fileArcControls?.step(fileArcDirectionOf(command))) event.preventDefault();
   }
 </script>
 
@@ -398,6 +427,7 @@
 
 {#if snapshot}
   {@const viewSettings = snapshot.viewer.viewSettings}
+  {@const listedSnapshot = snapshot}
   <div class="app-shell">
     <div
       class="viewer"
@@ -495,6 +525,7 @@
               {translator}
               onOpenFavourite={(favourite: Favourite) => void controller.openFavourite(favourite)}
               onOpenRecentFile={(recentFile: RecentFile) => void controller.openRecentFile(recentFile)}
+              folderTreeState={explorerTree}
             />
           {/if}
         </div>
@@ -714,6 +745,7 @@
                     onOpenLink={(link: DocumentLink) => void controller.openLink(link)}
                     onCommand={(command: ViewerCommand) => void controller.execute(command)}
                     onEditFormula={editPreviewFormula}
+                    onMoveWithWheel={(event: WheelEvent) => fileArcControls?.moveWithWheel(event) ?? false}
                     isOutlineVisible={false}
                     isFavourite={isActiveFavourite}
                     canBeFavourite={!isActiveUntitled}
@@ -756,6 +788,7 @@
               onCurrentHeadingChange={showCurrentHeading}
               onCommand={(command: ViewerCommand) => void controller.execute(command)}
               onEditFormula={editPreviewFormula}
+              onMoveWithWheel={(event: WheelEvent) => fileArcControls?.moveWithWheel(event) ?? false}
               isOutlineVisible={isSidebarViewShown(viewSettings, 'outline')}
               isFavourite={isActiveFavourite}
               canBeFavourite={!isActiveUntitled}
@@ -766,6 +799,18 @@
               )}
             />
           {/if}
+          <FileArcHost
+            onControls={(controls: FileArcControls) => (fileArcControls = controls)}
+            wording={fileArcWording}
+            kindId={shownWorkspaceKindId}
+            ctrlWheelAction={viewSettings.ctrlWheelAction}
+            list={() => fileArcListOf(listedSnapshot, explorerTree)}
+            {translator}
+            onOpen={(location: DocumentLocation) => controller.openDocuments([location.displayPath])}
+            onNotice={(key: MessageKey) => controller.showNotice(key)}
+            onFocusDocument={focusDocument}
+            readModifiedTime={(path: string) => controller.readModifiedTime(path)}
+          />
         </div>
       </div>
     </div>
@@ -886,7 +931,12 @@
       onCommand={(command: ViewerCommand) => void controller.execute(command)}
     />
   {:else if snapshot.openDialog === 'keyboardShortcuts'}
-    <KeyboardShortcutsDialog {translator} {shortcuts} onClose={() => controller.closeDialog()} />
+    <KeyboardShortcutsDialog
+      {translator}
+      {shortcuts}
+      ctrlWheelAction={viewSettings.ctrlWheelAction}
+      onClose={() => controller.closeDialog()}
+    />
   {:else if snapshot.openDialog === 'pasteTable'}
     <PasteTableDialog
       {translator}
@@ -1054,6 +1104,7 @@
   }
 
   .reading-area {
+    position: relative;
     display: flex;
     flex: 1;
     min-height: 0;

@@ -101,6 +101,10 @@ export class InMemoryDocumentFiles implements DocumentFilePort {
     return Promise.resolve(statuses);
   }
 
+  readModifiedTime(path: string): Promise<number | undefined> {
+    return Promise.resolve(this.modifiedAtByKey.get(InMemoryDocumentFiles.locationOf(path).canonicalKey));
+  }
+
   private statusOf(location: DocumentLocation): PathStatus {
     if (this.unreachableKeys.has(location.canonicalKey)) return 'unreachable';
     return this.textByKey.has(location.canonicalKey) ? 'available' : 'missing';

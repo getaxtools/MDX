@@ -64,6 +64,7 @@ describe('FileArc', () => {
     expect(card.textContent).toContain('install.md');
     expect(card.textContent).toContain('3 of 12');
     expect(card.textContent).toContain('Handbook › docs · edited yesterday');
+    expect(card.getAttribute('aria-label')).toBe('install.md, 3 of 12, Handbook › docs · edited yesterday');
     expect(arc.getAttribute('aria-activedescendant')).toBe(card.id);
   });
 
@@ -79,7 +80,7 @@ describe('FileArc', () => {
 
     const card = screen.getByRole('option', { selected: true });
 
-    expect(card.getAttribute('aria-label')).toBe(`${longName}, 1 of 12`);
+    expect(card.getAttribute('aria-label')).toBe(`${longName}, 1 of 12, Handbook › docs`);
     expect(card.querySelector('.card-position')?.textContent).toBe('1 of 12');
     expect(card.querySelector('.card-name')?.contains(card.querySelector('.card-position'))).toBe(false);
     expect(SOURCE).toMatch(/\.card-position \{[^}]*flex: none/);

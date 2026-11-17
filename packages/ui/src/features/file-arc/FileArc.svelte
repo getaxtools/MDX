@@ -8,6 +8,7 @@
   import { readWheelMediaPreferences } from '../control-wheel/wheelMediaPreferences';
   import { fileArcMotion } from './fileArcMotion';
   import {
+    cardAccessibleName,
     cardDetailsText,
     entryAccessibleName,
     fileArcLabel,
@@ -55,6 +56,7 @@
     fileArcLayout({ listLength: entries.length, highlighted, areaWidth, areaHeight, direction }),
   );
   const card = $derived(entries[highlighted]);
+  const cardDetails = $derived(card ? cardDetailsText(card, lastEdited, translator) : '');
   const optionId = (index: number) => `file-arc-option-${String(index)}`;
   const nameOf = (index: number) => {
     const entry = entries[index];
@@ -150,7 +152,11 @@
       role="option"
       tabindex="-1"
       aria-selected="true"
-      aria-label={nameOf(highlighted)}
+      aria-label={cardAccessibleName(
+        card,
+        { index: highlighted, count: entries.length, details: cardDetails },
+        translator,
+      )}
       style:left="{layout.card.left}px"
       style:top="calc(50% + {layout.card.top}px)"
       onclick={() => onChoose(highlighted)}
@@ -162,7 +168,7 @@
           <span class="card-name">{card.name}</span>
           <span class="card-position">{positionText(highlighted, entries.length, translator)}</span>
         </span>
-        <span class="card-details">{cardDetailsText(card, lastEdited, translator)}</span>
+        <span class="card-details">{cardDetails}</span>
       </span>
     </div>
   {/if}

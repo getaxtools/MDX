@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { applyViewCommand, isViewCommand } from '../view/viewCommands';
 import {
   SETTING_DEFINITIONS,
+  descriptionKeyOf,
   matchesQuery,
   matchingSettings,
   type SettingDefinition,
@@ -149,5 +150,29 @@ describe('matchingSettings', () => {
 
   it('ignores accents when searching', () => {
     expect(idsFor('thème')).toEqual(['theme']);
+  });
+});
+
+describe('the Ctrl with the mouse wheel setting', () => {
+  it('the setting offers moves between files and zooms', () => {
+    const setting = settingWithId('ctrlWheel');
+    if (setting.kind !== 'choice') throw new Error('not a choice');
+
+    expect(setting.choices(translator).map((choice) => choice.label)).toEqual([
+      'Moves between files',
+      'Zooms',
+    ]);
+    expect(setting.valueIn(DEFAULT_VIEW_SETTINGS)).toBe('moveBetweenFiles');
+    expect(setting.commandFor('zoom')).toEqual({ kind: 'setCtrlWheelAction', ctrlWheelAction: 'zoom' });
+    expect(setting.commandFor('scroll')).toBeUndefined();
+  });
+
+  it('the zoom description names the wheel only while it zooms', () => {
+    const zoom = settingWithId('zoom');
+    const descriptionWith = (ctrlWheelAction: 'moveBetweenFiles' | 'zoom') =>
+      translator.translate(descriptionKeyOf(zoom, { ...DEFAULT_VIEW_SETTINGS, ctrlWheelAction }));
+
+    expect(descriptionWith('moveBetweenFiles')).not.toContain('wheel');
+    expect(descriptionWith('zoom')).toContain('mouse wheel');
   });
 });

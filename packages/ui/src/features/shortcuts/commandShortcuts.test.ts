@@ -21,6 +21,27 @@ function keys(key: string, modifiers: Partial<ShortcutKeyEvent> = {}): ShortcutK
   };
 }
 
+describe('the file arc keys', () => {
+  it('ctrl+down and ctrl+up step the arc forward and back', () => {
+    expect(commandForShortcut(keys('ArrowDown', { ctrlKey: true }), 'windows')).toEqual({
+      kind: 'stepFileArcForward',
+    });
+    expect(commandForShortcut(keys('ArrowUp', { ctrlKey: true }), 'windows')).toEqual({
+      kind: 'stepFileArcBack',
+    });
+  });
+
+  it('the keys do nothing during composition', () => {
+    expect(
+      commandForShortcut(keys('ArrowDown', { ctrlKey: true, isComposing: true }), 'windows'),
+    ).toBeUndefined();
+  });
+
+  it('leaves Ctrl+Alt+Down to the editor for another cursor', () => {
+    expect(commandForShortcut(keys('ArrowDown', { ctrlKey: true, altKey: true }), 'windows')).toBeUndefined();
+  });
+});
+
 describe('the moved editing keys', () => {
   it('Ctrl+E toggles editing and Ctrl+/ switches Rich text and Source', () => {
     expect(commandForShortcut(keys('e', { ctrlKey: true }), 'windows')).toEqual({ kind: 'toggleEditing' });

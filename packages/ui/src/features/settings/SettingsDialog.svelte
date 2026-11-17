@@ -20,6 +20,7 @@
   import NotesSettingsSection from '../notes/NotesSettingsSection.svelte';
   import {
     SETTING_SECTIONS,
+    descriptionKeyOf,
     matchesQuery,
     matchingSettings,
     type ChoiceSetting,
@@ -202,7 +203,7 @@
               </label>
             {/if}
             <p id="{controlId(setting)}-description" class="description">
-              {translator.translate(setting.descriptionKey)}
+              {translator.translate(descriptionKeyOf(setting, settings))}
             </p>
           </div>
         {/if}

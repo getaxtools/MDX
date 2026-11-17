@@ -23,9 +23,9 @@ export function keptCurrentText(wording: FileArcWording, translator: Translator)
   return translator.translate(WORDING_KEYS[wording].kept);
 }
 
-/** Why the arc did not open: nothing else is listed. */
-export function emptyListText(wording: FileArcWording, translator: Translator): string {
-  return translator.translate(WORDING_KEYS[wording].empty);
+/** Why the arc did not open: nothing else is listed. Shown as a notice. */
+export function emptyListKey(wording: FileArcWording): MessageKey {
+  return WORDING_KEYS[wording].empty;
 }
 
 /** `3 of 12` */
@@ -44,6 +44,24 @@ export function entryAccessibleName(
     position: positionText(index, count, translator),
   });
   return entry.isOpenInTab ? translator.translate('fileArc.entryOpenInTab', { entry: named }) : named;
+}
+
+/**
+ * The card's name holds everything it shows, in the order shown, so what is read out matches what
+ * is seen: `install.md, 3 of 12, Handbook › docs · edited yesterday`.
+ */
+export function cardAccessibleName(
+  entry: FileArcEntry,
+  { index, count, details }: { readonly index: number; readonly count: number; readonly details: string },
+  translator: Translator,
+): string {
+  const named = translator.translate('fileArc.entryName', {
+    name: entry.name,
+    position: positionText(index, count, translator),
+  });
+  const described =
+    details === '' ? named : translator.translate('fileArc.cardName', { entry: named, details });
+  return entry.isOpenInTab ? translator.translate('fileArc.entryOpenInTab', { entry: described }) : described;
 }
 
 /** `Handbook › docs · edited yesterday`; either part may be missing. */

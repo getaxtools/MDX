@@ -1,10 +1,10 @@
 <script lang="ts">
   import type { Translator } from '@mdx/i18n';
   import type { DocumentLocation, FolderListing, PathStatus } from '@mdx/platform';
-  import { SvelteSet } from 'svelte/reactivity';
   import ContextMenu from '../../components/ContextMenu.svelte';
   import { contextMenuPosition, isContextMenuKey } from '../../components/ContextMenuItem';
   import FolderContents from '../folder-tree/FolderContents.svelte';
+  import { FolderTreeState } from '../folder-tree/FolderTreeState';
   import type { FolderTreeCommand } from '../folder-tree/folderTreeCommands';
   import { isInsideFolder } from '../folder-tree/isInsideFolder';
   import { activateWithKeyboard, treeKeyboard } from '../folder-tree/treeKeyboard';
@@ -40,6 +40,7 @@
     onOpenDocument: (documentPath: string) => void;
     onCommand: (command: ExplorerFoldersCommand) => void;
     activeDocumentKey?: string | undefined;
+    treeState?: FolderTreeState;
   }
 
   const {
@@ -55,13 +56,13 @@
     onOpenDocument,
     onCommand,
     activeDocumentKey,
+    treeState = new FolderTreeState(),
   }: Props = $props();
 
   type MenuRequest =
     | { readonly kind: 'folder'; readonly index: number; readonly x: number; readonly y: number }
     | { readonly kind: 'header'; readonly x: number; readonly y: number };
 
-  const collapsedFolderKeys = new SvelteSet<string>();
   let folderRows: HTMLElement[] = $state([]);
   let revealedDocumentKey: string | undefined;
   let menuRequest: MenuRequest | undefined = $state();
@@ -73,13 +74,8 @@
     revealedDocumentKey = activeDocumentKey;
     const key = activeDocumentKey;
     const root = key ? folders.find((folder) => isInsideFolder(key, folder.canonicalKey)) : undefined;
-    if (root) collapsedFolderKeys.delete(root.canonicalKey);
+    if (root) treeState.collapsedRootKeys.delete(root.canonicalKey);
   });
-
-  function toggleFolder(canonicalKey: string) {
-    if (collapsedFolderKeys.has(canonicalKey)) collapsedFolderKeys.delete(canonicalKey);
-    else collapsedFolderKeys.add(canonicalKey);
-  }
 
   function labelOf(folder: DocumentLocation): string {
     const status = pathStatuses.get(folder.canonicalKey) ?? 'available';
@@ -158,7 +154,7 @@
     {:else}
       <ul role="tree" aria-labelledby="explorer-folders-heading" use:treeKeyboard>
         {#each folders as folder, index (folder.canonicalKey)}
-          {@const isFolderExpanded = !collapsedFolderKeys.has(folder.canonicalKey)}
+          {@const isFolderExpanded = !treeState.collapsedRootKeys.has(folder.canonicalKey)}
           <li role="none">
             <div
               bind:this={folderRows[index]}
@@ -169,7 +165,7 @@
               class:unavailable={(pathStatuses.get(folder.canonicalKey) ?? 'available') !== 'available'}
               title={folder.displayPath}
               aria-expanded={isFolderExpanded}
-              onclick={() => toggleFolder(folder.canonicalKey)}
+              onclick={() => treeState.toggleRoot(folder.canonicalKey)}
               onkeydown={(event) => handleKeydown(event, index)}
               oncontextmenu={(event) => openMenu(event, { kind: 'folder', index })}
             >
@@ -185,6 +181,7 @@
                 {folderRevisions}
                 {activeDocumentKey}
                 shouldRevealActiveDocument
+                {treeState}
                 {onListFolder}
                 {onShowFolder}
                 {onOpenDocument}

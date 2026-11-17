@@ -68,6 +68,8 @@
     onCommand?: (command: ViewerCommand) => void;
     /** Edit Formula on a rendered formula; the menu offers it only when this is given. */
     onEditFormula?: ((formula: RenderedFormula) => void) | undefined;
+    /** Ctrl with the mouse wheel: true when it moved between files, false to zoom as before. */
+    onMoveWithWheel?: (event: WheelEvent) => boolean;
     isOutlineVisible?: boolean;
     isFavourite?: boolean;
     canBeFavourite?: boolean;
@@ -105,6 +107,7 @@
     onCurrentHeadingChange = () => undefined,
     onCommand = () => undefined,
     onEditFormula,
+    onMoveWithWheel = () => false,
     isOutlineVisible = true,
     isFavourite = false,
     canBeFavourite = true,
@@ -131,13 +134,13 @@
     const area = documentArea;
     if (!area) return;
     // Registered by hand because a passive wheel listener cannot stop the page from scrolling.
-    const zoomWithWheel = (event: WheelEvent) => {
+    const routeCtrlWheel = (event: WheelEvent) => {
       if (!event.ctrlKey || event.deltaY === 0) return;
       event.preventDefault();
-      onCommand({ kind: event.deltaY < 0 ? 'zoomIn' : 'zoomOut' });
+      if (!onMoveWithWheel(event)) onCommand({ kind: event.deltaY < 0 ? 'zoomIn' : 'zoomOut' });
     };
-    area.addEventListener('wheel', zoomWithWheel, { passive: false });
-    return () => area.removeEventListener('wheel', zoomWithWheel);
+    area.addEventListener('wheel', routeCtrlWheel, { passive: false });
+    return () => area.removeEventListener('wheel', routeCtrlWheel);
   });
 
   function reportScroll() {

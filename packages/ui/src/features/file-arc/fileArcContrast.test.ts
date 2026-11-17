@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { THEME_COLOR_SCHEMES, type ThemePreference } from '@mdx/core';
+import { fileArcLayout, THEME_COLOR_SCHEMES, type ThemePreference } from '@mdx/core';
 import { describe, expect, it } from 'vitest';
 import { KIND_COLOUR_TOKENS } from '../control-wheel/kindPresentation';
 
@@ -86,6 +86,25 @@ describe('file arc contrast', () => {
       const text = rgbOf(tokensOf(theme).get('--color-text'));
       for (const dial of dialsOf(theme))
         expect(contrastRatio(text, dial), theme).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
+    }
+  });
+
+  it('keeps even the faintest name at 4.5:1 over black and white content in every app theme', () => {
+    const { names } = fileArcLayout({
+      listLength: 40,
+      highlighted: 20,
+      areaWidth: 1200,
+      areaHeight: 900,
+      direction: 'ltr',
+    });
+    const faintest = Math.min(...names.map((name) => name.opacity));
+
+    for (const theme of APP_THEMES) {
+      const text = rgbOf(tokensOf(theme).get('--color-text'));
+      for (const dial of dialsOf(theme))
+        expect(contrastRatio(laidOver(text, faintest, dial), dial), theme).toBeGreaterThanOrEqual(
+          MIN_TEXT_CONTRAST,
+        );
     }
   });
 
