@@ -627,6 +627,7 @@
   "editor.block.movedDown": "Moved $1 down.",
   "editor.block.first": "This is the first block.",
   "editor.block.last": "This is the last block.",
+  "editor.block.handle": "Actions for the $1 starting “$2”",
   "editor.block.kind.paragraph": "paragraph",
   "editor.block.kind.heading": "heading",
   "editor.block.kind.list": "list",

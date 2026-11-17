@@ -32,6 +32,7 @@ import {
 } from '@codemirror/view';
 import { nearestLineStart, pictureLinksAt, remotePictureMarkdown } from './attachments/pictureInsertion';
 import { pictureChooserFacet } from './attachments/pictureRequests';
+import { blockMenuOpener } from './blocks/blockHandle';
 import {
   formulaInsertion,
   type FormulaKind,
@@ -149,6 +150,8 @@ export interface SourceEditorOptions {
   readonly onChoosePictures?: () => void;
   /** Typing and other changes are refused, as while the notes folder is being moved. */
   readonly isReadOnly?: boolean;
+  /** Opens the block menu at a point, for the block at the caret, from a click on Rich text's block handle. */
+  readonly onOpenBlockMenu?: (point: { readonly x: number; readonly y: number }) => void;
 }
 
 /** A place in the text by zero-based line and column, in UTF-16 code units from the start of the line. */
@@ -305,9 +308,14 @@ function startingExtensions(
   ];
 }
 
-/** The app's equation editor, which `$$` then Enter also opens, and its picture chooser. */
-function appDialogExtensions({ onEditFormula, onChoosePictures }: SourceEditorOptions): Extension {
+/** The app's equation editor, which `$$` then Enter also opens, its picture chooser and the block menu. */
+function appDialogExtensions({
+  onEditFormula,
+  onChoosePictures,
+  onOpenBlockMenu,
+}: SourceEditorOptions): Extension {
   return [
+    onOpenBlockMenu ? blockMenuOpener.of(onOpenBlockMenu) : [],
     onEditFormula ? formulaEditorFacet.of(onEditFormula) : [],
     onEditFormula ? Prec.highest(keymap.of([{ key: 'Enter', run: startDisplayFormulaAfterDollars }])) : [],
     onChoosePictures ? pictureChooserFacet.of(onChoosePictures) : [],

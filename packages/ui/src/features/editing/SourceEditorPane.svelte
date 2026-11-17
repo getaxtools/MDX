@@ -160,6 +160,7 @@
       onFormattingChange: (formatting: FormattingState) => onFormattingChange(formatting),
       ...(onEditFormula ? { onEditFormula: (request: FormulaEditRequest) => onEditFormula(request) } : {}),
       ...(onChoosePictures ? { onChoosePictures: () => onChoosePictures() } : {}),
+      onOpenBlockMenu: (point: { readonly x: number; readonly y: number }) => (blockMenuRequest = point),
       typography,
       ...(richTextRendering ? { richTextRendering } : {}),
       snippets: editorSnippets,

@@ -1,5 +1,6 @@
 import { Prec, type Extension } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
+import { blockHandle } from '../blocks/blockHandle';
 import { editClickedFormula } from '../formulas/formulaRequests';
 import { blockLayer } from './blockLayer';
 import { inlineMarkupLayer } from './inlineMarkupLayer';
@@ -17,6 +18,7 @@ export function richTextExtensions(): Extension {
     widgetTheme,
     inlineMarkupLayer,
     blockLayer,
+    blockHandle(),
     Prec.high(keymap.of([{ key: 'Mod-Enter', run: toggleTasksAtCaret }])),
     EditorView.domEventHandlers({
       mousedown: (event, view) =>

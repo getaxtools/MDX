@@ -1,4 +1,5 @@
 import {
+  BLOCK_HANDLE_PHRASE,
   BLOCK_KIND_PHRASES,
   BLOCK_MOVE_PHRASES,
   BUILT_IN_SLASH_ITEMS,
@@ -31,6 +32,7 @@ const PHRASE_KEYS: Readonly<Record<string, MessageKey>> = {
   [BLOCK_MOVE_PHRASES.movedDown]: 'editor.block.movedDown',
   [BLOCK_MOVE_PHRASES.first]: 'editor.block.first',
   [BLOCK_MOVE_PHRASES.last]: 'editor.block.last',
+  [BLOCK_HANDLE_PHRASE]: 'editor.block.handle',
   ...blockKindPhraseKeys(),
   [SLASH_MENU_SECTION]: 'editor.slash.section.blocks',
   [SNIPPETS_SECTION]: 'editor.slash.section.snippets',
