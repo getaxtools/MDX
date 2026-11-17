@@ -9,9 +9,9 @@ import {
   type StoredWorkspace,
 } from '@mdx/platform';
 import { createMarkdownRenderer } from '@mdx/renderer';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ViewerController, type ViewerSnapshot } from '../viewer/ViewerController';
-import { jumpListWorkspacesOf } from './jumpListWorkspaces';
+import { jumpListNameOf, jumpListWorkspacesOf } from './jumpListWorkspaces';
 
 const ALL_KINDS_BUILT = workspaceKindsFor({ allowsPlannedKindPreview: true });
 
@@ -35,7 +35,10 @@ describe('jumpListWorkspacesOf', () => {
       stored('markdownViewer', 'Six', 60),
     ]);
 
-    const workspaces = jumpListWorkspacesOf(registry, kindsWith(['markdownViewer']), createTranslator());
+    const workspaces = jumpListWorkspacesOf(registry, kindsWith(['markdownViewer']), {
+      translator: createTranslator(),
+      removals: {},
+    });
 
     expect(workspaces).toEqual([
       { id: 'six', name: 'Six' },
@@ -45,6 +48,40 @@ describe('jumpListWorkspacesOf', () => {
       { id: 'two', name: 'Two' },
     ]);
     expect(workspaces.every((workspace) => Object.keys(workspace).join() === 'id,name')).toBe(true);
+  });
+});
+
+describe('jumpListNameOf', () => {
+  it('strips direction controls, zero-width characters and separators from a name', () => {
+    const translator = createTranslator();
+
+    expect(jumpListNameOf('\u202ERe\u200Bad\u2066ing\u2069\u061C\uFEFF\u2028\u2029', translator)).toBe(
+      'Reading',
+    );
+  });
+
+  it('gives a name with nothing visible left the default name, so the list still updates', () => {
+    expect(jumpListNameOf('\u200E\u202A \u0007', createTranslator())).toBe('Default');
+  });
+});
+
+describe('a removed Jump List entry', () => {
+  it('stays out until its workspace is shown again', () => {
+    const registry = (shownAtMs: number) =>
+      WorkspaceRegistry.fromStored([
+        stored('markdownViewer', 'One', 10),
+        stored('markdownViewer', 'Two', shownAtMs),
+      ]);
+    const options = { translator: createTranslator(), removals: { two: 50 } };
+    const kinds = kindsWith(['markdownViewer']);
+
+    expect(jumpListWorkspacesOf(registry(40), kinds, options).map((workspace) => workspace.id)).toEqual([
+      'one',
+    ]);
+    expect(jumpListWorkspacesOf(registry(60), kinds, options).map((workspace) => workspace.id)).toEqual([
+      'two',
+      'one',
+    ]);
   });
 });
 
@@ -71,6 +108,7 @@ describe('the Jump List of a running app', () => {
     await controller.start();
     return {
       controller,
+      session,
       shownName: () => latest?.workspaces?.registry.find(latest.workspaces.shownWorkspaceId)?.name,
     };
   }
@@ -86,9 +124,45 @@ describe('the Jump List of a running app', () => {
     expect(last?.workspaces.map((workspace) => workspace.name)).toContain('Reading');
   });
 
+  it('sends one update at a time, the newest list last', async () => {
+    const jumpList = new InMemoryJumpList();
+    const { controller } = await start(jumpList);
+    jumpList.isHeld = true;
+
+    await controller.execute({ kind: 'createWorkspace', name: 'Reading', kindId: 'markdownViewer' });
+    await controller.execute({ kind: 'createWorkspace', name: 'Plans', kindId: 'markdownViewer' });
+    jumpList.release();
+    await vi.waitFor(() => expect(jumpList.shownLists.at(-1)?.workspaces[0]?.name).toBe('Plans'));
+
+    expect(jumpList.mostAtOnce).toBe(1);
+  });
+
+  it('remembers a removed entry and leaves it out of the next list', async () => {
+    const jumpList = new InMemoryJumpList();
+    const { controller, session } = await start(jumpList);
+    await controller.execute({ kind: 'createWorkspace', name: 'Reading', kindId: 'markdownViewer' });
+    await vi.waitFor(() =>
+      expect(jumpList.shownLists.at(-1)?.workspaces.map((workspace) => workspace.name)).toContain('Reading'),
+    );
+    const readingId =
+      jumpList.shownLists.at(-1)?.workspaces.find((workspace) => workspace.name === 'Reading')?.id ?? '';
+    jumpList.removedWorkspaceIds = [readingId];
+
+    await controller.execute({ kind: 'createWorkspace', name: 'Plans', kindId: 'markdownViewer' });
+
+    await vi.waitFor(() =>
+      expect(Object.keys(session.currentState().jumpListRemovals ?? {})).toEqual([readingId]),
+    );
+    await vi.waitFor(() =>
+      expect(jumpList.shownLists.at(-1)?.workspaces.map((workspace) => workspace.id)).not.toContain(
+        readingId,
+      ),
+    );
+  });
+
   it('a refusal leaves the app working', async () => {
     const jumpList = new InMemoryJumpList();
-    jumpList.answer = 'refusedByPrivacySetting';
+    jumpList.outcome = 'refusedByPrivacySetting';
     const { controller, shownName } = await start(jumpList);
 
     await controller.execute({ kind: 'createWorkspace', name: 'Reading', kindId: 'markdownViewer' });

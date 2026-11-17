@@ -1,3 +1,4 @@
+import { NO_JUMP_LIST_REMOVALS, type JumpListRemovals } from '../workspaces/jumpListRemovals';
 import {
   DocumentOpenError,
   isViewLocation,
@@ -90,6 +91,7 @@ function emptyState(kindRegistry: readonly WorkspaceKind[]): ViewerState {
     wordGoals: {},
     snippetLibrary: EMPTY_SNIPPET_LIBRARY,
     injectionIgnoreList: InjectionIgnoreList.empty(),
+    jumpListRemovals: NO_JUMP_LIST_REMOVALS,
   };
 }
 
@@ -120,6 +122,7 @@ function viewerStateOf(restored: ViewerState): ViewerState {
     wordGoals: restored.wordGoals,
     snippetLibrary: restored.snippetLibrary,
     injectionIgnoreList: restored.injectionIgnoreList,
+    ...(restored.jumpListRemovals ? { jumpListRemovals: restored.jumpListRemovals } : {}),
     ...(restored.workspaceOverrides ? { workspaceOverrides: restored.workspaceOverrides } : {}),
   };
 }
@@ -529,6 +532,12 @@ export class ViewerSession {
     const changed = change(this.state.injectionIgnoreList);
     if (changed !== this.state.injectionIgnoreList)
       this.replaceState({ ...this.state, injectionIgnoreList: changed });
+  }
+
+  updateJumpListRemovals(change: (removals: JumpListRemovals) => JumpListRemovals): void {
+    const current = this.state.jumpListRemovals ?? NO_JUMP_LIST_REMOVALS;
+    const changed = change(current);
+    if (changed !== current) this.replaceState({ ...this.state, jumpListRemovals: changed });
   }
 
   updateSnippetLibrary(change: (snippetLibrary: SnippetLibrary) => SnippetLibrary): void {

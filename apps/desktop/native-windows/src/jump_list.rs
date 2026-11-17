@@ -23,6 +23,8 @@ use crate::com_error::{io_error_of, io_error_of_hresult};
 
 /// The longest arguments a shell link keeps (`INFOTIPSIZE`), and room for a title or tooltip.
 const MAX_LINK_TEXT_UNITS: usize = 1_024;
+/// The longest program path a shell link takes (`MAX_PATH`), its ending zero included.
+const MAX_PROGRAM_PATH_UNITS: usize = 260;
 
 /// One entry of a Jump List category: a link that starts this program with the given arguments.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,13 +52,23 @@ pub enum JumpListOutcome {
     RefusedByPrivacySetting,
 }
 
+/// What an update did, and the arguments of the links the user removed from the Jump List, which
+/// Windows asks a program not to add again.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JumpListUpdate {
+    /// Whether the category was written or a privacy setting refused it.
+    pub outcome: JumpListOutcome,
+    /// The arguments of each removed link, such as `--workspace=reading-1`.
+    pub removed_arguments: Vec<String>,
+}
+
 /// Replaces the program's custom Jump List category with these entries, on a thread of its own
 /// that sets up COM and takes it down again. Entries the user removed from the Jump List are left
 /// out, as Windows asks; an empty list removes the category.
 pub fn show_jump_list_category(
     category: &str,
     entries: &[JumpListEntry],
-) -> io::Result<JumpListOutcome> {
+) -> io::Result<JumpListUpdate> {
     let program = std::env::current_exe()?;
     let category = category.to_owned();
     let entries = entries.to_vec();
@@ -73,7 +85,7 @@ pub fn show_jump_list_category(
         .map_err(|_| io::Error::other("the Jump List thread stopped"))?
 }
 
-fn write_on_this_thread(update: &CategoryUpdate<'_>) -> io::Result<JumpListOutcome> {
+fn write_on_this_thread(update: &CategoryUpdate<'_>) -> io::Result<JumpListUpdate> {
     let _com = ApartmentComGuard::start()?;
     // SAFETY: COM is set up on this thread; `DestinationList` is the class id of the
     // `ICustomDestinationList` interface asked for.
@@ -84,11 +96,15 @@ fn write_on_this_thread(update: &CategoryUpdate<'_>) -> io::Result<JumpListOutco
     // SAFETY: `list` is a live object of this thread and `minimum_slots` outlives the call.
     let removed: IObjectArray =
         unsafe { list.BeginList(&raw mut minimum_slots) }.map_err(|error| io_error_of(&error))?;
-    match append_category(&list, &removed, update) {
+    let removed_arguments = arguments_of_links(&removed);
+    match append_category(&list, &removed_arguments, update) {
         Ok(outcome) => {
             // SAFETY: `list` began a list above that was not committed or aborted yet.
             unsafe { list.CommitList() }.map_err(|error| io_error_of(&error))?;
-            Ok(outcome)
+            Ok(JumpListUpdate {
+                outcome,
+                removed_arguments,
+            })
         }
         Err(error) => {
             // SAFETY: as above; aborting leaves the Jump List as it was.
@@ -100,7 +116,7 @@ fn write_on_this_thread(update: &CategoryUpdate<'_>) -> io::Result<JumpListOutco
 
 fn append_category(
     list: &ICustomDestinationList,
-    removed: &IObjectArray,
+    removed_arguments: &[String],
     update: &CategoryUpdate<'_>,
 ) -> io::Result<JumpListOutcome> {
     let CategoryUpdate {
@@ -108,7 +124,6 @@ fn append_category(
         category,
         entries,
     } = *update;
-    let removed_arguments = arguments_of_links(removed);
     let kept: Vec<&JumpListEntry> = entries
         .iter()
         .filter(|entry| !removed_arguments.contains(&entry.arguments))
@@ -164,8 +179,8 @@ fn shell_link(program: &Path, entry: &JumpListEntry) -> io::Result<IShellLinkW> 
     // SAFETY: COM is set up on this thread; the class id names the interface asked for.
     let link: IShellLinkW = unsafe { CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER) }
         .map_err(|error| io_error_of(&error))?;
-    let wide_program = wide_with_zero(program.as_os_str());
-    let wide_arguments = wide_with_zero(&entry.arguments);
+    let wide_program = whole_text_with_zero(program.as_os_str(), MAX_PROGRAM_PATH_UNITS)?;
+    let wide_arguments = whole_text_with_zero(&entry.arguments, MAX_LINK_TEXT_UNITS)?;
     let wide_title = wide_with_zero(&entry.title);
     // SAFETY: `link` is live, and each text ends with a zero and outlives its call, which copies it.
     unsafe {
@@ -212,6 +227,23 @@ fn string_property(wide_text: &[u16]) -> io::Result<PROPVARIANT> {
     Ok(value)
 }
 
+/// A text that must not be cut, such as a path or arguments, refused when it does not fit.
+fn whole_text_with_zero(text: impl AsRef<OsStr>, max_units: usize) -> io::Result<Vec<u16>> {
+    let wide: Vec<u16> = text
+        .as_ref()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    if wide.len() > max_units {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "the text is too long for a Jump List link",
+        ));
+    }
+    Ok(wide)
+}
+
+/// A title or category, cut to what a link keeps.
 fn wide_with_zero(text: impl AsRef<OsStr>) -> Vec<u16> {
     text.as_ref()
         .encode_wide()
@@ -228,18 +260,21 @@ fn text_until_zero(units: &[u16]) -> String {
     String::from_utf16_lossy(units.get(..end).unwrap_or_default())
 }
 
-/// COM in a single-threaded apartment for as long as the guard lives.
-struct ApartmentComGuard;
+/// COM in a single-threaded apartment for as long as the guard lives. It cannot be sent to another
+/// thread, so it always takes COM down on the thread that set it up.
+struct ApartmentComGuard(std::marker::PhantomData<*const ()>);
 
 impl ApartmentComGuard {
     fn start() -> io::Result<Self> {
-        // SAFETY: called once on a thread this module made, which has no COM mode yet.
+        // SAFETY: `CoInitializeEx` may be called on any thread with no reserved argument. A thread
+        // already in another COM mode gets an error, returned below; each success is paired with
+        // one `CoUninitialize` when the guard drops, on the same thread, as the guard is not `Send`.
         let result =
             unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) };
         if result.is_err() {
             return Err(io_error_of_hresult(result));
         }
-        Ok(Self)
+        Ok(Self(std::marker::PhantomData))
     }
 }
 
@@ -273,6 +308,17 @@ mod tests {
     }
 
     #[test]
+    fn refuses_a_path_or_arguments_that_do_not_fit_instead_of_cutting_them() {
+        let long_path = format!(r"C:\{}", "a".repeat(MAX_PROGRAM_PATH_UNITS));
+
+        assert!(whole_text_with_zero(&long_path, MAX_PROGRAM_PATH_UNITS).is_err());
+        assert_eq!(
+            whole_text_with_zero("ab", MAX_PROGRAM_PATH_UNITS).unwrap(),
+            [97, 98, 0]
+        );
+    }
+
+    #[test]
     fn reads_text_up_to_its_zero() {
         assert_eq!(text_until_zero(&[97, 98, 0, 99]), "ab");
         assert_eq!(text_until_zero(&[97, 98]), "ab");
@@ -293,5 +339,9 @@ mod tests {
         let items: IObjectArray = collection.cast().unwrap();
 
         assert_eq!(arguments_of_links(&items), ["--workspace=reading-1"]);
+        let properties: IPropertyStore = link.cast().unwrap();
+        // SAFETY: `properties` is a live object of this test's thread.
+        let title = unsafe { properties.GetValue(&PKEY_Title) }.unwrap();
+        assert_eq!(title.to_string(), "Reading");
     }
 }

@@ -408,3 +408,10 @@ export {
   type FileArcPlace,
   type LayoutDirection,
 } from './file-arc/fileArcLayout';
+export {
+  isRemovedFromJumpList,
+  NO_JUMP_LIST_REMOVALS,
+  parseJumpListRemovals,
+  withJumpListRemovals,
+  type JumpListRemovals,
+} from './workspaces/jumpListRemovals';

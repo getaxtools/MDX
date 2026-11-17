@@ -45,7 +45,7 @@ import type {
   ShownNotesIndex,
   SpecProjectManifest,
   InspectedLink,
-  JumpListAnswer,
+  JumpListUpdate,
   JumpListWorkspace,
   WatchedSpecProject,
   ProjectDocuments,
@@ -205,7 +205,7 @@ export const tauriCommands = {
   watchDocuments: (paths: readonly string[]) => invoke<null>('watch_documents', { paths }),
   watchFolders: (paths: readonly string[]) => invoke<null>('watch_folders', { paths }),
   showJumpListWorkspaces: (category: string, workspaces: readonly JumpListWorkspace[]) =>
-    invoke<JumpListAnswer>('show_jump_list_workspaces', { category, workspaces }),
+    invoke<JumpListUpdate>('show_jump_list_workspaces', { category, workspaces }),
   watchSpecProjects: (projects: readonly WatchedSpecProject[], additionalLocations: readonly string[]) =>
     invoke<null>('watch_spec_projects', { projects, additionalLocations }),
   resolveDocumentLink: (document: string, href: string, expectedTarget?: string) =>

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::app_windows::workspace_launch_argument;
+use crate::app_windows::{WorkspaceArgument, workspace_argument, workspace_launch_argument};
 use crate::commands::documents::run_blocking;
 use crate::documents::DocumentError;
 use crate::platform::{JumpListLink, JumpListResult, show_jump_list_category};
@@ -18,9 +18,17 @@ pub struct JumpListWorkspace {
     name: String,
 }
 
+/// What an update did, and the workspaces whose entries the user removed from the Jump List.
 #[derive(Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub enum JumpListAnswer {
+pub struct JumpListAnswer {
+    outcome: JumpListOutcome,
+    removed_workspace_ids: Vec<String>,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum JumpListOutcome {
     Written,
     RefusedByPrivacySetting,
     #[cfg(not(windows))]
@@ -36,15 +44,33 @@ pub async fn show_jump_list_workspaces(
 ) -> Result<JumpListAnswer, DocumentError> {
     let category = shown_text(&category).ok_or(DocumentError::InvalidRequest)?;
     let links = links_of(workspaces)?;
-    let result = run_blocking(move || show_jump_list_category(&category, &links))
-        .await?
-        .map_err(|_| DocumentError::Unreadable)?;
-    Ok(match result {
-        JumpListResult::Written => JumpListAnswer::Written,
-        JumpListResult::RefusedByPrivacySetting => JumpListAnswer::RefusedByPrivacySetting,
+    let (result, removed_arguments) =
+        run_blocking(move || show_jump_list_category(&category, &links))
+            .await?
+            .map_err(|_| DocumentError::Unreadable)?;
+    let outcome = match result {
+        JumpListResult::Written => JumpListOutcome::Written,
+        JumpListResult::RefusedByPrivacySetting => JumpListOutcome::RefusedByPrivacySetting,
         #[cfg(not(windows))]
-        JumpListResult::Unavailable => JumpListAnswer::Unavailable,
+        JumpListResult::Unavailable => JumpListOutcome::Unavailable,
+    };
+    Ok(JumpListAnswer {
+        outcome,
+        removed_workspace_ids: removed_workspace_ids_of(&removed_arguments),
     })
+}
+
+/// The workspaces of removed links that this app wrote; links in any other form are left alone.
+fn removed_workspace_ids_of(removed_arguments: &[String]) -> Vec<String> {
+    removed_arguments
+        .iter()
+        .filter_map(
+            |arguments| match workspace_argument(&[String::new(), arguments.clone()]) {
+                Some(WorkspaceArgument::Named(id)) => Some(id.as_str().to_owned()),
+                _ => None,
+            },
+        )
+        .collect()
 }
 
 fn links_of(workspaces: Vec<JumpListWorkspace>) -> Result<Vec<JumpListLink>, DocumentError> {
@@ -65,11 +91,21 @@ fn links_of(workspaces: Vec<JumpListWorkspace>) -> Result<Vec<JumpListLink>, Doc
         .collect()
 }
 
-/// A name as the taskbar shows it: on one line, without invisible characters; refused when empty or long.
+/// Direction controls, zero-width characters and line or paragraph separators: they hide or reorder
+/// a name without showing.
+fn is_hidden_in_a_name(character: char) -> bool {
+    character.is_control()
+        || matches!(
+            character,
+            '\u{061C}' | '\u{200B}'..='\u{200F}' | '\u{2028}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{FEFF}'
+        )
+}
+
+/// A name as the taskbar shows it: on one line, without hidden characters; refused when empty or long.
 fn shown_text(text: &str) -> Option<String> {
     let shown: String = text
         .chars()
-        .filter(|character| !character.is_control())
+        .filter(|character| !is_hidden_in_a_name(*character))
         .collect::<String>()
         .trim()
         .to_owned();
@@ -115,6 +151,25 @@ mod tests {
             links_of(vec![workspace("w-1", " \u{7} ")]),
             Err(DocumentError::InvalidRequest)
         );
+    }
+
+    #[test]
+    fn strips_direction_controls_zero_width_characters_and_separators_from_a_name() {
+        let name = "\u{202E}Re\u{200B}ad\u{2066}ing\u{2069}\u{061C}\u{FEFF}\u{2028}\u{2029}";
+
+        assert_eq!(shown_text(name).as_deref(), Some("Reading"));
+        assert_eq!(shown_text("\u{200E}\u{200F}\u{202A}"), None);
+    }
+
+    #[test]
+    fn reports_the_workspaces_of_removed_links_it_wrote() {
+        let removed = [
+            "--workspace=reading-1".to_owned(),
+            "--workspace=../x".to_owned(),
+            "--other".to_owned(),
+        ];
+
+        assert_eq!(removed_workspace_ids_of(&removed), ["reading-1"]);
     }
 
     #[test]

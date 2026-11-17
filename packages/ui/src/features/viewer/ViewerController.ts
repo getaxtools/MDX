@@ -24,6 +24,8 @@ import {
   type FrontMatterEdit,
   type EditingModeSetting,
   DEFAULT_SPEC_SEARCH_FILTER,
+  withJumpListRemovals,
+  NO_JUMP_LIST_REMOVALS,
   type SpecSearchFilter,
 } from '@mdx/core';
 import type { EmbedResolver, WikiLinkSuggester } from '@mdx/editor';
@@ -424,6 +426,9 @@ export class ViewerController {
   private shownRecentFiles: ViewerState['recentFiles'] | undefined;
   private shownRecentWorkspaces = '';
   private shownJumpListWorkspaces: string | undefined;
+  /** The list sent and not answered yet, so the same list is not sent twice while it waits. */
+  private sentJumpListWorkspaces: string | undefined;
+  private jumpListUpdate: Promise<void> = Promise.resolve();
   private pathStatuses: ReadonlyMap<string, PathStatus> = new Map();
   private checkedLocationKeys = '';
   private readonly liveReload: LiveReload | undefined;
@@ -1535,18 +1540,40 @@ export class ViewerController {
     void menu.showRecentFiles(displayPaths.slice(0, MAX_RECENT_MENU_ENTRIES), workspaces);
   }
 
-  /** Lists the recent workspaces in the Jump List; a refusal or a failure leaves the app as it is. */
+  /**
+   * Lists the recent workspaces in the Jump List, one update after another; a refusal or a failure leaves
+   * the app as it is, and a failed list is sent again on the next change.
+   */
   private showRecentWorkspacesInJumpList(): void {
     const { jumpList, session, translator } = this.dependencies;
     const registry = this.workspacesPart().workspaces?.registry;
     if (!jumpList || !registry) return;
-    const workspaces = jumpListWorkspacesOf(registry, session.currentState().workspaceKinds, translator);
+    const { workspaceKinds, jumpListRemovals } = session.currentState();
+    const removals = jumpListRemovals ?? NO_JUMP_LIST_REMOVALS;
+    const workspaces = jumpListWorkspacesOf(registry, workspaceKinds, { translator, removals });
     const workspacesKey = JSON.stringify(workspaces);
-    if (workspacesKey === this.shownJumpListWorkspaces) return;
-    this.shownJumpListWorkspaces = workspacesKey;
-    jumpList
-      .showRecentWorkspaces(translator.translate('workspaces.jumpList.category'), workspaces)
-      .catch(() => undefined);
+    if (workspacesKey === this.shownJumpListWorkspaces || workspacesKey === this.sentJumpListWorkspaces)
+      return;
+    this.sentJumpListWorkspaces = workspacesKey;
+    const category = translator.translate('workspaces.jumpList.category');
+    this.jumpListUpdate = this.jumpListUpdate
+      .then(() => jumpList.showRecentWorkspaces(category, workspaces))
+      .then(({ removedWorkspaceIds }) => {
+        this.shownJumpListWorkspaces = workspacesKey;
+        this.rememberJumpListRemovals(removedWorkspaceIds);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.sentJumpListWorkspaces === workspacesKey) this.sentJumpListWorkspaces = undefined;
+      });
+  }
+
+  private rememberJumpListRemovals(workspaceIds: readonly string[]): void {
+    if (workspaceIds.length === 0) return;
+    const nowMs = (this.dependencies.now?.() ?? new Date()).getTime();
+    this.dependencies.session.updateJumpListRemovals((removals) =>
+      withJumpListRemovals(removals, workspaceIds, nowMs),
+    );
   }
 
   /** The other workspaces of enabled kinds, most recently used first. */

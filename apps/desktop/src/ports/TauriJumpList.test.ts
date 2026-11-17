@@ -9,13 +9,13 @@ describe('TauriJumpList', () => {
     const calls: { command: string; args: unknown }[] = [];
     mockIPC((command, args) => {
       calls.push({ command, args });
-      return 'refusedByPrivacySetting';
+      return { outcome: 'refusedByPrivacySetting', removedWorkspaceIds: ['old-1'] };
     });
     const workspaces = [{ id: 'reading-1', name: 'Reading' }];
 
     const answer = await new TauriJumpList().showRecentWorkspaces('Workspaces', workspaces);
 
-    expect(answer).toBe('refusedByPrivacySetting');
+    expect(answer).toEqual({ outcome: 'refusedByPrivacySetting', removedWorkspaceIds: ['old-1'] });
     expect(calls).toEqual([
       { command: 'show_jump_list_workspaces', args: { category: 'Workspaces', workspaces } },
     ]);

@@ -18,7 +18,7 @@ mod volumes;
 #[cfg(windows)]
 pub use clipboard::read_clipboard_text;
 #[cfg(windows)]
-pub use jump_list::{JumpListEntry, JumpListOutcome, show_jump_list_category};
+pub use jump_list::{JumpListEntry, JumpListOutcome, JumpListUpdate, show_jump_list_category};
 #[cfg(windows)]
 pub use recycle_bin::move_to_recycle_bin;
 #[cfg(windows)]

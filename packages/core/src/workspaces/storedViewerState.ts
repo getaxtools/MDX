@@ -29,6 +29,7 @@ export const APP_VALUE_KEYS = [
   'wordGoals',
   'snippetLibrary',
   'injectionIgnoreEntries',
+  'jumpListRemovals',
 ] as const;
 
 export type AppValueKey = (typeof APP_VALUE_KEYS)[number];
@@ -65,6 +66,7 @@ export function storedViewerStateOf(state: ViewerState): StoredViewerState {
       wordGoals: persisted.wordGoals,
       snippetLibrary: persisted.snippetLibrary,
       injectionIgnoreEntries: persisted.injectionIgnoreEntries ?? [],
+      jumpListRemovals: persisted.jumpListRemovals ?? {},
     },
   };
 }
@@ -96,6 +98,7 @@ export function viewerStateFrom(
       wordGoals: appValues.wordGoals,
       snippetLibrary: appValues.snippetLibrary,
       injectionIgnoreEntries: appValues.injectionIgnoreEntries,
+      jumpListRemovals: appValues.jumpListRemovals,
     },
     kindRegistry,
   );

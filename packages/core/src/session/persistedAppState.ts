@@ -3,6 +3,11 @@ import type { DocumentLocation } from '@mdx/platform';
 import { ExplorerFolders } from '../explorer/ExplorerFolders';
 import type { IgnoreEntry } from '../prompt-injection/ignoreFindings';
 import { InjectionIgnoreList } from '../prompt-injection/InjectionIgnoreList';
+import {
+  NO_JUMP_LIST_REMOVALS,
+  parseJumpListRemovals,
+  type JumpListRemovals,
+} from '../workspaces/jumpListRemovals';
 import { FavouritesList, type Favourite, type FavouriteGroup } from '../favourites/FavouritesList';
 import { parseFavourites } from '../favourites/parseFavourites';
 import { RecentFilesList, type RecentFile } from '../recent-files/RecentFilesList';
@@ -38,6 +43,8 @@ export interface PersistedAppState {
   readonly snippetLibrary: SnippetLibrary;
   /** Findings the user ignored in the prompt injection check, as rule ids and hashes. */
   readonly injectionIgnoreEntries?: readonly IgnoreEntry[];
+  /** Workspaces whose Jump List entry the user removed, by id, with when. */
+  readonly jumpListRemovals?: JumpListRemovals;
   /** Lets an older MDX name the version that wrote state it cannot read. */
   readonly savedByAppVersion?: string;
 }
@@ -53,6 +60,8 @@ export interface ViewerState {
   readonly wordGoals: WordGoals;
   readonly snippetLibrary: SnippetLibrary;
   readonly injectionIgnoreList: InjectionIgnoreList;
+  /** Absent until the user removes a Jump List entry. */
+  readonly jumpListRemovals?: JumpListRemovals;
   /** The shown workspace's own theme, reading width or typography; absent without workspaces. */
   readonly workspaceOverrides?: WorkspaceOverrides;
 }
@@ -79,6 +88,7 @@ export function toPersistedAppState(
     wordGoals,
     snippetLibrary,
     injectionIgnoreList,
+    jumpListRemovals = NO_JUMP_LIST_REMOVALS,
   }: ViewerState,
   appVersion?: string,
 ): PersistedAppState {
@@ -96,6 +106,7 @@ export function toPersistedAppState(
     wordGoals,
     snippetLibrary,
     ...(injectionIgnoreList.isEmpty() ? {} : { injectionIgnoreEntries: injectionIgnoreList.toSaved() }),
+    ...(Object.keys(jumpListRemovals).length === 0 ? {} : { jumpListRemovals }),
   };
 }
 
@@ -133,6 +144,7 @@ export function restoreAppState(
     wordGoals: parseWordGoals(saved.wordGoals),
     snippetLibrary: parseSnippetLibrary(saved.snippetLibrary),
     injectionIgnoreList: InjectionIgnoreList.fromSaved(saved.injectionIgnoreEntries),
+    jumpListRemovals: parseJumpListRemovals(saved.jumpListRemovals),
     wasReset: false,
     newerSavedState: undefined,
   };
@@ -165,6 +177,7 @@ function emptyAppState({
     wordGoals: {},
     snippetLibrary: EMPTY_SNIPPET_LIBRARY,
     injectionIgnoreList: InjectionIgnoreList.empty(),
+    jumpListRemovals: NO_JUMP_LIST_REMOVALS,
     wasReset,
     newerSavedState,
   };
