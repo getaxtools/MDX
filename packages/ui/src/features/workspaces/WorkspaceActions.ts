@@ -1,6 +1,7 @@
 import {
   NOTES_KIND_ID,
   claimedNotesLocations,
+  isLocationIdClaimed,
   notesKindData,
   notesWorkspaceFileLists,
   type InitialWorkspaceLists,
@@ -155,6 +156,11 @@ export class WorkspaceActions {
     const locationId = this.dependencies.createLocationId?.() ?? crypto.randomUUID();
     try {
       const prepared = await notesLocations.prepareLocation(notesLocationPath, locationId);
+      const workspaces = this.dependencies.session.workspaces()?.workspaces() ?? [];
+      if (isLocationIdClaimed(prepared.locationId, workspaces)) {
+        showNotice('notesLocation.claim.sameLocationId');
+        return undefined;
+      }
       const { displayPath, canonicalKey } = prepared.location;
       return {
         kindData: notesKindData({ path: displayPath, canonicalKey, locationId: prepared.locationId }),

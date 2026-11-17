@@ -1,7 +1,7 @@
 use std::fs::{File, Metadata};
 use std::io;
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use crate::platform;
 
@@ -12,6 +12,10 @@ pub trait MoveFileSystem: Send + Sync {
     fn is_online_only(&self, path: &Path, metadata: &Metadata) -> bool;
     /// Creates the pending copy of one file.
     fn create_copy(&self, pending: &Path) -> io::Result<File>;
+    /// Gives the copy its source's modified time; the drive may keep it rounded.
+    fn set_copy_time(&self, copy: &File, modified: SystemTime) -> io::Result<()> {
+        copy.set_modified(modified)
+    }
     fn pause_after_file(&self) {}
 }
 

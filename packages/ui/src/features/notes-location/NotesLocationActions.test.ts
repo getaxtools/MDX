@@ -172,6 +172,31 @@ describe('a Notes workspace whose folder is missing', () => {
     expect(snapshot().notice).toBe('Another Notes workspace already uses this folder.');
   });
 
+  it("Choose Another refuses a copy of another workspace's notes folder", async () => {
+    const { controller, notesLocations, folders, snapshot } = await startWithMissingJournal();
+    await controller.execute({
+      kind: 'createWorkspace',
+      name: 'Work',
+      kindId: 'notes',
+      notesLocationPath: 'D:\\Work',
+    });
+    const workId = notesLocations.existingLocationIds.get('d:\\work') ?? '';
+    notesLocations.existingLocationIds.set('d:\\work copy', workId);
+    notesLocations.missingPaths.add(JOURNAL_FOLDER.toLowerCase());
+    const journalId = snapshot()
+      .workspaces?.registry.workspaces()
+      .find((workspace) => workspace.name === 'Journal')?.id;
+    await controller.execute({ kind: 'switchWorkspace', workspaceId: journalId ?? '' });
+    folders.pickedFolder = 'D:\\Work Copy';
+
+    await controller.execute({ kind: 'chooseNotesLocation' });
+
+    expect(snapshot().missingNotesLocation).toBe(JOURNAL_FOLDER);
+    expect(snapshot().notice).toBe(
+      "This notes folder is a copy of another Notes workspace's folder. Choose another folder, or remove the copy first.",
+    );
+  });
+
   it('cancelling the folder picker changes nothing', async () => {
     const { controller, snapshot, journalLocation } = await startWithMissingJournal();
 

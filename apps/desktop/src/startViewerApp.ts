@@ -121,6 +121,14 @@ function createViewerController({
 function saveOrAskBeforeClosing(controller: ViewerController): void {
   const appWindow = getCurrentWindow();
   void appWindow.onCloseRequested(async (event) => {
+    if (controller.isCopyingNotes()) {
+      event.preventDefault();
+      if (!(await controller.confirmClosingDuringNotesMove())) return;
+      if (!(await controller.confirmClosingWindow())) return;
+      await controller.saveNow();
+      await appWindow.destroy();
+      return;
+    }
     if (!controller.hasUnsavedDocuments()) {
       await controller.saveNow();
       return;

@@ -1,8 +1,12 @@
+use std::sync::Arc;
+
 use serde::Serialize;
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 
-use crate::documents::{DocumentError, validated_file_name, write_text_atomically};
+use crate::documents::{
+    DocumentAccessList, DocumentError, validated_file_name, write_text_atomically,
+};
 use crate::open_requests::StartupWorkspaceFile;
 use crate::storage::{
     PendingWorkspaceExport, WORKSPACE_FILE_EXTENSION, WorkspaceFileContents, read_workspace_file,
@@ -53,9 +57,11 @@ pub async fn pick_workspace_export_place(
 pub fn write_workspace_export(
     contents: String,
     pending: State<'_, PendingWorkspaceExport>,
+    access: State<'_, Arc<DocumentAccessList>>,
 ) -> Result<String, DocumentError> {
     validated_workspace_json(&contents)?;
     let destination = pending.take().ok_or(DocumentError::InvalidRequest)?;
+    access.check_writable_destination(&destination)?;
     write_text_atomically(&destination, &contents)?;
     Ok(destination.to_string_lossy().into_owned())
 }

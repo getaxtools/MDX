@@ -30,7 +30,9 @@ export type NotesMoveCommand =
   | { readonly kind: 'postponeNotesMove' }
   | { readonly kind: 'keepOldNotesCopy' }
   | { readonly kind: 'askToRemoveOldNotesCopy' }
-  | { readonly kind: 'removeOldNotesCopy' };
+  | { readonly kind: 'removeOldNotesCopy' }
+  | { readonly kind: 'stopNotesMoveAndClose' }
+  | { readonly kind: 'keepMovingNotes' };
 
 const NOTES_MOVE_COMMAND_KINDS: ReadonlySet<string> = new Set([
   'changeNotesLocation',
@@ -42,6 +44,8 @@ const NOTES_MOVE_COMMAND_KINDS: ReadonlySet<string> = new Set([
   'keepOldNotesCopy',
   'askToRemoveOldNotesCopy',
   'removeOldNotesCopy',
+  'stopNotesMoveAndClose',
+  'keepMovingNotes',
 ]);
 
 export function isNotesMoveCommand(command: { readonly kind: string }): command is NotesMoveCommand {
@@ -58,7 +62,8 @@ export type NotesMoveDialog =
       readonly problem?: MoveNotice;
     }
   | { readonly kind: 'removalOffer'; readonly target: string; readonly oldCopy: OldNotesCopy }
-  | { readonly kind: 'removalConfirmation'; readonly oldCopy: OldNotesCopy };
+  | { readonly kind: 'removalConfirmation'; readonly oldCopy: OldNotesCopy }
+  | { readonly kind: 'closeDuringMove'; readonly source: string };
 
 /** What the status bar says while the notes are read-only for a move. */
 export type NotesMoveStatus =
@@ -78,8 +83,8 @@ export interface NotesMoveActionsDependencies {
   readonly notesMoves: NotesMovePort;
   readonly pickFolder: () => Promise<string | undefined>;
   readonly showNotice: (notice: MoveNotice, actions?: readonly NotesMoveCommand[]) => void;
-  /** Open notes with changes not saved yet, which a move would leave behind. */
-  readonly hasUnsavedNotes: () => boolean;
+  /** Open documents in the folder with changes not saved yet, which a move or a removal would lose. */
+  readonly hasUnsavedDocumentsIn: (folder: string) => boolean;
   /** The app language, for file sizes in messages. */
   readonly locale: string;
   readonly onChange: () => void;
@@ -95,8 +100,32 @@ export class NotesMoveActions {
   private active: ActiveMove | undefined;
   private dialog: NotesMoveDialog | undefined;
   private status: NotesMoveStatus | undefined;
+  /** The copy that runs now, so closing the window can wait for it to stop. */
+  private running: Promise<void> | undefined;
+  private answerClosing: ((mayClose: boolean) => void) | undefined;
 
   constructor(private readonly dependencies: NotesMoveActionsDependencies) {}
+
+  /**
+   * Closing the window while files are copied asks first: Stop and Close stops the move safely
+   * before the window closes; Keep Moving, the default, keeps the window open.
+   */
+  confirmClosing(): Promise<boolean> {
+    const move = this.active;
+    if (!this.running || !move) return Promise.resolve(true);
+    this.dialog = { kind: 'closeDuringMove', source: move.source };
+    this.dependencies.onChange();
+    return new Promise((resolve) => (this.answerClosing = resolve));
+  }
+
+  isCopying(): boolean {
+    return this.running !== undefined;
+  }
+
+  /** Clear All Data forgot every move, so nothing is read-only or offered any more. */
+  forgetMoves(): void {
+    this.endMove();
+  }
 
   start(): () => void {
     return this.dependencies.notesMoves.onProgress((progress) => this.showProgress(progress));
@@ -126,6 +155,8 @@ export class NotesMoveActions {
       keepOldNotesCopy: () => this.keepOldCopy(),
       askToRemoveOldNotesCopy: () => this.askToRemoveOldCopy(),
       removeOldNotesCopy: () => this.removeOldCopy(),
+      stopNotesMoveAndClose: () => this.stopAndClose(),
+      keepMovingNotes: () => this.keepMoving(),
     };
     await handlers[command.kind]();
   }
@@ -167,7 +198,7 @@ export class NotesMoveActions {
       this.showUnfinishedMove(this.active);
       return;
     }
-    if (this.dependencies.hasUnsavedNotes()) {
+    if (this.dependencies.hasUnsavedDocumentsIn(shown.location.path)) {
       this.notify({ key: 'notesLocation.move.unsavedNotes' });
       return;
     }
@@ -218,13 +249,32 @@ export class NotesMoveActions {
     this.dependencies.showNotice({ key: 'notesLocation.move.moving', values: { target: move.target } }, [
       { kind: 'stopNotesMove' },
     ]);
+    this.running = this.dependencies.notesMoves.runMove(move.locationId);
     try {
-      await this.dependencies.notesMoves.runMove(move.locationId);
+      await this.running;
     } catch (error) {
       this.pauseAfter(move, error);
       return;
+    } finally {
+      this.running = undefined;
     }
     await this.switchTo(move);
+  }
+
+  private async stopAndClose(): Promise<void> {
+    const running = this.running;
+    await this.dependencies.notesMoves.stopMove();
+    await running?.catch(() => undefined);
+    this.answerClosing?.(true);
+    this.answerClosing = undefined;
+  }
+
+  private keepMoving(): Promise<void> {
+    if (this.dialog?.kind === 'closeDuringMove') this.dialog = undefined;
+    this.answerClosing?.(false);
+    this.answerClosing = undefined;
+    this.dependencies.onChange();
+    return Promise.resolve();
   }
 
   /** The move stopped; the notes stay in the old folder and stay read-only until Resume or Cancel. */
@@ -241,17 +291,25 @@ export class NotesMoveActions {
     this.dependencies.onChange();
   }
 
+  /**
+   * Until the workspace record names the new folder, a failure pauses the move; after that the
+   * notes are in the new folder, so what remains is the offer of the old copy, never a cancel.
+   */
   private async switchTo(move: ActiveMove): Promise<void> {
-    const { notesMoves } = this.dependencies;
+    let target: DocumentLocation;
     try {
-      const target = await notesMoves.switchMove(move.locationId);
+      target = await this.dependencies.notesMoves.switchMove(move.locationId);
       await this.useNewFolder(move, target);
-      this.status = undefined;
-      this.notify({ key: 'notesLocation.move.switched', values: { target: target.displayPath } });
-      await this.dependencies.onSwitched();
-      await this.offerOldCopy();
     } catch (error) {
       this.pauseAfter(move, error);
+      return;
+    }
+    this.status = undefined;
+    this.notify({ key: 'notesLocation.move.switched', values: { target: target.displayPath } });
+    try {
+      await this.dependencies.onSwitched();
+    } finally {
+      await this.offerOldCopy();
     }
   }
 
@@ -341,6 +399,10 @@ export class NotesMoveActions {
   private async removeOldCopy(): Promise<void> {
     const oldCopy = this.dialog?.kind === 'removalConfirmation' ? this.dialog.oldCopy : undefined;
     if (!oldCopy) return;
+    if (this.dependencies.hasUnsavedDocumentsIn(oldCopy.path)) {
+      this.notify({ key: 'notesLocation.move.unsavedOldCopy', values: { path: oldCopy.path } });
+      return;
+    }
     try {
       const removal = await this.dependencies.notesMoves.removeOldCopy(oldCopy.locationId);
       this.endMove();

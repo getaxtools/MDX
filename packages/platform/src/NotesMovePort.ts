@@ -40,6 +40,10 @@ export type NotesMoveProblem =
   | { readonly code: 'moveUnderway' }
   | { readonly code: 'noMove' }
   | { readonly code: 'oldCopyInUse' }
+  | { readonly code: 'newFolderInUse' }
+  | { readonly code: 'targetClaimed' }
+  | { readonly code: 'freeSpaceUnknown' }
+  | { readonly code: 'recycleFailed' }
   | { readonly code: 'accessDenied' }
   | { readonly code: 'invalidRequest' }
   | { readonly code: 'journalUnavailable' };
@@ -112,5 +116,7 @@ export interface NotesMovePort {
   unfinishedMoves(): Promise<readonly UnfinishedNotesMove[]>;
   keepOldCopy(locationId: string): Promise<void>;
   removeOldCopy(locationId: string): Promise<OldCopyRemoval>;
+  /** Forgets every move, for Clear All Data; the notes folders keep their files and become writable. */
+  clearMoves(): Promise<void>;
   onProgress(listener: (progress: NotesMoveProgress) => void): () => void;
 }

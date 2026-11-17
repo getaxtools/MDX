@@ -3,7 +3,7 @@ use std::path::Path;
 
 use serde::Serialize;
 
-use super::move_copy::{hash_of_file, is_own_copy, pending_path_of};
+use super::copy_identity::{has_same_bytes, hash_of_file, is_own_copy, pending_path_of};
 use super::move_journal::{JournalFile, MoveJournal, MoveState, folders_overlap, path_inside};
 use super::{MAX_LISTED_PATHS, MoveError};
 
@@ -37,11 +37,12 @@ pub fn cancel_move(journal: &MoveJournal) -> Result<KeptFiles, MoveError> {
     let mut kept = KeptFiles::default();
     for file in &journal.files {
         let target = path_inside(&journal.target, &file.path)?;
+        let source = path_inside(&journal.source, &file.path)?;
         let _ = fs::remove_file(pending_path_of(&target));
         if !target.exists() {
             continue;
         }
-        if is_copy_made_by_move(&target, file) && fs::remove_file(&target).is_ok() {
+        if is_copy_made_by_move(&target, &source, file) && fs::remove_file(&target).is_ok() {
             continue;
         }
         kept.add(&file.path);
@@ -50,12 +51,15 @@ pub fn cancel_move(journal: &MoveJournal) -> Result<KeptFiles, MoveError> {
     Ok(kept)
 }
 
-fn is_copy_made_by_move(target: &Path, file: &JournalFile) -> bool {
-    is_own_copy(target, file)
-        && file
-            .sha256
-            .as_ref()
-            .is_none_or(|sha256| hash_of_file(target).is_ok_and(|hash| hash == *sha256))
+/// A copy the journal recorded must still have its size, time and hash; one copied after the
+/// journal was last written must hold exactly its source's bytes.
+fn is_copy_made_by_move(target: &Path, source: &Path, file: &JournalFile) -> bool {
+    match (&file.target_modified_ns, &file.sha256) {
+        (Some(_), Some(sha256)) => {
+            is_own_copy(target, file) && hash_of_file(target).is_ok_and(|hash| hash == *sha256)
+        }
+        _ => has_same_bytes(target, source),
+    }
 }
 
 /// Deepest first; `remove_dir` refuses a folder that still holds anything.

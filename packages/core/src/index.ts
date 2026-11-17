@@ -233,6 +233,7 @@ export {
   DEFAULT_NOTES_FOLDER_NAME,
   NOTES_KIND_ID,
   claimedNotesLocations,
+  isLocationIdClaimed,
   defaultNotesLocationPath,
   isInsideFolder,
   kindDataWithLocation,

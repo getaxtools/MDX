@@ -1,0 +1,40 @@
+[package]
+name = "mdx-native-windows"
+version = "0.8.1"
+description = "The Windows calls MDX - Markdown Explorer makes that need unsafe code, each behind a safe function"
+authors = ["getaxtools"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/getaxtools/mdx"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+
+[lib]
+name = "mdx_native_windows"
+
+[target.'cfg(windows)'.dependencies]
+# The same version Tauri already uses, so no second copy is built.
+windows = { version = "0.62.2", features = [
+  "Win32_Foundation",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Com",
+  "Win32_System_Registry",
+  "Win32_UI_Shell",
+] }
+
+[target.'cfg(windows)'.dev-dependencies]
+tempfile = "3.27.0"
+
+[lints.rust]
+# Unsafe code is allowed in this crate only; every block says why it is sound.
+unsafe_op_in_unsafe_fn = "deny"
+missing_docs = "warn"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+undocumented_unsafe_blocks = "deny"
+cognitive_complexity = "warn"
+too_many_lines = "warn"

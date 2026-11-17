@@ -23,6 +23,7 @@ const DATA_FOLDER_OVERRIDE_VARIABLE: &str = "MDX_DATA_DIR";
 const NOTES_INDEX_FOLDER_NAME: &str = "notes-index";
 const NOTES_MOVES_FOLDER_NAME: &str = "notes-moves";
 /// UI tests slow a move down, so they can try to type while it runs.
+#[cfg(debug_assertions)]
 const MOVE_PAUSE_OVERRIDE_VARIABLE: &str = "MDX_MOVE_FILE_PAUSE_MS";
 
 pub fn initialize(app: &App) -> Result<(), Box<dyn std::error::Error>> {
@@ -57,17 +58,26 @@ pub fn initialize(app: &App) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn notes_moves(data_folder: &std::path::Path, access: &DocumentAccessList) -> Arc<NotesMoves> {
-    let pause_ms = std::env::var(MOVE_PAUSE_OVERRIDE_VARIABLE)
-        .ok()
-        .filter(|_| cfg!(debug_assertions))
-        .and_then(|value| value.parse().ok())
-        .unwrap_or(0);
     let moves = NotesMoves::new(
         data_folder.join(NOTES_MOVES_FOLDER_NAME),
-        Duration::from_millis(pause_ms),
+        pause_after_each_moved_file(),
     );
     moves.keep_unfinished_moves_read_only(access);
     Arc::new(moves)
+}
+
+#[cfg(debug_assertions)]
+fn pause_after_each_moved_file() -> Duration {
+    let pause_ms = std::env::var(MOVE_PAUSE_OVERRIDE_VARIABLE)
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(0);
+    Duration::from_millis(pause_ms)
+}
+
+#[cfg(not(debug_assertions))]
+const fn pause_after_each_moved_file() -> Duration {
+    Duration::ZERO
 }
 
 fn start_document_watcher(app: AppHandle) -> DocumentWatcher {

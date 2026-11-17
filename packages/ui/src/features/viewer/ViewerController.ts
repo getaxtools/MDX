@@ -149,6 +149,8 @@ const MOVE_NOTICE_ACTION_LABELS: Readonly<Record<NotesMoveCommand['kind'], Messa
   keepOldNotesCopy: 'notesLocation.move.keepOldCopy',
   askToRemoveOldNotesCopy: 'notesLocation.move.removeOldCopy',
   removeOldNotesCopy: 'notesLocation.move.moveToRecycleBin',
+  stopNotesMoveAndClose: 'notesLocation.move.stopAndClose',
+  keepMovingNotes: 'notesLocation.move.keepMoving',
 };
 export const MAX_RECENT_MENU_ENTRIES = 10;
 /** How long typing pauses before the preview beside the editor shows the new text. */
@@ -617,7 +619,7 @@ export class ViewerController {
       locale: translator.locale,
       pickFolder: () => this.pickNotesFolder(),
       showNotice: (notice, actions) => this.showMoveNotice(notice, actions),
-      hasUnsavedNotes: () => this.hasUnsavedNotes(),
+      hasUnsavedDocumentsIn: (folder) => this.hasUnsavedDocumentsIn(folder),
       onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
       onSwitched: async () => {
         await this.notesLocationActions?.check();
@@ -627,11 +629,18 @@ export class ViewerController {
     });
   }
 
-  private hasUnsavedNotes(): boolean {
-    const shown = this.dependencies.session.shownWorkspace();
-    const location = shown ? notesLocationOf(shown) : undefined;
-    if (!location) return false;
-    return [...this.editing.unsavedKeys()].some((key) => isInsideFolder(key, location.canonicalKey));
+  private hasUnsavedDocumentsIn(folder: string): boolean {
+    return [...this.editing.unsavedKeys()].some((key) => isInsideFolder(key, folder));
+  }
+
+  /** Files of a notes folder are being copied, so closing the window asks first. */
+  isCopyingNotes(): boolean {
+    return this.notesMoveActions?.isCopying() ?? false;
+  }
+
+  /** Whether the window may close now; while notes are copied the user is asked first. */
+  confirmClosingDuringNotesMove(): Promise<boolean> {
+    return this.notesMoveActions?.confirmClosing() ?? Promise.resolve(true);
   }
 
   private showMoveNotice(notice: MoveNotice, commands: readonly NotesMoveCommand[] = []): void {
@@ -1583,6 +1592,8 @@ export class ViewerController {
     this.navigation.recordActiveDocument();
     await this.dependencies.session.clearStoredData();
     await this.notesIndexActions?.clearAll();
+    await this.dependencies.notesMoves?.clearMoves();
+    this.notesMoveActions?.forgetMoves();
     await this.saveNow();
     await this.showNotesIndex();
     this.showNotice('privacy.clearAllData.done');

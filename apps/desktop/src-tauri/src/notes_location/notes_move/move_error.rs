@@ -59,6 +59,14 @@ pub enum MoveError {
     NoMove,
     #[error("a workspace still uses the old folder")]
     OldCopyInUse,
+    #[error("a workspace already uses the new folder")]
+    NewFolderInUse,
+    #[error("another Notes workspace uses the new folder or a folder around it")]
+    TargetClaimed,
+    #[error("the free space on the new folder's drive could not be read")]
+    FreeSpaceUnknown,
+    #[error("the Recycle Bin did not take the old files")]
+    RecycleFailed,
     #[error("the folder may not be used")]
     AccessDenied,
     #[error("the request was invalid")]

@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::commands::documents::{run_blocking, validated_path};
 use crate::commands::notes_location::{LocationCheck, claimable_path, location_check, user_folder};
@@ -53,6 +53,7 @@ impl NotesMoves {
         self.journals.read(location_id)?.ok_or(MoveError::NoMove)
     }
 
+    #[cfg(test)]
     fn is_running(&self) -> bool {
         self.running_location_id
             .lock()
@@ -133,12 +134,21 @@ pub async fn plan_notes_move(
 ) -> Result<MovePlanSummary, MoveError> {
     let workspace_id = validated_id(request.workspace_id)?;
     let location_id = validated_id(request.location_id)?;
+    let database = app.state::<WorkspaceDatabase>();
+    let other_folders = notes_folders_of_workspaces(&database, Some(&workspace_id))?;
     let (access, moves) = (Arc::clone(&access), Arc::clone(&moves));
     run_blocking(move || {
         let target = claimable_path(&request.target, &app, &access)?;
         let user_folder = user_folder(&app);
         let source = movable_source(&request.source, &location_id, &access)?;
-        if moves.is_running() || moves.journals.read(&location_id)?.is_some() {
+        if other_folders
+            .iter()
+            .any(|folder| folders_touch(folder, &target))
+        {
+            return Err(MoveError::TargetClaimed);
+        }
+        let _running = RunningMove::claim(&moves, &location_id)?;
+        if moves.journals.read(&location_id)?.is_some() {
             return Err(MoveError::MoveUnderway);
         }
         let place = MoveTarget {
@@ -227,14 +237,15 @@ pub async fn cancel_notes_move(
     location_id: String,
     access: State<'_, Arc<DocumentAccessList>>,
     moves: State<'_, Arc<NotesMoves>>,
+    database: State<'_, WorkspaceDatabase>,
 ) -> Result<KeptFiles, MoveError> {
     let location_id = validated_id(location_id)?;
+    let notes_folders = notes_folders_of_workspaces(&database, None)?;
     let (access, moves) = (Arc::clone(&access), Arc::clone(&moves));
     run_blocking(move || {
-        if moves.is_running() {
-            return Err(MoveError::MoveUnderway);
-        }
+        let _running = RunningMove::claim(&moves, &location_id)?;
         let journal = moves.journal(&location_id)?;
+        check_new_folder_is_unused(&journal, &notes_folders)?;
         let kept = cancel_move(&journal)?;
         moves.journals.remove(&location_id)?;
         access.make_folder_writable(&journal.source);
@@ -348,16 +359,12 @@ pub async fn remove_old_notes_copy(
     database: State<'_, WorkspaceDatabase>,
 ) -> Result<OldCopyRemoval, MoveError> {
     let location_id = validated_id(location_id)?;
-    let journal = moves.journal(&location_id)?;
-    let kind_data: Vec<String> = database
-        .load_registry()
-        .map_err(|_| MoveError::JournalUnavailable)?
-        .into_iter()
-        .filter_map(|workspace| workspace.kind_data)
-        .collect();
-    check_old_copy_is_unused(&journal, &kind_data)?;
+    let notes_folders = notes_folders_of_workspaces(&database, None)?;
     let moves = Arc::clone(&moves);
     run_blocking(move || {
+        let _running = RunningMove::claim(&moves, &location_id)?;
+        let journal = moves.journal(&location_id)?;
+        check_old_copy_is_unused(&journal, &notes_folders)?;
         let removal = remove_old_copy(&journal, &SystemRecycleBin, &DiskFileSystem::default())?;
         moves.journals.remove(&location_id)?;
         Ok(removal)
@@ -366,19 +373,69 @@ pub async fn remove_old_notes_copy(
 }
 
 /// The new folder must hold the notes, and no workspace may still use the old one.
-fn check_old_copy_is_unused(journal: &MoveJournal, kind_data: &[String]) -> Result<(), MoveError> {
+fn check_old_copy_is_unused(
+    journal: &MoveJournal,
+    notes_folders: &[PathBuf],
+) -> Result<(), MoveError> {
     if location_check(&journal.target, &journal.location_id) != LocationCheck::Available {
         return Err(MoveError::OldCopyInUse);
     }
-    let is_used = kind_data
+    if notes_folders
         .iter()
-        .filter_map(|kind_data| notes_folder_of(kind_data))
-        .any(|folder| folders_touch(&folder, &journal.source));
-    if is_used {
+        .any(|folder| folders_touch(folder, &journal.source))
+    {
         Err(MoveError::OldCopyInUse)
     } else {
         Ok(())
     }
+}
+
+/// Cancel removes copies from the new folder, so it is refused once a workspace reads its notes there.
+fn check_new_folder_is_unused(
+    journal: &MoveJournal,
+    notes_folders: &[PathBuf],
+) -> Result<(), MoveError> {
+    if notes_folders
+        .iter()
+        .any(|folder| folders_touch(folder, &journal.target))
+    {
+        Err(MoveError::NewFolderInUse)
+    } else {
+        Ok(())
+    }
+}
+
+/// The notes folders the workspaces' records name, leaving out one workspace when given.
+fn notes_folders_of_workspaces(
+    database: &WorkspaceDatabase,
+    except_workspace_id: Option<&str>,
+) -> Result<Vec<PathBuf>, MoveError> {
+    Ok(database
+        .load_registry()
+        .map_err(|_| MoveError::JournalUnavailable)?
+        .into_iter()
+        .filter(|workspace| Some(workspace.id.as_str()) != except_workspace_id)
+        .filter_map(|workspace| notes_folder_of(workspace.kind_data.as_deref()?))
+        .collect())
+}
+
+/// Clear All Data forgets every move; the notes folders become writable again and keep their files.
+#[tauri::command]
+pub async fn clear_notes_moves(
+    access: State<'_, Arc<DocumentAccessList>>,
+    moves: State<'_, Arc<NotesMoves>>,
+) -> Result<usize, MoveError> {
+    let (access, moves) = (Arc::clone(&access), Arc::clone(&moves));
+    run_blocking(move || {
+        let _running = RunningMove::claim(&moves, "")?;
+        let journals = moves.journals.all();
+        for journal in &journals {
+            moves.journals.remove(&journal.location_id)?;
+            access.make_folder_writable(&journal.source);
+        }
+        Ok(journals.len())
+    })
+    .await?
 }
 
 fn notes_folder_of(kind_data: &str) -> Option<PathBuf> {
@@ -400,8 +457,10 @@ fn folders_touch(first: &Path, second: &Path) -> bool {
 mod tests {
     use super::*;
 
-    fn notes_workspace(path: &Path) -> String {
-        serde_json::json!({ "location": { "path": path, "locationId": "location-1" } }).to_string()
+    fn notes_workspace(path: &Path) -> PathBuf {
+        let kind_data =
+            serde_json::json!({ "location": { "path": path, "locationId": "location-1" } });
+        notes_folder_of(&kind_data.to_string()).unwrap()
     }
 
     fn switched_journal(source: &Path, target: &Path) -> MoveJournal {
@@ -449,6 +508,21 @@ mod tests {
         assert_eq!(
             check_old_copy_is_unused(&journal, &[]),
             Err(MoveError::OldCopyInUse)
+        );
+    }
+
+    #[test]
+    fn cancel_is_refused_once_a_workspace_reads_its_notes_from_the_new_folder() {
+        let (source, target) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let mut journal = switched_journal(source.path(), target.path());
+        journal.state = MoveState::Verified;
+
+        let refusal = check_new_folder_is_unused(&journal, &[notes_workspace(target.path())]);
+
+        assert_eq!(refusal, Err(MoveError::NewFolderInUse));
+        assert_eq!(
+            check_new_folder_is_unused(&journal, &[notes_workspace(source.path())]),
+            Ok(())
         );
     }
 

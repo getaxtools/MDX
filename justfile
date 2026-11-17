@@ -1,6 +1,7 @@
 set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
 
 tauri_manifest := "apps/desktop/src-tauri/Cargo.toml"
+native_manifest := "apps/desktop/native-windows/Cargo.toml"
 
 # List all recipes
 default:
@@ -33,6 +34,7 @@ licenses:
 # Run Rust unit and integration tests
 test-rust: build-frontend
     cargo nextest run --manifest-path {{ tauri_manifest }}
+    cargo nextest run --manifest-path {{ native_manifest }}
 
 # Build the Windows installer
 build:
@@ -60,17 +62,21 @@ lint: build-frontend
     pnpm typecheck
     cargo fmt --manifest-path {{ tauri_manifest }} --check
     cargo clippy --manifest-path {{ tauri_manifest }} --all-targets --all-features -- -D warnings
+    cargo fmt --manifest-path {{ native_manifest }} --check
+    cargo clippy --manifest-path {{ native_manifest }} --all-targets -- -D warnings
 
 # Format all code in place
 fmt:
     pnpm fmt
     cargo fmt --manifest-path {{ tauri_manifest }}
+    cargo fmt --manifest-path {{ native_manifest }}
 
 # Audit dependencies for vulnerabilities and licenses
 audit:
     pnpm audit --audit-level high
     osv-scanner scan source --config osv-scanner.toml --recursive .
     cargo deny --manifest-path {{ tauri_manifest }} check
+    cargo deny --manifest-path {{ native_manifest }} check
 
 # Run everything CI runs
 check: lint coverage test-rust test-ui

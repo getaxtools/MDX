@@ -11,8 +11,9 @@ import {
   type UnfinishedNotesMove,
 } from '@mdx/platform';
 import { createMarkdownRenderer } from '@mdx/renderer';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ViewerController, type ViewerSnapshot } from '../viewer/ViewerController';
+import { NotesMoveActions } from './NotesMoveActions';
 
 const ALL_KINDS_BUILT = workspaceKindsFor({ allowsPlannedKindPreview: true });
 const NOTES_FOLDER = 'C:\\Users\\Ana\\Documents\\MDX Notes';
@@ -76,7 +77,7 @@ async function startNotesWorkspace({ unfinished }: StartOptions = {}) {
     if (!latest) throw new Error('no snapshot published');
     return latest;
   };
-  return { controller, session, notesMoves, folders, snapshot, notesLocation, locationId };
+  return { controller, session, notesMoves, notesLocations, folders, snapshot, notesLocation, locationId };
 }
 
 describe('Change location', () => {
@@ -321,5 +322,102 @@ describe('an unfinished move at start', () => {
     await controller.start();
 
     expect(snapshot().notesMoveDialog?.kind).toBe('removalOffer');
+  });
+});
+
+describe('the review of a move', () => {
+  it('a failure after the workspace switched offers the old copy instead of a cancel', async () => {
+    const { session, notesMoves, folders, locationId } = await startNotesWorkspace();
+    folders.pickedFolder = NEW_FOLDER;
+    let shownDialog: string | undefined;
+    const actions = new NotesMoveActions({
+      session,
+      notesMoves,
+      locale: 'en',
+      pickFolder: () => Promise.resolve(NEW_FOLDER),
+      showNotice: () => undefined,
+      hasUnsavedDocumentsIn: () => false,
+      onChange: () => (shownDialog = actions.dialogShown()?.kind),
+      onSwitched: () => Promise.reject(new Error('the index could not be shown')),
+    });
+    await actions.run({ kind: 'changeNotesLocation' });
+
+    await actions.run({ kind: 'startNotesMove' }).catch(() => undefined);
+
+    expect(shownDialog).toBe('removalOffer');
+    expect(notesMoves.calls).toContain(`finish ${locationId}`);
+    expect(notesMoves.calls).not.toContain(`cancel ${locationId}`);
+  });
+
+  it('closing during the copy asks, Keep Moving keeps the window, Stop and Close stops first', async () => {
+    const { controller, notesMoves, folders, snapshot } = await startNotesWorkspace();
+    folders.pickedFolder = NEW_FOLDER;
+    await controller.execute({ kind: 'changeNotesLocation' });
+    notesMoves.isHoldingRuns = true;
+    const moving = controller.execute({ kind: 'startNotesMove' });
+    await vi.waitFor(() => expect(controller.isCopyingNotes()).toBe(true));
+
+    const firstAnswer = controller.confirmClosingDuringNotesMove();
+    expect(snapshot().notesMoveDialog?.kind).toBe('closeDuringMove');
+    await controller.execute({ kind: 'keepMovingNotes' });
+    const secondAnswer = controller.confirmClosingDuringNotesMove();
+    await controller.execute({ kind: 'stopNotesMoveAndClose' });
+    await moving;
+
+    expect(await firstAnswer).toBe(false);
+    expect(await secondAnswer).toBe(true);
+    expect(notesMoves.calls).toContain('stop');
+    expect(snapshot().notesMoveStatus).toBe('Notes move paused; notes are read-only');
+  });
+
+  it('the old copy is not removed while a document in it has unsaved changes', async () => {
+    const { controller, session, notesMoves, folders, snapshot, locationId } = await startNotesWorkspace();
+    folders.pickedFolder = NEW_FOLDER;
+    await controller.execute({ kind: 'changeNotesLocation' });
+    await controller.execute({ kind: 'startNotesMove' });
+    await session.openDocument(PLAN_NOTE);
+    await controller.execute({ kind: 'toggleEditing' });
+    controller.updateEditedText(PLAN_NOTE.toLowerCase(), '# Plan, edited in the old copy');
+    await controller.execute({ kind: 'askToRemoveOldNotesCopy' });
+
+    await controller.execute({ kind: 'removeOldNotesCopy' });
+
+    expect(notesMoves.calls).not.toContain(`remove ${locationId}`);
+    expect(snapshot().notice).toBe(
+      `Save or close the changed documents in ${NOTES_FOLDER} before you remove the old copy.`,
+    );
+  });
+
+  it('Clear All Data forgets every move and the notes become writable', async () => {
+    const { controller, notesMoves, folders, snapshot } = await startNotesWorkspace();
+    folders.pickedFolder = NEW_FOLDER;
+    await controller.execute({ kind: 'changeNotesLocation' });
+
+    await controller.execute({ kind: 'clearAllData' });
+
+    expect(notesMoves.calls).toContain('clear');
+    expect(snapshot().notesMoveStatus).toBeUndefined();
+    expect(snapshot().notesMoveDialog).toBeUndefined();
+  });
+
+  it('a folder with the location id of another Notes workspace cannot be claimed', async () => {
+    const { controller, notesLocations, snapshot, locationId } = await startNotesWorkspace();
+    notesLocations.existingLocationIds.set('d:\\old copy', locationId);
+
+    await controller.execute({
+      kind: 'createWorkspace',
+      name: 'Work',
+      kindId: 'notes',
+      notesLocationPath: 'D:\\Old Copy',
+    });
+
+    expect(snapshot().notice).toBe(
+      "This notes folder is a copy of another Notes workspace's folder. Choose another folder, or remove the copy first.",
+    );
+    expect(
+      snapshot()
+        .workspaces?.registry.workspaces()
+        .map((workspace) => workspace.name),
+    ).not.toContain('Work');
   });
 });

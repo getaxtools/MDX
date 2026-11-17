@@ -1,4 +1,3 @@
-use std::ffi::OsString;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -8,10 +7,11 @@ use std::time::SystemTime;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
+use super::copy_identity::{has_same_bytes, hash_of_file, hex_of, is_own_copy, pending_path_of};
 use super::move_journal::{
     FileState, JournalFile, MoveJournal, MoveState, nanoseconds_of, path_inside,
 };
-use super::move_plan::{PENDING_SUFFIX, check_target_is_empty};
+use super::move_plan::check_target_is_empty;
 use super::source_changes::{forget_changed_copies, take_source_changes};
 use super::{ListedProblem, MoveError, MoveFileSystem};
 
@@ -170,7 +170,9 @@ fn copy_file(
             vec![file.path.clone()],
         ));
     }
-    if !is_own_copy(&target, file) && target.exists() {
+    // A copy with exactly the source's bytes may be replaced, as one left by a move that stopped
+    // before its journal was written; anything else in its place is the user's.
+    if target.exists() && !is_own_copy(&target, file) && !has_same_bytes(&target, &source) {
         return Err(MoveError::TargetChanged {
             path: file.path.clone(),
         });
@@ -184,23 +186,13 @@ fn copy_file(
         relative: &file.path,
         modified,
     };
-    let sha256 = copy.write(file_system)?;
+    let written = copy.write(file_system)?;
     file.size = metadata.len();
     file.modified_ns = nanoseconds_of(modified);
-    file.sha256 = Some(sha256);
+    file.target_modified_ns = Some(written.modified_ns);
+    file.sha256 = Some(written.sha256);
     file.state = FileState::Copied;
     Ok(())
-}
-
-/// A copy the move made carries its source's size and modified time, which no other program sets.
-pub fn is_own_copy(target: &Path, file: &JournalFile) -> bool {
-    fs::symlink_metadata(target).is_ok_and(|metadata| {
-        metadata.is_file()
-            && metadata.len() == file.size
-            && metadata
-                .modified()
-                .is_ok_and(|modified| nanoseconds_of(modified) == file.modified_ns)
-    })
 }
 
 struct PendingCopy<'a> {
@@ -210,10 +202,17 @@ struct PendingCopy<'a> {
     modified: SystemTime,
 }
 
+/// What a written copy holds: the hash of the bytes read, and its time as its drive keeps it.
+struct WrittenCopy {
+    sha256: String,
+    modified_ns: i64,
+}
+
 impl PendingCopy<'_> {
-    /// Writes `<name>.mdx-saving`, keeps the source's modified time, then renames it into place.
-    fn write(&self, file_system: &dyn MoveFileSystem) -> Result<String, MoveError> {
+    /// Writes `<name>.mdx-moving`, keeps the source's modified time, then renames it into place.
+    fn write(&self, file_system: &dyn MoveFileSystem) -> Result<WrittenCopy, MoveError> {
         let pending = pending_path_of(self.target);
+        let _ = fs::remove_file(&pending);
         let result = self.write_to(&pending, file_system);
         if result.is_err() {
             let _ = fs::remove_file(&pending);
@@ -225,17 +224,25 @@ impl PendingCopy<'_> {
         &self,
         pending: &Path,
         file_system: &dyn MoveFileSystem,
-    ) -> Result<String, MoveError> {
+    ) -> Result<WrittenCopy, MoveError> {
         let writing = |error: std::io::Error| MoveError::writing(&error, self.relative);
         let mut reader =
             File::open(self.source).map_err(|error| MoveError::reading(&error, self.relative))?;
         let mut writer = file_system.create_copy(pending).map_err(writing)?;
         let sha256 = self.copy_hashing(&mut reader, &mut writer)?;
         writer.sync_all().map_err(writing)?;
-        writer.set_modified(self.modified).map_err(writing)?;
+        file_system
+            .set_copy_time(&writer, self.modified)
+            .map_err(writing)?;
         drop(writer);
         fs::rename(pending, self.target).map_err(writing)?;
-        Ok(sha256)
+        let kept_time = fs::metadata(self.target)
+            .and_then(|metadata| metadata.modified())
+            .map_err(writing)?;
+        Ok(WrittenCopy {
+            sha256,
+            modified_ns: nanoseconds_of(kept_time),
+        })
     }
 
     fn copy_hashing(&self, reader: &mut File, writer: &mut File) -> Result<String, MoveError> {
@@ -269,23 +276,6 @@ fn verify_copy(target_root: &Path, file: &mut JournalFile) -> Result<(), MoveErr
     Ok(())
 }
 
-pub fn hash_of_file(path: &Path) -> std::io::Result<String> {
-    let mut reader = File::open(path)?;
-    let mut hasher = Sha256::new();
-    let mut buffer = vec![0; COPY_BUFFER_BYTES];
-    loop {
-        let read = reader.read(&mut buffer)?;
-        let Some(chunk) = buffer.get(..read).filter(|chunk| !chunk.is_empty()) else {
-            return Ok(hex_of(hasher.finalize().as_slice()));
-        };
-        hasher.update(chunk);
-    }
-}
-
-fn hex_of(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
-}
-
 /// The copy must hold exactly the journal's files, nothing left over and nothing missing.
 fn check_file_count(journal: &MoveJournal) -> Result<(), MoveError> {
     let found = count_files_below(&journal.target)?;
@@ -310,10 +300,4 @@ fn count_files_below(root: &Path) -> Result<usize, MoveError> {
         }
     }
     Ok(count)
-}
-
-pub fn pending_path_of(target: &Path) -> PathBuf {
-    let mut name = target.file_name().map(OsString::from).unwrap_or_default();
-    name.push(PENDING_SUFFIX);
-    target.with_file_name(name)
 }

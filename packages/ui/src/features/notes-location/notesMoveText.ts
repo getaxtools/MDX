@@ -31,7 +31,20 @@ export function notesMoveDialogText(dialog: NotesMoveDialog, translator: Transla
   if (dialog.kind === 'plan') return planText(dialog, translator);
   if (dialog.kind === 'resume') return resumeText(dialog, translator);
   if (dialog.kind === 'removalOffer') return removalOfferText(dialog, translator);
+  if (dialog.kind === 'closeDuringMove') return closeDuringMoveText(dialog, translator);
   return removalConfirmationText(dialog, translator);
+}
+
+function closeDuringMoveText(
+  { source }: Extract<NotesMoveDialog, { kind: 'closeDuringMove' }>,
+  translator: Translator,
+): NotesMoveDialogText {
+  return {
+    title: translator.translate('notesLocation.move.closeTitle'),
+    message: translator.translate('notesLocation.move.closeMessage', { source }),
+    confirm: buttonOf(translator, 'notesLocation.move.stopAndClose', { kind: 'stopNotesMoveAndClose' }),
+    cancel: buttonOf(translator, 'notesLocation.move.keepMoving', { kind: 'keepMovingNotes' }),
+  };
 }
 
 function buttonOf(translator: Translator, key: MessageKey, command: NotesMoveCommand): DialogButton {

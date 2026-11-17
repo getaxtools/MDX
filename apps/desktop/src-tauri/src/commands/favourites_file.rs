@@ -19,7 +19,9 @@ pub async fn export_favourites(
     contents: String,
     suggested_file_name: String,
     app: AppHandle,
+    access: State<'_, Arc<DocumentAccessList>>,
 ) -> Result<Option<String>, DocumentError> {
+    let access = Arc::clone(&access);
     tauri::async_runtime::spawn_blocking(move || {
         validated_favourites_json(&contents)?;
         let file_name = validated_file_name(&suggested_file_name)?;
@@ -34,6 +36,7 @@ pub async fn export_favourites(
             return Ok(None);
         };
         let destination = with_json_extension(chosen);
+        access.check_writable_destination(&destination)?;
         write_text_atomically(&destination, &contents)?;
         Ok(Some(destination.to_string_lossy().into_owned()))
     })

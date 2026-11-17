@@ -358,6 +358,21 @@ mod tests {
     }
 
     #[test]
+    fn a_picture_for_a_note_in_a_folder_being_moved_is_refused() {
+        let (folder, note, access) = opened_note();
+        access.make_folder_read_only(folder.path());
+
+        let refusal = save_requested_attachment(
+            pasted_into_notes(&note, folder.path(), PNG),
+            &access,
+            &DroppedImages::default(),
+        );
+
+        assert_eq!(refusal, Err(DocumentError::AccessDenied));
+        assert!(!folder.path().join("Attachments").exists());
+    }
+
+    #[test]
     fn a_notes_folder_that_does_not_hold_the_note_is_refused() {
         let (_folder, note, access) = opened_note();
         let elsewhere = tempfile::tempdir().unwrap();

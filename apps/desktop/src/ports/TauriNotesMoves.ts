@@ -51,6 +51,10 @@ export class TauriNotesMoves implements NotesMovePort {
     return refusedAsMoveError(tauriCommands.removeOldNotesCopy(locationId));
   }
 
+  async clearMoves(): Promise<void> {
+    await refusedAsMoveError(tauriCommands.clearNotesMoves());
+  }
+
   onProgress(listener: (progress: NotesMoveProgress) => void): () => void {
     const stopListening = listen<NotesMoveProgress>(NOTES_MOVE_PROGRESS_EVENT, (event) =>
       listener(event.payload),

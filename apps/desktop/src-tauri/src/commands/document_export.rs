@@ -1,11 +1,14 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use serde::Deserialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
 
-use crate::documents::{DocumentError, validated_file_name, write_text_atomically};
+use crate::documents::{
+    DocumentAccessList, DocumentError, validated_file_name, write_text_atomically,
+};
 
 const MAX_EXPORTED_BYTES: usize = 64 * 1024 * 1024;
 
@@ -40,6 +43,7 @@ pub async fn export_document(
     format: ExportFormat,
     app: AppHandle,
 ) -> Result<Option<String>, DocumentError> {
+    let access = Arc::clone(&app.state::<Arc<DocumentAccessList>>());
     tauri::async_runtime::spawn_blocking(move || {
         if contents.len() > MAX_EXPORTED_BYTES {
             return Err(DocumentError::InvalidRequest);
@@ -56,6 +60,7 @@ pub async fn export_document(
             return Ok(None);
         };
         let destination = with_extension(chosen, format);
+        access.check_writable_destination(&destination)?;
         write_text_atomically(&destination, &contents)?;
         Ok(Some(destination.to_string_lossy().into_owned()))
     })

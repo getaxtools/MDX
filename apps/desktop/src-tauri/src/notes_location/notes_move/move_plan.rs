@@ -11,8 +11,11 @@ use crate::notes_location::is_refused_place;
 
 /// Windows paths stop at 32,767 UTF-16 units; the rest is room for the long-path prefix.
 pub const MAX_TARGET_PATH_UNITS: usize = 32_000;
-/// Every copy is written under a pending name first, which the path must also fit.
-pub const PENDING_SUFFIX: &str = ".mdx-saving";
+/// Every copy is written under a pending name first, which the path must also fit. Only the move
+/// uses this name, so a leftover from an interrupted move is never taken for a note.
+pub const PENDING_SUFFIX: &str = ".mdx-moving";
+/// A file name stops at 255 UTF-16 units, and the pending name must fit too.
+const MAX_NAME_UNITS: usize = 255;
 /// The copy may need a little more room than the files themselves, for folders and the file table.
 const FREE_SPACE_MARGIN_DIVISOR: u64 = 10;
 
@@ -93,7 +96,7 @@ pub fn plan_move(
         total_bytes.saturating_add(total_bytes.div_ceil(FREE_SPACE_MARGIN_DIVISOR));
     let available_bytes = file_system
         .available_bytes(target.target)
-        .map_err(|error| MoveError::writing(&error, ""))?;
+        .map_err(|_| MoveError::FreeSpaceUnknown)?;
     if available_bytes < required_bytes {
         return Err(MoveError::NotEnoughSpace {
             required_bytes,
@@ -176,6 +179,9 @@ fn add_entry(
     let relative = relative_path_of(source, &path).ok_or_else(|| MoveError::SourceUnreadable {
         path: path.to_string_lossy().into_owned(),
     })?;
+    if relative.ends_with(PENDING_SUFFIX) {
+        return Ok(None);
+    }
     let file_type = entry
         .file_type()
         .map_err(|error| MoveError::reading(&error, &relative))?;
@@ -198,6 +204,7 @@ fn add_entry(
         path: relative,
         size: metadata.len(),
         modified_ns: metadata.modified().map(nanoseconds_of).unwrap_or_default(),
+        target_modified_ns: None,
         sha256: None,
         state: FileState::Pending,
     });
@@ -210,7 +217,14 @@ fn paths_too_long(files: &[JournalFile], target: &MoveTarget) -> Vec<String> {
         .iter()
         .filter(|file| {
             let units = target_units + 1 + file.path.encode_utf16().count() + PENDING_SUFFIX.len();
-            units > target.max_path_units
+            let name_units = file
+                .path
+                .rsplit('/')
+                .next()
+                .unwrap_or_default()
+                .encode_utf16()
+                .count();
+            units > target.max_path_units || name_units + PENDING_SUFFIX.len() > MAX_NAME_UNITS
         })
         .map(|file| file.path.clone())
         .collect()
@@ -392,6 +406,28 @@ mod tests {
                     "Projects/Ideas.md".to_owned()
                 ],
                 count: 2
+            }
+        );
+    }
+
+    #[test]
+    fn a_name_too_long_for_its_pending_copy_is_listed() {
+        let source = notes_folder();
+        let long_name = format!("{}.md", "n".repeat(250));
+        fs::write(source.path().join(&long_name), "# Long").unwrap();
+        let place = tempfile::tempdir().unwrap();
+
+        let refusal = plan_move(
+            source.path(),
+            &target_at(&place.path().join("N")),
+            &plenty_of_space(),
+        );
+
+        assert_eq!(
+            refusal.unwrap_err(),
+            MoveError::PathsTooLong {
+                paths: vec![long_name],
+                count: 1
             }
         );
     }

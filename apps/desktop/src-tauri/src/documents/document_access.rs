@@ -86,6 +86,19 @@ impl DocumentAccessList {
             })
     }
 
+    /// A file the user chose to write may not land in a notes folder being moved.
+    pub fn check_writable_destination(&self, destination: &Path) -> Result<(), DocumentError> {
+        let is_in_read_only_folder = destination
+            .parent()
+            .and_then(|folder| locate_document(folder).ok())
+            .is_some_and(|folder| self.is_read_only(&folder));
+        if is_in_read_only_folder {
+            Err(DocumentError::AccessDenied)
+        } else {
+            Ok(())
+        }
+    }
+
     /// Records a document the app has read, which is what makes it eligible to be saved over.
     pub fn remember_opened(&self, location: &DocumentLocation) {
         self.opened_document_keys
@@ -191,6 +204,28 @@ mod tests {
         assert!(!access.is_read_only(&location(&root, "docs-old/c.md")));
         access.make_folder_writable(&root.path().join("docs"));
         assert!(!access.is_read_only(&note));
+    }
+
+    #[test]
+    fn a_chosen_file_in_a_read_only_folder_is_refused() {
+        let root = tree();
+        let access = DocumentAccessList::default();
+        access.make_folder_read_only(&root.path().join("docs"));
+
+        assert_eq!(
+            access.check_writable_destination(
+                &root.path().join("docs").join("guides").join("new.md")
+            ),
+            Err(DocumentError::AccessDenied)
+        );
+        assert_eq!(
+            access.check_writable_destination(&root.path().join("other").join("new.md")),
+            Ok(())
+        );
+        assert_eq!(
+            access.check_writable_destination(&root.path().join("missing").join("new.md")),
+            Ok(())
+        );
     }
 
     #[test]

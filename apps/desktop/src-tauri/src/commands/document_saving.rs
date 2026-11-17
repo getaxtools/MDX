@@ -140,6 +140,17 @@ mod tests {
     }
 
     #[test]
+    fn refuses_a_note_in_a_folder_being_moved_and_leaves_it_alone() {
+        let (folder, path, access) = granted_document(b"# Old");
+        access.make_folder_read_only(folder.path());
+
+        let result = save_edited_document(&edited(&path, "# New", "utf-8"), &access);
+
+        assert_eq!(result, Err(DocumentError::AccessDenied));
+        assert_eq!(fs::read_to_string(&path).unwrap(), "# Old");
+    }
+
+    #[test]
     fn refuses_documents_outside_granted_folders() {
         let (_folder, path, _access) = granted_document(b"# Old");
 

@@ -38,3 +38,4 @@ jobs:
           tool: osv-scanner,cargo-deny
       - run: osv-scanner scan source --config osv-scanner.toml --recursive .
       - run: cargo deny --manifest-path apps/desktop/src-tauri/Cargo.toml check advisories
+      - run: cargo deny --manifest-path apps/desktop/native-windows/Cargo.toml check advisories

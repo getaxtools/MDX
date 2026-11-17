@@ -125,6 +125,7 @@ export const tauriCommands = {
   unfinishedNotesMoves: () => invoke<UnfinishedNotesMove[]>('unfinished_notes_moves'),
   keepOldNotesCopy: (locationId: string) => invoke<null>('keep_old_notes_copy', { locationId }),
   removeOldNotesCopy: (locationId: string) => invoke<OldCopyRemoval>('remove_old_notes_copy', { locationId }),
+  clearNotesMoves: () => invoke<number>('clear_notes_moves'),
   createNote: (creation: NoteCreation) => invoke<DocumentLocation>('create_note', { ...creation }),
   createNoteInFolder: ({ location, folder, name, text }: NoteInFolder) =>
     invoke<DocumentLocation>('create_note_in_folder', { location, note: { folder, name, text } }),

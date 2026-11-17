@@ -129,6 +129,7 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::notes_move::unfinished_notes_moves,
         commands::notes_move::keep_old_notes_copy,
         commands::notes_move::remove_old_notes_copy,
+        commands::notes_move::clear_notes_moves,
         commands::notes::create_note,
         commands::notes::create_note_in_folder,
         commands::notes::rename_note,

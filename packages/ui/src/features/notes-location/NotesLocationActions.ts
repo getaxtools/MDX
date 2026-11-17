@@ -1,5 +1,6 @@
 import {
   claimedNotesLocations,
+  isLocationIdClaimed,
   locationClaimProblem,
   kindDataWithLocation,
   notesLocationOf,
@@ -87,10 +88,21 @@ export class NotesLocationActions {
     const newId = this.dependencies.createLocationId?.() ?? crypto.randomUUID();
     try {
       const prepared = await this.dependencies.notesLocations.prepareLocation(picked, newId);
+      if (this.isAnotherWorkspacesLocation(prepared.locationId)) {
+        this.dependencies.showNotice('notesLocation.claim.sameLocationId');
+        return;
+      }
       await this.moveShownWorkspaceTo(prepared.location, prepared.locationId, location);
     } catch {
       this.dependencies.showNotice('workspaces.notes.locationFailed', { path: picked });
     }
+  }
+
+  /** A copy of another workspace's notes folder, such as one kept after a move, carries its id. */
+  private isAnotherWorkspacesLocation(locationId: string): boolean {
+    const { session } = this.dependencies;
+    const workspaces = session.workspaces()?.workspaces() ?? [];
+    return isLocationIdClaimed(locationId, workspaces, session.shownWorkspace()?.id);
   }
 
   private async pickUnclaimedFolder(): Promise<string | undefined> {

@@ -1,3 +1,4 @@
+mod copy_identity;
 mod move_cancel;
 mod move_copy;
 mod move_error;

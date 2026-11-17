@@ -14,7 +14,11 @@ use super::*;
 struct TestDisk {
     created_copies: AtomicUsize,
     full_after_copies: Option<usize>,
+    /// Keeps file times to two seconds, as FAT, exFAT and some network drives do.
+    rounds_times: bool,
 }
+
+const ROUNDING_SECONDS: u64 = 2;
 
 impl MoveFileSystem for TestDisk {
     fn available_bytes(&self, _folder: &Path) -> io::Result<u64> {
@@ -31,6 +35,18 @@ impl MoveFileSystem for TestDisk {
             return Err(io::Error::from(io::ErrorKind::StorageFull));
         }
         File::create(pending)
+    }
+
+    fn set_copy_time(&self, copy: &File, modified: SystemTime) -> io::Result<()> {
+        if !self.rounds_times {
+            return copy.set_modified(modified);
+        }
+        let seconds = modified
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let rounded = seconds - seconds % ROUNDING_SECONDS;
+        copy.set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(rounded))
     }
 }
 
@@ -561,20 +577,33 @@ fn cancel_after_the_switch_is_refused() {
 #[derive(Default)]
 struct FakeRecycleBin {
     is_missing: bool,
+    /// Stands in for a shell that cannot be started.
+    is_broken: bool,
+    /// Files the Recycle Bin leaves where they are, as one in use by another program.
+    refused_names: Vec<&'static str>,
+    capacity_bytes: Option<u64>,
     recycled: Mutex<Vec<PathBuf>>,
 }
 
 impl crate::platform::RecycleBin for FakeRecycleBin {
-    fn is_available_for(&self, _folder: &Path) -> bool {
-        !self.is_missing
+    fn capacity_for(&self, _folder: &Path) -> Option<u64> {
+        (!self.is_missing).then_some(self.capacity_bytes.unwrap_or(u64::MAX))
     }
 
-    fn recycle(&self, paths: &[PathBuf]) -> io::Result<()> {
-        for path in paths {
+    fn recycle(&self, paths: &[PathBuf]) -> io::Result<Vec<PathBuf>> {
+        if self.is_broken {
+            return Err(io::Error::other("the shell is not registered"));
+        }
+        let (refused, taken): (Vec<PathBuf>, Vec<PathBuf>) =
+            paths.iter().cloned().partition(|path| {
+                path.file_name()
+                    .is_some_and(|name| self.refused_names.iter().any(|refused| name == *refused))
+            });
+        for path in &taken {
             fs::remove_file(path)?;
         }
-        self.recycled.lock().unwrap().extend_from_slice(paths);
-        Ok(())
+        self.recycled.lock().unwrap().extend(taken);
+        Ok(refused)
     }
 }
 
@@ -647,4 +676,177 @@ fn the_old_copy_is_removed_only_after_the_switch() {
 
     assert_eq!(refusal, Err(MoveError::WrongState));
     assert_eq!(snapshot(setup.source.path()).len(), 2);
+}
+
+/// Gives the file other bytes of the same length and puts its modified time back.
+fn change_bytes_keeping_size_and_time(path: &Path) {
+    let modified = fs::metadata(path).unwrap().modified().unwrap();
+    let mut bytes = fs::read(path).unwrap();
+    bytes.reverse();
+    fs::write(path, bytes).unwrap();
+    set_modified(path, modified);
+}
+
+#[test]
+fn a_drive_that_rounds_times_still_verifies_resumes_and_cancels() {
+    let setup = MoveSetup::with_notes(4);
+    let mut journal = setup.planned_journal();
+    let rounding = TestDisk {
+        rounds_times: true,
+        ..TestDisk::default()
+    };
+
+    setup.run(&mut journal, &rounding).unwrap();
+    let again = TestDisk {
+        rounds_times: true,
+        ..TestDisk::default()
+    };
+    setup.run(&mut journal, &again).unwrap();
+    let kept = cancel_move(&journal).unwrap();
+
+    assert_eq!(again.created_copies.load(Ordering::SeqCst), 0);
+    assert_eq!(kept, KeptFiles::default());
+    assert!(!setup.target().exists());
+}
+
+#[test]
+fn a_copy_with_other_bytes_of_the_same_size_and_time_is_kept_by_cancel() {
+    let setup = MoveSetup::with_notes(2);
+    let mut journal = setup.planned_journal();
+    setup.run(&mut journal, &TestDisk::default()).unwrap();
+    change_bytes_keeping_size_and_time(&setup.target().join("Note 0000.md"));
+
+    let kept = cancel_move(&journal).unwrap();
+
+    assert_eq!(kept.paths, ["Note 0000.md"]);
+    assert!(setup.target().join("Note 0000.md").exists());
+}
+
+#[test]
+fn an_old_file_with_other_bytes_of_the_same_size_and_time_is_kept() {
+    let setup = MoveSetup::with_notes(2);
+    let journal = switched_move(&setup);
+    change_bytes_keeping_size_and_time(&setup.source.path().join("Note 0000.md"));
+
+    let removal =
+        remove_old_copy(&journal, &FakeRecycleBin::default(), &TestDisk::default()).unwrap();
+
+    assert_eq!(removal.recycled_count, 1);
+    assert_eq!(removal.kept.paths, ["Note 0000.md"]);
+}
+
+#[test]
+fn an_old_file_whose_new_copy_changed_or_went_is_kept() {
+    let setup = MoveSetup::with_notes(3);
+    let journal = switched_move(&setup);
+    fs::remove_file(setup.target().join("Note 0000.md")).unwrap();
+    change_bytes_keeping_size_and_time(&setup.target().join("Note 0002.md"));
+
+    let removal =
+        remove_old_copy(&journal, &FakeRecycleBin::default(), &TestDisk::default()).unwrap();
+
+    assert_eq!(removal.kept.paths, ["Note 0000.md", "Note 0002.md"]);
+    assert!(setup.source.path().join("Note 0000.md").exists());
+}
+
+#[test]
+fn old_files_beyond_what_the_recycle_bin_holds_are_kept() {
+    let setup = MoveSetup::with_notes(3);
+    let journal = switched_move(&setup);
+    let first_size = journal.files.first().unwrap().size;
+    let small_bin = FakeRecycleBin {
+        capacity_bytes: Some(first_size),
+        ..FakeRecycleBin::default()
+    };
+
+    let removal = remove_old_copy(&journal, &small_bin, &TestDisk::default()).unwrap();
+
+    assert_eq!(removal.recycled_count, 1);
+    assert_eq!(removal.kept.count, 2);
+}
+
+#[test]
+fn an_old_file_with_a_path_the_shell_cannot_take_is_kept() {
+    let setup = MoveSetup::with_notes(1);
+    let long_name = format!("{}.md", "n".repeat(240));
+    fs::write(setup.source.path().join(&long_name), "# Long").unwrap();
+    let journal = switched_move(&setup);
+
+    let removal =
+        remove_old_copy(&journal, &FakeRecycleBin::default(), &TestDisk::default()).unwrap();
+
+    assert_eq!(removal.kept.paths, [long_name]);
+    assert_eq!(removal.recycled_count, 1);
+}
+
+#[test]
+fn resume_succeeds_after_a_crash_in_a_file_that_was_then_deleted() {
+    let setup = MoveSetup::with_notes(4);
+    let mut journal = setup.planned_journal();
+    let full = TestDisk {
+        full_after_copies: Some(2),
+        ..TestDisk::default()
+    };
+    let _ = setup.run(&mut journal, &full);
+    let crashed_in = setup
+        .target()
+        .join("Projects")
+        .join("Note 0001.md.mdx-moving");
+    fs::write(&crashed_in, "# Note 1, half").unwrap();
+    fs::remove_file(setup.source.path().join("Projects").join("Note 0001.md")).unwrap();
+    let mut resumed = setup.saved_journal();
+
+    setup.run(&mut resumed, &TestDisk::default()).unwrap();
+
+    assert!(!crashed_in.exists());
+    assert_eq!(snapshot(&setup.target()), snapshot(setup.source.path()));
+    assert_eq!(resumed.files.len(), 3);
+}
+
+#[test]
+fn a_pending_copy_left_in_the_notes_folder_is_never_copied() {
+    let setup = MoveSetup::with_notes(2);
+    fs::write(setup.source.path().join("Plan.md.mdx-moving"), "left over").unwrap();
+
+    let journal = setup.planned_journal();
+
+    assert!(
+        journal
+            .files
+            .iter()
+            .all(|file| !file.path.ends_with(".mdx-moving"))
+    );
+    assert_eq!(journal.files.len(), 2);
+}
+
+#[test]
+fn a_file_still_there_after_recycling_is_kept_and_listed() {
+    let setup = MoveSetup::with_notes(3);
+    let journal = switched_move(&setup);
+    let holding_one = FakeRecycleBin {
+        refused_names: vec!["Note 0002.md"],
+        ..FakeRecycleBin::default()
+    };
+
+    let removal = remove_old_copy(&journal, &holding_one, &TestDisk::default()).unwrap();
+
+    assert_eq!(removal.recycled_count, 2);
+    assert_eq!(removal.kept.paths, ["Note 0002.md"]);
+    assert!(setup.source.path().join("Note 0002.md").exists());
+}
+
+#[test]
+fn a_broken_shell_is_reported_and_keeps_everything() {
+    let setup = MoveSetup::with_notes(3);
+    let journal = switched_move(&setup);
+    let before = snapshot(setup.source.path());
+    let broken = FakeRecycleBin {
+        is_broken: true,
+        ..FakeRecycleBin::default()
+    };
+
+    let failure = remove_old_copy(&journal, &broken, &TestDisk::default());
+
+    assert_eq!(failure, Err(MoveError::RecycleFailed));
+    assert_eq!(snapshot(setup.source.path()), before);
 }

@@ -13,6 +13,7 @@ use crate::documents::{
 
 const MAX_LISTED_ENTRIES_PER_KIND: usize = 1_000;
 /// UI tests answer the folder picker with this folder, since WebDriver cannot reach the native dialog.
+#[cfg(debug_assertions)]
 const PICKED_FOLDER_OVERRIDE_VARIABLE: &str = "MDX_PICKED_FOLDER";
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize)]
@@ -40,9 +41,8 @@ pub async fn pick_folder(
 }
 
 fn picked_folder(app: &AppHandle) -> Result<Option<std::path::PathBuf>, DocumentError> {
-    if cfg!(debug_assertions)
-        && let Some(folder) = std::env::var_os(PICKED_FOLDER_OVERRIDE_VARIABLE)
-    {
+    #[cfg(debug_assertions)]
+    if let Some(folder) = std::env::var_os(PICKED_FOLDER_OVERRIDE_VARIABLE) {
         return Ok(Some(folder.into()));
     }
     let Some(picked) = app.dialog().file().blocking_pick_folder() else {

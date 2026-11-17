@@ -125,6 +125,13 @@ export class InMemoryNotesMoves implements NotesMovePort {
     return Promise.resolve(this.removal);
   }
 
+  clearMoves(): Promise<void> {
+    this.calls.push('clear');
+    this.moves.clear();
+    this.unfinished.splice(0);
+    return Promise.resolve();
+  }
+
   onProgress(listener: (progress: NotesMoveProgress) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

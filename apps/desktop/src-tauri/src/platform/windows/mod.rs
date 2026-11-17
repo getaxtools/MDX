@@ -3,7 +3,7 @@ mod recycle_bin;
 use std::fs::Metadata;
 use std::os::windows::fs::MetadataExt;
 
-pub use recycle_bin::{has_recycle_bin, move_to_recycle_bin};
+pub use recycle_bin::{move_to_recycle_bin, recycle_bin_capacity};
 
 const ERROR_SEM_TIMEOUT: i32 = 121;
 const ERROR_BAD_NETPATH: i32 = 53;

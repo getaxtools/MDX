@@ -38,8 +38,8 @@ unicode-normalization = "0.1.25"
 fs4 = { version = "=1.1.0", default-features = false, features = ["sync"] }
 
 [target.'cfg(windows)'.dependencies]
-# The Recycle Bin for the old copy of a moved Notes folder; pinned below 5.3.0, which is under two weeks old.
-trash = { version = "=5.2.9", default-features = false, features = ["coinit_apartmentthreaded"] }
+# The Windows calls that need unsafe code (Recycle Bin, volume names, registry), kept out of this crate.
+mdx-native-windows = { version = "0.8.1", path = "../native-windows" }
 
 [features]
 webdriver = ["dep:tauri-plugin-wdio-webdriver"]

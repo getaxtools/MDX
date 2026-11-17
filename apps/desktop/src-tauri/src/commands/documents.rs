@@ -105,6 +105,7 @@ pub async fn save_document_as(
             return Ok(None);
         };
         let destination = with_markdown_extension(chosen);
+        access.check_writable_destination(&destination)?;
         request.write_to(&destination)?;
         access.grant_folder_of(&destination)?;
         Ok(Some(locate_document(&destination)?.display_path))

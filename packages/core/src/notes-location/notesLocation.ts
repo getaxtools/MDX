@@ -88,6 +88,21 @@ export function kindDataWithLocation(kindData: unknown, location: NotesLocation)
   return { ...(isRecord(kindData) ? kindData : {}), location };
 }
 
+/**
+ * Whether another Notes workspace already has this location id, as a copy of its folder kept after
+ * a move has: two workspaces would then share one index.
+ */
+export function isLocationIdClaimed(
+  locationId: string,
+  workspaces: readonly StoredWorkspace[],
+  exceptWorkspaceId?: string,
+): boolean {
+  return workspaces.some(
+    (workspace) =>
+      workspace.id !== exceptWorkspaceId && notesLocationOf(workspace)?.locationId === locationId,
+  );
+}
+
 /** The folders other Notes workspaces have claimed, leaving out the one being changed. */
 export function claimedNotesLocations(
   workspaces: readonly StoredWorkspace[],

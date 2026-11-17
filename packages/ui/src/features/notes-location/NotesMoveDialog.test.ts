@@ -85,4 +85,13 @@ describe('NotesMoveDialog', () => {
     );
     expect(onCommand).toHaveBeenCalledWith({ kind: 'postponeNotesMove' });
   });
+  it('closing during a move starts on Keep Moving, which Escape also chooses', async () => {
+    const { onCommand } = renderDialog({ kind: 'closeDuringMove', source: 'C:\\Notes' });
+
+    await userEvent.keyboard('{Escape}');
+
+    expect(document.activeElement?.textContent).toBe('Keep Moving');
+    expect(screen.getByRole('button', { name: 'Stop and Close' })).toBeTruthy();
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'keepMovingNotes' });
+  });
 });

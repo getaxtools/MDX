@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use super::move_copy::{is_own_copy, make_folders};
-use super::move_journal::{FileState, JournalFile, MoveJournal, nanoseconds_of, path_inside};
+use super::copy_identity::{is_own_copy, is_unchanged_source, pending_path_of};
+use super::move_copy::make_folders;
+use super::move_journal::{FileState, JournalFile, MoveJournal, path_inside};
 use super::move_plan::list_source_tree;
 use super::{ListedProblem, MoveError, MoveFileSystem};
 
@@ -19,9 +20,10 @@ pub fn forget_changed_copies(journal: &mut MoveJournal) -> Result<(), MoveError>
         let target = path_inside(&target_root, &file.path)?;
         if !is_own_copy(&target, file) {
             file.state = FileState::Pending;
-        } else if !is_unchanged(&source, file) {
+        } else if !is_unchanged_source(&source, file) {
             remove_own_copy(&target, file)?;
             file.sha256 = None;
+            file.target_modified_ns = None;
             file.state = FileState::Pending;
         }
     }
@@ -97,6 +99,7 @@ fn take_changed_files(
 
 /// Removes a copy the move made of a file that changed or went; anything else there is refused.
 fn remove_own_copy(target: &Path, file: &JournalFile) -> Result<(), MoveError> {
+    let _ = fs::remove_file(pending_path_of(target));
     if !target.exists() {
         return Ok(());
     }
@@ -106,13 +109,4 @@ fn remove_own_copy(target: &Path, file: &JournalFile) -> Result<(), MoveError> {
         });
     }
     fs::remove_file(target).map_err(|error| MoveError::writing(&error, &file.path))
-}
-
-fn is_unchanged(source: &Path, file: &JournalFile) -> bool {
-    fs::symlink_metadata(source).is_ok_and(|metadata| {
-        metadata.len() == file.size
-            && metadata
-                .modified()
-                .is_ok_and(|modified| nanoseconds_of(modified) == file.modified_ns)
-    })
 }

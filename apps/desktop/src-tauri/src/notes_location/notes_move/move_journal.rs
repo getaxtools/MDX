@@ -39,7 +39,11 @@ pub struct JournalFile {
     /// Relative to the notes folder, with `/` between its parts.
     pub path: String,
     pub size: u64,
+    /// The source's modified time.
     pub modified_ns: i64,
+    /// The copy's modified time as its drive keeps it, which FAT, exFAT and some network drives round.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_modified_ns: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sha256: Option<String>,
     pub state: FileState,
@@ -252,6 +256,7 @@ mod tests {
                 path: "Projects/Plan.md".to_owned(),
                 size: 5,
                 modified_ns: 1,
+                target_modified_ns: None,
                 sha256: None,
                 state: FileState::Pending,
             }],
