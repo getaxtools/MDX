@@ -2282,6 +2282,7 @@ name = "mdx-native-windows"
 version = "0.8.1"
 dependencies = [
  "windows",
+ "windows-core",
 ]
 
 [[package]]

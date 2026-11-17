@@ -24,7 +24,7 @@ pub fn read_registry_number(root: RegistryRoot, key: &str, value: &str) -> io::R
     let key = wide_text(key);
     let value = wide_text(value);
     let mut number = 0_u32;
-    let mut size = u32::try_from(size_of::<u32>()).unwrap_or(u32::MAX);
+    let mut size = 4_u32;
     // SAFETY: both names end with a zero and live for the call; the data pointer and its size
     // describe `number`, and only a 32-bit number is accepted, so nothing larger is written.
     let result = unsafe {

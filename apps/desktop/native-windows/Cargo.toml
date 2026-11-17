@@ -21,6 +21,8 @@ windows = { version = "0.62.2", features = [
   "Win32_System_Registry",
   "Win32_UI_Shell",
 ] }
+# The `implement` macro that builds the progress sink names this crate; already in the lock with windows.
+windows-core = "0.62.2"
 
 [target.'cfg(windows)'.dev-dependencies]
 tempfile = "3.27.0"

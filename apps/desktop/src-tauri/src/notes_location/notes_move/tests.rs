@@ -579,6 +579,9 @@ struct FakeRecycleBin {
     is_missing: bool,
     /// Stands in for a shell that cannot be started.
     is_broken: bool,
+    /// Fails from this call on, counting from zero, as a shell that stops part way.
+    fails_from_call: Option<usize>,
+    calls: AtomicUsize,
     /// Files the Recycle Bin leaves where they are, as one in use by another program.
     refused_names: Vec<&'static str>,
     capacity_bytes: Option<u64>,
@@ -591,7 +594,8 @@ impl crate::platform::RecycleBin for FakeRecycleBin {
     }
 
     fn recycle(&self, paths: &[PathBuf]) -> io::Result<Vec<PathBuf>> {
-        if self.is_broken {
+        let call = self.calls.fetch_add(1, Ordering::SeqCst);
+        if self.is_broken || self.fails_from_call.is_some_and(|first| call >= first) {
             return Err(io::Error::other("the shell is not registered"));
         }
         let (refused, taken): (Vec<PathBuf>, Vec<PathBuf>) =
@@ -849,4 +853,20 @@ fn a_broken_shell_is_reported_and_keeps_everything() {
 
     assert_eq!(failure, Err(MoveError::RecycleFailed));
     assert_eq!(snapshot(setup.source.path()), before);
+}
+
+#[test]
+fn a_later_batch_failing_keeps_it_and_reports_the_earlier_ones() {
+    let setup = MoveSetup::with_notes(250);
+    let journal = switched_move(&setup);
+    let failing_later = FakeRecycleBin {
+        fails_from_call: Some(1),
+        ..FakeRecycleBin::default()
+    };
+
+    let removal = remove_old_copy(&journal, &failing_later, &TestDisk::default()).unwrap();
+
+    assert_eq!(removal.recycled_count, 200);
+    assert_eq!(removal.kept.count, 50);
+    assert_eq!(snapshot(setup.source.path()).len(), 50);
 }
