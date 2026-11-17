@@ -66,6 +66,9 @@ const SAMPLE_VALUES = {
   wanted: 'Plan.md',
   savedAs: 'Plan (imported).md',
   detail: 'Plan#^a1b2',
+  entry: 'install.md, 3 of 12',
+  when: 'yesterday',
+  ctrl: 'Ctrl',
 };
 
 describe('createTranslator', () => {
