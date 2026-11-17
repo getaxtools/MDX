@@ -2,6 +2,7 @@ pub mod app_info;
 pub mod app_state;
 pub mod app_windows;
 pub mod attachments;
+pub mod clipboard;
 pub mod document_export;
 pub mod document_saving;
 pub mod document_search;

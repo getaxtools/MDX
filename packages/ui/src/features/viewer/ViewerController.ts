@@ -976,6 +976,21 @@ export class ViewerController {
     return this.documentAttachments?.pastePicture(bytes) ?? Promise.resolve(undefined);
   }
 
+  /**
+   * Edit > Paste as Plain Text and the palette: the one place the app reads the clipboard, and only
+   * while the active document is being edited.
+   */
+  async pastePlainText(): Promise<void> {
+    const shell = this.dependencies.desktopShell;
+    if (!shell || !this.editingActions.isActiveDocumentEditing()) return;
+    try {
+      this.editingActions.insertPlainText(await shell.readClipboardText());
+    } catch (error) {
+      const isTooLarge = error instanceof DocumentOpenError && error.failure === 'tooLarge';
+      this.showNotice(isTooLarge ? 'editor.pastePlainText.tooLarge' : 'editor.pastePlainText.failed');
+    }
+  }
+
   /** The Image button: chosen picture files are copied next to the active document and linked at the caret. */
   addPictureFiles(): Promise<void> {
     const filterName = this.dependencies.translator.translate('attachments.pictureFilter');
@@ -1369,6 +1384,7 @@ export class ViewerController {
     runEditorCommand: ({ command }) => {
       this.editingActions.runEditorCommand(command);
     },
+    pastePlainText: () => this.pastePlainText(),
     revertDocument: () => this.editingActions.revertActiveDocument(),
     changeOutlineSection: ({ line, action }) => {
       const refusal = this.editingActions.changeOutlineSection(line, action);

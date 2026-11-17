@@ -8,6 +8,7 @@ export type EditingCommand =
   | { readonly kind: 'togglePreviewBesideEditor' }
   | { readonly kind: 'newDocument' }
   | { readonly kind: 'runEditorCommand'; readonly command: EditorMenuCommand }
+  | { readonly kind: 'pastePlainText' }
   | { readonly kind: 'revertDocument' }
   | { readonly kind: 'reloadActiveDocument' }
   | { readonly kind: 'reloadFromDisk'; readonly canonicalKey: string }
@@ -27,6 +28,12 @@ export type EditorRequest =
       readonly id: number;
       readonly canonicalKey: string;
       readonly kind: 'replaceText';
+      readonly text: string;
+    }
+  | {
+      readonly id: number;
+      readonly canonicalKey: string;
+      readonly kind: 'insertPlainText';
       readonly text: string;
     }
   | {

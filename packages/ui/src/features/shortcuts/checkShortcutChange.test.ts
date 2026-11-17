@@ -28,6 +28,7 @@ describe('checkShortcutChange', () => {
     [['F6'], 'shortcuts.moveBetweenRegions'],
     [['ctrl', '1'], 'shortcuts.tabByNumber'],
     [['ctrl', 'V'], 'menu.edit.paste'],
+    [['ctrl', 'shift', 'V'], 'menu.edit.pastePlainText'],
   ])('refuses in-place keys such as %j', (combination, actionKey) => {
     expect(check(combination)).toEqual({ isAccepted: false, refusal: { reason: 'usedBy', actionKey } });
   });
@@ -43,7 +44,7 @@ describe('checkShortcutChange', () => {
   });
 
   it.each([
-    [['ctrl', 'shift', 'V'], 'shortcuts.planned.pastePlainText'],
+    [['ctrl', 'F1'], 'shortcuts.planned.showToolbar'],
     [['ctrl', 'alt', 'W'], 'workspaces.switch'],
   ])('refuses keys kept for planned features or used by a command, such as %j', (combination, actionKey) => {
     expect(check(combination)).toEqual({ isAccepted: false, refusal: { reason: 'usedBy', actionKey } });

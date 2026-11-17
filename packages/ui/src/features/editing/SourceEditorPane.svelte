@@ -265,6 +265,7 @@
     else if (request.kind === 'insertPictureLinks')
       shownEditor.insertPictureLinks(request.links, request.point);
     else if (request.kind === 'revealRange') shownEditor.revealRange(request.range);
+    else if (request.kind === 'insertPlainText') shownEditor.insertPlainText(request.text);
     else if (request.kind === 'insertSnippet')
       shownEditor.insertSnippet(snippetExpander(request.body, { fileName, locale: translator.locale }));
     else shownEditor.replaceText(request.text);

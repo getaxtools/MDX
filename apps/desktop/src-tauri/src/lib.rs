@@ -101,6 +101,7 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
     builder.invoke_handler(tauri::generate_handler![
         commands::attachments::save_attachment,
         commands::attachments::add_picture_files,
+        commands::clipboard::read_clipboard_text,
         commands::documents::open_document,
         commands::documents::pick_documents,
         commands::documents::check_path_statuses,

@@ -164,6 +164,21 @@ export class EditingActions {
     this.callbacks.onChange();
   }
 
+  /** Asks the active document's editor to insert text at the selection; false when it is not being edited. */
+  insertPlainText(text: string): boolean {
+    const location = this.activeLocation();
+    if (!location || !this.editing.isEditing(location.canonicalKey)) return false;
+    const { canonicalKey } = location;
+    this.requests.set(canonicalKey, {
+      id: this.nextRequestId(),
+      canonicalKey,
+      kind: 'insertPlainText',
+      text,
+    });
+    this.callbacks.onChange();
+    return true;
+  }
+
   revertActiveDocument(): Promise<void> {
     const location = this.activeLocation();
     return location ? this.reloadFromDisk(location.canonicalKey) : Promise.resolve();

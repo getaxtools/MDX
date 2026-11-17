@@ -64,7 +64,6 @@ const TEXT_EDITING_KEYS: readonly KeyboardShortcut[] = [
 const PLANNED_FEATURE_KEYS: readonly KeyboardShortcut[] = [
   { combinations: [['ctrl', 'F1']], actionKey: 'shortcuts.planned.showToolbar' },
   { combinations: [['ctrl', 'shift', 'Q']], actionKey: 'editor.action.quote' },
-  { combinations: [['ctrl', 'shift', 'V']], actionKey: 'shortcuts.planned.pastePlainText' },
 ];
 
 const KEPT_SHORTCUTS: readonly KeyboardShortcut[] = [

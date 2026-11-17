@@ -11,6 +11,7 @@ export interface KeyboardShortcut {
 export const SHORTCUTS_HANDLED_IN_PLACE: readonly KeyboardShortcut[] = [
   { combinations: [['ctrl', 'C']], actionKey: 'menu.edit.copy' },
   { combinations: [['ctrl', 'A']], actionKey: 'menu.edit.selectAll' },
+  { combinations: [['ctrl', 'shift', 'V']], actionKey: 'menu.edit.pastePlainText' },
   { combinations: [['ctrl', '1–9']], actionKey: 'shortcuts.tabByNumber' },
   { combinations: [['F3'], ['shift', 'F3']], actionKey: 'shortcuts.findNext' },
   { combinations: [['ctrl', 'wheel']], actionKey: 'shortcuts.zoomWithWheel' },

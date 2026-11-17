@@ -74,6 +74,7 @@ const COMMANDS_WITHOUT_SHORTCUTS: readonly CommandWithoutShortcut[] = [
   { command: { kind: 'runEditorCommand', command: 'replace' }, actionKey: 'menu.edit.replace' },
   { command: { kind: 'runEditorCommand', command: 'goToLine' }, actionKey: 'menu.edit.goToLine' },
   { command: { kind: 'runEditorCommand', command: 'insertEquation' }, actionKey: 'equation.insertCommand' },
+  { command: { kind: 'pastePlainText' }, actionKey: 'menu.edit.pastePlainText' },
   { command: { kind: 'runEditorCommand', command: 'copyLineUp' }, actionKey: 'menu.edit.copyLineUp' },
   { command: { kind: 'runEditorCommand', command: 'copyLineDown' }, actionKey: 'menu.edit.copyLineDown' },
   {

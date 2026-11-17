@@ -8,6 +8,7 @@ import {
 } from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
 import {
+  DocumentOpenError,
   InMemoryAppMenu,
   InMemoryAppState,
   InMemoryDesktopShell,
@@ -829,6 +830,36 @@ describe('ViewerController', () => {
         expect(snapshot().editorRequest).toMatchObject({ kind: 'replaceText', text: '# Updated elsewhere' }),
       );
       expect(snapshot().notice).toBeUndefined();
+    });
+
+    it('the clipboard read runs only from the menu command', async () => {
+      const { controller, desktopShell, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      desktopShell.clipboardText = 'Area \\(x\\)';
+      await controller.start();
+      await controller.execute({ kind: 'pastePlainText' });
+      const readsWhileShown = desktopShell.clipboardReads;
+      await controller.execute({ kind: 'toggleEditing' });
+      await controller.execute({ kind: 'runEditorCommand', command: 'undo' });
+      const readsWhileEditing = desktopShell.clipboardReads;
+
+      await controller.execute({ kind: 'pastePlainText' });
+
+      expect(readsWhileShown).toBe(0);
+      expect(readsWhileEditing).toBe(0);
+      expect(desktopShell.clipboardReads).toBe(1);
+      expect(snapshot().editorRequest).toMatchObject({ kind: 'insertPlainText', text: 'Area \\(x\\)' });
+    });
+
+    it('Paste as Plain Text names a clipboard over the editor limit', async () => {
+      const { controller, desktopShell, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      vi.spyOn(desktopShell, 'readClipboardText').mockRejectedValue(new DocumentOpenError('tooLarge', ''));
+      await controller.start();
+      await controller.execute({ kind: 'toggleEditing' });
+
+      await controller.execute({ kind: 'pastePlainText' });
+
+      expect(snapshot().notice).toBe('The clipboard text is larger than 1 MB, so it was not pasted.');
+      expect(snapshot().editorRequest?.kind).not.toBe('insertPlainText');
     });
 
     it('sends menu commands to the editor only while editing, with Find going to the editor', async () => {

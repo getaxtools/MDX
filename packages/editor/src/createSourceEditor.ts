@@ -32,6 +32,7 @@ import {
 } from '@codemirror/view';
 import { nearestLineStart, pictureLinksAt, remotePictureMarkdown } from './attachments/pictureInsertion';
 import { pictureChooserFacet } from './attachments/pictureRequests';
+import { insertPlainText, plainTextPaste } from './attachments/plainTextPaste';
 import { blockMenuOpener } from './blocks/blockHandle';
 import { calloutTypeChange, type CalloutFoldSign } from './rich-text/calloutMarker';
 import { calloutTypeMenuOpener } from './rich-text/calloutTitleWidget';
@@ -220,6 +221,8 @@ export interface SourceEditor {
   /** Switches between Rich text and Source without changing the text, the selection or the undo history. */
   setEditingMode(mode: EditingMode): void;
   setTypography(typography: EditorTypography): void;
+  /** Paste as Plain Text from the menu: inserts text exactly at the selection, as one undo step. */
+  insertPlainText(text: string): void;
   /** Runs a Formatting toolbar control on the selection, leaving the focus where it is. */
   runFormatting(action: ToolboxAction): void;
   /**
@@ -320,6 +323,7 @@ function startingExtensions(
     editingModeExtension(mode, options.onEditingModeChange),
     typographyExtension(options.typography ?? DEFAULT_EDITOR_TYPOGRAPHY),
     editorExtensions(options),
+    plainTextPaste(),
     appDialogExtensions(options),
     options.wikiLinks ? richTextProvidersFacet.of({ inline: [WIKI_LINK_BRACKETS] }) : [],
   ];
@@ -339,9 +343,13 @@ function appDialogExtensions(options: SourceEditorOptions): Extension {
 
 function toolboxEditingOf(
   view: EditorView,
-): Pick<SourceEditor, 'runFormatting' | 'insertFormula' | 'editFormulaInOrder'> {
+): Pick<SourceEditor, 'runFormatting' | 'insertFormula' | 'editFormulaInOrder' | 'insertPlainText'> {
   return {
     runFormatting: (action) => runToolboxAction(view, action),
+    insertPlainText: (text) => {
+      insertPlainText(view, text);
+      view.focus();
+    },
     insertFormula: (target, formula) => insertFormula(view, target, formula),
     editFormulaInOrder: (index, source) => editFormulaInOrder(view, index, source),
   };

@@ -116,6 +116,12 @@ const EDIT_SEARCH_ITEMS: [CommandItem; 4] = [
 
 const COPY_AS_HTML_ITEM: CommandItem = ("copyAsHtml", "menu.edit.copyAsHtml", None);
 
+const PASTE_PLAIN_TEXT_ITEM: CommandItem = (
+    "pastePlainText",
+    "menu.edit.pastePlainText",
+    Some("Ctrl+Shift+V"),
+);
+
 const EDIT_INSERT_ITEMS: [CommandItem; 1] = [("insertEquation", "menu.edit.insertMath", None)];
 
 const TOGGLE_EDITING_ITEM: CommandItem =
@@ -532,6 +538,7 @@ impl MainMenuBuilder<'_> {
             .item(&copy)
             .item(&self.command_item(COPY_AS_HTML_ITEM)?)
             .item(&paste)
+            .item(&self.command_item(PASTE_PLAIN_TEXT_ITEM)?)
             .item(&select_all)
             .separator();
         self.with_items(builder, &EDIT_SEARCH_ITEMS)?
@@ -717,6 +724,7 @@ mod tests {
             .chain(&EDIT_INSERT_ITEMS)
             .chain(&[
                 PASTE_TABLE_ITEM,
+                PASTE_PLAIN_TEXT_ITEM,
                 COPY_AS_HTML_ITEM,
                 SETTINGS_ITEM,
                 TOGGLE_EDITING_ITEM,

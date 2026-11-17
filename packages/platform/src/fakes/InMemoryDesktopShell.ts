@@ -10,6 +10,15 @@ export class InMemoryDesktopShell implements DesktopShellPort {
   /** Paths that cannot be shown, such as ones the app was never allowed to open. */
   readonly unrevealablePaths = new Set<string>();
 
+  /** How many times the clipboard was read, which only Paste as Plain Text does. */
+  clipboardReads = 0;
+
+  readClipboardText(): Promise<string> {
+    this.clipboardReads += 1;
+    if (this.isClipboardBlocked) return Promise.reject(new Error('The clipboard is not available'));
+    return Promise.resolve(this.clipboardText);
+  }
+
   writeClipboardText(text: string): Promise<void> {
     if (this.isClipboardBlocked) return Promise.reject(new Error('The clipboard is not available'));
     this.clipboardText = text;

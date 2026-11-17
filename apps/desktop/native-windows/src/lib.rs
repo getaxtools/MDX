@@ -3,6 +3,8 @@
 //! forbids `unsafe` code.
 
 #[cfg(windows)]
+mod clipboard;
+#[cfg(windows)]
 mod com_error;
 #[cfg(windows)]
 mod jump_list;
@@ -13,6 +15,8 @@ mod registry;
 #[cfg(windows)]
 mod volumes;
 
+#[cfg(windows)]
+pub use clipboard::read_clipboard_text;
 #[cfg(windows)]
 pub use jump_list::{JumpListEntry, JumpListOutcome, show_jump_list_category};
 #[cfg(windows)]
