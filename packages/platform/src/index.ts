@@ -36,6 +36,8 @@ export type {
   ViewMenuState,
 } from './AppMenuPort';
 export { InMemoryAppMenu } from './fakes/InMemoryAppMenu';
+export type { JumpListAnswer, JumpListPort, JumpListWorkspace } from './JumpListPort';
+export { InMemoryJumpList } from './fakes/InMemoryJumpList';
 export { InMemoryDocumentExport, type ExportedDocument } from './fakes/InMemoryDocumentExport';
 export type { DocumentExportPort, ExportFormat } from './DocumentExportPort';
 export type { DocumentsChangedListener, DocumentWatcherPort } from './DocumentWatcherPort';

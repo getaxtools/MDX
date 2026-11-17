@@ -116,6 +116,7 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::app_state::grant_app_state_access,
         commands::workspaces::import_legacy_state,
         commands::workspaces::clear_workspaces,
+        commands::jump_list::show_jump_list_workspaces,
         commands::workspaces::grant_workspace_access,
         commands::workspace_file::pick_workspace_export_place,
         commands::workspace_file::write_workspace_export,

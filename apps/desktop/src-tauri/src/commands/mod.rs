@@ -10,6 +10,7 @@ pub mod favourites_file;
 pub mod file_manager;
 pub mod folder_text_search;
 pub mod folders;
+pub mod jump_list;
 pub mod links;
 pub mod live_reload;
 pub mod notes;

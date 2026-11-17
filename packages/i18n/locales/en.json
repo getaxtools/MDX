@@ -868,6 +868,7 @@
   "workspaces.notes.claim.containsLocation": "This folder contains another Notes workspace's folder.",
   "workspaces.notes.noDocuments": "MDX could not find your Documents folder. Choose a folder for your notes.",
   "workspaces.notes.locationFailed": "MDX could not use {path} for notes.",
+  "workspaces.jumpList.category": "Workspaces",
   "settings.section.notes": "Notes",
   "settings.notes.folder": "Notes folder",
   "settings.notes.openInFileExplorer": "Open in File Explorer",

@@ -45,6 +45,8 @@ import type {
   ShownNotesIndex,
   SpecProjectManifest,
   InspectedLink,
+  JumpListAnswer,
+  JumpListWorkspace,
   WatchedSpecProject,
   ProjectDocuments,
   TagCount,
@@ -200,6 +202,8 @@ export const tauriCommands = {
     invoke<ChosenPictureReply[]>('add_picture_files', { request }),
   watchDocuments: (paths: readonly string[]) => invoke<null>('watch_documents', { paths }),
   watchFolders: (paths: readonly string[]) => invoke<null>('watch_folders', { paths }),
+  showJumpListWorkspaces: (category: string, workspaces: readonly JumpListWorkspace[]) =>
+    invoke<JumpListAnswer>('show_jump_list_workspaces', { category, workspaces }),
   watchSpecProjects: (projects: readonly WatchedSpecProject[], additionalLocations: readonly string[]) =>
     invoke<null>('watch_spec_projects', { projects, additionalLocations }),
   resolveDocumentLink: (document: string, href: string, expectedTarget?: string) =>

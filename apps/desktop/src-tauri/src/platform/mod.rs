@@ -1,7 +1,9 @@
+mod jump_list;
 mod recycle_bin;
 #[cfg(windows)]
 mod windows;
 
+pub use jump_list::{JumpListLink, JumpListResult, show_jump_list_category};
 pub use recycle_bin::{RecycleBin, SystemRecycleBin};
 #[cfg(windows)]
 pub use windows::{is_cloud_only, is_locked_error_code, is_network_error_code};

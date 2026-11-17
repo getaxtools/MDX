@@ -33,6 +33,7 @@ import {
   hasFile,
   isUntitledLocation,
   type AppMenuPort,
+  type JumpListPort,
   type AppWindowsPort,
   type DesktopShellPort,
   type DocumentExportPort,
@@ -135,6 +136,7 @@ import {
 } from '../spec-viewer/specViewerCommands';
 import { windowTitleFor } from '../workspaces/windowTitle';
 import { recentWorkspaceLinks } from '../workspaces/recentWorkspaceLinks';
+import { jumpListWorkspacesOf } from '../workspaces/jumpListWorkspaces';
 import { applySessionCommand } from './applySessionCommand';
 import { LiveReload } from './LiveReload';
 import { InjectionCheckActions, type InjectionCheckView } from '../prompt-injection/InjectionCheckActions';
@@ -190,6 +192,8 @@ export interface ViewerControllerDependencies {
   readonly renderer: MarkdownRenderer;
   readonly translator: Translator;
   readonly menu?: AppMenuPort;
+  /** The taskbar Jump List, on systems that have one. */
+  readonly jumpList?: JumpListPort;
   readonly watcher?: DocumentWatcherPort;
   readonly resources?: DocumentResourcesPort;
   readonly printer?: DocumentPrinterPort;
@@ -419,6 +423,7 @@ export class ViewerController {
   private shownMenuShortcuts = '';
   private shownRecentFiles: ViewerState['recentFiles'] | undefined;
   private shownRecentWorkspaces = '';
+  private shownJumpListWorkspaces: string | undefined;
   private pathStatuses: ReadonlyMap<string, PathStatus> = new Map();
   private checkedLocationKeys = '';
   private readonly liveReload: LiveReload | undefined;
@@ -1442,6 +1447,7 @@ export class ViewerController {
     );
     this.showViewStateInMenu();
     this.showRecentFilesInMenu();
+    this.showRecentWorkspacesInJumpList();
     this.showShortcutsInMenu();
   }
 
@@ -1504,6 +1510,20 @@ export class ViewerController {
     this.shownRecentWorkspaces = workspacesKey;
     const displayPaths = recentFiles.entries().map((recentFile) => recentFile.location.displayPath);
     void menu.showRecentFiles(displayPaths.slice(0, MAX_RECENT_MENU_ENTRIES), workspaces);
+  }
+
+  /** Lists the recent workspaces in the Jump List; a refusal or a failure leaves the app as it is. */
+  private showRecentWorkspacesInJumpList(): void {
+    const { jumpList, session, translator } = this.dependencies;
+    const registry = this.workspacesPart().workspaces?.registry;
+    if (!jumpList || !registry) return;
+    const workspaces = jumpListWorkspacesOf(registry, session.currentState().workspaceKinds, translator);
+    const workspacesKey = JSON.stringify(workspaces);
+    if (workspacesKey === this.shownJumpListWorkspaces) return;
+    this.shownJumpListWorkspaces = workspacesKey;
+    jumpList
+      .showRecentWorkspaces(translator.translate('workspaces.jumpList.category'), workspaces)
+      .catch(() => undefined);
   }
 
   /** The other workspaces of enabled kinds, most recently used first. */
@@ -1822,6 +1842,7 @@ export class ViewerController {
     this.publish(this.composeSnapshot(this.snapshot.notice));
     this.showViewStateInMenu();
     this.showRecentFilesInMenu();
+    this.showRecentWorkspacesInJumpList();
     this.showShortcutsInMenu();
     this.refreshPathStatuses();
     this.liveReload?.watchOpenTabs();

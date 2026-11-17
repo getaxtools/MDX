@@ -10,6 +10,7 @@ pub use file_routing::FileRoute;
 pub use open_windows::{OpenWindows, SavedWindow, WindowReport};
 pub use window_labels::{
     MAX_WINDOWS, WorkspaceArgument, is_window_label, next_window_label, workspace_argument,
+    workspace_launch_argument,
 };
 
 use crate::commands::app_windows::StartupWorkspaceNotice;

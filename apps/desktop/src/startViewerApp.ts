@@ -17,6 +17,7 @@ import { TauriDesktopShell } from './ports/TauriDesktopShell';
 import { TauriDocumentExport } from './ports/TauriDocumentExport';
 import { TauriDocumentWatcher } from './ports/TauriDocumentWatcher';
 import { TauriFavouritesFile } from './ports/TauriFavouritesFile';
+import { TauriJumpList } from './ports/TauriJumpList';
 import { TauriFolderWatcher } from './ports/TauriFolderWatcher';
 import { TauriFolders } from './ports/TauriFolders';
 import { TauriNoteFiles } from './ports/TauriNoteFiles';
@@ -94,6 +95,7 @@ function createViewerController({
     renderer: createMarkdownRenderer({ window, alertTitles: translatedAlertTitles(translator) }),
     translator,
     menu,
+    jumpList: new TauriJumpList(),
     watcher: new TauriDocumentWatcher(),
     resources: new TauriDocumentResources(),
     printer: new WebViewPrinter(),

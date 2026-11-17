@@ -5,12 +5,16 @@
 #[cfg(windows)]
 mod com_error;
 #[cfg(windows)]
+mod jump_list;
+#[cfg(windows)]
 mod recycle_bin;
 #[cfg(windows)]
 mod registry;
 #[cfg(windows)]
 mod volumes;
 
+#[cfg(windows)]
+pub use jump_list::{JumpListEntry, JumpListOutcome, show_jump_list_category};
 #[cfg(windows)]
 pub use recycle_bin::move_to_recycle_bin;
 #[cfg(windows)]

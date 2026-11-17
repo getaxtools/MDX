@@ -36,6 +36,11 @@ pub enum WorkspaceArgument {
     Malformed,
 }
 
+/// The argument that starts the app showing a workspace, as a Jump List entry passes it.
+pub fn workspace_launch_argument(id: &WorkspaceId) -> String {
+    format!("{WORKSPACE_ARGUMENT}={}", id.as_str())
+}
+
 /// `--workspace=<id>` or `--workspace <id>`; the first one counts.
 pub fn workspace_argument(arguments: &[String]) -> Option<WorkspaceArgument> {
     let mut rest = arguments.iter().skip(1);
@@ -58,6 +63,19 @@ pub fn workspace_argument(arguments: &[String]) -> Option<WorkspaceArgument> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_launch_argument_names_the_workspace_the_app_reads_back() {
+        let id = WorkspaceId::try_from("reading-1".to_owned()).unwrap();
+
+        let argument = workspace_launch_argument(&id);
+
+        assert_eq!(argument, "--workspace=reading-1");
+        assert_eq!(
+            workspace_argument(&["mdx.exe".to_owned(), argument]),
+            Some(WorkspaceArgument::Named(id))
+        );
+    }
 
     fn arguments(list: &[&str]) -> Vec<String> {
         std::iter::once("mdx.exe")
