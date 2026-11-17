@@ -1,11 +1,11 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 
 use crate::commands::documents::{run_blocking, validated_path};
 use crate::commands::folders::pick_folder_in_dialog;
@@ -77,25 +77,43 @@ impl NotesImports {
     }
 }
 
-/// The folder picked for the next import. The window may read from it only to import it: it gets
-/// no general access, so it can never become a notes folder or be written to through other commands.
+/// The folder each window picked for its next import. The window may read from it only to import it
+/// once: it gets no general access, so it can never become a notes folder or be written to through
+/// other commands.
 #[derive(Debug, Default)]
-pub struct PendingImportSource(Mutex<Option<PathBuf>>);
+pub struct PendingImportSource(Mutex<HashMap<String, PathBuf>>);
+
+impl PendingImportSource {
+    fn remember(&self, window_label: &str, folder: PathBuf) {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(window_label.to_owned(), folder);
+    }
+
+    /// Uses up the window's pick, so one pick allows one import of that folder only.
+    fn take(&self, window_label: &str) -> Option<PathBuf> {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .remove(window_label)
+    }
+}
 
 /// Asks for the folder to import; `None` when the user cancels.
 #[tauri::command]
 pub async fn pick_notes_import_folder(
-    app: AppHandle,
+    window: WebviewWindow,
     pending: State<'_, Arc<PendingImportSource>>,
 ) -> Result<Option<String>, DocumentError> {
     let pending = Arc::clone(&pending);
     run_blocking(move || {
-        let Some(folder) = pick_folder_in_dialog(&app)? else {
+        let Some(folder) = pick_folder_in_dialog(window.app_handle())? else {
             return Ok(None);
         };
         let folder = dunce::canonicalize(folder)?;
         let shown = folder.to_string_lossy().into_owned();
-        *pending.0.lock().unwrap_or_else(PoisonError::into_inner) = Some(folder);
+        pending.remember(window.label(), folder);
         Ok(Some(shown))
     })
     .await?
@@ -116,7 +134,7 @@ pub struct NotesImportRequest {
 #[tauri::command]
 pub async fn import_notes_folder(
     request: NotesImportRequest,
-    app: AppHandle,
+    window: WebviewWindow,
     access: State<'_, Arc<DocumentAccessList>>,
     imports: State<'_, Arc<NotesImports>>,
 ) -> Result<ImportReport, DocumentError> {
@@ -126,15 +144,18 @@ pub async fn import_notes_folder(
     let known_languages = validated_languages(&request.known_code_languages)?;
     let access = Arc::clone(&access);
     let running = NotesImports::start(&imports)?;
+    let picked = window
+        .state::<Arc<PendingImportSource>>()
+        .take(window.label());
     run_blocking(move || {
         let root = allowed_root(&request.location, &access)?;
-        require_picked_source(&source, &app.state::<Arc<PendingImportSource>>())?;
+        require_picked_source(&source, picked.as_deref())?;
         let mut last_sent: Option<Instant> = None;
         let mut on_progress = |progress: ImportProgress| {
             let is_due = last_sent.is_none_or(|sent| sent.elapsed() >= PROGRESS_INTERVAL);
             if is_due || progress.done == progress.total {
                 last_sent = Some(Instant::now());
-                let _ = app.emit(NOTES_IMPORT_PROGRESS_EVENT, progress);
+                let _ = window.emit_to(window.label(), NOTES_IMPORT_PROGRESS_EVENT, progress);
             }
         };
         let mut control = ImportControl {
@@ -164,15 +185,7 @@ fn validated_languages(languages: &[String]) -> Result<HashSet<String>, Document
 }
 
 /// Only the folder the user picked for this import may be read.
-fn require_picked_source(
-    source: &Path,
-    pending: &PendingImportSource,
-) -> Result<(), DocumentError> {
-    let picked = pending
-        .0
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone();
+fn require_picked_source(source: &Path, picked: Option<&Path>) -> Result<(), DocumentError> {
     let source = dunce::canonicalize(source)?;
     if picked.is_some_and(|picked| picked == source) {
         Ok(())
@@ -315,14 +328,31 @@ mod tests {
     fn only_the_picked_folder_may_be_imported() {
         let picked = tempfile::tempdir().unwrap();
         let other = tempfile::tempdir().unwrap();
-        let pending = PendingImportSource::default();
-        *pending.0.lock().unwrap() = Some(dunce::canonicalize(picked.path()).unwrap());
+        let picked_path = dunce::canonicalize(picked.path()).unwrap();
 
-        assert_eq!(require_picked_source(picked.path(), &pending), Ok(()));
         assert_eq!(
-            require_picked_source(other.path(), &pending),
+            require_picked_source(picked.path(), Some(&picked_path)),
+            Ok(())
+        );
+        assert_eq!(
+            require_picked_source(other.path(), Some(&picked_path)),
             Err(DocumentError::AccessDenied)
         );
+        assert_eq!(
+            require_picked_source(picked.path(), None),
+            Err(DocumentError::AccessDenied)
+        );
+    }
+
+    #[test]
+    fn each_window_keeps_its_own_pick_and_a_pick_is_used_once() {
+        let pending = PendingImportSource::default();
+        pending.remember("main", PathBuf::from(r"D:\Vault A"));
+        pending.remember("window-2", PathBuf::from(r"D:\Vault B"));
+
+        assert_eq!(pending.take("main"), Some(PathBuf::from(r"D:\Vault A")));
+        assert_eq!(pending.take("main"), None);
+        assert_eq!(pending.take("window-2"), Some(PathBuf::from(r"D:\Vault B")));
     }
 
     #[test]

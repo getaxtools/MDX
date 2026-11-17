@@ -114,6 +114,8 @@
   }: Props = $props();
 
   const SCROLL_REPORT_DELAY_MS = 250;
+  /** Printing and exporting go ahead after this long, even if a picture or a font is still loading. */
+  const RENDERING_WAIT_LIMIT_MS = 5_000;
   let documentArea: HTMLElement | undefined = $state();
   let restoredDocument: RenderedActiveDocument | undefined;
   let pendingScrollReport: ReturnType<typeof globalThis.setTimeout> | undefined;
@@ -251,9 +253,19 @@
 
   /**
    * Waits until the shown document has drawn: the new HTML is in place, code is highlighted, math is
-   * typeset, fonts are loaded and pictures are decoded. A picture that fails to load does not hold it up.
+   * typeset, fonts are loaded and pictures are decoded. A picture that fails to load does not hold it up,
+   * and the wait ends after a few seconds whatever is still loading.
    */
   async function renderingSettled(): Promise<void> {
+    let stopWaiting: ReturnType<typeof globalThis.setTimeout> | undefined;
+    const waitLimit = new Promise<void>((resolve) => {
+      stopWaiting = globalThis.setTimeout(resolve, RENDERING_WAIT_LIMIT_MS);
+    });
+    await Promise.race([renderingDrawn(), waitLimit]);
+    globalThis.clearTimeout(stopWaiting);
+  }
+
+  async function renderingDrawn(): Promise<void> {
     await tick();
     await Promise.allSettled([pendingCodeBlocks, pendingRichBlocks]);
     // Some engines, and the test DOM, lack the font and decode APIs; waiting then simply ends.

@@ -376,4 +376,27 @@ describe('DocumentView', () => {
     await vi.waitFor(() => expect(onPrint).toHaveBeenCalledOnce());
     expect(wasPrintedEarly).toBe(false);
   });
+
+  it('prints after a few seconds even when the typesetting never finishes', async () => {
+    const renderInto = vi.fn<RichBlockRenderer['renderInto']>(() => new Promise<void>(() => undefined));
+    const onPrint = vi.fn();
+    const { rerender } = renderDocument('<p><span class="mdx-math-inline">x</span></p>', {
+      richBlocks: { renderInto, typesetMath: () => Promise.resolve(undefined) },
+      onPrint,
+    });
+    await vi.waitFor(() => expect(renderInto).toHaveBeenCalled());
+    vi.useFakeTimers();
+    try {
+      await rerender({ printRequest: 1 });
+      await vi.advanceTimersByTimeAsync(4_000);
+      const wasPrintedEarly = onPrint.mock.calls.length > 0;
+
+      await vi.advanceTimersByTimeAsync(1_500);
+
+      expect(wasPrintedEarly).toBe(false);
+      expect(onPrint).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

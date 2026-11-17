@@ -7,7 +7,8 @@ use serde::Serialize;
 
 use super::file_placement::{CopiedContent, Placement, place_copy};
 use super::folder_walk::{
-    FolderWalk, WalkControl, WalkedFile, is_same_or_inside, walk_folder_with,
+    FolderWalk, WalkControl, WalkedFile, canonical_even_if_missing, is_same_or_inside,
+    walk_folder_with,
 };
 use crate::documents::{DocumentError, MAX_DOCUMENT_BYTES, is_markdown_path};
 use crate::notes::NotesRoot;
@@ -132,10 +133,13 @@ fn list_source(
     )
 }
 
-/// Makes the file's folder and checks that it really is inside the location, so a junction in the
-/// location cannot send the copy somewhere else.
+/// Makes the file's folder and checks that it really is inside the location, before making it and again
+/// after, so a junction in the location can neither get folders made outside nor the copy sent there.
 fn prepared_folder_of(root: &NotesRoot, destination: &Path) -> Result<(), DocumentError> {
     let folder = destination.parent().ok_or(DocumentError::InvalidRequest)?;
+    if !is_same_or_inside(&canonical_even_if_missing(folder)?, root.folder()) {
+        return Err(DocumentError::AccessDenied);
+    }
     fs::create_dir_all(folder)?;
     root.resolve_inside(folder).map(|_| ())
 }
@@ -470,6 +474,26 @@ mod tests {
         let report = folders.import(&[]);
 
         assert_eq!(report.failed_files, vec!["Projects/Plan.md"]);
+        assert!(fs::read_dir(outside.path()).unwrap().next().is_none());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_junction_in_the_location_gets_no_folders_made_outside_it() {
+        let folders = Folders::new();
+        let outside = tempfile::tempdir().unwrap();
+        assert!(
+            super::super::folder_walk::make_junction(
+                &folders.location.path().join("Projects"),
+                outside.path(),
+            )
+            .unwrap()
+        );
+        folders.write_source("Projects/Sub/Plan.md", b"theirs");
+
+        let report = folders.import(&[]);
+
+        assert_eq!(report.failed_files, vec!["Projects/Sub/Plan.md"]);
         assert!(fs::read_dir(outside.path()).unwrap().next().is_none());
     }
 
