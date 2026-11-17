@@ -123,6 +123,7 @@ import type { NoteTransferDialog } from '../notes/NoteTransferActions';
 import { NotesIndexActions, type NoteBacklinks } from '../notes/NotesIndexActions';
 import { SpecViewerActions, type SpecProjectsView } from '../spec-viewer/SpecViewerActions';
 import { SpecDocumentRenderings } from '../spec-viewer/SpecDocumentRenderings';
+import { SpecProjectChecks } from '../spec-viewer/SpecProjectChecks';
 import type { SpecPreview } from '../spec-viewer/specPreview';
 import { specPreviewFor, viewLocationFor } from '../spec-viewer/specViewLocations';
 import type { OutsideLinkRequest } from '../spec-viewer/outsideLinkRequest';
@@ -395,6 +396,9 @@ export class ViewerController {
   private readonly notesActions: NotesActions | undefined;
   private readonly notesIndexActions: NotesIndexActions | undefined;
   private readonly specViewerActions: SpecViewerActions | undefined;
+  private readonly specProjectChecks: SpecProjectChecks;
+  /** The scan whose documents were last checked for prompt injection without the user asking. */
+  private checkedSpecView: SpecProjectsView | undefined;
   private shownSpecFoldersKey: string | undefined;
   private readonly specPreviews = new Map<string, SpecPreview>();
   private pendingWorkspaceFile: PendingWorkspaceFile | undefined;
@@ -464,6 +468,7 @@ export class ViewerController {
     this.notesActions = this.createNotesActions();
     this.notesIndexActions = this.createNotesIndexActions();
     this.specDocumentRenderings = this.createSpecDocumentRenderings();
+    this.specProjectChecks = this.createSpecProjectChecks();
     this.specViewerActions = this.createSpecViewerActions();
     this.injectionChecks = this.createInjectionCheckActions();
   }
@@ -496,6 +501,9 @@ export class ViewerController {
       session,
       checker: new InjectionChecker(startInjectionCheckWorker),
       afterPaint,
+      isAgentContext: (opened) =>
+        this.isSpecViewerShown() &&
+        this.specViewerActions?.holdsDocument(opened.location.displayPath) === true,
       now: () => (this.dependencies.now?.() ?? new Date()).getTime(),
       onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
     });
@@ -516,8 +524,40 @@ export class ViewerController {
     if (!specProjects) return undefined;
     return new SpecViewerActions({
       specProjects,
+      onChange: () => {
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+        this.checkSpecProjectsOnce();
+      },
+    });
+  }
+
+  private createSpecProjectChecks(): SpecProjectChecks {
+    const { session, startInjectionCheckWorker = startModuleWorker } = this.dependencies;
+    return new SpecProjectChecks({
+      checker: new InjectionChecker(startInjectionCheckWorker),
+      ignoreEntries: () => session.currentState().injectionIgnoreList.entries(),
       onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
     });
+  }
+
+  /** Each new scan of a Spec viewer workspace is checked once it is shown, unless the setting is Off. */
+  private checkSpecProjectsOnce(): void {
+    const view = this.specViewerActions?.view();
+    if (!view) this.specProjectChecks.clear();
+    if (!view?.roots || view === this.checkedSpecView) return;
+    this.checkedSpecView = view;
+    const { session, afterPaint = runAfterNextFrame } = this.dependencies;
+    if (session.currentState().viewSettings.automaticInjectionCheck === 'off') return;
+    afterPaint(() => void this.checkSpecProjects());
+  }
+
+  private async runSpecProjectsCommand(kind: 'checkSpecProjects' | 'refreshSpecProjects'): Promise<void> {
+    if (kind === 'checkSpecProjects') await this.checkSpecProjects();
+    else await this.specViewerActions?.refresh();
+  }
+
+  private checkSpecProjects(): Promise<void> {
+    return this.specProjectChecks.check(this.specViewerActions?.scannedDocuments() ?? []);
   }
 
   private createPropertyEditing(): PropertyEditing {
@@ -746,8 +786,8 @@ export class ViewerController {
 
   private async runSpecViewerCommand(command: SpecViewerCommand): Promise<void> {
     const { session, renderer, translator } = this.dependencies;
-    if (command.kind === 'refreshSpecProjects') {
-      await this.specViewerActions?.refresh();
+    if (command.kind === 'checkSpecProjects' || command.kind === 'refreshSpecProjects') {
+      await this.runSpecProjectsCommand(command.kind);
       return;
     }
     if (command.kind === 'followSpecLink') {
@@ -2052,8 +2092,10 @@ export class ViewerController {
   }
 
   private specProjectsPart(): Pick<ViewerSnapshot, 'specProjects' | 'specPreviews'> {
-    const specProjects = this.specViewerActions?.view();
+    const view = this.specViewerActions?.view();
     const previews = this.specPreviews.size > 0 ? { specPreviews: this.specPreviews } : {};
+    const injectionFindings = this.specProjectChecks.findings();
+    const specProjects = view && injectionFindings.size > 0 ? { ...view, injectionFindings } : view;
     return specProjects ? { specProjects, ...previews } : previews;
   }
 

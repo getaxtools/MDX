@@ -53,6 +53,8 @@ export interface InjectionCheckDependencies {
   readonly afterPaint: (run: () => void) => void;
   readonly now: () => number;
   readonly onChange: () => void;
+  /** Documents agents read as context, such as the files of a spec project, which the default setting checks. */
+  readonly isAgentContext?: (opened: OpenedDocument) => boolean;
 }
 
 interface ShownDocument {
@@ -60,6 +62,7 @@ interface ShownDocument {
   readonly opened: OpenedDocument;
   readonly origin: DocumentOrigin;
   readonly location?: string;
+  readonly isAgentContext: boolean;
   /** The text shown or edited now, which the next check reads. */
   readonly text: string;
 }
@@ -87,13 +90,14 @@ function rangeOf(text: string, finding: InjectionFinding): EditorTextRange {
   return { from: { line: finding.line, column: finding.column }, to: findingEnd(text, finding) };
 }
 
-function shownDocumentOf(opened: OpenedDocument, text: string): ShownDocument {
+function shownDocumentOf(opened: OpenedDocument, text: string, isAgentContext: boolean): ShownDocument {
   const isUntitled = isUntitledLocation(opened.location);
   return {
     documentKey: opened.location.canonicalKey,
     opened,
     origin: isUntitled ? 'untitled' : 'local',
     ...(isUntitled ? {} : { location: opened.location.displayPath }),
+    isAgentContext: !isUntitled && isAgentContext,
     text,
   };
 }
@@ -118,7 +122,7 @@ export class InjectionCheckActions {
     }
     const isSameDocument = this.shown?.documentKey === opened.location.canonicalKey;
     if (isSameDocument && this.shown?.opened === opened) return;
-    this.shown = shownDocumentOf(opened, text);
+    this.shown = shownDocumentOf(opened, text, this.isAgentContext(opened));
     if (!isSameDocument) this.forgetCheck();
     if (this.isCheckedWhenShown()) this.checkAfterPaint();
   }
@@ -205,6 +209,10 @@ export class InjectionCheckActions {
     this.forget();
   }
 
+  private isAgentContext(opened: OpenedDocument): boolean {
+    return this.dependencies.isAgentContext?.(opened) ?? false;
+  }
+
   /** An open panel checks each document it is shown with; the setting decides for the others. */
   private isCheckedWhenShown(): boolean {
     const shown = this.shown;
@@ -231,6 +239,7 @@ export class InjectionCheckActions {
         text: shown.text,
         origin: shown.origin,
         ...(shown.location === undefined ? {} : { location: shown.location }),
+        ...(shown.isAgentContext ? { isAgentContext: true } : {}),
         trigger: 'manual',
       });
     } catch {

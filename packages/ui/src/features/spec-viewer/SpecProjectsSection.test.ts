@@ -213,4 +213,52 @@ describe('SpecProjectsSection', () => {
     expect(screen.getByText('Reading spec projects...')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Spec projects' })).toBeTruthy();
   });
+
+  describe('with prompt injection findings', () => {
+    async function renderWithFindings() {
+      const onOpenDocument = vi.fn<(documentPath: string) => void>();
+      render(SpecProjectsSection, {
+        roots: [scanned(manifestOf(PROJECT_FILES))],
+        translator: createTranslator(),
+        isExpanded: true,
+        onToggleExpanded: vi.fn(),
+        onOpenDocument,
+        injectionFindings: new Map([
+          [
+            'C:\\Projects\\shop\\GEMINI.md',
+            { location: 'c:\\projects\\shop\\gemini.md', findingCount: 2, highestSeverity: 'high' as const },
+          ],
+        ]),
+      });
+      await userEvent.click(screen.getByRole('treeitem', { name: 'Agent instructions, 2 items' }));
+      return { onOpenDocument };
+    }
+
+    it('shows a quiet badge with the count on a document that has findings', async () => {
+      await renderWithFindings();
+
+      const row = screen.getByRole('treeitem', { name: 'GEMINI.md, 2 findings, highest High' });
+
+      expect(row.querySelector('.finding-badge')?.textContent.trim()).toBe('2 findings');
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    it('shows no badge on a document without findings', async () => {
+      await renderWithFindings();
+
+      const clean = screen.getByRole('treeitem', {
+        name: 'backend.instructions.md in .github/instructions/api',
+      });
+
+      expect(clean.querySelector('.finding-badge')).toBeNull();
+    });
+
+    it('still opens a document that has findings', async () => {
+      const { onOpenDocument } = await renderWithFindings();
+
+      await userEvent.click(screen.getByRole('treeitem', { name: /^GEMINI\.md, 2 findings/ }));
+
+      expect(onOpenDocument).toHaveBeenCalledWith('C:\\Projects\\shop\\GEMINI.md');
+    });
+  });
 });

@@ -48,6 +48,11 @@ export interface FollowSpecLinkCommand {
 }
 
 /** Scans the workspace's folders again, for shares that do not report their changes. */
+/** Checks the spec documents and agent instruction files of the shown projects for prompt injection. */
+export interface CheckSpecProjectsCommand {
+  readonly kind: 'checkSpecProjects';
+}
+
 export interface RefreshSpecProjectsCommand {
   readonly kind: 'refreshSpecProjects';
 }
@@ -60,7 +65,8 @@ export type SpecViewerCommand =
   | OpenSpecFindingCommand
   | OpenSpecPreviewCommand
   | FollowSpecLinkCommand
-  | RefreshSpecProjectsCommand;
+  | RefreshSpecProjectsCommand
+  | CheckSpecProjectsCommand;
 
 const SPEC_VIEWER_COMMAND_KINDS: ReadonlySet<string> = new Set([
   'openSpecDashboard',
@@ -70,6 +76,7 @@ const SPEC_VIEWER_COMMAND_KINDS: ReadonlySet<string> = new Set([
   'openSpecPreview',
   'followSpecLink',
   'refreshSpecProjects',
+  'checkSpecProjects',
 ]);
 
 export function isSpecViewerCommand(command: { readonly kind: string }): command is SpecViewerCommand {

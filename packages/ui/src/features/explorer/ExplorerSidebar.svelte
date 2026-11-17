@@ -166,6 +166,8 @@
         onFollowLink={(rootKey: string, linkPath: string) =>
           onCommand({ kind: 'followSpecLink', rootKey, linkPath })}
         onRefresh={() => onCommand({ kind: 'refreshSpecProjects' })}
+        onCheckForInjection={() => onCommand({ kind: 'checkSpecProjects' })}
+        injectionFindings={specProjects.injectionFindings}
         {activeDocumentKey}
       />
     {:else}

@@ -4,6 +4,9 @@
   import ExplorerSectionHeader from '../explorer/ExplorerSectionHeader.svelte';
   import TreeChevron from '../folder-tree/TreeChevron.svelte';
   import { activateWithKeyboard, treeKeyboard } from '../folder-tree/treeKeyboard';
+  import { severityLabelOf } from '../prompt-injection/findingPresentation';
+  import type { ProjectFileSummary } from '../prompt-injection/InjectionChecker';
+  import SeverityIcon from '../prompt-injection/SeverityIcon.svelte';
   import { specProjectTree, type ScannedSpecRoot, type SpecTreeNode } from './specProjectTree';
 
   interface Props {
@@ -20,6 +23,9 @@
     onOpenFeature?: (rootKey: string, featureFolder: string) => void;
     onFollowLink?: (rootKey: string, linkPath: string) => void;
     onRefresh?: () => void;
+    onCheckForInjection?: () => void;
+    /** Prompt injection findings of checked documents that have any, by their full path. */
+    injectionFindings?: ReadonlyMap<string, ProjectFileSummary> | undefined;
     activeDocumentKey?: string | undefined;
   }
 
@@ -35,6 +41,8 @@
     onOpenFeature = () => undefined,
     onFollowLink = () => undefined,
     onRefresh = () => undefined,
+    onCheckForInjection = () => undefined,
+    injectionFindings,
     activeDocumentKey,
   }: Props = $props();
 
@@ -68,6 +76,21 @@
     else if (node.children.length > 0) toggleRow(node);
   }
 
+  function findingsOf(node: SpecTreeNode): ProjectFileSummary | undefined {
+    return node.documentPath === undefined ? undefined : injectionFindings?.get(node.documentPath);
+  }
+
+  /** A row with findings says so after its name, as the badge shows it after the label. */
+  function accessibleNameOf(node: SpecTreeNode): string {
+    const findings = findingsOf(node);
+    if (!findings?.highestSeverity) return node.accessibleName;
+    const description = translator.translate('specViewer.injection.findings', {
+      count: findings.findingCount,
+      severity: severityLabelOf(findings.highestSeverity, translator),
+    });
+    return `${node.accessibleName}, ${description}`;
+  }
+
   function isActive(node: SpecTreeNode): boolean {
     return (
       node.documentPath?.toLowerCase() === activeDocumentKey?.toLowerCase() && activeDocumentKey !== undefined
@@ -79,6 +102,7 @@
   {#each nodes as node (node.id)}
     {@const hasChildren = node.children.length > 0}
     {@const isNodeOpen = isOpen(node)}
+    {@const findings = findingsOf(node)}
     <li role="none">
       <div
         role="treeitem"
@@ -88,7 +112,7 @@
         aria-level={level}
         aria-selected={isActive(node)}
         aria-expanded={hasChildren ? isNodeOpen : undefined}
-        aria-label={node.accessibleName}
+        aria-label={accessibleNameOf(node)}
         onclick={() => chooseRow(node)}
         onkeydown={activateWithKeyboard}
       >
@@ -109,6 +133,12 @@
         {/if}
         <span class="name" aria-hidden="true">{node.label}</span>
         {#if node.detail}<span class="detail" aria-hidden="true">{node.detail}</span>{/if}
+        {#if findings?.highestSeverity}
+          <span class="finding-badge" aria-hidden="true">
+            <SeverityIcon severity={findings.highestSeverity} />
+            {translator.translate('promptInjection.badge.count', { count: findings.findingCount })}
+          </span>
+        {/if}
       </div>
       {#if hasChildren && isNodeOpen}
         <ul class="nested" role="group">
@@ -136,6 +166,16 @@
         onclick={onRefresh}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.05-4.95M19 4.5v4h-4" /></svg>
+      </button>
+      <button
+        class="refresh"
+        aria-label={translator.translate('specViewer.injection.check')}
+        title={translator.translate('specViewer.injection.check')}
+        onclick={onCheckForInjection}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"
+          ><path d="M12 3l7 3v5c0 4.5-3 8.4-7 10-4-1.6-7-5.5-7-10V6z" /></svg
+        >
       </button>
     {/snippet}
   </ExplorerSectionHeader>
@@ -165,6 +205,17 @@
 </section>
 
 <style>
+  .finding-badge {
+    display: inline-flex;
+    flex: none;
+    gap: var(--space-1);
+    align-items: center;
+    margin-inline-start: auto;
+    padding-inline-start: var(--space-2);
+    color: var(--color-text-secondary);
+    font-size: var(--text-size-small);
+  }
+
   .refresh {
     display: inline-flex;
     align-items: center;

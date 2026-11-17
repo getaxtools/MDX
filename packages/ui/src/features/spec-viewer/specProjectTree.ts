@@ -57,7 +57,7 @@ interface TreeContext {
   readonly idPrefix: string;
 }
 
-function fullPathOf(root: DocumentLocation, relativePath: string): string {
+export function fullPathOf(root: DocumentLocation, relativePath: string): string {
   const separator = root.displayPath.includes('\\') ? '\\' : '/';
   const base = root.displayPath.endsWith(separator) ? root.displayPath.slice(0, -1) : root.displayPath;
   return `${base}${separator}${relativePath.split('/').join(separator)}`;

@@ -1221,6 +1221,8 @@
   "specViewer.refusal.modifiedDropsScenario": "Modified requirement \"{name}\" drops scenarios the current spec has: {section}.",
   "specViewer.refusal.addedExists": "Requirement \"{name}\" already exists.",
   "specViewer.refusal.addedNearMatch": "Added requirement \"{name}\" differs from \"{section}\" only in case or spacing.",
+  "specViewer.injection.check": "Check spec projects for prompt injection",
+  "specViewer.injection.findings": "{count, plural, one {# finding} other {# findings}}, highest {severity}",
   "settings.notes.confirmDeletion": "Ask before moving a note to the trash",
   "settings.notes.confirmDeletionDescription": "Deleted notes always go to the Notes trash first, so you can restore them.",
   "settings.notes.confirmLinkUpdates": "Ask before updating links to a renamed or moved note",

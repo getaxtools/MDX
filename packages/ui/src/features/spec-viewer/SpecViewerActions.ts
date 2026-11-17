@@ -12,9 +12,11 @@ import type {
   TextSearchOptions,
   WatchedSpecProject,
 } from '@mdx/platform';
-import { activeChangeFindings } from './activeChangeFindings';
+import { activeChangeFindings, type ProjectTextReader } from './activeChangeFindings';
+import type { ProjectFileSummary } from '../prompt-injection/InjectionChecker';
 import { ProjectTextCache } from './ProjectTextCache';
-import type { ScannedSpecRoot } from './specProjectTree';
+import type { ScannedDocuments } from './SpecProjectChecks';
+import { fullPathOf, type ScannedSpecRoot } from './specProjectTree';
 
 /** What the Spec viewer's sidebar shows for the folders of the shown workspace. */
 export interface SpecProjectsView {
@@ -22,6 +24,8 @@ export interface SpecProjectsView {
   readonly roots: readonly ScannedSpecRoot[] | undefined;
   /** Folders that could not be scanned, by their shown path. */
   readonly unreadableFolders: readonly string[];
+  /** The prompt injection findings of each checked document that has any, by its full path. */
+  readonly injectionFindings?: ReadonlyMap<string, ProjectFileSummary>;
 }
 
 export interface SpecViewerActionsDependencies {
@@ -37,6 +41,8 @@ interface RootScan {
   readonly paths?: readonly string[];
   /** The linked folders the scan followed, by their paths relative to the folder. */
   readonly followedLinks?: readonly string[];
+  /** Reads a file of the scan, again only once its modified time changes. */
+  readonly readText?: ProjectTextReader;
   readonly unreadableFolder?: string;
 }
 
@@ -58,6 +64,21 @@ export class SpecViewerActions {
   /** Scans a folder again whenever the watcher reports a change below it; returns how to stop. */
   start(): () => void {
     return this.dependencies.specProjects.onProjectsChanged((folderPaths) => void this.refresh(folderPaths));
+  }
+
+  /** The spec documents and agent instruction files of each scanned folder. */
+  scannedDocuments(): ScannedDocuments[] {
+    return this.scans.flatMap(({ scanned, paths = [], readText }) =>
+      scanned && readText ? [{ root: scanned.root, paths, readText }] : [],
+    );
+  }
+
+  /** Whether a document is one a scan of the shown folders listed, which agents read as context. */
+  holdsDocument(displayPath: string): boolean {
+    const key = displayPath.toLowerCase();
+    return this.scannedDocuments().some(({ root, paths }) =>
+      paths.some((path) => fullPathOf(root, path).toLowerCase() === key),
+    );
   }
 
   view(): SpecProjectsView | undefined {
@@ -170,9 +191,11 @@ export class SpecViewerActions {
         folderPath,
         AGENT_INSTRUCTION_LOCATIONS,
       );
+      const readText = this.texts.readerFor(folderPath, manifest);
       return {
         folderPath,
-        scanned: await this.overviewOf(folderPath, manifest),
+        scanned: await this.overviewOf(manifest, readText),
+        readText,
         paths: manifest.files.map((file) => file.path),
         followedLinks: manifest.links.filter((link) => link.isFollowed).map((link) => link.path),
       };
@@ -181,8 +204,10 @@ export class SpecViewerActions {
     }
   }
 
-  private async overviewOf(folderPath: string, manifest: SpecProjectManifest): Promise<ScannedSpecRoot> {
-    const readText = this.texts.readerFor(folderPath, manifest);
+  private async overviewOf(
+    manifest: SpecProjectManifest,
+    readText: ProjectTextReader,
+  ): Promise<ScannedSpecRoot> {
     const taskTexts = new Map<string, string>();
     for (const path of activeTaskDocumentsOf(specProjectsOverview(manifest))) {
       const text = await readText(path);
