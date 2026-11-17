@@ -163,6 +163,28 @@ mod tests {
     }
 
     #[test]
+    fn finds_nothing_of_a_protected_section_in_a_notes_folder() {
+        let (folder, access) = granted_folder();
+        let section = folder
+            .path()
+            .join(".mdx-notes")
+            .join("protected")
+            .join("notes");
+        fs::create_dir_all(&section).unwrap();
+        fs::write(
+            section.join("4f1c0a2e9b7d4c3a8e6f5d4c3b2a1f0e.mdxp"),
+            "sealed",
+        )
+        .unwrap();
+        fs::write(section.join("Bank details.md"), "4821").unwrap();
+        fs::write(folder.path().join("Plan.md"), "#").unwrap();
+
+        let documents = documents_in_folders(&[display_path_of(&folder)], &access);
+
+        assert_eq!(names_of(&documents), vec!["Plan.md"]);
+    }
+
+    #[test]
     fn skips_hidden_folders() {
         let (folder, access) = granted_folder();
         fs::create_dir(folder.path().join(".git")).unwrap();

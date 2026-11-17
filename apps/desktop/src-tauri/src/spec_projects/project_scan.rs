@@ -8,6 +8,7 @@ use crate::documents::{
     DocumentAccessList, DocumentError, DocumentLocation, decode_document_bytes, locate_document,
     location_of_resolved_path, modified_at_ms,
 };
+use crate::notes_location::NOTES_APP_FOLDER;
 
 pub const MAX_SCANNED_FILES: usize = 5_000;
 pub const MAX_SCAN_DEPTH: usize = 12;
@@ -16,7 +17,10 @@ const MAX_CONFIGURATION_FILE_BYTES: u64 = 64 * 1024;
 const MAX_CONFIGURATION_TEXT_BYTES: usize = 4 * 1024 * 1024;
 const CONFIGURATION_EXTENSIONS: [&str; 3] = ["yaml", "yml", "json"];
 /// Build output, package and environment folders: never part of a spec project, often huge and busy.
-const NEVER_ENTERED_FOLDERS: [&str; 7] = [
+/// The app's own folder in a Notes location holds the trash and any protected section, so no scan,
+/// not even one the user widened, ever enters it.
+const NEVER_ENTERED_FOLDERS: [&str; 8] = [
+    NOTES_APP_FOLDER,
     "node_modules",
     ".git",
     "target",
@@ -538,6 +542,25 @@ pub(crate) mod tests {
                 "packages/api/GEMINI.md",
             ]
         );
+    }
+
+    #[test]
+    fn never_enters_the_notes_app_folder_with_its_protected_section() {
+        let root = tempfile::tempdir().unwrap();
+        write_files(
+            root.path(),
+            &[
+                ".mdx-notes/protected/notes/4f1c0a2e9b7d4c3a8e6f5d4c3b2a1f0e.mdxp",
+                ".mdx-notes/protected/notes/4f1c0a2e9b7d4c3a8e6f5d4c3b2a1f0e.md",
+                "specs/plan.md",
+            ],
+        );
+        let widened =
+            [".mdx-notes/**", "**/*.md"].map(|location| ScanPattern::parse(location).unwrap());
+
+        let manifest = scan_granted_project(root.path(), &widened, &granted(root.path())).unwrap();
+
+        assert_eq!(file_paths(&manifest), vec!["specs/plan.md"]);
     }
 
     #[test]

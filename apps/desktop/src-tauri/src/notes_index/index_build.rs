@@ -273,8 +273,11 @@ impl NoteFolder for DiskNoteFolder {
         Ok(decode_document_bytes(&self.read_note_bytes(path)?).text)
     }
 
+    /// Only what a listing could hold is read: never an excluded path, nor anything in a dot-named
+    /// folder such as the app's own, which holds the trash and any protected section.
     fn read_note_bytes(&self, path: &str) -> Result<Vec<u8>, IndexError> {
-        if self.excluded.contains(path) {
+        let is_in_dot_folder = path.split('/').any(|part| part.starts_with('.'));
+        if self.excluded.contains(path) || is_in_dot_folder {
             return Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied).into());
         }
         Ok(fs::read(self.root.join(path))?)
@@ -440,6 +443,34 @@ mod tests {
         assert_eq!(outcome.indexed, 2);
         assert_eq!(indexed_paths(&index), vec!["Inbox.md", "Projects/Plan.md"]);
         assert_eq!(snapshot_of(location.path()), before);
+    }
+
+    #[test]
+    fn the_protected_section_is_never_listed_or_opened() {
+        let location = tempfile::tempdir().unwrap();
+        let section = location
+            .path()
+            .join(".mdx-notes")
+            .join("protected")
+            .join("notes");
+        fs::create_dir_all(&section).unwrap();
+        fs::write(section.join("Bank details.md"), "# Bank details\n\n4821\n").unwrap();
+        fs::write(location.path().join("Journal.md"), "# Journal\n").unwrap();
+        let folder = DiskNoteFolder::new(location.path().to_path_buf(), ExcludedPaths::default());
+
+        let listed: Vec<String> = folder
+            .list_notes()
+            .unwrap()
+            .into_iter()
+            .map(|note| note.path)
+            .collect();
+
+        assert_eq!(listed, vec!["Journal.md"]);
+        assert!(
+            folder
+                .read_note(".mdx-notes/protected/notes/Bank details.md")
+                .is_err()
+        );
     }
 
     #[test]
