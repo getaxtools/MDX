@@ -25,7 +25,7 @@ const OPTIONS = { isCaseSensitive: false, isWholeWord: false };
 
 async function startInJournal(documents: Readonly<Record<string, string>> = {}) {
   const notesIndex = new InMemoryNotesIndex();
-  const noteFiles = new InMemoryNoteFiles({ notes: Object.keys(documents) });
+  const noteFiles = new InMemoryNoteFiles({ notes: Object.keys(documents), texts: documents });
   let nextId = 0;
   const session = new ViewerSession({
     documentFiles: new InMemoryDocumentFiles(documents),
@@ -216,6 +216,24 @@ describe('the notes index', () => {
     ]);
     expect(notesIndex.suggestionRequests).toEqual([{ typed: 'pl', fromNote: 'Projects/Inbox.md' }]);
     expect(await suggester?.headings('Plan')).toEqual([{ level: 2, text: 'Goals' }]);
+  });
+
+  it('a note shows its embeds of other notes of the location, and other documents none', async () => {
+    const { controller, snapshot } = await startInJournal({
+      'E:\\Journal\\Plan.md': '# Plan',
+      'E:\\Journal\\Daily.md': '![[Plan]]',
+    });
+    await controller.openDocuments(['E:\\Journal\\Daily.md']);
+    const daily = snapshot().viewer.tabStrip.activeTab()?.location;
+    if (!daily) throw new Error('the note did not open');
+
+    const resolver = controller.embedResolverFor(daily);
+
+    expect(resolver?.targetOf('![[Plan]]')).toBe('Plan');
+    await expect(resolver?.resolve('Plan')).resolves.toBe('# Plan');
+    expect(
+      controller.embedResolverFor(InMemoryDocumentFiles.locationOf('C:\\Docs\\Guide.md')),
+    ).toBeUndefined();
   });
 
   it('a document outside the notes folder is offered no wiki-links', async () => {

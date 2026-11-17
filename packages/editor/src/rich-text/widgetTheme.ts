@@ -3,6 +3,8 @@ import {
   CALLOUT_CLASS,
   CALLOUT_TITLE_CLASS,
   DIAGRAM_CLASS,
+  EMBED_CLASS,
+  EMBED_NOT_FOUND_CLASS,
   FORMULA_CLASS,
   IMAGE_CLASS,
   PROPERTIES_CLASS,
@@ -69,6 +71,13 @@ const calloutRules = {
 const renderedBlockRules = {
   [`.${RENDERED_BLOCK_CLASS}`]: { fontFamily: 'var(--font-reading)', whiteSpace: 'normal' },
   [`div.${FORMULA_CLASS}`]: { display: 'block', textAlign: 'center', overflowX: 'auto' },
+  [`.${EMBED_CLASS}`]: {
+    borderInlineStart: '3px solid var(--color-border)',
+    paddingInline: 'var(--space-3)',
+    marginBlock: 'var(--space-2)',
+  },
+  [`.${EMBED_CLASS}:focus-visible`]: { outline: '2px solid var(--color-focus)', outlineOffset: '2px' },
+  [`.${EMBED_NOT_FOUND_CLASS}`]: { color: 'var(--color-text-secondary)', fontStyle: 'italic' },
   [`.${TABLE_CLASS}`]: { overflowX: 'auto' },
   [`.${TABLE_CLASS} table`]: { borderCollapse: 'collapse' },
   [`.${TABLE_CLASS} :is(th, td)`]: { border: '1px solid var(--color-border)', padding: '6px var(--space-3)' },

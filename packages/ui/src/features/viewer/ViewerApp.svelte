@@ -723,6 +723,7 @@
                     onChoosePictures={() => void controller.addPictureFiles()}
                     snippets={snapshot ? availableSnippets(snapshot.viewer.snippetLibrary) : []}
                     wikiLinks={activeTab ? controller.wikiLinkSuggesterFor(activeTab.location) : undefined}
+                    embedResolver={activeTab ? controller.embedResolverFor(activeTab.location) : undefined}
                     isReadOnly={snapshot?.isActiveDocumentReadOnly ?? false}
                     onSelectedTextChange={(selectedText: string) =>
                       (selectedWords = selectedText === '' ? 0 : measureDocument(selectedText).words)}

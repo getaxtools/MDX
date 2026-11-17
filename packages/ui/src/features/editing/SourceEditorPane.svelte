@@ -13,6 +13,7 @@
   } from './blockMenu';
   import type {
     CalloutFoldSign,
+    EmbedResolver,
     EditorTextRange,
     FormattingState,
     FormulaEditRequest,
@@ -53,6 +54,8 @@
     snippets?: readonly Snippet[];
     /** Suggests notes after `[[` in a note of a Notes workspace. */
     wikiLinks?: WikiLinkSuggester | undefined;
+    /** The embeds the workspace kind shows in Rich text. */
+    embedResolver?: EmbedResolver | undefined;
     isShowingHiddenCharacters?: boolean;
     /** Ranges to underline, such as prompt injection findings. */
     markedRanges?: readonly EditorTextRange[];
@@ -89,6 +92,7 @@
     onSelectedTextChange = () => undefined,
     snippets = [],
     wikiLinks,
+    embedResolver,
     isShowingHiddenCharacters = false,
     markedRanges = [],
     isReadOnly = false,
@@ -191,6 +195,7 @@
       ...(richTextRendering ? { richTextRendering } : {}),
       snippets: editorSnippets,
       ...(wikiLinks ? { wikiLinks } : {}),
+      ...(embedResolver ? { embedResolver } : {}),
       findHiddenCharacters: (lineText: string) => listHiddenCharacters(lineText),
       isShowingHiddenCharacters,
       isReadOnly,

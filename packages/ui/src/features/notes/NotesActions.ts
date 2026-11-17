@@ -5,10 +5,12 @@ import {
   noteNameOf,
   notesLocationOf,
   notePathInLocation,
+  notesSettingsOf,
   resolveWikiLink,
   type NoteEntry,
   type ViewerSession,
 } from '@mdx/core';
+import type { EmbedResolver } from '@mdx/editor';
 import type { MessageKey, Translator } from '@mdx/i18n';
 import {
   DocumentOpenError,
@@ -29,6 +31,7 @@ import {
   type NoteLinkUpdateCommand,
   type NoteLinkUpdatePreview,
 } from './NoteLinkUpdateActions';
+import { noteEmbedResolver } from './noteEmbeds';
 import { NOTE_TRASH_COMMAND_KINDS, NoteTrashActions, type NoteTrashCommand } from './NoteTrashActions';
 import {
   NOTE_TRANSFER_COMMAND_KINDS,
@@ -215,6 +218,25 @@ export class NotesActions {
       },
       unresolvedDescription: this.dependencies.translator.translate('notes.links.unresolved'),
     };
+  }
+
+  /** How a note of the shown workspace shows its `![[Note]]` embeds in Rich text; undefined for any other document. */
+  embedResolverFor(document: DocumentLocation): EmbedResolver | undefined {
+    const location = this.locationPath();
+    const list = this.noteList;
+    const shown = this.dependencies.session.shownWorkspace();
+    if (location === undefined || !shown || list?.location !== location) return undefined;
+    if (!isInsideFolder(document.displayPath, location)) return undefined;
+    return noteEmbedResolver({
+      location,
+      fromNote: notePathInLocation(location, document.displayPath),
+      notes: list.notes,
+      excludedPaths: notesSettingsOf(shown).excludedPaths,
+      readNote: (path) => this.dependencies.noteFiles.readNote(path),
+      openNote: (path) => void this.dependencies.openDocument(path),
+      offerNote: (target) => this.offerNoteFor(target, document),
+      translator: this.dependencies.translator,
+    });
   }
 
   /** The shown location's notes as last listed, for telling which note a wiki-link name means. */

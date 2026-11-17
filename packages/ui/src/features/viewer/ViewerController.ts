@@ -26,7 +26,7 @@ import {
   DEFAULT_SPEC_SEARCH_FILTER,
   type SpecSearchFilter,
 } from '@mdx/core';
-import type { WikiLinkSuggester } from '@mdx/editor';
+import type { EmbedResolver, WikiLinkSuggester } from '@mdx/editor';
 import type { MessageKey, Translator } from '@mdx/i18n';
 import {
   DocumentOpenError,
@@ -782,6 +782,11 @@ export class ViewerController {
   /** Suggests notes after `[[` while a note of the shown Notes workspace is edited. */
   wikiLinkSuggesterFor(document: DocumentLocation): WikiLinkSuggester | undefined {
     return this.notesIndexActions?.linkSuggesterFor(document, () => this.notesActions?.noteEntries());
+  }
+
+  /** The embeds Rich text shows for a document, from its workspace kind; undefined when it has none. */
+  embedResolverFor(document: DocumentLocation): EmbedResolver | undefined {
+    return this.notesActions?.embedResolverFor(document);
   }
 
   /** The window got the focus: a Notes folder that reports no changes is checked again now. */

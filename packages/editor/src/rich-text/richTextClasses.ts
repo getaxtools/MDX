@@ -19,6 +19,9 @@ export const RULE_CLASS = 'cm-rich-rule';
 export const PROPERTIES_CLASS = 'cm-rich-properties';
 export const CALLOUT_CLASS = 'cm-rich-callout';
 export const CALLOUT_TITLE_CLASS = 'cm-rich-callout-title';
+export const EMBED_CLASS = 'cm-rich-embed';
+export const EMBED_CONTENT_CLASS = 'cm-rich-embed-content';
+export const EMBED_NOT_FOUND_CLASS = 'cm-rich-embed-not-found';
 
 /** Quotes nested deeper than this are indented like this depth. */
 export const DEEPEST_QUOTE_STYLE = 3;

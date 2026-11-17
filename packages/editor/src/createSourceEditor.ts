@@ -82,6 +82,7 @@ import { isComposing } from './rich-text/compositionHold';
 import { linkOpener, openLinkAtCaret } from './rich-text/linkOpening';
 import { isInLink, type WrittenLink } from './rich-text/linkTargets';
 import { richTextProvidersFacet, type RichTextProviders } from './rich-text/richTextProviders';
+import { embedResolverFacet, openEmbedAtCaret, type EmbedResolver } from './rich-text/embeds';
 import { richTextRenderingFacet, type RichTextRendering } from './rich-text/richTextRendering';
 import {
   DEFAULT_EDITOR_TYPOGRAPHY,
@@ -142,6 +143,8 @@ export interface SourceEditorOptions {
   readonly onFormattingChange?: (formatting: FormattingState) => void;
   /** Renders Rich text's widgets the way the preview renders this document; without it, blocks stay text. */
   readonly richTextRendering?: RichTextRendering;
+  /** Shows the embeds the workspace kind resolves, read-only, in Rich text. */
+  readonly embedResolver?: EmbedResolver;
   /** Widgets and decorations of the workspace kind and of later editor features. */
   readonly richTextProviders?: RichTextProviders;
   /** Finds the hidden characters of a line, for Show hidden characters; without it none are drawn. */
@@ -583,7 +586,7 @@ function menuCommandsOf(view: EditorView): Readonly<Record<EditorMenuCommand, ()
     copyLineUp: () => copyLineUp(view),
     copyLineDown: () => copyLineDown(view),
     addNextOccurrence: () => selectNextOccurrence(view),
-    openLink: () => openLinkAtCaret(view),
+    openLink: () => openLinkAtCaret(view) || openEmbedAtCaret(view),
     insertEquation: () => startFormula(undefined)(view),
   };
 }
@@ -648,6 +651,7 @@ function editorExtensions(options: SourceEditorOptions): Extension[] {
     EditorState.phrases.of(options.phrases),
     options.onOpenLink ? linkOpener.of(options.onOpenLink) : [],
     options.richTextRendering ? richTextRenderingFacet.of(options.richTextRendering) : [],
+    options.embedResolver ? embedResolverFacet.of(options.embedResolver) : [],
     options.richTextProviders ? richTextProvidersFacet.of(options.richTextProviders) : [],
     // An explicit tab stop lets checkers see that the scrolling editor can be reached with the keyboard.
     EditorView.contentAttributes.of({ 'aria-label': options.label, spellcheck: 'false', tabindex: '0' }),

@@ -5,6 +5,7 @@ import {
   PropertiesChipWidget,
   TableWidget,
 } from './blockWidgets';
+import { EMBED_BLOCKS } from './embeds';
 import { lineCountOf } from './renderedWidgets';
 import type { RichTextBlock, RichTextBlockProvider } from './richTextProviders';
 import { richTextRenderingFacet } from './richTextRendering';
@@ -96,4 +97,5 @@ export const BUILT_IN_BLOCK_PROVIDERS: readonly RichTextBlockProvider[] = [
   htmlBlocks,
   frontMatter,
   diagrams,
+  EMBED_BLOCKS,
 ];
