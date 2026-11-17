@@ -11,7 +11,7 @@ function isEditorAction(action: ToolboxAction): action is EditorAction {
 
 /** Runs a Formatting toolbar control on the editor's selection. */
 export function runToolboxAction(view: EditorView, action: ToolboxAction): void {
-  if (action === 'table') insertMenuItemAtSelection(view, 'table');
+  if (action === 'table' || action === 'callout') insertMenuItemAtSelection(view, action);
   else if (action === 'formula') startFormula(undefined)(view);
   else if (isEditorAction(action)) EDITOR_ACTION_COMMANDS[action](view);
   else toParagraph(view);

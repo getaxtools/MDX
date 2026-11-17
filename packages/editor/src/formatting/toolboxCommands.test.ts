@@ -28,7 +28,17 @@ function textFromInsertMenu(itemId: string): string {
 }
 
 describe('toolbox commands', () => {
-  it.each(['table', 'inlineMath', 'displayMath'] as const)(
+  it('insert callout adds the NOTE marker with the caret in the body', () => {
+    const view = new EditorView({ state: EditorState.create({ doc: '', extensions: [markdownSyntax()] }) });
+
+    runToolboxAction(view, 'callout');
+
+    expect(view.state.doc.toString()).toBe('> [!NOTE]\n> ');
+    expect(view.state.selection.main.head).toBe(view.state.doc.length);
+    view.destroy();
+  });
+
+  it.each(['table', 'callout', 'inlineMath', 'displayMath'] as const)(
     'the %s button inserts what the insert menu item of the same name inserts',
     (action) => {
       expect(textAfterToolbox(action, '', 0)).toBe(textFromInsertMenu(action));

@@ -9,6 +9,8 @@ export {
 } from './createSourceEditor';
 export { BLOCK_KIND_PHRASES, BLOCK_MOVE_PHRASES, type MoveDirection } from './blocks/moveBlocks';
 export { BLOCK_HANDLE_PHRASE } from './blocks/blockHandle';
+export { CALLOUT_TYPE_PHRASE } from './rich-text/calloutTitleWidget';
+export type { CalloutFoldSign } from './rich-text/calloutMarker';
 export type { BlockKind } from './blocks/markdownBlocks';
 export { TURN_INTO_KINDS, type BlockAction, type TurnIntoKind } from './blocks/blockActions';
 export {

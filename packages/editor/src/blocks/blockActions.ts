@@ -1,11 +1,20 @@
 import { EditorSelection, type EditorState, type TransactionSpec } from '@codemirror/state';
 import { blockMove } from './moveBlocks';
 import { siblingBlocksAt, type MarkdownBlock } from './markdownBlocks';
+import { calloutStartChange } from '../rich-text/calloutFolds';
+import { calloutLineAt, type CalloutFoldSign } from '../rich-text/calloutMarker';
 
 export type TurnIntoKind =
   'paragraph' | 'heading1' | 'heading2' | 'heading3' | 'quote' | 'bulletList' | 'codeBlock';
 
-export type BlockAction = 'moveUp' | 'moveDown' | 'duplicate' | 'delete' | `turnInto.${TurnIntoKind}`;
+export type BlockAction =
+  | 'moveUp'
+  | 'moveDown'
+  | 'duplicate'
+  | 'delete'
+  | 'startCollapsed'
+  | 'startExpanded'
+  | `turnInto.${TurnIntoKind}`;
 
 export const TURN_INTO_KINDS: readonly TurnIntoKind[] = [
   'paragraph',
@@ -44,9 +53,40 @@ export function blockAction(state: EditorState, action: BlockAction): Transactio
   }
   const block = blockAtCaret(state);
   if (!block) return undefined;
-  if (action === 'duplicate') return duplicate(state, block);
-  if (action === 'delete') return remove(state, block);
+  if (isBlockEdit(action)) return BLOCK_EDITS[action](state, block);
   return turnInto(state, block, action.slice('turnInto.'.length) as TurnIntoKind);
+}
+
+type BlockEdit = 'duplicate' | 'delete' | 'startCollapsed' | 'startExpanded';
+
+const BLOCK_EDITS: Readonly<
+  Record<BlockEdit, (state: EditorState, block: MarkdownBlock) => TransactionSpec | undefined>
+> = {
+  duplicate: (state, block) => duplicate(state, block),
+  delete: (state, block) => remove(state, block),
+  startCollapsed: (state, block) => calloutStart(state, block, 'startCollapsed'),
+  startExpanded: (state, block) => calloutStart(state, block, 'startExpanded'),
+};
+
+function isBlockEdit(action: BlockAction): action is BlockEdit {
+  return Object.hasOwn(BLOCK_EDITS, action);
+}
+
+/** The fold sign of the callout at the caret, or undefined when the block is not a callout. */
+export function calloutFoldAtCaret(state: EditorState): CalloutFoldSign | undefined {
+  const block = blockAtCaret(state);
+  return block?.kind === 'quote' ? calloutLineAt(state, block.from)?.foldSign : undefined;
+}
+
+function calloutStart(
+  state: EditorState,
+  block: MarkdownBlock,
+  action: 'startCollapsed' | 'startExpanded',
+): TransactionSpec | undefined {
+  const callout = block.kind === 'quote' ? calloutLineAt(state, block.from) : undefined;
+  return callout
+    ? calloutStartChange(callout, action === 'startCollapsed' ? 'collapsed' : 'expanded')
+    : undefined;
 }
 
 /** An exact copy goes below the block, separated as list items or blocks are. */

@@ -30,7 +30,40 @@ const calloutRules = {
     color: 'var(--color-text)',
   },
   ...calloutLookRules,
-  [`.${CALLOUT_TITLE_CLASS}`]: { color: 'var(--callout-color)', fontWeight: '600' },
+  [`.${CALLOUT_TITLE_CLASS}`]: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 'var(--space-1)',
+    // The look's colour is too light for text on its own tint, so it marks the icons only.
+    color: 'var(--color-text)',
+    fontWeight: '600',
+  },
+  [`.${CALLOUT_TITLE_CLASS} button`]: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 'var(--space-1)',
+    minWidth: '24px',
+    minHeight: '24px',
+    padding: '0 2px',
+    border: '0',
+    borderRadius: 'var(--radius-small)',
+    background: 'transparent',
+    color: 'inherit',
+    font: 'inherit',
+    cursor: 'pointer',
+  },
+  [`.${CALLOUT_TITLE_CLASS} button:hover`]: { background: 'var(--color-surface-hover)' },
+  [`.${CALLOUT_TITLE_CLASS} button:focus-visible`]: { outline: '2px solid var(--color-focus)' },
+  [`.${CALLOUT_TITLE_CLASS} svg`]: {
+    width: '16px',
+    height: '16px',
+    fill: 'none',
+    stroke: 'var(--callout-color)',
+    strokeWidth: '2',
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+  },
+  [`.${CALLOUT_TITLE_CLASS} [aria-expanded='true'] svg`]: { transform: 'rotate(90deg)' },
 };
 
 const renderedBlockRules = {
@@ -78,6 +111,7 @@ const forcedColourRules = {
   '@media (forced-colors: active)': {
     [CALLOUT_LINE]: { borderInlineStartColor: 'CanvasText' },
     [`.${CALLOUT_TITLE_CLASS}`]: { color: 'CanvasText' },
+    [`.${CALLOUT_TITLE_CLASS} svg`]: { stroke: 'CanvasText' },
     [`.${RULE_CLASS}`]: { borderBlockStartColor: 'CanvasText' },
     [`.${PROPERTIES_CLASS}`]: { borderColor: 'CanvasText', color: 'CanvasText' },
   },

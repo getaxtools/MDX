@@ -21,6 +21,7 @@ export const TOOLBOX_ICONS: Readonly<
   numberedList: ['M10 6h10', 'M10 12h10', 'M10 18h10', 'M4 5l1.5-1v4', 'M4 14h3l-3 4h3'],
   taskList: ['M4 5h4v4H4z', 'M4 15h4v4H4z', 'M11 7h9', 'M11 17h9', 'M5 17l1 1 2-2'],
   quote: ['M5 6v12', 'M9 8h10', 'M9 12h10', 'M9 16h6'],
+  callout: ['M4 5h16v14H4z', 'M8 9h.01', 'M11 9h6', 'M8 13h9', 'M8 16h6'],
   codeBlock: ['M4 5h16v14H4z', 'M9 10l-2 2 2 2', 'M15 10l2 2-2 2'],
   table: ['M4 5h16v14H4z', 'M4 10h16', 'M4 15h16', 'M10 5v14'],
   horizontalRule: ['M4 12h16', 'M8 7h8', 'M8 17h8'],

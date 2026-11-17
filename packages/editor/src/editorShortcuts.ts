@@ -26,7 +26,7 @@ export type EditorAction =
  * What a Formatting toolbar control does: an editing key's action, or one without a key; `formula`
  * starts a formula of the kind the user chose last.
  */
-export type ToolboxAction = EditorAction | 'paragraph' | 'table' | 'formula';
+export type ToolboxAction = EditorAction | 'paragraph' | 'table' | 'callout' | 'formula';
 
 export interface EditorShortcut {
   readonly action: EditorAction;

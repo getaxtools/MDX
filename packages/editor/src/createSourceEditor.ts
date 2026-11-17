@@ -33,6 +33,8 @@ import {
 import { nearestLineStart, pictureLinksAt, remotePictureMarkdown } from './attachments/pictureInsertion';
 import { pictureChooserFacet } from './attachments/pictureRequests';
 import { blockMenuOpener } from './blocks/blockHandle';
+import { calloutTypeChange, type CalloutFoldSign } from './rich-text/calloutMarker';
+import { calloutTypeMenuOpener } from './rich-text/calloutTitleWidget';
 import {
   formulaInsertion,
   type FormulaKind,
@@ -46,7 +48,7 @@ import {
   startFormula,
   type FormulaEditRequest,
 } from './formulas/formulaRequests';
-import { blockAction, blockAtCaret, type BlockAction } from './blocks/blockActions';
+import { blockAction, blockAtCaret, calloutFoldAtCaret, type BlockAction } from './blocks/blockActions';
 import type { BlockKind } from './blocks/markdownBlocks';
 import { sectionChange, type SectionAction } from './blocks/outlineSections';
 import {
@@ -152,6 +154,11 @@ export interface SourceEditorOptions {
   readonly isReadOnly?: boolean;
   /** Opens the block menu at a point, for the block at the caret, from a click on Rich text's block handle. */
   readonly onOpenBlockMenu?: (point: { readonly x: number; readonly y: number }) => void;
+  /** Opens the callout type menu from a callout's icon; the choice is written back with `setCalloutType`. */
+  readonly onOpenCalloutTypeMenu?: (
+    point: { readonly x: number; readonly y: number },
+    type: { readonly from: number; readonly to: number },
+  ) => void;
 }
 
 /** A place in the text by zero-based line and column, in UTF-16 code units from the start of the line. */
@@ -195,7 +202,17 @@ export interface SourceEditor {
   /** Inserts a snippet at the selection, selecting its first field. */
   insertSnippet(expand: SnippetExpander): void;
   /** The block at the caret and where the caret is on screen, for the block menu. */
-  blockAtCaret(): { readonly kind: BlockKind; readonly x: number; readonly y: number } | undefined;
+  blockAtCaret():
+    | {
+        readonly kind: BlockKind;
+        readonly x: number;
+        readonly y: number;
+        /** For a callout: how it is written to start, which Start collapsed and Start expanded change. */
+        readonly calloutFold?: CalloutFoldSign;
+      }
+    | undefined;
+  /** The callout type menu's choice: replaces only the type word of the callout at the range. */
+  setCalloutType(range: { readonly from: number; readonly to: number }, type: string): void;
   runBlockAction(action: BlockAction): void;
   /** Adds picture links on their own lines at the line start nearest to a point, or at the caret. */
   insertPictureLinks(links: readonly string[], point?: { readonly x: number; readonly y: number }): void;
@@ -309,13 +326,11 @@ function startingExtensions(
 }
 
 /** The app's equation editor, which `$$` then Enter also opens, its picture chooser and the block menu. */
-function appDialogExtensions({
-  onEditFormula,
-  onChoosePictures,
-  onOpenBlockMenu,
-}: SourceEditorOptions): Extension {
+function appDialogExtensions(options: SourceEditorOptions): Extension {
+  const { onEditFormula, onChoosePictures, onOpenBlockMenu, onOpenCalloutTypeMenu } = options;
   return [
     onOpenBlockMenu ? blockMenuOpener.of(onOpenBlockMenu) : [],
+    onOpenCalloutTypeMenu ? calloutTypeMenuOpener.of(onOpenCalloutTypeMenu) : [],
     onEditFormula ? formulaEditorFacet.of(onEditFormula) : [],
     onEditFormula ? Prec.highest(keymap.of([{ key: 'Enter', run: startDisplayFormulaAfterDollars }])) : [],
     onChoosePictures ? pictureChooserFacet.of(onChoosePictures) : [],
@@ -508,12 +523,27 @@ function slashMenuControlOf(
 
 function blockEditingOf(
   view: EditorView,
-): Pick<SourceEditor, 'changeSection' | 'insertPictureLinks' | 'blockAtCaret' | 'runBlockAction'> {
+): Pick<
+  SourceEditor,
+  'changeSection' | 'insertPictureLinks' | 'blockAtCaret' | 'runBlockAction' | 'setCalloutType'
+> {
   return {
     blockAtCaret: () => {
       const block = blockAtCaret(view.state);
       const caret = view.coordsAtPos(view.state.selection.main.head);
-      return block && caret ? { kind: block.kind, x: caret.left, y: caret.bottom } : undefined;
+      if (!block || !caret) return undefined;
+      const calloutFold = calloutFoldAtCaret(view.state);
+      return {
+        kind: block.kind,
+        x: caret.left,
+        y: caret.bottom,
+        ...(calloutFold === undefined ? {} : { calloutFold }),
+      };
+    },
+    setCalloutType: (range, type) => {
+      const spec = calloutTypeChange(view.state, range, type);
+      if (spec) view.dispatch(spec);
+      view.focus();
     },
     runBlockAction: (action) => {
       const spec = blockAction(view.state, action);

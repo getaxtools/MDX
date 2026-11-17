@@ -38,6 +38,7 @@ export const TOOLBOX_GROUPS: readonly (readonly ToolboxControl[])[] = [
   ],
   [
     button('quote', 'editor.action.quote'),
+    button('callout', 'editor.toolbox.callout'),
     button('codeBlock', 'editor.action.codeBlock'),
     button('table', 'editor.toolbox.table'),
     button('horizontalRule', 'editor.action.horizontalRule'),

@@ -8,7 +8,6 @@ import {
   showRenderedHtmlWhenReady,
 } from './renderedWidgets';
 import {
-  CALLOUT_TITLE_CLASS,
   DIAGRAM_CLASS,
   FORMULA_CLASS,
   HTML_BLOCK_CLASS,
@@ -173,27 +172,5 @@ export class PropertiesChipWidget extends RenderedWidget {
     const chip = this.container(view, 'div', PROPERTIES_CLASS);
     chip.textContent = renderingOf(view)?.labels.properties(this.propertyCount) ?? this.source;
     return chip;
-  }
-}
-
-/** A callout's title, shown in place of its `[!type]` marker. */
-export class CalloutTitleWidget extends WidgetType {
-  constructor(private readonly title: string) {
-    super();
-  }
-
-  override eq(other: WidgetType): boolean {
-    return other instanceof CalloutTitleWidget && other.title === this.title;
-  }
-
-  toDOM(view: EditorView): HTMLElement {
-    const title = view.dom.ownerDocument.createElement('span');
-    title.className = CALLOUT_TITLE_CLASS;
-    title.textContent = this.title;
-    return title;
-  }
-
-  override ignoreEvent(): boolean {
-    return false;
   }
 }

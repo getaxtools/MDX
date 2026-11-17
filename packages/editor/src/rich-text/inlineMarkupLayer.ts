@@ -1,4 +1,4 @@
-import { syntaxTree } from '@codemirror/language';
+import { foldedRanges, syntaxTree } from '@codemirror/language';
 import type { EditorState, Range } from '@codemirror/state';
 import {
   Decoration,
@@ -105,7 +105,8 @@ function isRebuildNeeded(update: ViewUpdate): boolean {
     update.docChanged ||
     update.viewportChanged ||
     update.selectionSet ||
-    syntaxTree(update.state) !== syntaxTree(update.startState)
+    syntaxTree(update.state) !== syntaxTree(update.startState) ||
+    foldedRanges(update.state) !== foldedRanges(update.startState)
   );
 }
 

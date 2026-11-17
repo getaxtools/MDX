@@ -5,8 +5,14 @@
   import type { BlockAction } from '@mdx/editor';
   import ContextMenu from '../../components/ContextMenu.svelte';
   import { isContextMenuKey, type ContextMenuRequest } from '../../components/ContextMenuItem';
-  import { editorMenuItems, type EditorMenuChoice } from './blockMenu';
+  import {
+    calloutTypeMenuItems,
+    editorMenuItems,
+    type CalloutTypeChoice,
+    type EditorMenuChoice,
+  } from './blockMenu';
   import type {
+    CalloutFoldSign,
     EditorTextRange,
     FormattingState,
     FormulaEditRequest,
@@ -98,7 +104,11 @@
   }: Props = $props();
 
   let container: HTMLDivElement | undefined = $state();
-  let blockMenuRequest: ContextMenuRequest | undefined = $state();
+  let blockMenuRequest:
+    (ContextMenuRequest & { readonly calloutFold?: CalloutFoldSign | undefined }) | undefined = $state();
+  let calloutTypeMenu:
+    | { readonly position: ContextMenuRequest; readonly type: { readonly from: number; readonly to: number } }
+    | undefined = $state();
   let isCaretInLink = $state(false);
 
   /** Shift+F10 or the Menu key in the editor open the block menu at the caret. */
@@ -108,7 +118,18 @@
     if (!block) return;
     event.preventDefault();
     event.stopPropagation();
-    blockMenuRequest = { x: block.x, y: block.y };
+    blockMenuRequest = { x: block.x, y: block.y, calloutFold: block.calloutFold };
+  }
+
+  function chooseCalloutType(type: CalloutTypeChoice) {
+    const range = calloutTypeMenu?.type;
+    calloutTypeMenu = undefined;
+    if (range) editor?.setCalloutType(range, type);
+  }
+
+  function closeCalloutTypeMenu() {
+    calloutTypeMenu = undefined;
+    editor?.focus();
   }
 
   function chooseEditorMenuItem(choice: EditorMenuChoice) {
@@ -160,7 +181,12 @@
       onFormattingChange: (formatting: FormattingState) => onFormattingChange(formatting),
       ...(onEditFormula ? { onEditFormula: (request: FormulaEditRequest) => onEditFormula(request) } : {}),
       ...(onChoosePictures ? { onChoosePictures: () => onChoosePictures() } : {}),
-      onOpenBlockMenu: (point: { readonly x: number; readonly y: number }) => (blockMenuRequest = point),
+      onOpenBlockMenu: (point: { readonly x: number; readonly y: number }) =>
+        (blockMenuRequest = { ...point, calloutFold: editor?.blockAtCaret()?.calloutFold }),
+      onOpenCalloutTypeMenu: (
+        position: { readonly x: number; readonly y: number },
+        type: { readonly from: number; readonly to: number },
+      ) => (calloutTypeMenu = { position, type }),
       typography,
       ...(richTextRendering ? { richTextRendering } : {}),
       snippets: editorSnippets,
@@ -256,10 +282,20 @@
 {#if blockMenuRequest}
   <ContextMenu
     label={translator.translate('editor.blockMenu.label')}
-    items={editorMenuItems(translator, { isCaretInLink })}
+    items={editorMenuItems(translator, { isCaretInLink, calloutFold: blockMenuRequest.calloutFold })}
     position={blockMenuRequest}
     onChoose={chooseEditorMenuItem}
     onClose={closeBlockMenu}
+  />
+{/if}
+
+{#if calloutTypeMenu}
+  <ContextMenu
+    label={translator.translate('editor.richText.calloutType')}
+    items={calloutTypeMenuItems(translator)}
+    position={calloutTypeMenu.position}
+    onChoose={chooseCalloutType}
+    onClose={closeCalloutTypeMenu}
   />
 {/if}
 

@@ -3,6 +3,7 @@ import { EditorView, keymap } from '@codemirror/view';
 import { blockHandle } from '../blocks/blockHandle';
 import { editClickedFormula } from '../formulas/formulaRequests';
 import { blockLayer } from './blockLayer';
+import { calloutFolding } from './calloutFolds';
 import { inlineMarkupLayer } from './inlineMarkupLayer';
 import { openClickedLink } from './linkOpening';
 import { RICH_TEXT_CLASS } from './richTextClasses';
@@ -19,6 +20,7 @@ export function richTextExtensions(): Extension {
     inlineMarkupLayer,
     blockLayer,
     blockHandle(),
+    calloutFolding(),
     Prec.high(keymap.of([{ key: 'Mod-Enter', run: toggleTasksAtCaret }])),
     EditorView.domEventHandlers({
       mousedown: (event, view) =>
