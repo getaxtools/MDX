@@ -34,6 +34,7 @@ import { nearestLineStart, pictureLinksAt, remotePictureMarkdown } from './attac
 import { pictureChooserFacet } from './attachments/pictureRequests';
 import { insertPlainText, plainTextPaste } from './attachments/plainTextPaste';
 import { blockMenuOpener } from './blocks/blockHandle';
+import { formulaPasteNotice, pasteFormulas } from './formula-paste/formulaPaste';
 import { calloutTypeChange, type CalloutFoldSign } from './rich-text/calloutMarker';
 import { calloutTypeMenuOpener } from './rich-text/calloutTitleWidget';
 import {
@@ -656,7 +657,8 @@ function editorExtensions(options: SourceEditorOptions): Extension[] {
     // An explicit tab stop lets checkers see that the scrolling editor can be reached with the keyboard.
     EditorView.contentAttributes.of({ 'aria-label': options.label, spellcheck: 'false', tabindex: '0' }),
     ...editorKeymaps(),
-    EditorView.domEventHandlers({ paste: (event, view) => pastePictures(event, view, options) }),
+    formulaPasteNotice(),
+    EditorView.domEventHandlers({ paste: (event, view) => pasteInOrder(event, view, options) }),
     EditorView.updateListener.of((update) => reportChanges(update, options)),
   ];
 }
@@ -737,17 +739,30 @@ function multipleCursors(): Extension[] {
   ];
 }
 
-/** Pasted picture files are saved next to the document; pasted remote pictures become links. */
-function pastePictures(event: ClipboardEvent, view: EditorView, options: SourceEditorOptions): boolean {
+/**
+ * A paste runs the first handler that applies: Ctrl+Shift+V's plain text (handled before this),
+ * picture files, formulas, remote pictures, then the default paste.
+ */
+function pasteInOrder(event: ClipboardEvent, view: EditorView, options: SourceEditorOptions): boolean {
+  return (
+    pastePictureFiles(event, view, options) || pasteFormulas(event, view) || pasteRemotePictures(event, view)
+  );
+}
+
+/** Pasted picture files are saved next to the document. */
+function pastePictureFiles(event: ClipboardEvent, view: EditorView, options: SourceEditorOptions): boolean {
+  const pictures = [...(event.clipboardData?.files ?? [])].filter((file) => file.type.startsWith('image/'));
+  const { onPastePicture } = options;
+  if (pictures.length === 0 || !onPastePicture) return false;
+  event.preventDefault();
+  for (const picture of pictures) void insertPastedPicture(view, picture, onPastePicture);
+  return true;
+}
+
+/** Pasted HTML that holds only remote pictures becomes links to them. */
+function pasteRemotePictures(event: ClipboardEvent, view: EditorView): boolean {
   const clipboard = event.clipboardData;
   if (!clipboard) return false;
-  const pictures = [...clipboard.files].filter((file) => file.type.startsWith('image/'));
-  const { onPastePicture } = options;
-  if (pictures.length > 0 && onPastePicture) {
-    event.preventDefault();
-    for (const picture of pictures) void insertPastedPicture(view, picture, onPastePicture);
-    return true;
-  }
   const remoteLinks = remotePictureMarkdown(clipboard.getData('text/html'), (html) =>
     new globalThis.DOMParser().parseFromString(html, 'text/html'),
   );

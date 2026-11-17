@@ -168,6 +168,9 @@ importers:
       '@lezer/highlight':
         specifier: 1.2.5
         version: 1.2.5
+      mathml-to-latex:
+        specifier: 1.8.0
+        version: 1.8.0
 
   packages/i18n:
     dependencies:
@@ -892,6 +895,10 @@ packages:
   '@wdio/utils@9.33.1':
     resolution: {integrity: sha512-NEjrHeJmxdxBPJWb0XfaTtGNm19TWAFzyAZuefht0gPSFWVY1yymU3vcVonzZ+jzhCwpfeeFeCHeoOXD9JxLTw==}
     engines: {node: '>=18.20.8 <19 || >=20.20.2 <21 || >=22.23.4 <23 || >=24.22.1 <25 || >=26.12.1'}
+
+  '@xmldom/xmldom@0.9.12':
+    resolution: {integrity: sha512-5AXjrcMClTryPe9LgZrygpB1lj7s0S9E0+W+AHaVKAVyHanafK86iPSvG5xHVSp/jC+VH1UXu0TAEmY279xH7A==}
+    engines: {node: '>=14.6'}
 
   '@zip.js/zip.js@2.24.0':
     resolution: {integrity: sha512-WlaVKzdqBK+RF3bdiXZWbdCnvGB6PdO4IHC1mn/2Yfl3bASgqUNegnU3+PNg61iecwoPfUi5BgLUPqBukXpyWw==}
@@ -1784,6 +1791,9 @@ packages:
   markdown-it@15.0.3:
     resolution: {integrity: sha512-+Az7Ojz3iRGu8KYMvJ6xVhvrxP3eE+vEtJX75Ow88XBpcQNV/0lGX5ZynIIBftREo4DC2jsveAMDaeltmm8QvQ==}
     hasBin: true
+
+  mathml-to-latex@1.8.0:
+    resolution: {integrity: sha512-gQ0uK3zqB8HwlfaXJkEL5rgaZNbKUiBMmBP/B/W+b+t6KcseLSuYb1b0BjLgS9ZiQa24ePkqTX8/6FaQuDL7wQ==}
 
   mdast-util-to-hast@13.2.1:
     resolution: {integrity: sha512-cctsq2wp5vTsLIcaymblUriiTcZd0CwWtCbLvrOzYCDZoWyMNV8sZ7krj09FSnsiJi3WVsHLM4k6Dq/yaPyCXA==}
@@ -3229,6 +3239,8 @@ snapshots:
       - supports-color
       - yauzl
 
+  '@xmldom/xmldom@0.9.12': {}
+
   '@zip.js/zip.js@2.24.0': {}
 
   abort-controller@3.0.0:
@@ -4106,6 +4118,10 @@ snapshots:
       mdurl: 2.1.0
       punycode.js: 2.3.1
       uc.micro: 3.0.0
+
+  mathml-to-latex@1.8.0:
+    dependencies:
+      '@xmldom/xmldom': 0.9.12
 
   mdast-util-to-hast@13.2.1:
     dependencies:

@@ -58,6 +58,21 @@ export class MainWindowPage {
     );
   }
 
+  /**
+   * Pastes clipboard data into the focused editor. The driver's Ctrl+V is a synthetic key press,
+   * which never reads the clipboard, so the paste event the browser would fire is sent instead.
+   */
+  async pasteIntoFocusedEditor(data: Readonly<Record<string, string>>): Promise<void> {
+    await this.browser.execute((clipboardData) => {
+      const transfer = new DataTransfer();
+      for (const [type, value] of Object.entries(clipboardData)) transfer.setData(type, value);
+      const target = document.activeElement ?? document.body;
+      target.dispatchEvent(
+        new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }),
+      );
+    }, data);
+  }
+
   /** Types into the focused text field the way an input method inserts text. */
   async typeInFocusedField(text: string): Promise<void> {
     await this.browser.execute((typedText) => {

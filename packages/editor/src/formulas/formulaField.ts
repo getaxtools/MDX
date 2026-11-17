@@ -2,6 +2,7 @@ import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { EditorState, StateEffect, StateField, type Extension } from '@codemirror/state';
 import { Decoration, EditorView, keymap, type DecorationSet } from '@codemirror/view';
+import { formulaFieldPaste, type FormulaTypesetCheck } from '../formula-paste/formulaFieldPaste';
 import { isComposing } from '../rich-text/compositionHold';
 import { snippetFields, snippetInsertion } from '../snippets/snippetFields';
 import { automaticFractions } from './automaticFractions';
@@ -26,6 +27,8 @@ export interface FormulaFieldOptions {
   readonly suggestions?: FormulaSuggestions;
   /** Whether a slash after a term makes a fraction; off when not given. */
   readonly isAutomaticFractionOn?: () => boolean;
+  /** Checks a pasted formula with the typesetter before its TeX is inserted; unchecked when not given. */
+  readonly isFormulaTypeset?: FormulaTypesetCheck;
 }
 
 /** The equation editor's TeX source field. */
@@ -113,6 +116,7 @@ function fieldExtensions(options: FormulaFieldOptions): Extension[] {
       spellcheck: 'false',
     }),
     fieldKeymap(options),
+    formulaFieldPaste(options.isFormulaTypeset),
     EditorView.updateListener.of((update) => {
       if (update.docChanged) options.onChange(update.state.doc.toString());
     }),

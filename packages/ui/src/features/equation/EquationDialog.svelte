@@ -145,6 +145,8 @@
       phrases: editorPhrases(translator),
       suggestions: { commands: SUPPORTED_TEX_COMMANDS, typeset: typesetSuggestion },
       isAutomaticFractionOn: () => isFractionOn,
+      isFormulaTypeset: async (source, isDisplay) =>
+        (await previewFormula(source, isDisplay)).kind === 'typeset',
     });
     field.focus();
     void previewer.renderNow(

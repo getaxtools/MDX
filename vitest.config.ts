@@ -1,6 +1,20 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { svelteTesting } from '@testing-library/svelte/vite';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
+
+// The MathML converter runs with a shim over the browser's parser in place of `@xmldom/xmldom`, as
+// in the app; inlining the converter lets the alias reach its import.
+const XMLDOM_SHIM = {
+  resolve: {
+    alias: {
+      '@xmldom/xmldom': fileURLToPath(
+        new URL('./packages/editor/src/formula-paste/xmldomShim.ts', import.meta.url),
+      ),
+    },
+  },
+};
+const CONVERTER_INLINED = { server: { deps: { inline: ['mathml-to-latex'] } } };
 
 export default defineConfig({
   test: {
@@ -16,9 +30,19 @@ export default defineConfig({
           environment: 'jsdom',
         },
       },
-      { test: { name: 'editor', include: ['packages/editor/src/**/*.test.ts'], environment: 'jsdom' } },
       {
+        ...XMLDOM_SHIM,
         test: {
+          name: 'editor',
+          include: ['packages/editor/src/**/*.test.ts'],
+          environment: 'jsdom',
+          ...CONVERTER_INLINED,
+        },
+      },
+      {
+        ...XMLDOM_SHIM,
+        test: {
+          ...CONVERTER_INLINED,
           name: 'freeze-compat',
           include: ['tests/freeze-compat/**/*.test.ts'],
           environment: 'jsdom',
@@ -27,8 +51,10 @@ export default defineConfig({
         },
       },
       {
+        ...XMLDOM_SHIM,
         plugins: [svelte(), svelteTesting()],
         test: {
+          ...CONVERTER_INLINED,
           name: 'ui',
           include: ['packages/ui/src/**/*.test.ts', 'apps/desktop/src/**/*.test.ts'],
           environment: 'jsdom',

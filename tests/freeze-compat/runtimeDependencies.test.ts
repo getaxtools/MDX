@@ -6,6 +6,7 @@ import {
   createRichBlockRenderer,
 } from '@mdx/renderer';
 import { describe, expect, it, vi } from 'vitest';
+import { texOfMathml } from '../../packages/editor/src/formula-paste/mathmlToTex';
 
 const DOCUMENT_WITH_EVERY_PLUGIN = [
   '# Title',
@@ -93,5 +94,11 @@ describe('runtime dependencies with a frozen prototype', () => {
     }
     expect(page.body.textContent).toContain('😄');
     expect(page.body.textContent).toContain('The note.');
+  });
+
+  it('MathML converter loads and converts with the prototype frozen', async () => {
+    const fraction = '<math><mfrac><mi>x</mi><mn>2</mn></mfrac></math>';
+
+    expect(await texOfMathml(fraction)).toBe(String.raw`\frac{x}{2}`);
   });
 });

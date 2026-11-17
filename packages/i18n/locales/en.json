@@ -274,6 +274,8 @@
   "menu.edit.pastePlainText": "Paste as Plain Text",
   "editor.pastePlainText.tooLarge": "The clipboard text is larger than 1 MB, so it was not pasted.",
   "editor.pastePlainText.failed": "The clipboard text could not be read.",
+  "editor.formulaPaste.notice": "Pasted as equation",
+  "editor.formulaPaste.pasteAsText": "Paste as text",
   "menu.edit.insert": "Insert",
   "menu.edit.insertMath": "Math…",
   "menu.view.toggleStatusBar": "Show Status Bar",
