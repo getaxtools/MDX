@@ -1,6 +1,7 @@
 import {
   filterIgnoredFindings,
   ignoreEntryFor,
+  isProtectedLocation,
   isSidebarViewShown,
   Ruleset,
   type DocumentOrigin,
@@ -116,7 +117,8 @@ export class InjectionCheckActions {
 
   /** The active document after it was drawn: another document, or the same one saved or reloaded. */
   documentShown(opened: OpenedDocument | undefined, text: string | undefined): void {
-    if (!opened || text === undefined) {
+    // A protected note is never checked, so no finding, excerpt or ignore entry of it is ever kept.
+    if (!opened || text === undefined || isProtectedLocation(opened.location)) {
       this.forget();
       return;
     }

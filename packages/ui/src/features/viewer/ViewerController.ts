@@ -1,4 +1,5 @@
 import {
+  isProtectedLocation,
   measureDocument,
   availableSnippets,
   clearWordGoal,
@@ -2293,7 +2294,7 @@ export class ViewerController {
     const shown = session.shownWorkspace();
     const title = windowTitleFor(
       {
-        documentName: activeDocument?.fileName,
+        documentName: activeDocument && windowDocumentName(activeDocument, translator),
         workspaceName: shown ? workspaceNameOf(shown, translator) : undefined,
       },
       translator,
@@ -2302,4 +2303,9 @@ export class ViewerController {
     this.shownWindowTitle = title;
     void desktopShell?.setWindowTitle(title);
   }
+}
+
+/** A protected note never puts its title in the window title, which Windows shows in many places. */
+function windowDocumentName(document: RenderedActiveDocument, translator: Translator): string {
+  return isProtectedLocation(document) ? translator.translate('window.protectedNote') : document.fileName;
 }
