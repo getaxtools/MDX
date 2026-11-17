@@ -208,6 +208,7 @@
       editor = created;
       const startingEditor = created;
       globalThis.requestAnimationFrame(() => {
+        if (isClosed) return;
         startingEditor.scrollToRatio(untrack(() => scrollRatio));
         onReady(startingEditor);
       });

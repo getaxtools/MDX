@@ -138,6 +138,28 @@ describe('SourceEditorPane', () => {
     expect(textBox.textContent).toContain('# Guide');
   });
 
+  it('an editor closed before its first frame does not report itself ready', async () => {
+    const heldFrames: FrameRequestCallback[] = [];
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((frame) => heldFrames.push(frame));
+    const onReady = vi.fn();
+    const { unmount } = render(SourceEditorPane, {
+      canonicalKey: KEY,
+      fileName: 'Guide.md',
+      text: '# Guide\n',
+      zoomPercent: 100,
+      translator: createTranslator(),
+      onChange: vi.fn(),
+      onReady,
+    });
+    await screen.findByRole('textbox', { name: 'Source of Guide.md' }, EDITOR_LOAD_WAIT);
+
+    unmount();
+    for (const frame of heldFrames.splice(0)) frame(0);
+
+    expect(onReady.mock.calls.at(-1)).toEqual([undefined]);
+    vi.restoreAllMocks();
+  });
+
   it('shows text reloaded from disk and reports it as the current text', async () => {
     const { props, rerender, onChange } = renderPane();
     const textBox = await screen.findByRole('textbox', { name: 'Source of Guide.md' });
