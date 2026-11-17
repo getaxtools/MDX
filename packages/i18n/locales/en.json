@@ -135,6 +135,8 @@
   "toolbar.label": "Document actions",
   "sidebar.label": "Explorer",
   "sidebar.resize": "Resize Explorer",
+  "sidebar.hide": "Hide side bar",
+  "sidebar.show": "Show side bar",
   "sidebar.open": "Open",
   "find.label": "Find in document",
   "menu.file.exportAsHtml": "Export as HTML…",

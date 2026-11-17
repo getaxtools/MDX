@@ -8,6 +8,7 @@
   import type { PathCommand } from '../file-paths/pathCommands';
   import type { TabCommand } from './tabCommands';
   import { commandForTabMenuItem, tabContextMenuItems, type TabMenuItemId } from './tabContextMenu';
+  import SidebarToggleButton from '../view/SidebarToggleButton.svelte';
 
   interface Props {
     tabs: readonly Tab[];
@@ -17,6 +18,8 @@
     translator: Translator;
     onActivate: (canonicalKey: string) => void;
     onCommand: (command: TabCommand | PathCommand) => void;
+    /** Given while the side bar is hidden: the strip then starts with Show side bar. */
+    onShowSidebar?: (() => void) | undefined;
   }
 
   const {
@@ -27,6 +30,7 @@
     translator,
     onActivate,
     onCommand,
+    onShowSidebar,
   }: Props = $props();
 
   function isMissing(tab: Tab): boolean {
@@ -115,51 +119,56 @@
 
 <svelte:window onpointerup={finishDrag} />
 
-<div class="tab-strip" data-focus-region role="tablist" aria-label={translator.translate('tabs.label')}>
-  {#each tabs as tab, index (tab.location.canonicalKey)}
-    {@const isActive = tab.location.canonicalKey === activeKey}
-    <div
-      class="tab"
-      class:active={isActive}
-      class:pinned={tab.isPinned}
-      class:missing={isMissing(tab)}
-      role="presentation"
-      onpointerenter={() => markDropTarget(index)}
-    >
-      <button
-        bind:this={tabButtons[index]}
-        class="tab-label"
-        role="tab"
-        aria-selected={isActive}
-        tabindex={isActive ? 0 : -1}
-        title={isMissing(tab)
-          ? translator.translate('tabs.status.missing', { fileName: tab.location.displayPath })
-          : tab.location.displayPath}
-        onclick={() => onActivate(tab.location.canonicalKey)}
-        onkeydown={(event) => handleKeydown(event, index)}
-        onauxclick={(event) => handleAuxClick(event, tab.location.canonicalKey)}
-        oncontextmenu={(event) => openMenu(event, index)}
-        onpointerdown={(event) => startDrag(event, tab.location.canonicalKey)}
+<div class="tab-row" data-focus-region>
+  {#if onShowSidebar}
+    <SidebarToggleButton action="show" {translator} onToggle={() => onShowSidebar()} />
+  {/if}
+  <div class="tab-strip" role="tablist" aria-label={translator.translate('tabs.label')}>
+    {#each tabs as tab, index (tab.location.canonicalKey)}
+      {@const isActive = tab.location.canonicalKey === activeKey}
+      <div
+        class="tab"
+        class:active={isActive}
+        class:pinned={tab.isPinned}
+        class:missing={isMissing(tab)}
+        role="presentation"
+        onpointerenter={() => markDropTarget(index)}
       >
-        {#if tab.isPinned}<span class="pin" aria-hidden="true">📌</span>{/if}
-        {labelOf(tab)}
-        {#if unsavedKeys.has(tab.location.canonicalKey)}
-          <span class="unsaved-dot" aria-hidden="true">●</span>
-          <span class="visually-hidden">{translator.translate('tabs.status.unsavedHint')}</span>
-        {/if}
-      </button>
-      <!-- A tab list may only contain tabs, so keyboard and screen reader users close tabs with Ctrl+W instead. -->
-      <button
-        class="tab-close"
-        tabindex="-1"
-        aria-hidden="true"
-        title={translator.translate('tabs.closeTab', { fileName: tab.location.fileName })}
-        onclick={() => onCommand({ kind: 'closeTab', canonicalKey: tab.location.canonicalKey })}
-      >
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" /></svg>
-      </button>
-    </div>
-  {/each}
+        <button
+          bind:this={tabButtons[index]}
+          class="tab-label"
+          role="tab"
+          aria-selected={isActive}
+          tabindex={isActive ? 0 : -1}
+          title={isMissing(tab)
+            ? translator.translate('tabs.status.missing', { fileName: tab.location.displayPath })
+            : tab.location.displayPath}
+          onclick={() => onActivate(tab.location.canonicalKey)}
+          onkeydown={(event) => handleKeydown(event, index)}
+          onauxclick={(event) => handleAuxClick(event, tab.location.canonicalKey)}
+          oncontextmenu={(event) => openMenu(event, index)}
+          onpointerdown={(event) => startDrag(event, tab.location.canonicalKey)}
+        >
+          {#if tab.isPinned}<span class="pin" aria-hidden="true">📌</span>{/if}
+          {labelOf(tab)}
+          {#if unsavedKeys.has(tab.location.canonicalKey)}
+            <span class="unsaved-dot" aria-hidden="true">●</span>
+            <span class="visually-hidden">{translator.translate('tabs.status.unsavedHint')}</span>
+          {/if}
+        </button>
+        <!-- A tab list may only contain tabs, so keyboard and screen reader users close tabs with Ctrl+W instead. -->
+        <button
+          class="tab-close"
+          tabindex="-1"
+          aria-hidden="true"
+          title={translator.translate('tabs.closeTab', { fileName: tab.location.fileName })}
+          onclick={() => onCommand({ kind: 'closeTab', canonicalKey: tab.location.canonicalKey })}
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" /></svg>
+        </button>
+      </div>
+    {/each}
+  </div>
 </div>
 {#if menuRequest && menuTab}
   <ContextMenu
@@ -176,12 +185,18 @@
 {/if}
 
 <style>
-  .tab-strip {
+  .tab-row {
     display: flex;
     flex: none;
     min-height: 36px;
     background: var(--color-surface);
     box-shadow: inset 0 -1px 0 var(--color-border);
+  }
+
+  .tab-strip {
+    display: flex;
+    flex: 1;
+    min-width: 0;
     overflow-x: auto;
     scrollbar-width: thin;
   }

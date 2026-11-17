@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { WorkspaceKindId } from '@mdx/core';
+  import type { Snippet } from 'svelte';
   import type { Translator } from '@mdx/i18n';
   import KindIcon from '../control-wheel/KindIcon.svelte';
   import { KIND_ICONS, kindNameOf } from '../control-wheel/kindPresentation';
@@ -14,9 +15,11 @@
     shortcutLabel: string | undefined;
     translator: Translator;
     onSwitch: () => void;
+    /** Buttons at the end of the header, such as Hide side bar. */
+    actions?: Snippet | undefined;
   }
 
-  const { name, kindId, icon, colour, shortcutLabel, translator, onSwitch }: Props = $props();
+  const { name, kindId, icon, colour, shortcutLabel, translator, onSwitch, actions }: Props = $props();
 
   const iconPaths = $derived(workspaceIconPathsOf(icon, KIND_ICONS[kindId]));
   const colourValue = $derived(colourValueOf(colour));
@@ -37,10 +40,14 @@
     {#if colourValue}<span class="swatch" style:background={colourValue}></span>{/if}
     <span class="name">{name}</span>
   </button>
+  {@render actions?.()}
 </div>
 
 <style>
   .workspace-header {
+    display: flex;
+    gap: var(--space-1);
+    align-items: center;
     padding: var(--space-1) var(--space-2);
     border-block-end: 1px solid var(--color-border);
     border-inline-end: 1px solid var(--color-border);
@@ -49,9 +56,10 @@
 
   .workspace-button {
     display: flex;
+    flex: 1;
     align-items: center;
     gap: var(--space-2);
-    width: 100%;
+    min-width: 0;
     min-height: 28px;
     padding: 0 var(--space-2);
     border: none;

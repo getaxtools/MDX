@@ -134,6 +134,60 @@ describe('ViewerApp', () => {
     expect(screen.getByRole('region', { name: 'Favourites' })).toBeTruthy();
   });
 
+  describe('side bar buttons', () => {
+    it('the header button hides the side bar', async () => {
+      await renderViewer([GUIDE]);
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Hide side bar' }));
+
+      expect(screen.queryByRole('region', { name: 'Favourites' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Explorer' }).getAttribute('aria-pressed')).toBe('false');
+      expect(screen.getByRole('button', { name: 'Show side bar' })).toBeTruthy();
+    });
+
+    it('the tab strip button shows the side bar', async () => {
+      await renderViewer([GUIDE]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Hide side bar' }));
+
+      await userEvent.click(screen.getByRole('button', { name: 'Show side bar' }));
+
+      expect(screen.getByRole('region', { name: 'Favourites' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Show side bar' })).toBeNull();
+    });
+
+    it('focus moves to the document when the side bar hides', async () => {
+      await renderViewer([GUIDE]);
+      const article = await screen.findByRole('article', { name: 'Guide.md' });
+      screen.getByRole('button', { name: 'Hide side bar' }).focus();
+
+      await userEvent.keyboard('{Enter}');
+
+      await vi.waitFor(() => expect(document.activeElement).toBe(article.closest('main')));
+    });
+
+    it('the activity bar button is pressed only while the side bar is shown', async () => {
+      await renderViewer([GUIDE]);
+      const explorerButton = await screen.findByRole('button', { name: 'Explorer' });
+      expect(explorerButton.getAttribute('aria-pressed')).toBe('true');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Hide side bar' }));
+      expect(explorerButton.getAttribute('aria-pressed')).toBe('false');
+      await userEvent.click(screen.getByRole('button', { name: 'Show side bar' }));
+
+      expect(explorerButton.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('hides the side bar whatever view it shows', async () => {
+      await renderViewer([GUIDE]);
+      await userEvent.keyboard('{Control>}{Shift>}O{/Shift}{/Control}');
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Hide side bar' }));
+
+      expect(screen.getByRole('button', { name: 'Show side bar' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Outline' }).getAttribute('aria-pressed')).toBe('false');
+    });
+  });
+
   it('turns cells pasted with Ctrl+Alt+V into a new document that cannot be starred until saved', async () => {
     await renderViewer();
 

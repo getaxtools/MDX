@@ -33,6 +33,8 @@ export type ViewCommand =
   | { readonly kind: 'setTypography'; readonly typography: Typography }
   | { readonly kind: 'setLanguage'; readonly language: LanguagePreference }
   | { readonly kind: 'toggleSidebar' }
+  | { readonly kind: 'hideSidebar' }
+  | { readonly kind: 'showSidebar' }
   | { readonly kind: 'toggleSidebarView'; readonly sidebarView: SidebarView }
   | { readonly kind: 'toggleOutline' }
   | { readonly kind: 'toggleStatusBar' }
@@ -71,6 +73,8 @@ const VIEW_COMMAND_HANDLERS: ViewCommandHandlers = {
   setTypography: (settings, { typography }) => ({ ...settings, typography }),
   setLanguage: (settings, { language }) => ({ ...settings, language }),
   toggleSidebar: (settings) => toggleSidebarView(settings, 'explorer'),
+  hideSidebar: (settings) => ({ ...settings, isSidebarVisible: false }),
+  showSidebar: (settings) => ({ ...settings, isSidebarVisible: true }),
   toggleSidebarView: (settings, { sidebarView }) => toggleSidebarView(settings, sidebarView),
   toggleOutline: (settings) => toggleSidebarView(settings, 'outline'),
   toggleStatusBar: (settings) => ({ ...settings, isStatusBarVisible: !settings.isStatusBarVisible }),

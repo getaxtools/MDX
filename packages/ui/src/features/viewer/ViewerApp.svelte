@@ -31,7 +31,7 @@
   } from '@mdx/editor';
   import type { Translator } from '@mdx/i18n';
   import type { CodeHighlighter, OutlineEntry, RichBlockRenderer } from '@mdx/renderer';
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import CommandPalette from '../command-palette/CommandPalette.svelte';
   import { paletteCommands } from '../command-palette/paletteCommands';
   import ExplorerSidebar from '../explorer/ExplorerSidebar.svelte';
@@ -91,7 +91,8 @@
   import StatusBar from '../view/StatusBar.svelte';
   import DocumentToolbar from '../view/DocumentToolbar.svelte';
   import NoticeBar from './NoticeBar.svelte';
-  import { moveFocusBetweenRegions } from './focusRegions';
+  import { focusRegionOf, moveFocusBetweenRegions } from './focusRegions';
+  import SidebarToggleButton from '../view/SidebarToggleButton.svelte';
   import { COMMAND_SHORTCUTS, commandForShortcut, shortcutLabelFor } from '../shortcuts/commandShortcuts';
   import { effectiveCommandShortcuts } from '../shortcuts/effectiveCommandShortcuts';
   import type { ControlWheelButton } from '../view/ControlWheelButton';
@@ -247,6 +248,14 @@
 
   /** Widths while a splitter is dragged; the settings keep the width once the drag ends. */
   let draggedPanelWidths: Partial<Record<ResizablePanel, number | undefined>> = $state({});
+
+  /** Hiding from the keyboard puts the focus in the document, not on the window. */
+  async function hideSidebar(isFromKeyboard: boolean) {
+    await controller.execute({ kind: 'hideSidebar' });
+    if (!isFromKeyboard) return;
+    await tick();
+    focusRegionOf(globalThis.document.querySelector('.reading-area'));
+  }
 
   function shownPanelWidth(panel: ResizablePanel): number {
     const dragged = draggedPanelWidths[panel];
@@ -414,7 +423,23 @@
               shortcutLabel={shortcutLabelFor({ kind: 'showWorkspaceSwitcher' }, translator, shortcuts)}
               {translator}
               onSwitch={() => void controller.execute({ kind: 'showWorkspaceSwitcher' })}
-            />
+            >
+              {#snippet actions()}
+                <SidebarToggleButton
+                  action="hide"
+                  {translator}
+                  onToggle={(isFromKeyboard: boolean) => void hideSidebar(isFromKeyboard)}
+                />
+              {/snippet}
+            </WorkspaceButton>
+          {:else}
+            <div class="sidebar-header">
+              <SidebarToggleButton
+                action="hide"
+                {translator}
+                onToggle={(isFromKeyboard: boolean) => void hideSidebar(isFromKeyboard)}
+              />
+            </div>
           {/if}
           {#if viewSettings.sidebarView === 'search'}
             <FolderSearchPanel
@@ -495,6 +520,9 @@
           {translator}
           onActivate={(canonicalKey: string) => controller.activateTab(canonicalKey)}
           onCommand={(command: ViewerCommand) => void controller.execute(command)}
+          onShowSidebar={viewSettings.isSidebarVisible
+            ? undefined
+            : () => void controller.execute({ kind: 'showSidebar' })}
         />
         <div class="document-header">
           {#if viewSettings.isBreadcrumbsVisible && activeTab && snapshot.activeDocument}
@@ -979,6 +1007,15 @@
     display: grid;
     grid-template-columns: auto var(--explorer-width) auto 1fr;
     min-height: 0;
+  }
+
+  .sidebar-header {
+    display: flex;
+    justify-content: flex-end;
+    padding: var(--space-1) var(--space-2);
+    border-block-end: 1px solid var(--color-border);
+    border-inline-end: 1px solid var(--color-border);
+    background: var(--color-surface);
   }
 
   .sidebar-column {

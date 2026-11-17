@@ -42,6 +42,16 @@ describe('view commands', () => {
     expect(applyViewCommand(withoutSidebar, { kind: 'zoomOut' }).zoomPercent).toBe(100);
   });
 
+  it('hides the side bar whatever it shows, and shows the same view again', () => {
+    const outline = { ...DEFAULT_VIEW_SETTINGS, sidebarView: 'outline' as const };
+
+    const hidden = applyViewCommand(outline, { kind: 'hideSidebar' });
+    const shown = applyViewCommand(hidden, { kind: 'showSidebar' });
+
+    expect(hidden).toMatchObject({ isSidebarVisible: false, sidebarView: 'outline' });
+    expect(shown).toMatchObject({ isSidebarVisible: true, sidebarView: 'outline' });
+  });
+
   it('sets the zoom to a chosen step', () => {
     expect(applyViewCommand(DEFAULT_VIEW_SETTINGS, { kind: 'setZoom', zoomPercent: 150 }).zoomPercent).toBe(
       150,

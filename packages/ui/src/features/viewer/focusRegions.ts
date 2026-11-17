@@ -36,6 +36,13 @@ function wrappedIndex(currentIndex: number, offset: number, count: number): numb
   return (((start + offset) % count) + count) % count;
 }
 
+/** Focuses what F6 would focus in the region around an element; false when there is nothing to focus. */
+export function focusRegionOf(element: Element | null): boolean {
+  const target = focusTargetIn(element?.closest(`[${FOCUS_REGION_ATTRIBUTE}]`) ?? undefined);
+  target?.focus();
+  return target !== undefined;
+}
+
 function focusTargetIn(region: Element | undefined): HTMLElement | undefined {
   if (!region) return undefined;
   for (const selector of FOCUS_TARGET_SELECTORS) {
