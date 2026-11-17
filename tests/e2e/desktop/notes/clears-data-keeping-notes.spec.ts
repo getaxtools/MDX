@@ -57,12 +57,9 @@ describe('Clear All Data in a Notes workspace', () => {
 
   async function searchUntilFound(query: string, expectedNote: string): Promise<void> {
     await mainWindow.pressShortcut('Ctrl+Shift+F');
-    const input = app.browser.$('input[type="search"][aria-label="Search in folders"]');
     await app.browser.waitUntil(
       async () => {
-        await input.setValue(query);
-        await mainWindow.pressKeyOn(input, 'Enter');
-        const found = await app.browser.$$('.folder-search .results .document').map((note) => note.getText());
+        const found = await mainWindow.searchedDocumentNames(query);
         return found.includes(expectedNote);
       },
       { timeout: INDEX_WAIT_MS },

@@ -350,6 +350,22 @@ export class MainWindowPage {
     }));
   }
 
+  /**
+   * Searches in the side bar's Search view and gives the names of the documents found, read only
+   * once that search has finished: a read while it runs finds the list empty.
+   */
+  async searchedDocumentNames(query: string): Promise<string[]> {
+    const input = this.browser.$('input[type="search"][aria-label="Search in folders"]');
+    if ((await input.getValue()) !== query) await input.setValue(query);
+    await this.pressKeyOn(input, 'Enter');
+    const status = this.browser.$('.folder-search .status');
+    const searching = translator.translate('folderSearch.searching');
+    await this.browser.waitUntil(async () => !(await status.getText()).includes(searching), {
+      timeoutMsg: `The search for "${query}" never finished`,
+    });
+    return this.browser.$$('.folder-search .results .document').map((document) => document.getText());
+  }
+
   /** Presses a key on one element, whatever has the focus. */
   async pressKeyOn(element: ChainablePromiseElement, key: string): Promise<void> {
     await this.browser.execute(

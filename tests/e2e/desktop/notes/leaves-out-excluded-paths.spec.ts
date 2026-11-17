@@ -58,12 +58,9 @@ describe('excluded paths in a Notes workspace', () => {
   /** Searches until exactly these notes are found, as the index builds in the background. */
   async function searchUntilFound(query: string, expectedNotes: readonly string[]): Promise<void> {
     await mainWindow.pressShortcut('Ctrl+Shift+F');
-    const input = app.browser.$('input[type="search"][aria-label="Search in folders"]');
     await app.browser.waitUntil(
       async () => {
-        await input.setValue(query);
-        await mainWindow.pressKeyOn(input, 'Enter');
-        const found = await app.browser.$$('.folder-search .results .document').map((note) => note.getText());
+        const found = await mainWindow.searchedDocumentNames(query);
         return JSON.stringify([...found].sort()) === JSON.stringify([...expectedNotes].sort());
       },
       { timeout: SEARCH_WAIT_MS },

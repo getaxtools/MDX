@@ -69,12 +69,9 @@ describe('searching notes', () => {
     expectedNotes: readonly string[],
     { timeoutMs = SEARCH_WAIT_MS }: { timeoutMs?: number } = {},
   ): Promise<void> {
-    const input = app.browser.$('input[type="search"][aria-label="Search in folders"]');
     await app.browser.waitUntil(
       async () => {
-        await input.setValue(query);
-        await mainWindow.pressKeyOn(input, 'Enter');
-        const found = await app.browser.$$('.folder-search .results .document').map((note) => note.getText());
+        const found = await mainWindow.searchedDocumentNames(query);
         return JSON.stringify([...found].sort()) === JSON.stringify([...expectedNotes].sort());
       },
       { timeout: timeoutMs },

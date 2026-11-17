@@ -67,12 +67,9 @@ describe('wiki-link suggestions while editing a note', () => {
   /** The index builds in the background; a search finding the notes says it is done. */
   async function waitUntilIndexed(): Promise<void> {
     await mainWindow.pressShortcut('Ctrl+Shift+F');
-    const input = app.browser.$('input[type="search"][aria-label="Search in folders"]');
     await app.browser.waitUntil(
       async () => {
-        await input.setValue('ship');
-        await mainWindow.pressKeyOn(input, 'Enter');
-        const found = await app.browser.$$('.folder-search .results .document').map((note) => note.getText());
+        const found = await mainWindow.searchedDocumentNames('ship');
         return found.includes('Plan.md');
       },
       { timeout: INDEX_WAIT_MS },
