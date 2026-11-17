@@ -1,3 +1,4 @@
+import { forceParsing } from '@codemirror/language';
 import { EditorView } from '@codemirror/view';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createSourceEditor, type SourceEditor, type SourceEditorOptions } from '../createSourceEditor';
@@ -25,6 +26,7 @@ function spellcheckOf(view: EditorView): string | null {
   return view.contentDOM.getAttribute('spellcheck');
 }
 
+const FULL_PARSE_TIMEOUT_MS = 5000;
 const APP_DEFAULTS = { isInRichText: true, isInSource: false };
 
 const DOCUMENT = [
@@ -79,6 +81,8 @@ describe('spell check in the editor', () => {
 
   it('code, inline code, math, URLs, front matter and HTML are excluded', () => {
     const { view } = openEditor({ editingMode: 'source', text: DOCUMENT });
+    // The editor parses in short slices and finishes in the background; this test needs all of it.
+    forceParsing(view, view.state.doc.length, FULL_PARSE_TIMEOUT_MS);
 
     const excluded = nonProseRanges(view.state, { from: 0, to: view.state.doc.length }).map(({ from, to }) =>
       view.state.sliceDoc(from, to),

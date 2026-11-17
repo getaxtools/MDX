@@ -15,6 +15,8 @@ interface FoundMath {
 }
 
 const PARSE_TIMEOUT_MS = 5000;
+/** The property parses and renders a hundred documents, which takes longer than one test usually may on a busy machine. */
+const PROPERTY_TEST_TIMEOUT_MS = 30_000;
 const MATH_NODES = new Set(['InlineMath', 'DisplayMath']);
 
 /** The editor holds every line break as `
@@ -189,50 +191,54 @@ describe('the editor and the preview', () => {
     }
   });
 
-  it('the editor and the preview find the same math ranges in generated documents', () => {
-    const piece = fc.constantFrom(
-      ...[
-        '$',
-        '$$',
-        '$$\n',
-        '  $$\n',
-        '\\',
-        '\\$',
-        'x',
-        '1',
-        ' ',
-        '\t',
-        '\n',
-        '\n\n',
-        '`',
-        '\n```\n',
-        '{',
-        '}',
-      ],
-      ...[
-        '> ',
-        '- ',
-        '1. ',
-        '# ',
-        '    ',
-        '---\n',
-        '| a |',
-        '|---|\n',
-        '[a](b)',
-        '*',
-        '_',
-        '<b>',
-        '~~',
-        '==',
-      ],
-    );
+  it(
+    'the editor and the preview find the same math ranges in generated documents',
+    { timeout: PROPERTY_TEST_TIMEOUT_MS },
+    () => {
+      const piece = fc.constantFrom(
+        ...[
+          '$',
+          '$$',
+          '$$\n',
+          '  $$\n',
+          '\\',
+          '\\$',
+          'x',
+          '1',
+          ' ',
+          '\t',
+          '\n',
+          '\n\n',
+          '`',
+          '\n```\n',
+          '{',
+          '}',
+        ],
+        ...[
+          '> ',
+          '- ',
+          '1. ',
+          '# ',
+          '    ',
+          '---\n',
+          '| a |',
+          '|---|\n',
+          '[a](b)',
+          '*',
+          '_',
+          '<b>',
+          '~~',
+          '==',
+        ],
+      );
 
-    fc.assert(
-      fc.property(fc.array(piece, { maxLength: 40 }), (pieces) => {
-        const doc = pieces.join('');
+      fc.assert(
+        fc.property(fc.array(piece, { maxLength: 40 }), (pieces) => {
+          const doc = pieces.join('');
 
-        expect(editorMathOf(doc)).toEqual(previewMathOf(doc));
-      }),
-    );
-  });
+          expect(editorMathOf(doc)).toEqual(previewMathOf(doc));
+        }),
+      );
+    },
+  );
 });

@@ -37,8 +37,11 @@ const WEB_PAGE_FORMULA = [
 
 let restoreTextMeasuring: () => void;
 
-beforeAll(() => {
+// The MathML converter is a chunk of its own, loaded on first use; under a busy machine that first
+// load alone can outlast a wait, so it is loaded once here and the tests time only the paste.
+beforeAll(async () => {
   restoreTextMeasuring = measureTextAsEmpty();
+  await import('mathml-to-latex');
 });
 
 afterAll(() => {

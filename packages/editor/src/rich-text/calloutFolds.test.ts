@@ -1,4 +1,4 @@
-import { foldedRanges } from '@codemirror/language';
+import { foldedRanges, forceParsing } from '@codemirror/language';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { calloutLineAt, calloutTypeChange } from './calloutMarker';
 import { calloutStartChange } from './calloutFolds';
@@ -11,6 +11,7 @@ import {
 } from './richTextTestEditor';
 import { EditorState } from '@codemirror/state';
 
+const FULL_PARSE_TIMEOUT_MS = 5000;
 const COLLAPSED = 'Intro\n\n> [!NOTE]- Can I export?\n> Yes, as PDF.\n\nEnd\n';
 
 let opened: TestEditor | undefined;
@@ -67,6 +68,9 @@ describe('callout folding', () => {
     editor.view.dispatch({ changes: { from: 0, insert: 'More ' } });
 
     expect(foldCount(editor)).toBe(1);
+    // The parser gets a short time slice per edit and finishes the rest in the background; on a busy
+    // machine the slice can end before the callout, so the parse is finished here as idle time would.
+    forceParsing(editor.view, editor.view.state.doc.length, FULL_PARSE_TIMEOUT_MS);
     expect(foldButton(editor)?.getAttribute('aria-expanded')).toBe('false');
   });
 

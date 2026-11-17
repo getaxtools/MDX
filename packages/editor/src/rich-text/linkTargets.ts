@@ -65,10 +65,22 @@ function referenceLabelOf(state: EditorState, link: SyntaxNode): string | undefi
 }
 
 /** A link the preview links: one with an address, or a reference whose definition is in the parsed text. */
-export function hasLinkTarget(state: EditorState, link: SyntaxNode): boolean {
+export function hasLinkTarget(
+  state: EditorState,
+  link: SyntaxNode,
+  tree: SyntaxTree = syntaxTree(state),
+): boolean {
   if (link.getChild('URL')) return true;
   const label = referenceLabelOf(state, link);
-  return label !== undefined && linkDefinitions(state, syntaxTree(state)).has(label);
+  return label !== undefined && linkDefinitions(state, tree).has(label);
+}
+
+/**
+ * The whole document's tree when it can be parsed in time: opening a link is a single action, and
+ * a definition further down may not have been parsed yet.
+ */
+function fullTreeOf(state: EditorState): SyntaxTree {
+  return ensureSyntaxTree(state, state.doc.length, REFERENCE_PARSE_TIMEOUT_MS) ?? syntaxTree(state);
 }
 
 /**
@@ -96,18 +108,18 @@ export function linkAt(state: EditorState, position: number): WrittenLink | unde
 }
 
 function linkNodeAt(state: EditorState, position: number): SyntaxNode | undefined {
-  const tree = syntaxTree(state);
+  const tree = fullTreeOf(state);
   for (const side of [1, -1] as const) {
     for (let node: SyntaxNode | null = tree.resolveInner(position, side); node; node = node.parent) {
       if (node.name === 'Image') break;
-      if (isLinkNode(state, node)) return node;
+      if (isLinkNode(state, node, tree)) return node;
     }
   }
   return undefined;
 }
 
-function isLinkNode(state: EditorState, node: SyntaxNode): boolean {
-  if (node.name === 'Link') return hasLinkTarget(state, node);
+function isLinkNode(state: EditorState, node: SyntaxNode, tree: SyntaxTree): boolean {
+  if (node.name === 'Link') return hasLinkTarget(state, node, tree);
   return node.name === 'Autolink' || isBareUrl(state, node);
 }
 
@@ -116,7 +128,6 @@ function writtenLinkOf(state: EditorState, link: SyntaxNode): WrittenLink | unde
   if (url) return { destination: state.sliceDoc(url.from, url.to), form: 'destination' };
   const label = referenceLabelOf(state, link);
   if (label === undefined) return undefined;
-  const tree = ensureSyntaxTree(state, state.doc.length, REFERENCE_PARSE_TIMEOUT_MS) ?? syntaxTree(state);
-  const destination = linkDefinitions(state, tree).get(label);
+  const destination = linkDefinitions(state, fullTreeOf(state)).get(label);
   return destination === undefined ? undefined : { destination, form: 'destination' };
 }

@@ -27,6 +27,8 @@ function textAfter(action: EditorAction, doc: string, selection: { anchor: numbe
 }
 
 /** The toolbox commands that start a block, with the insert menu item that starts the same block. */
+/** The property formats a hundred generated documents, which takes longer than one test usually may on a busy machine. */
+const PROPERTY_TEST_TIMEOUT_MS = 30_000;
 const INSERT_PAIRS: readonly (readonly [EditorAction, string])[] = [
   ['heading1', 'heading1'],
   ['heading2', 'heading2'],
@@ -96,7 +98,7 @@ describe("formatting in the document's own style", () => {
     }
   });
 
-  it('a formatting command changes only the selected lines', () => {
+  it('a formatting command changes only the selected lines', { timeout: PROPERTY_TEST_TIMEOUT_MS }, () => {
     const line = fc.constantFrom(
       'plain text',
       '**bold** words',

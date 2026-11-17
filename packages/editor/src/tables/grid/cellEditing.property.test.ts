@@ -6,6 +6,9 @@ import { measureTextAsEmpty } from '../../formula-paste/pasteTestEvents';
 import { openRichTextEditor, placeCaret } from '../../rich-text/richTextTestEditor';
 import { tableAt } from '../tableCells';
 
+/** The property opens and types into sixty tables, which takes longer than one test usually may on a busy machine. */
+const PROPERTY_TEST_TIMEOUT_MS = 30_000;
+
 const GFM_SHOWCASE = join(
   import.meta.dirname,
   '..',
@@ -75,7 +78,7 @@ afterAll(() => {
 });
 
 describe('cell-local edits', () => {
-  it('editing one cell changes bytes only inside it', () => {
+  it('editing one cell changes bytes only inside it', { timeout: PROPERTY_TEST_TIMEOUT_MS }, () => {
     fc.assert(
       fc.property(
         tableShape.chain((shape) =>
