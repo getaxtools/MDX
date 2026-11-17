@@ -255,6 +255,15 @@ describe('ViewerController', () => {
       return viewer;
     }
 
+    it('opens the operating system language settings for spelling', async () => {
+      const { controller, desktopShell } = createViewer();
+      await controller.start();
+
+      await controller.execute({ kind: 'openLanguageSettings' });
+
+      expect(desktopShell.languageSettingsOpenings).toBe(1);
+    });
+
     it('closes the active tab', async () => {
       const { controller, snapshot } = await viewerWithTwoTabs();
 

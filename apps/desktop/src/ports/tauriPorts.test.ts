@@ -208,6 +208,14 @@ describe('TauriDesktopShell', () => {
       { command: 'toggle_full_screen', args: {} },
     ]);
   });
+
+  it('opens the language settings with a request that names no page', async () => {
+    const calls = mockCommands({ open_language_settings: () => null });
+
+    await new TauriDesktopShell().openLanguageSettings();
+
+    expect(calls).toEqual([{ command: 'open_language_settings', args: {} }]);
+  });
 });
 
 describe('TauriDesktopShell clipboard', () => {

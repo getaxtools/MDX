@@ -53,6 +53,8 @@ export type ViewCommand =
   | { readonly kind: 'toggleWheelButtonInStatusBar' }
   | { readonly kind: 'toggleSlashMenuInRichText' }
   | { readonly kind: 'toggleSlashMenuInSource' }
+  | { readonly kind: 'toggleSpellCheckInRichText' }
+  | { readonly kind: 'toggleSpellCheckInSource' }
   | { readonly kind: 'toggleNoteDeletionConfirmation' }
   | { readonly kind: 'toggleNoteLinkUpdateConfirmation' }
   | { readonly kind: 'toggleHiddenCharacters' }
@@ -106,6 +108,14 @@ const VIEW_COMMAND_HANDLERS: ViewCommandHandlers = {
   toggleSlashMenuInSource: (settings) => ({
     ...settings,
     isSlashMenuInSource: !settings.isSlashMenuInSource,
+  }),
+  toggleSpellCheckInRichText: (settings) => ({
+    ...settings,
+    isSpellCheckedInRichText: !settings.isSpellCheckedInRichText,
+  }),
+  toggleSpellCheckInSource: (settings) => ({
+    ...settings,
+    isSpellCheckedInSource: !settings.isSpellCheckedInSource,
   }),
   toggleNoteDeletionConfirmation: (settings) => ({
     ...settings,

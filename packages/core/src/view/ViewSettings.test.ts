@@ -43,6 +43,8 @@ describe('view settings', () => {
       editingMode: 'richText',
       isSlashMenuInRichText: true,
       isSlashMenuInSource: false,
+      isSpellCheckedInRichText: true,
+      isSpellCheckedInSource: false,
       isNoteDeletionConfirmed: true,
       isNoteLinkUpdateConfirmed: true,
       isShowingHiddenCharacters: false,
@@ -94,6 +96,8 @@ describe('view settings', () => {
       editingMode: 'richText',
       isSlashMenuInRichText: false,
       isSlashMenuInSource: true,
+      isSpellCheckedInRichText: false,
+      isSpellCheckedInSource: true,
       isNoteDeletionConfirmed: false,
       isNoteLinkUpdateConfirmed: false,
       isShowingHiddenCharacters: true,
@@ -102,6 +106,15 @@ describe('view settings', () => {
     };
 
     expect(parseViewSettings(saved)).toEqual(saved);
+  });
+
+  describe('Check spelling', () => {
+    it('Source is off by default, Rich text on, also for settings saved before the setting', () => {
+      expect(DEFAULT_VIEW_SETTINGS.isSpellCheckedInSource).toBe(false);
+      expect(DEFAULT_VIEW_SETTINGS.isSpellCheckedInRichText).toBe(true);
+      expect(parseViewSettings({}).isSpellCheckedInSource).toBe(false);
+      expect(parseViewSettings({}).isSpellCheckedInRichText).toBe(true);
+    });
   });
 
   describe('Ctrl with the mouse wheel', () => {

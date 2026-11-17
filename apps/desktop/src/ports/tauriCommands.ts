@@ -214,6 +214,7 @@ export const tauriCommands = {
     invoke<InspectedLink>('inspect_document_link', { document, href }),
   openExternalLink: (url: string) => invoke<null>('open_external_link', { url }),
   revealInFileManager: (path: string) => invoke<null>('reveal_in_file_manager', { path }),
+  openLanguageSettings: () => invoke<null>('open_language_settings'),
   readClipboardText: () => invoke<string>('read_clipboard_text'),
   toggleFullScreen: () => invoke<null>('toggle_full_screen'),
   setWindowTitle: (title: string) => invoke<null>('set_window_title', { title }),

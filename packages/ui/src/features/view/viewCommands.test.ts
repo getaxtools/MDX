@@ -32,6 +32,8 @@ describe('view commands', () => {
       editingMode: 'richText',
       isSlashMenuInRichText: true,
       isSlashMenuInSource: false,
+      isSpellCheckedInRichText: true,
+      isSpellCheckedInSource: false,
       isNoteDeletionConfirmed: true,
       isNoteLinkUpdateConfirmed: true,
       isShowingHiddenCharacters: false,

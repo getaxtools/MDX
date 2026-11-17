@@ -152,6 +152,7 @@ import {
   type InjectionCheckWorkerStarter,
 } from '../prompt-injection/InjectionCheckWorker';
 import { commandForMenuItem, type ViewerCommand } from './viewerCommands';
+import { NO_PROTECTED_DOCUMENTS, type ProtectedDocuments } from '../editing/editorSpellCheck';
 
 export const STATE_SAVE_DELAY_MS = 500;
 const MOVE_NOTICE_ACTION_LABELS: Readonly<Record<NotesMoveCommand['kind'], MessageKey>> = {
@@ -222,6 +223,8 @@ export interface ViewerControllerDependencies {
   readonly startInjectionCheckWorker?: InjectionCheckWorkerStarter;
   /** Runs work once the shown document has been drawn; the next animation frame unless a test sets it. */
   readonly afterPaint?: (run: () => void) => void;
+  /** Which documents belong to a protected section; none until protected notes supply the rule. */
+  readonly protectedDocuments?: ProtectedDocuments;
 }
 
 export interface RenderedActiveDocument {
@@ -1377,6 +1380,7 @@ export class ViewerController {
     copyPath: ({ path }) => this.copyPath(path),
     revealInFileManager: ({ path }) => this.revealInFileManager(path),
     toggleFullScreen: () => this.dependencies.desktopShell?.toggleFullScreen(),
+    openLanguageSettings: () => this.dependencies.desktopShell?.openLanguageSettings(),
     openNewWindow: () => this.openNewWindow(),
     toggleControlWheel: () => this.toggleControlWheel(),
     setWordGoal: ({ goal }) => this.changeWordGoal((goals, key) => setWordGoal(goals, key, goal)),
@@ -1605,6 +1609,11 @@ export class ViewerController {
   /** When a file was last changed, read without opening it; undefined when that is not known. */
   readModifiedTime(path: string): Promise<number | undefined> {
     return this.dependencies.session.readModifiedTime(path);
+  }
+
+  /** A document of a protected section, which must never be spell checked or otherwise leak its words. */
+  isProtectedDocument(location: DocumentLocation): boolean {
+    return (this.dependencies.protectedDocuments ?? NO_PROTECTED_DOCUMENTS).isProtected(location);
   }
 
   /** The subfolders and Markdown documents in a folder; empty when the folder cannot be read. */

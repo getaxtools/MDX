@@ -50,6 +50,9 @@ export interface ViewSettings {
   /** A slash at the start of a line or after a space opens the insert menu, per editing mode. */
   readonly isSlashMenuInRichText: boolean;
   readonly isSlashMenuInSource: boolean;
+  /** The operating system marks misspelled words in prose, per editing mode. */
+  readonly isSpellCheckedInRichText: boolean;
+  readonly isSpellCheckedInSource: boolean;
   /** Deleting a note asks first; the note goes to the Notes trash either way. */
   readonly isNoteDeletionConfirmed: boolean;
   /** Renaming or moving a note shows the link changes it needs before making them; Undo works either way. */
@@ -136,6 +139,8 @@ export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
   editingMode: 'richText',
   isSlashMenuInRichText: true,
   isSlashMenuInSource: false,
+  isSpellCheckedInRichText: true,
+  isSpellCheckedInSource: false,
   isNoteDeletionConfirmed: true,
   isNoteLinkUpdateConfirmed: true,
   isShowingHiddenCharacters: false,
@@ -265,6 +270,8 @@ type FeatureSettings = KindSwitcherSettings &
     | 'editingMode'
     | 'isSlashMenuInRichText'
     | 'isSlashMenuInSource'
+    | 'isSpellCheckedInRichText'
+    | 'isSpellCheckedInSource'
     | 'isNoteDeletionConfirmed'
     | 'isNoteLinkUpdateConfirmed'
     | 'isShowingHiddenCharacters'
@@ -340,11 +347,20 @@ function parseInjectionCheckSettings(
 
 function parseEditingSettings(
   saved: Record<string, unknown>,
-): Pick<ViewSettings, 'editingMode' | 'isSlashMenuInRichText' | 'isSlashMenuInSource'> {
+): Pick<
+  ViewSettings,
+  | 'editingMode'
+  | 'isSlashMenuInRichText'
+  | 'isSlashMenuInSource'
+  | 'isSpellCheckedInRichText'
+  | 'isSpellCheckedInSource'
+> {
   return {
     editingMode: oneOf(EDITING_MODES, saved.editingMode, EDITING_MODE_OF_EARLIER_SETTINGS),
     isSlashMenuInRichText: saved.isSlashMenuInRichText !== false,
     isSlashMenuInSource: saved.isSlashMenuInSource === true,
+    isSpellCheckedInRichText: saved.isSpellCheckedInRichText !== false,
+    isSpellCheckedInSource: saved.isSpellCheckedInSource === true,
   };
 }
 

@@ -176,3 +176,19 @@ describe('the Ctrl with the mouse wheel setting', () => {
     expect(descriptionWith('zoom')).toContain('mouse wheel');
   });
 });
+
+describe('the spelling settings', () => {
+  it('offers check spelling for each mode and a button to the language settings', () => {
+    const richText = settingWithId('spellCheckInRichText');
+    const source = settingWithId('spellCheckInSource');
+    const languages = settingWithId('spellingLanguages');
+
+    expect([richText.section, source.section, languages.section]).toEqual(['editing', 'editing', 'editing']);
+    if (richText.kind !== 'toggle' || source.kind !== 'toggle' || languages.kind !== 'action')
+      throw new Error('unexpected kinds');
+    expect(richText.isOnIn(DEFAULT_VIEW_SETTINGS)).toBe(true);
+    expect(source.isOnIn(DEFAULT_VIEW_SETTINGS)).toBe(false);
+    expect(languages.command).toEqual({ kind: 'openLanguageSettings' });
+    expect(translator.translate(languages.buttonLabelKey)).toBe('Open Language Settings');
+  });
+});

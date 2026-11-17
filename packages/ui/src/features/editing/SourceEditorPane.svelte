@@ -21,6 +21,7 @@
     SourceEditor,
     SlashMenuSettings,
     SourceEditorOptions,
+    SpellCheckSettings,
     WikiLinkSuggester,
     WrittenLink,
   } from '@mdx/editor';
@@ -46,6 +47,8 @@
     editorRequest?: EditorRequest | undefined;
     /** Whether a slash opens the insert menu, in each mode. */
     slashMenu?: SlashMenuSettings;
+    /** Whether the operating system marks misspelled prose, in each mode; the app turns it off for protected documents. */
+    spellCheck?: SpellCheckSettings;
     /** Saves a pasted picture and gives the Markdown link to insert. */
     onPastePicture?: (bytes: Uint8Array) => Promise<string | undefined>;
     onCursorCountChange?: (count: number) => void;
@@ -87,6 +90,7 @@
     translator,
     editorRequest,
     slashMenu = { isInRichText: false, isInSource: false },
+    spellCheck = { isInRichText: false, isInSource: false },
     onPastePicture,
     onCursorCountChange = () => undefined,
     onSelectedTextChange = () => undefined,
@@ -176,6 +180,7 @@
       onChange: (editedText: string) => onChange(editedText),
       onScroll: (ratio: number) => onScroll(ratio),
       slashMenu,
+      spellCheck,
       editingMode,
       ...(onPastePicture ? { onPastePicture } : {}),
       onCursorCountChange: (count: number) => onCursorCountChange(count),
@@ -230,6 +235,10 @@
 
   $effect(() => {
     editor?.setSlashMenuSettings(slashMenu);
+  });
+
+  $effect(() => {
+    editor?.setSpellCheckSettings(spellCheck);
   });
 
   $effect(() => {

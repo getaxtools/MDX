@@ -65,6 +65,8 @@ import { formattingStateOf, type FormattingState } from './formatting/formatting
 import { runToolboxAction } from './formatting/toolboxCommands';
 import { isSlashMenuOnIn, SLASH_MENU_OFF, type SlashMenuSettings } from './editing-mode/slashMenuSettings';
 import { editorCompletions } from './slash-menu/slashMenu';
+import { spellCheckExtension } from './spelling/proseOnlySpelling';
+import { isSpellCheckOnIn, SPELL_CHECK_OFF, type SpellCheckSettings } from './spelling/spellCheckSettings';
 import { WIKI_LINK_BRACKETS } from './wiki-links/wikiLinkBrackets';
 import { wikiLinkCompletions, type WikiLinkSuggester } from './wiki-links/wikiLinkCompletions';
 import { snippetFields, snippetInsertion, type SnippetExpander } from './snippets/snippetFields';
@@ -117,6 +119,8 @@ export interface SourceEditorOptions {
   readonly onScroll?: (scrollRatio: number) => void;
   /** Whether a slash opens the insert menu, in Rich text and in Source; off in both when not given. */
   readonly slashMenu?: SlashMenuSettings;
+  /** Whether the operating system marks misspelled prose, in Rich text and in Source; off when not given. */
+  readonly spellCheck?: SpellCheckSettings;
   /** Saves a pasted picture next to the document and gives the Markdown link to insert. */
   readonly onPastePicture?: (bytes: Uint8Array) => Promise<string | undefined>;
   /** How many cursors or selections there are, reported when the number changes. */
@@ -203,6 +207,7 @@ export interface SourceEditor {
   /** Moves, promotes or demotes the outline section whose heading is on a zero-based line, as one undo step. */
   changeSection(headingLine: number, action: SectionAction): void;
   setSlashMenuSettings(settings: SlashMenuSettings): void;
+  setSpellCheckSettings(settings: SpellCheckSettings): void;
   setSnippets(snippets: readonly EditorSnippet[]): void;
   /** Inserts a snippet at the selection, selecting its first field. */
   insertSnippet(expand: SnippetExpander): void;
@@ -262,7 +267,7 @@ const KEYS_USED_FOR_MOVING_BLOCKS = new Set(['Shift-Alt-ArrowUp', 'Shift-Alt-Arr
 const BRACKETS_CLOSED_AUTOMATICALLY = ['(', '[', '{', '"', '`'];
 
 export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
-  const slashMenuSwitch = new Compartment();
+  const modeSwitches: ModeSwitches = { slashMenu: new Compartment(), spellCheck: new Compartment() };
   const hiddenCharactersSwitch = new Compartment();
   const formatting = formattingReporter(options);
   const readOnlySwitch = new Compartment();
@@ -271,14 +276,13 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
     state: EditorState.create({
       doc: options.text,
       extensions: [
-        startingExtensions(options, slashMenuSwitch, hiddenCharactersSwitch),
+        startingExtensions(options, modeSwitches, hiddenCharactersSwitch),
         readOnlySwitch.of(readOnlyExtension(options.isReadOnly === true)),
         formatting.extension,
       ],
     }),
   });
   const commands = menuCommandsOf(view);
-  const { followEditingMode, ...slashMenu } = slashMenuControlOf(view, slashMenuSwitch, options);
   const { stopReportingScroll, ...scrolling } = scrollingOf(view, options);
   return {
     focus: () => view.focus(),
@@ -290,8 +294,7 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
     ...readOnlyControlOf(view, readOnlySwitch),
     run: (command) => commands[command](),
     ...blockEditingOf(view),
-    ...slashMenu,
-    ...editingModeControlOf(view, followEditingMode),
+    ...modeSettingsOf(view, modeSwitches, options),
     ...toolboxEditingOf(view),
     destroy: () => {
       formatting.stop();
@@ -299,6 +302,43 @@ export function createSourceEditor(options: SourceEditorOptions): SourceEditor {
       view.destroy();
     },
   };
+}
+
+/** Settings that apply per editing mode, reconfigured when the mode changes. */
+interface ModeSwitches {
+  readonly slashMenu: Compartment;
+  readonly spellCheck: Compartment;
+}
+
+function modeSettingsOf(
+  view: EditorView,
+  switches: ModeSwitches,
+  options: SourceEditorOptions,
+): Pick<
+  SourceEditor,
+  | 'setSlashMenuSettings'
+  | 'setSnippets'
+  | 'insertSnippet'
+  | 'setSpellCheckSettings'
+  | 'editingMode'
+  | 'setEditingMode'
+  | 'setTypography'
+> {
+  const { followEditingMode: followSlashMenu, ...slashMenu } = slashMenuControlOf(
+    view,
+    switches.slashMenu,
+    options,
+  );
+  const { followEditingMode: followSpellCheck, ...spellCheck } = spellCheckControlOf(
+    view,
+    switches.spellCheck,
+    options,
+  );
+  const followEditingMode = () => {
+    followSlashMenu();
+    followSpellCheck();
+  };
+  return { ...slashMenu, ...spellCheck, ...editingModeControlOf(view, followEditingMode) };
 }
 
 function editingModeControlOf(
@@ -317,12 +357,13 @@ function editingModeControlOf(
 
 function startingExtensions(
   options: SourceEditorOptions,
-  slashMenuSwitch: Compartment,
+  modeSwitches: ModeSwitches,
   hiddenCharactersSwitch: Compartment,
 ): Extension[] {
   const mode = options.editingMode ?? DEFAULT_EDITING_MODE;
   return [
-    slashMenuSwitch.of(initialSlashMenu(options, mode)),
+    modeSwitches.slashMenu.of(initialSlashMenu(options, mode)),
+    modeSwitches.spellCheck.of(initialSpellCheck(options)),
     hiddenCharactersSwitch.of(initialHiddenCharacters(options)),
     editingModeExtension(mode, options.onEditingModeChange),
     typographyExtension(options.typography ?? DEFAULT_EDITOR_TYPOGRAPHY),
@@ -533,6 +574,35 @@ function slashMenuControlOf(
   };
 }
 
+function initialSpellCheck(options: SourceEditorOptions): Extension {
+  const mode = options.editingMode ?? DEFAULT_EDITING_MODE;
+  return spellCheckExtension(isSpellCheckOnIn(options.spellCheck ?? SPELL_CHECK_OFF, mode));
+}
+
+/** Spell check follows its setting for the mode the editor is in. */
+function spellCheckControlOf(
+  view: EditorView,
+  spellCheckSwitch: Compartment,
+  options: SourceEditorOptions,
+): Pick<SourceEditor, 'setSpellCheckSettings'> & { readonly followEditingMode: () => void } {
+  let settings = options.spellCheck ?? SPELL_CHECK_OFF;
+  let isOn = isSpellCheckOnIn(settings, editingModeOf(view.state));
+  // Only a change of on or off reconfigures, so settings handed again while typing never redraw the marks.
+  const reconfigure = () => {
+    const isOnNow = isSpellCheckOnIn(settings, editingModeOf(view.state));
+    if (isOnNow === isOn) return;
+    isOn = isOnNow;
+    view.dispatch({ effects: spellCheckSwitch.reconfigure(spellCheckExtension(isOn)) });
+  };
+  return {
+    followEditingMode: reconfigure,
+    setSpellCheckSettings: (changed) => {
+      settings = changed;
+      reconfigure();
+    },
+  };
+}
+
 function blockEditingOf(
   view: EditorView,
 ): Pick<
@@ -655,7 +725,7 @@ function editorExtensions(options: SourceEditorOptions): Extension[] {
     options.embedResolver ? embedResolverFacet.of(options.embedResolver) : [],
     options.richTextProviders ? richTextProvidersFacet.of(options.richTextProviders) : [],
     // An explicit tab stop lets checkers see that the scrolling editor can be reached with the keyboard.
-    EditorView.contentAttributes.of({ 'aria-label': options.label, spellcheck: 'false', tabindex: '0' }),
+    EditorView.contentAttributes.of({ 'aria-label': options.label, tabindex: '0' }),
     ...editorKeymaps(),
     formulaPasteState(),
     EditorView.domEventHandlers({ paste: (event, view) => pasteInOrder(event, view, options) }),

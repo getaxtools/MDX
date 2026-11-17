@@ -41,6 +41,7 @@ export { editingModeFacet, editingModeOf, type EditingMode } from './editing-mod
 export type { EditorTypography } from './rich-text/typography';
 export type { WrittenLink } from './rich-text/linkTargets';
 export type { SlashMenuSettings } from './editing-mode/slashMenuSettings';
+export type { SpellCheckSettings } from './spelling/spellCheckSettings';
 export type { CalloutPresentation, RichTextLabels, RichTextRendering } from './rich-text/richTextRendering';
 export type { EmbedResolver } from './rich-text/embeds';
 export type {

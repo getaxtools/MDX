@@ -6,6 +6,7 @@ export class InMemoryDesktopShell implements DesktopShellPort {
   isClipboardBlocked = false;
   readonly revealedPaths: string[] = [];
   isFullScreen = false;
+  languageSettingsOpenings = 0;
   windowTitle = '';
   /** Paths that cannot be shown, such as ones the app was never allowed to open. */
   readonly unrevealablePaths = new Set<string>();
@@ -40,6 +41,11 @@ export class InMemoryDesktopShell implements DesktopShellPort {
 
   setWindowTitle(title: string): Promise<void> {
     this.windowTitle = title;
+    return Promise.resolve();
+  }
+
+  openLanguageSettings(): Promise<void> {
+    this.languageSettingsOpenings += 1;
     return Promise.resolve();
   }
 

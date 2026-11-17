@@ -49,6 +49,7 @@ export type ViewerCommand =
   | InjectionCheckCommand
   | FileArcCommand
   | { readonly kind: 'toggleFullScreen' }
+  | { readonly kind: 'openLanguageSettings' }
   | { readonly kind: 'openNewWindow' }
   | { readonly kind: 'toggleControlWheel' }
   | { readonly kind: 'showWorkspaceKindSettings' }

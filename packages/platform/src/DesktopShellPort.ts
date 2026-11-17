@@ -13,4 +13,6 @@ export interface DesktopShellPort {
   toggleFullScreen(): Promise<void>;
   /** The title bar and taskbar text, such as the document and workspace names. */
   setWindowTitle(title: string): Promise<void>;
+  /** Opens the operating system's language settings, where spelling languages are installed. */
+  openLanguageSettings(): Promise<void>;
 }

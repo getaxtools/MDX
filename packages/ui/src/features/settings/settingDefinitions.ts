@@ -282,6 +282,33 @@ const EDITING_SETTINGS: readonly SettingDefinition[] = [
     isOnIn: (settings) => settings.isSlashMenuInSource,
     toggleCommand: { kind: 'toggleSlashMenuInSource' },
   },
+  {
+    id: 'spellCheckInRichText',
+    kind: 'toggle',
+    section: 'editing',
+    labelKey: 'settings.spellCheckInRichText.label',
+    descriptionKey: 'settings.spellCheckInRichText.description',
+    isOnIn: (settings) => settings.isSpellCheckedInRichText,
+    toggleCommand: { kind: 'toggleSpellCheckInRichText' },
+  },
+  {
+    id: 'spellCheckInSource',
+    kind: 'toggle',
+    section: 'editing',
+    labelKey: 'settings.spellCheckInSource.label',
+    descriptionKey: 'settings.spellCheckInSource.description',
+    isOnIn: (settings) => settings.isSpellCheckedInSource,
+    toggleCommand: { kind: 'toggleSpellCheckInSource' },
+  },
+  {
+    id: 'spellingLanguages',
+    kind: 'action',
+    section: 'editing',
+    labelKey: 'settings.spellingLanguages.label',
+    descriptionKey: 'settings.spellingLanguages.description',
+    buttonLabelKey: 'settings.spellingLanguages.button',
+    command: { kind: 'openLanguageSettings' },
+  },
 ];
 
 const automaticInjectionCheckSetting: ChoiceSetting = {

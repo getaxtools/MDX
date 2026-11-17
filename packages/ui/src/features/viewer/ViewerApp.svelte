@@ -56,6 +56,8 @@
   import type { RenderedFormula } from '../document-view/renderedFormulaAt';
   import { openLinkFromEditor } from '../editing/editorLinks';
   import { createRichTextRendering } from '../editing/richTextRendering';
+  import { editorSpellCheckOf } from '../editing/editorSpellCheck';
+  import { isSpellingMenuWanted } from '../editing/spellingMenu';
   import PanelResizer from '../../components/PanelResizer.svelte';
   import SettingsDialog from '../settings/SettingsDialog.svelte';
   import StartPage from '../start-page/StartPage.svelte';
@@ -352,9 +354,10 @@
     });
   }
 
-  // The webview's own menu offers browser actions such as Back and Refresh that make no sense in the app.
+  // The webview's own menu offers browser actions such as Back and Refresh that make no sense in the
+  // app; in spell-checked editor text it offers spelling suggestions instead.
   function preventBrowserContextMenu(event: MouseEvent) {
-    event.preventDefault();
+    if (!isSpellingMenuWanted(event)) event.preventDefault();
   }
 
   type ControlWheelComponent = typeof import('../control-wheel/ControlWheel.svelte').default;
@@ -711,6 +714,10 @@
                       isInRichText: viewSettings.isSlashMenuInRichText,
                       isInSource: viewSettings.isSlashMenuInSource,
                     }}
+                    spellCheck={editorSpellCheckOf(
+                      viewSettings,
+                      controller.isProtectedDocument(editedDocument),
+                    )}
                     {isShowingHiddenCharacters}
                     markedRanges={snapshot?.injectionCheck?.findingRanges ?? []}
                     onPastePicture={(bytes: Uint8Array) => controller.pastePicture(bytes)}
