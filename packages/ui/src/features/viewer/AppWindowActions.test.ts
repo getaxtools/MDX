@@ -84,6 +84,37 @@ describe('app windows', () => {
     expect(session.shownWorkspace()?.id).toBe('workspace-1');
   });
 
+  it('files sent with a workspace the user stays away from go where files usually go', async () => {
+    const { controller, session, snapshot, appWindows } = await startWindow();
+    await controller.execute({ kind: 'createWorkspace', name: 'Handbook', kindId: 'markdownViewer' });
+    await controller.execute({ kind: 'switchWorkspace', workspaceId: 'default' });
+    await controller.execute({ kind: 'toggleEditing' });
+    controller.updateEditedText(snapshot().activeDocument?.canonicalKey ?? '', '# Changed');
+
+    appWindows.askToShow('workspace-1', [PLAN]);
+    await vi.waitFor(() => expect(snapshot().unsavedChanges).toBeDefined());
+    await controller.answerUnsavedChanges('cancel');
+
+    await vi.waitFor(() => expect(appWindows.routedDocuments).toEqual([PLAN]));
+    expect(session.shownWorkspace()?.id).toBe('default');
+  });
+
+  it('deleting a workspace another window shows is refused and that window keeps it', async () => {
+    const { controller, session, snapshot, workspaceStore } = await startWindow();
+    await controller.execute({ kind: 'createWorkspace', name: 'Handbook', kindId: 'markdownViewer' });
+    await controller.execute({ kind: 'newDocument' });
+    workspaceStore.shownElsewhere.add('workspace-1');
+
+    await controller.execute({ kind: 'confirmDeleteWorkspace' });
+    await controller.execute({ kind: 'deleteWorkspace' });
+
+    expect(session.shownWorkspace()?.id).toBe('workspace-1');
+    expect(session.workspaces()?.find('workspace-1')).toBeDefined();
+    expect(snapshot().notice).toBe(
+      'Handbook is open in another window, so it was not deleted. Close it there first; that window is now in front.',
+    );
+  });
+
   it('a workspace deleted in another window moves this window and says why', async () => {
     const { controller, session, snapshot, appWindows, workspaceStore } = await startWindow();
     await controller.execute({ kind: 'createWorkspace', name: 'Handbook', kindId: 'markdownViewer' });

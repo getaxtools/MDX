@@ -9,8 +9,7 @@ use tauri::{App, AppHandle, Manager, Window, WindowEvent};
 pub use file_routing::FileRoute;
 pub use open_windows::{OpenWindows, SavedWindow, WindowReport};
 pub use window_labels::{
-    MAX_WINDOWS, WorkspaceArgument, is_window_label, next_window_label, workspace_argument,
-    workspace_launch_argument,
+    MAX_WINDOWS, WorkspaceArgument, is_window_label, workspace_argument, workspace_launch_argument,
 };
 
 use crate::commands::app_windows::StartupWorkspaceNotice;
@@ -33,6 +32,13 @@ pub fn save_open_windows(windows: &OpenWindows, database: &WorkspaceDatabase) {
     if let Ok(value) = JsonText::try_from(json) {
         let _ = database.save_app_value(&key, &value);
     }
+}
+
+/// The user stayed in a window that Exit asked to close: closing is normal again, and the windows
+/// still open are saved, so those Exit already closed do not come back at the next start.
+pub fn stay_after_cancelled_exit(windows: &OpenWindows, database: &WorkspaceDatabase) {
+    windows.cancel_exiting();
+    save_open_windows(windows, database);
 }
 
 /// Drops the tabs and layout a window label had, so a window opened later under it starts empty.
@@ -232,6 +238,26 @@ mod tests {
 
         assert_eq!(named_workspace(&database, &arguments, &notice), None);
         assert!(notice.take());
+    }
+
+    #[test]
+    fn after_exit_is_cancelled_and_the_first_window_closed_only_it_opens_again() {
+        let folder = tempfile::tempdir().unwrap();
+        let database = WorkspaceDatabase::new(folder.path());
+        let windows = OpenWindows::default();
+        windows.add("main", "default");
+        windows.add("window-2", "handbook");
+        save_open_windows(&windows, &database);
+        windows.start_exiting();
+        windows.closed("window-2");
+
+        stay_after_cancelled_exit(&windows, &database);
+        assert!(!windows.closed("main"));
+
+        assert_eq!(
+            saved_open_windows(&database),
+            vec![saved("main", "default")]
+        );
     }
 
     #[test]

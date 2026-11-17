@@ -27,6 +27,8 @@ export interface AppWindowsPort {
   /** Opens another window on the workspace this window shows. */
   openNewWindow(): Promise<void>;
   reportState(report: WindowStateReport): Promise<void>;
+  /** Sends files on to the window the usual rules choose, such as files this window did not open. */
+  routeDocuments(paths: readonly string[]): Promise<void>;
   /** Brings forward another window showing the workspace; false when none does. */
   focusWindowShowing(workspaceId: string): Promise<boolean>;
   /** Another window saved a list, such as the favourites, of a workspace this window shows. */

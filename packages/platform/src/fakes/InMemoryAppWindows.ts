@@ -42,6 +42,13 @@ export class InMemoryAppWindows implements AppWindowsPort {
     return Promise.resolve();
   }
 
+  readonly routedDocuments: string[] = [];
+
+  routeDocuments(paths: readonly string[]): Promise<void> {
+    this.routedDocuments.push(...paths);
+    return Promise.resolve();
+  }
+
   focusWindowShowing(workspaceId: string): Promise<boolean> {
     if (!this.shownElsewhere.has(workspaceId)) return Promise.resolve(false);
     this.focusedWorkspaces.push(workspaceId);

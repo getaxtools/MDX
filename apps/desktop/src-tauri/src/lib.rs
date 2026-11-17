@@ -175,6 +175,7 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::app_windows::window_startup_workspace,
         commands::app_windows::take_startup_workspace_notice,
         commands::app_windows::close_cancelled,
+        commands::app_windows::route_documents,
         commands::workspaces::load_workspace,
         commands::workspaces::save_workspace,
         commands::workspaces::delete_workspace,

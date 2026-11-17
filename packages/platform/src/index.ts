@@ -71,6 +71,7 @@ export type {
 export { InMemoryAttachments, type SavedAttachmentRecord } from './fakes/InMemoryAttachments';
 export {
   UnknownWorkspaceError,
+  WorkspaceShownElsewhereError,
   WORKSPACE_LIST_NAMES,
   type LegacyStateImport,
   type StoredWorkspace,

@@ -188,6 +188,7 @@ export const tauriCommands = {
   takeStartupWorkspaceNotice: () => invoke<boolean>('take_startup_workspace_notice'),
   openNewWindow: () => invoke<null>('open_new_window'),
   closeCancelled: () => invoke<null>('close_cancelled'),
+  routeDocuments: (paths: readonly string[]) => invoke<null>('route_documents', { paths }),
   reportWindowState: (state: WindowStateReport) => invoke<null>('report_window_state', { state }),
   focusWindowShowing: (workspaceId: string) => invoke<boolean>('focus_window_showing', { workspaceId }),
   updateViewMenu: (state: ViewMenuState) => invoke<null>('update_view_menu', { state }),

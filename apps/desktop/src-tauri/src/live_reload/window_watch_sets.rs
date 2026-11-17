@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::Mutex;
 
 use super::lock;
+use crate::documents::canonical_key_of;
 
 /// What each window asks to watch. The watcher gets every window's set together, so one window's
 /// request never stops live reload in another, and each change goes only to the windows watching it.
@@ -30,19 +31,28 @@ impl<Item: Clone + PartialEq> WindowWatchSets<Item> {
         watch(combined(&sets));
     }
 
-    /// Each window with the changed paths it watches; windows watching none of them are left out.
+    /// Each window with the changed paths it watches, matched the way the app keys paths, so two
+    /// spellings of one file match; windows watching none of them are left out.
     pub fn share_of(
         &self,
         changed: &[String],
         path_of: impl Fn(&Item) -> &str,
     ) -> Vec<(String, Vec<String>)> {
+        let changed_keys: Vec<(String, &String)> = changed
+            .iter()
+            .map(|path| (canonical_key_of(path), path))
+            .collect();
         lock(&self.0)
             .iter()
             .filter_map(|(window_label, items)| {
-                let share: Vec<String> = changed
+                let watched_keys: Vec<String> = items
                     .iter()
-                    .filter(|path| items.iter().any(|item| path_of(item) == path.as_str()))
-                    .cloned()
+                    .map(|item| canonical_key_of(path_of(item)))
+                    .collect();
+                let share: Vec<String> = changed_keys
+                    .iter()
+                    .filter(|(key, _)| watched_keys.contains(key))
+                    .map(|(_, path)| (*path).clone())
                     .collect();
                 (!share.is_empty()).then(|| (window_label.clone(), share))
             })
@@ -127,6 +137,19 @@ mod tests {
         let mut expected: Vec<String> = (0..8).map(|window| format!("{window}-49.md")).collect();
         expected.sort();
         assert_eq!(watched, expected);
+    }
+
+    #[test]
+    fn a_change_spelled_differently_still_reaches_the_window_watching_it() {
+        let sets = WindowWatchSets::default();
+        replace(&sets, "main", &[r"C:\Docs\Guide.md"]);
+
+        let shares = sets.share_of(&paths(&[r"c:\docs\GUIDE.md"]), String::as_str);
+
+        assert_eq!(
+            shares,
+            vec![("main".to_owned(), paths(&[r"c:\docs\GUIDE.md"]))]
+        );
     }
 
     #[test]

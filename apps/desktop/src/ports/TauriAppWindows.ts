@@ -44,6 +44,10 @@ export class TauriAppWindows implements AppWindowsPort {
     await tauriCommands.reportWindowState(report);
   }
 
+  async routeDocuments(paths: readonly string[]): Promise<void> {
+    await tauriCommands.routeDocuments(paths);
+  }
+
   focusWindowShowing(workspaceId: string): Promise<boolean> {
     return tauriCommands.focusWindowShowing(workspaceId);
   }

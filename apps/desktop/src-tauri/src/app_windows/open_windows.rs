@@ -3,6 +3,7 @@ use std::sync::{Mutex, PoisonError};
 use serde::{Deserialize, Serialize};
 
 use super::file_routing::{FileRoute, RoutableWindow, route_file};
+use super::window_labels::next_window_label;
 
 /// A window to open again at the next start, in the order the windows were opened.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -62,6 +63,34 @@ impl OpenWindows {
                 focus_order: windows.last_focus_order,
             });
         });
+    }
+
+    /// Takes the lowest free label for a window about to be built on the workspace, in one step, so
+    /// two New Window presses at once never get the same label. None when every label is taken.
+    pub fn reserve_new(&self, workspace_id: &str) -> Option<String> {
+        self.with(|windows| {
+            let taken: Vec<String> = windows
+                .open
+                .iter()
+                .map(|window| window.label.clone())
+                .collect();
+            let label = next_window_label(&taken)?;
+            windows.last_focus_order += 1;
+            windows.open.push(OpenWindow {
+                label: label.clone(),
+                report: WindowReport {
+                    workspace_id: workspace_id.to_owned(),
+                    ..WindowReport::default()
+                },
+                focus_order: windows.last_focus_order,
+            });
+            Some(label)
+        })
+    }
+
+    /// Gives back a reserved label whose window could not be built.
+    pub fn release(&self, label: &str) {
+        self.with(|windows| windows.open.retain(|window| window.label != label));
     }
 
     /// Returns whether the window's workspace changed, so the saved windows are written again.
@@ -296,6 +325,40 @@ mod tests {
 
         assert!(!windows.closed("main"));
         assert!(windows.labels().is_empty());
+    }
+
+    #[test]
+    fn new_window_presses_at_once_each_get_their_own_label() {
+        let windows = std::sync::Arc::new(OpenWindows::default());
+        windows.add("main", "default");
+        let presses: Vec<_> = (0..12)
+            .map(|_| {
+                let windows = std::sync::Arc::clone(&windows);
+                std::thread::spawn(move || windows.reserve_new("default"))
+            })
+            .collect();
+        let mut labels: Vec<String> = presses
+            .into_iter()
+            .filter_map(|press| press.join().unwrap())
+            .collect();
+        labels.sort();
+        let count = labels.len();
+        labels.dedup();
+
+        assert_eq!(labels.len(), count);
+        assert_eq!(windows.labels().len(), count + 1);
+    }
+
+    #[test]
+    fn a_label_whose_window_could_not_be_built_is_given_back() {
+        let windows = OpenWindows::default();
+        windows.add("main", "default");
+        let label = windows.reserve_new("default").unwrap();
+
+        windows.release(&label);
+
+        assert_eq!(windows.labels(), vec!["main"]);
+        assert_eq!(windows.reserve_new("default"), Some(label));
     }
 
     #[test]

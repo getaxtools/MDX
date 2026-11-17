@@ -1432,5 +1432,6 @@
   "menu.file.newWindow": "New Window",
   "windows.startupWorkspaceMissing": "The workspace MDX was started with no longer exists, so this window shows the workspace used last.",
   "windows.workspaceNotFound": "That workspace no longer exists.",
+  "workspaces.delete.shownInAnotherWindow": "{name} is open in another window, so it was not deleted. Close it there first; that window is now in front.",
   "windows.workspaceDeletedElsewhere": "The workspace this window showed was deleted in another window, so it shows the workspace used before."
 }

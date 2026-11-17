@@ -69,6 +69,28 @@ describe('several windows', () => {
     expect(await findAccessibilityViolations(app.browser)).toEqual([]);
   });
 
+  it('a workspace another window shows with unsaved edits is not deleted', async () => {
+    await runFromPalette('New Workspace…');
+    const dialog = app.browser.$('[role="dialog"]');
+    await dialog.$('input#workspace-name').setValue('Handbook');
+    await dialog.$('button=Create').click();
+    await page.waitForExplorerFolderEntries(HANDBOOK_FOLDER, ['plan.md']);
+    await openSecondWindow();
+    await page.pressShortcut('Ctrl+N');
+    await page.typeAtEndOfDocument('Draft');
+    await page.waitForUnsavedTab('Untitled-1.md');
+    await app.browser.switchToWindow(FIRST_WINDOW);
+
+    await runFromPalette('Delete Workspace…');
+    await app.browser.$('[role="alertdialog"]').$('button=Delete Workspace').click();
+
+    await page.waitForNotice('workspaces.delete.shownInAnotherWindow', { name: 'Handbook' });
+    expect(await page.windowTitle()).toBe('Handbook - MDX');
+    await app.browser.switchToWindow(SECOND_WINDOW);
+    await page.waitForUnsavedTab('Untitled-1.md');
+    expect(await findAccessibilityViolations(app.browser)).toEqual([]);
+  });
+
   it('a double-clicked file opens in the window whose workspace contains it', async () => {
     await openSecondWindow();
     await runFromPalette('New Workspace…');

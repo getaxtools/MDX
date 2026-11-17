@@ -8,9 +8,10 @@ import {
   type PortableWorkspace,
   type ViewerSession,
   type WorkspaceKindId,
+  type WorkspaceRemoval,
   type WorkspaceRequest,
 } from '@mdx/core';
-import type { DocumentLocation, NotesLocationPort } from '@mdx/platform';
+import { WorkspaceShownElsewhereError, type DocumentLocation, type NotesLocationPort } from '@mdx/platform';
 import type { MessageKey, Translator } from '@mdx/i18n';
 import { workspaceNameOf, type WorkspaceCommand, type WorkspaceDetails } from './workspaceCommands';
 
@@ -207,11 +208,25 @@ export class WorkspaceActions {
     const { session, translator, showDialog, showNotice } = this.dependencies;
     const shown = session.shownWorkspace();
     if (!shown || !(await this.dependencies.confirmLeavingDocuments())) return;
-    const removal = await session.deleteWorkspace(shown.id);
+    const removal = await this.deleteUnlessShownElsewhere(shown.id);
     showDialog(undefined);
     if (removal?.outcome !== 'removed') return;
     await this.dependencies.showSwitchedWorkspace();
     showNotice('workspaces.deleted', { name: workspaceNameOf(shown, translator) });
+  }
+
+  /** Another window showing the workspace keeps it, with any unsaved edits, and is brought forward. */
+  private async deleteUnlessShownElsewhere(workspaceId: string): Promise<WorkspaceRemoval | undefined> {
+    const { session, translator, showNotice } = this.dependencies;
+    try {
+      return await session.deleteWorkspace(workspaceId);
+    } catch (error) {
+      if (!(error instanceof WorkspaceShownElsewhereError)) throw error;
+      const workspace = session.workspaces()?.find(workspaceId);
+      const name = workspace ? workspaceNameOf(workspace, translator) : workspaceId;
+      showNotice('workspaces.delete.shownInAnotherWindow', { name });
+      return undefined;
+    }
   }
 
   /** A workspace another window shows is brought forward there instead, unless Windows chose this window. */

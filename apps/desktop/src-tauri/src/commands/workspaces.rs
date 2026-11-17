@@ -17,13 +17,17 @@ use crate::storage::{
 #[derive(Debug, PartialEq, Eq, Serialize)]
 #[serde(tag = "code", rename_all = "camelCase")]
 pub enum WorkspaceCommandError {
-    InvalidArgument { argument: &'static str },
+    InvalidArgument {
+        argument: &'static str,
+    },
     InvalidValue,
     UnknownWorkspace,
     AlreadyImported,
     ImportFailed,
     NewerDatabase,
     StorageUnavailable,
+    /// Another window shows the workspace; it is brought forward so its edits are not lost.
+    ShownInAnotherWindow,
 }
 
 impl From<DatabaseError> for WorkspaceCommandError {
@@ -118,8 +122,15 @@ pub fn delete_workspace(
     database: State<'_, WorkspaceDatabase>,
 ) -> CommandResult<()> {
     let workspace_id = WorkspaceId::try_from(workspace_id)?;
-    database.delete_workspace(&workspace_id)?;
     let windows = window.state::<Arc<OpenWindows>>();
+    if let Some(label) = windows.other_window_showing(workspace_id.as_str(), window.label()) {
+        if let Some(other) = window.get_webview_window(&label) {
+            let _ = other.unminimize();
+            let _ = other.set_focus();
+        }
+        return Err(WorkspaceCommandError::ShownInAnotherWindow);
+    }
+    database.delete_workspace(&workspace_id)?;
     for label in other_windows(&windows, window.label()) {
         let _ = window.emit_to(
             label.as_str(),
@@ -245,6 +256,14 @@ mod tests {
                     list_name: "favourites".to_owned(),
                 }
             )]
+        );
+    }
+
+    #[test]
+    fn deleting_a_workspace_another_window_shows_is_refused_with_its_own_code() {
+        assert_eq!(
+            serde_json::to_value(WorkspaceCommandError::ShownInAnotherWindow).unwrap(),
+            serde_json::json!({ "code": "shownInAnotherWindow" })
         );
     }
 

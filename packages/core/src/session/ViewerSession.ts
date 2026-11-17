@@ -241,17 +241,21 @@ export class ViewerSession {
     this.replaceState(this.state);
   }
 
-  /** A shown workspace is first replaced by the Markdown viewer workspace shown most recently. */
+  /**
+   * A shown workspace is replaced by the Markdown viewer workspace shown most recently, once it is
+   * deleted. The store may refuse, such as while another window shows it; nothing changes then.
+   */
   async deleteWorkspace(workspaceId: string): Promise<WorkspaceRemoval | undefined> {
+    const storage = this.workspaceStorage;
     const registry = this.workspaces();
-    if (!this.workspaceStorage || !registry) return undefined;
+    if (!storage || !registry) return undefined;
     const removal = registry.remove(workspaceId);
     if (removal.outcome !== 'removed') return removal;
-    if (this.shownWorkspace()?.id === workspaceId) {
-      const fallback = removal.registry.lastShownOfKind(DEFAULT_WORKSPACE_KIND_ID);
-      if (fallback) await this.switchWorkspace(fallback.id);
-    }
-    await this.workspaceStorage.deleteWorkspace(removal.registry, workspaceId);
+    const wasShown = this.shownWorkspace()?.id === workspaceId;
+    if (wasShown) await this.save();
+    const fallback = removal.registry.lastShownOfKind(DEFAULT_WORKSPACE_KIND_ID);
+    await storage.deleteWorkspace(removal.registry, workspaceId);
+    if (wasShown && fallback) await this.switchWorkspace(fallback.id, { shouldSaveCurrent: false });
     this.replaceState(this.state);
     return removal;
   }

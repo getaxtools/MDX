@@ -1,5 +1,6 @@
 import {
   UnknownWorkspaceError,
+  WorkspaceShownElsewhereError,
   type LegacyStateImport,
   type StoredWorkspace,
   type StoredWorkspaceContents,
@@ -76,7 +77,12 @@ export class InMemoryWorkspaceStore implements WorkspaceStorePort {
     return Promise.resolve();
   }
 
+  /** Workspaces another window shows, which the desktop app refuses to delete. */
+  readonly shownElsewhere = new Set<string>();
+
   deleteWorkspace(workspaceId: string): Promise<void> {
+    if (this.shownElsewhere.has(workspaceId))
+      return Promise.reject(new WorkspaceShownElsewhereError(workspaceId));
     this.rows.delete(workspaceId);
     return Promise.resolve();
   }

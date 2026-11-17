@@ -1,6 +1,7 @@
 import {
   UnknownWorkspaceError,
   WORKSPACE_LIST_NAMES,
+  WorkspaceShownElsewhereError,
   type LegacyStateImport,
   type StoredWorkspace,
   type StoredWorkspaceContents,
@@ -52,7 +53,12 @@ export class TauriWorkspaceStore implements WorkspaceStorePort {
   }
 
   async deleteWorkspace(workspaceId: string): Promise<void> {
-    await tauriCommands.deleteWorkspace(workspaceId);
+    try {
+      await tauriCommands.deleteWorkspace(workspaceId);
+    } catch (error) {
+      if (hasCode(error, 'shownInAnotherWindow')) throw new WorkspaceShownElsewhereError(workspaceId);
+      throw error;
+    }
   }
 
   async saveList(workspaceId: string, listName: WorkspaceListName, value: unknown): Promise<void> {
@@ -117,5 +123,9 @@ async function withUnknownWorkspaceError(workspaceId: string, save: () => Promis
 }
 
 function isUnknownWorkspaceReply(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'unknownWorkspace';
+  return hasCode(error, 'unknownWorkspace');
+}
+
+function hasCode(error: unknown, code: string): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === code;
 }

@@ -66,6 +66,14 @@ export interface WorkspaceStorePort {
 }
 
 /** Thrown when a list or session is saved for a workspace that does not exist. */
+/** Another window shows the workspace, so it is not deleted; that window is brought forward. */
+export class WorkspaceShownElsewhereError extends Error {
+  constructor(readonly workspaceId: string) {
+    super(`Another window shows the workspace ${workspaceId}`);
+    this.name = 'WorkspaceShownElsewhereError';
+  }
+}
+
 export class UnknownWorkspaceError extends Error {
   constructor(readonly workspaceId: string) {
     super(`No workspace has the id ${workspaceId}`);

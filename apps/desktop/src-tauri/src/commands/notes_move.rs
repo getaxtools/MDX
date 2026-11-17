@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 
 use crate::commands::documents::{run_blocking, validated_path};
 use crate::commands::notes_location::{LocationCheck, claimable_path, location_check, user_folder};
@@ -207,7 +207,7 @@ struct MoveProgressEvent {
 #[tauri::command]
 pub async fn run_notes_move(
     location_id: String,
-    app: AppHandle,
+    window: WebviewWindow,
     moves: State<'_, Arc<NotesMoves>>,
 ) -> Result<(), MoveError> {
     let location_id = validated_id(location_id)?;
@@ -218,7 +218,7 @@ pub async fn run_notes_move(
                 location_id: location_id.clone(),
                 progress,
             };
-            let _ = app.emit(NOTES_MOVE_PROGRESS_EVENT, event);
+            let _ = window.emit_to(window.label(), NOTES_MOVE_PROGRESS_EVENT, event);
         };
         moves.run(&location_id, &report)
     })

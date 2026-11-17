@@ -131,7 +131,7 @@ pub fn forward_second_instance(app: &AppHandle, arguments: &[String], working_fo
 }
 
 /// Sends each document to its window and returns the window of the last one.
-fn forward_documents(app: &AppHandle, display_paths: Vec<String>) -> Option<String> {
+pub fn forward_documents(app: &AppHandle, display_paths: Vec<String>) -> Option<String> {
     let windows = app.state::<Arc<OpenWindows>>();
     let mut last = None;
     for display_path in display_paths {

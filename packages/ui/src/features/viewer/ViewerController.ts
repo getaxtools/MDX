@@ -1892,6 +1892,7 @@ export class ViewerController {
       showWorkspace: async ({ workspaceId, documentPaths }) => {
         await this.workspaceActions.switchTo(workspaceId, { mayFocusOtherWindow: false });
         if (session.shownWorkspace()?.id === workspaceId) await this.openDocuments(documentPaths);
+        else if (documentPaths.length > 0) await appWindows.routeDocuments(documentPaths);
       },
       showSwitchedWorkspace: () => this.showSwitchedWorkspace(),
       showNotice: (key) => this.showNotice(key),

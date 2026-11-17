@@ -1,4 +1,3 @@
-import { listen } from '@tauri-apps/api/event';
 import {
   NotesMoveError,
   type DocumentLocation,
@@ -13,6 +12,7 @@ import {
   type UnfinishedNotesMove,
 } from '@mdx/platform';
 import { NOTES_MOVE_PROGRESS_EVENT, tauriCommands } from './tauriCommands';
+import { listenInThisWindow } from './windowEvents';
 
 export class TauriNotesMoves implements NotesMovePort {
   planMove(request: NotesMoveRequest): Promise<NotesMovePlan> {
@@ -56,10 +56,9 @@ export class TauriNotesMoves implements NotesMovePort {
   }
 
   onProgress(listener: (progress: NotesMoveProgress) => void): () => void {
-    const stopListening = listen<NotesMoveProgress>(NOTES_MOVE_PROGRESS_EVENT, (event) =>
+    return listenInThisWindow<NotesMoveProgress>(NOTES_MOVE_PROGRESS_EVENT, (event) =>
       listener(event.payload),
     );
-    return () => void stopListening.then((unlisten) => unlisten());
   }
 }
 

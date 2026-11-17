@@ -5,11 +5,12 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 
 use crate::app_windows::{
-    OpenWindows, WindowReport, forget_window_sessions, next_window_label, open_window,
-    save_open_windows,
+    OpenWindows, WindowReport, forget_window_sessions, open_window, save_open_windows,
+    stay_after_cancelled_exit,
 };
-use crate::documents::canonical_key_of;
+use crate::documents::{DocumentAccessList, canonical_key_of, locate_document};
 use crate::open_requests::MAIN_WINDOW_LABEL;
+use crate::open_requests::forward_documents;
 use crate::storage::{WorkspaceDatabase, WorkspaceId};
 
 /// A window reports at most this many open documents and roots; more would only slow routing down.
@@ -37,10 +38,14 @@ pub async fn open_new_window(
     let workspace_id = windows
         .workspace_of(window.label())
         .ok_or(WindowCommandError::WindowUnavailable)?;
-    let label = next_window_label(&windows.labels()).ok_or(WindowCommandError::TooManyWindows)?;
+    let label = windows
+        .reserve_new(&workspace_id)
+        .ok_or(WindowCommandError::TooManyWindows)?;
     forget_window_sessions(&database, &label);
-    open_window(&app, &label).map_err(|_| WindowCommandError::WindowUnavailable)?;
-    windows.add(&label, &workspace_id);
+    if open_window(&app, &label).is_err() {
+        windows.release(&label);
+        return Err(WindowCommandError::WindowUnavailable);
+    }
     save_open_windows(&windows, &database);
     Ok(())
 }
@@ -152,10 +157,41 @@ pub fn take_startup_workspace_notice(
     window.label() == MAIN_WINDOW_LABEL && notice.take()
 }
 
+/// At most this many files come with one request to show a workspace.
+const MAX_ROUTED_DOCUMENTS: usize = 200;
+
+/// Files sent with a workspace the window did not move to, because the user kept its unsaved edits,
+/// go where any opened file goes. Only files the app was already given are accepted.
+#[tauri::command]
+pub fn route_documents(
+    paths: Vec<String>,
+    app: AppHandle,
+    access: State<'_, Arc<DocumentAccessList>>,
+) -> CommandResult<()> {
+    if paths.len() > MAX_ROUTED_DOCUMENTS {
+        return Err(WindowCommandError::InvalidArgument { argument: "paths" });
+    }
+    forward_documents(&app, granted_display_paths(&paths, &access));
+    Ok(())
+}
+
+fn granted_display_paths(paths: &[String], access: &DocumentAccessList) -> Vec<String> {
+    paths
+        .iter()
+        .filter(|path| path.chars().count() <= MAX_PATH_CHARACTERS && !path.contains('\0'))
+        .filter_map(|path| locate_document(std::path::Path::new(path)).ok())
+        .filter(|location| access.is_allowed(location))
+        .map(|location| location.display_path)
+        .collect()
+}
+
 /// The window asked about its edits while Exit closed every window, and the user chose to stay.
 #[tauri::command]
-pub fn close_cancelled(windows: State<'_, Arc<OpenWindows>>) {
-    windows.cancel_exiting();
+pub fn close_cancelled(
+    windows: State<'_, Arc<OpenWindows>>,
+    database: State<'_, WorkspaceDatabase>,
+) {
+    stay_after_cancelled_exit(&windows, &database);
 }
 
 #[cfg(test)]
@@ -180,6 +216,29 @@ mod tests {
             vec![canonical_key_of(r"D:\Docs\Guide.md")]
         );
         assert_eq!(checked.root_keys, vec![canonical_key_of(r"D:\Docs")]);
+    }
+
+    #[test]
+    fn only_files_the_app_was_given_are_routed_again() {
+        let granted = tempfile::tempdir().unwrap();
+        let other = tempfile::tempdir().unwrap();
+        let plan = granted.path().join("Plan.md");
+        let secret = other.path().join("Secret.md");
+        std::fs::write(&plan, "#").unwrap();
+        std::fs::write(&secret, "#").unwrap();
+        let access = DocumentAccessList::default();
+        access.grant_folder(granted.path()).unwrap();
+
+        let routed = granted_display_paths(
+            &[
+                plan.to_string_lossy().into_owned(),
+                secret.to_string_lossy().into_owned(),
+            ],
+            &access,
+        );
+
+        assert_eq!(routed.len(), 1);
+        assert!(routed[0].ends_with("Plan.md"));
     }
 
     #[test]
