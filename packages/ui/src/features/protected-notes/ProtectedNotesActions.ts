@@ -273,7 +273,7 @@ export class ProtectedNotesActions {
       try {
         const { recoveryKey } = await this.dependencies.protectedNotes.setUp(section.path, password);
         this.unconfirmedRecoveryKeys.set(section.key, recoveryKey);
-        this.status = { isSetUp: true, isUnlocked: true, canUnlockOnThisPc: false };
+        this.status = { isSetUp: true, isUnlocked: true, canUnlockOnThisPc: false, isReencrypting: false };
       } catch (error) {
         this.setUpProblem = problemOf(error, SET_UP_PROBLEMS, 'protectedNotes.setUp.failed');
       }
