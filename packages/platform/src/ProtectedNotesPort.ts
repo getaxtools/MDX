@@ -253,6 +253,18 @@ export interface ProtectedNotesPort {
    */
   openAttachment(location: string, noteId: string): Promise<Uint8Array>;
   /**
+   * Backs the section up as it is, still encrypted, into a new folder inside one the user picks in
+   * the app's dialog; resolves to that folder, or `undefined` when the user cancelled. Works while
+   * locked too.
+   */
+  backUp(location: string): Promise<string | undefined>;
+  /**
+   * Restores a backup folder the user picks where this notes location has no section; resolves to
+   * whether it was restored. The section is then locked, and unlocks with the password or recovery
+   * key it had when it was backed up.
+   */
+  restore(location: string): Promise<boolean>;
+  /**
    * Tells the listener which sections locked, in any window, by their notes locations' canonical keys,
    * so every window closes their notes; returns how to stop listening.
    */

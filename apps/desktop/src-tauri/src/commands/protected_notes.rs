@@ -1191,6 +1191,7 @@ pub async fn protected_save(
 }
 
 pub mod attachments;
+pub mod section_backups;
 
 #[cfg(test)]
 mod tests {

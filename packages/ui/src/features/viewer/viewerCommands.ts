@@ -68,6 +68,7 @@ export type ViewerCommand =
   | { readonly kind: 'showSettings' }
   | { readonly kind: 'confirmClearAllData' }
   | { readonly kind: 'clearAllData' }
+  | { readonly kind: 'confirmProtectedCopy' }
   | { readonly kind: 'showFind' }
   | { readonly kind: 'showFolderSearch' }
   | {

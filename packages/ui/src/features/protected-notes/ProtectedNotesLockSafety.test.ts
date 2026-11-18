@@ -197,22 +197,30 @@ describe('a lock saves the edits of every window first', () => {
   });
 });
 
-describe('a protected note is not exported, printed or copied as HTML', () => {
+describe('a protected note is never copied as HTML, and exported or printed only once the user accepts', () => {
+  it('refuses Copy as HTML with a notice', async () => {
+    const { protectedNotes, noteId } = await sectionWithOneNote();
+    const { controller, snapshot } = await windowShowingTheNote(protectedNotes, noteId);
+
+    await controller.execute({ kind: 'copyAsHtml' });
+
+    expect(snapshot().notice).toBe('Protected notes cannot be copied as HTML yet.');
+    expect(snapshot().copyAsHtmlRequest ?? 0).toBe(0);
+  });
+
   it.each([
-    { kind: 'exportDocument', format: 'html' },
-    { kind: 'exportDocument', format: 'plainText' },
-    { kind: 'print' },
-    { kind: 'copyAsHtml' },
-  ] as const)('refuses $kind with a notice', async (command) => {
+    { command: { kind: 'exportDocument', format: 'html' }, dialog: 'protectedExportWarning' },
+    { command: { kind: 'exportDocument', format: 'plainText' }, dialog: 'protectedExportWarning' },
+    { command: { kind: 'print' }, dialog: 'protectedPrintWarning' },
+  ] as const)('asks before $command.kind and starts nothing yet', async ({ command, dialog }) => {
     const { protectedNotes, noteId } = await sectionWithOneNote();
     const { controller, snapshot } = await windowShowingTheNote(protectedNotes, noteId);
 
     await controller.execute(command);
 
-    expect(snapshot().notice).toBe('Protected notes cannot be exported, printed or copied as HTML yet.');
+    expect(snapshot().openDialog).toBe(dialog);
     expect(snapshot().exportRequest).toBeUndefined();
     expect(snapshot().printRequest ?? 0).toBe(0);
-    expect(snapshot().copyAsHtmlRequest ?? 0).toBe(0);
   });
 });
 

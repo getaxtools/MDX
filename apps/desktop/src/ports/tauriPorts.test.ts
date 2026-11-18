@@ -423,6 +423,8 @@ describe('TauriProtectedNotes', () => {
       protected_move_in: () => ({ noteId: NOTE_ID, isPlainCopyKept: false }),
       protected_add_attachment: () => ({ noteId: NOTE_ID, fileName: 'Chart.png' }),
       protected_open_attachment: () => new Uint8Array([137, 80, 78, 71]).buffer,
+      protected_back_up: () => null,
+      protected_restore: () => true,
       protected_move_out: () => ({
         canonicalKey: 'c:\\notes\\bank details.md',
         displayPath: 'C:\\Notes\\Bank details.md',
@@ -466,6 +468,8 @@ describe('TauriProtectedNotes', () => {
     await notes.addPastedAttachment(LOCATION, { name: 'Chart.png', bytes: new Uint8Array([137, 80]) });
     await notes.addDroppedAttachment(LOCATION, 'C:\\Pictures\\scan.png');
     expect(await notes.openAttachment(LOCATION, NOTE_ID)).toEqual(new Uint8Array([137, 80, 78, 71]));
+    expect(await notes.backUp(LOCATION)).toBeUndefined();
+    expect(await notes.restore(LOCATION)).toBe(true);
     return revision;
   }
 
@@ -497,6 +501,8 @@ describe('TauriProtectedNotes', () => {
       'protected_add_attachment',
       'protected_add_attachment',
       'protected_open_attachment',
+      'protected_back_up',
+      'protected_restore',
     ]);
     const withPassword = calls
       .filter((call) => JSON.stringify(call.args).includes(PASSWORD))

@@ -1046,6 +1046,26 @@
       onCommand={(command: ViewerCommand) => void controller.execute(command)}
     />
   {/if}
+  {#if snapshot.openDialog === 'protectedPrintWarning'}
+    <ConfirmDialog
+      title={translator.translate('protectedNotes.copyWarning.print.title')}
+      message={translator.translate('protectedNotes.copyWarning.print.message')}
+      confirmLabel={translator.translate('protectedNotes.copyWarning.print.confirm')}
+      cancelLabel={translator.translate('protectedNotes.copyWarning.cancel')}
+      onConfirm={() => void controller.execute({ kind: 'confirmProtectedCopy' })}
+      onCancel={() => controller.closeDialog()}
+    />
+  {/if}
+  {#if snapshot.openDialog === 'protectedExportWarning'}
+    <ConfirmDialog
+      title={translator.translate('protectedNotes.copyWarning.export.title')}
+      message={translator.translate('protectedNotes.copyWarning.export.message')}
+      confirmLabel={translator.translate('protectedNotes.copyWarning.export.confirm')}
+      cancelLabel={translator.translate('protectedNotes.copyWarning.cancel')}
+      onConfirm={() => void controller.execute({ kind: 'confirmProtectedCopy' })}
+      onCancel={() => controller.closeDialog()}
+    />
+  {/if}
   {#if snapshot.openDialog === 'clearAllData'}
     <ConfirmDialog
       title={translator.translate('privacy.clearAllData.title')}

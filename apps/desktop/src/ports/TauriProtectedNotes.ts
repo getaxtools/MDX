@@ -185,6 +185,14 @@ export class TauriProtectedNotes implements ProtectedNotesPort {
     return new Uint8Array(await call<ArrayBuffer>('protected_open_attachment', { location, noteId }));
   }
 
+  async backUp(location: string): Promise<string | undefined> {
+    return (await call<string | null>('protected_back_up', { location })) ?? undefined;
+  }
+
+  restore(location: string): Promise<boolean> {
+    return call('protected_restore', { location });
+  }
+
   onLocked(listener: ProtectedNotesLockedListener): () => void {
     return listenInThisWindow<{ readonly locationKeys: string[] }>(PROTECTED_NOTES_LOCKED_EVENT, (event) =>
       listener(event.payload.locationKeys),

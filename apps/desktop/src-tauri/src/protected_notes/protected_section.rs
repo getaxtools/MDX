@@ -26,6 +26,7 @@ use crate::secrets::{DeviceSecretStore, SecretName};
 mod attachments;
 mod key_changes;
 mod note_moves;
+mod section_backup;
 
 pub use attachments::{ATTACHMENT_FOLDER, AddedAttachment, NewAttachment};
 pub use key_changes::{Reencryption, ReencryptionFinish};

@@ -369,6 +369,8 @@ export type ViewerDialog =
   | 'commandPalette'
   | 'settings'
   | 'clearAllData'
+  | 'protectedExportWarning'
+  | 'protectedPrintWarning'
   | 'controlWheel'
   | 'workspaceKindSettings'
   | 'wordGoal'
@@ -389,6 +391,14 @@ const DIALOGS_BY_COMMAND: Partial<Record<ViewerCommand['kind'], ViewerDialog>> =
 };
 
 type SnapshotListener = (snapshot: ViewerSnapshot) => void;
+
+type ProtectedCopyOutput =
+  { readonly kind: 'print' } | { readonly kind: 'export'; readonly format: ExportFormat };
+
+interface PendingProtectedCopy {
+  readonly output: ProtectedCopyOutput;
+  readonly canonicalKey: string;
+}
 
 type CommandHandlers = {
   readonly [Kind in ViewerCommand['kind']]?: (
@@ -432,6 +442,8 @@ export class ViewerController {
   private folderSearchQuery: string | undefined;
   private copyAsHtmlRequest = 0;
   private exportRequest: ExportRequest | undefined;
+  /** An export or print of a protected note that waits for the user to accept an unprotected copy. */
+  private pendingProtectedCopy: PendingProtectedCopy | undefined;
   private printRequest = 0;
   private externalLinkRequest: string | undefined;
   private outsideLinkRequest: OutsideLinkRequest | undefined;
@@ -1367,6 +1379,7 @@ export class ViewerController {
 
   closeDialog(): void {
     this.openDialog = undefined;
+    this.pendingProtectedCopy = undefined;
     this.workspaceActions.forgetWorkspaceFile();
     this.publish(this.composeSnapshot(this.snapshot.notice));
   }
@@ -1496,14 +1509,10 @@ export class ViewerController {
     reloadFromDisk: ({ canonicalKey }) => this.editingActions.reloadFromDisk(canonicalKey),
     overwriteChangesOnDisk: ({ canonicalKey }) => this.saving.overwriteChangesOnDisk(canonicalKey),
     print: () => {
-      if (!this.activeDocument || this.refusesProtectedOutput()) return;
-      if (this.editingActions.isActiveDocumentEditing()) {
-        this.dependencies.printer?.printActiveDocument();
-        return;
-      }
-      this.printRequest += 1;
-      this.publish(this.composeSnapshot(this.snapshot.notice));
+      if (!this.activeDocument || this.asksBeforeCopying({ kind: 'print' })) return;
+      this.startPrint();
     },
+    confirmProtectedCopy: () => this.confirmProtectedCopy(),
     showFolderSearch: () => {
       this.folderSearchQuery = undefined;
       this.dependencies.session.updateViewSettings((viewSettings) => showSidebarView(viewSettings, 'search'));
@@ -1536,13 +1545,10 @@ export class ViewerController {
       if (!this.refusesProtectedOutput()) void this.copyHtml(html);
     },
     exportDocument: ({ format }) => {
-      if (!this.activeDocument || this.refusesProtectedOutput()) return;
-      this.exportRequest = { format, number: (this.exportRequest?.number ?? 0) + 1 };
-      this.publish(this.composeSnapshot(this.snapshot.notice));
+      if (!this.activeDocument || this.asksBeforeCopying({ kind: 'export', format })) return;
+      this.startExport(format);
     },
-    saveExport: async ({ format, contents }) => {
-      if (!this.refusesProtectedOutput()) await this.saveExport(format, contents);
-    },
+    saveExport: ({ format, contents }) => this.saveExport(format, contents),
     confirmClearAllData: () => this.confirmClearAllData(),
     clearAllData: () => this.clearAllData(),
     toggleSourceView: () => {
@@ -1877,6 +1883,46 @@ export class ViewerController {
     await this.saveNow();
     await this.showNotesIndex();
     this.showNotice('privacy.clearAllData.done');
+  }
+
+  /**
+   * An export or print of a protected note writes a copy that is not protected, so the user is asked
+   * first and nothing starts until they accept.
+   */
+  private asksBeforeCopying(output: ProtectedCopyOutput): boolean {
+    const document = this.activeDocument;
+    if (!document || !isProtectedLocation(document)) return false;
+    this.pendingProtectedCopy = { output, canonicalKey: document.canonicalKey };
+    this.openDialog = output.kind === 'print' ? 'protectedPrintWarning' : 'protectedExportWarning';
+    this.publish(this.composeSnapshot(this.snapshot.notice));
+    return true;
+  }
+
+  /** Starts the export or print the user accepted, if the same note is still shown. */
+  private confirmProtectedCopy(): void {
+    const pending = this.pendingProtectedCopy;
+    this.pendingProtectedCopy = undefined;
+    this.openDialog = undefined;
+    if (!pending || this.activeDocument?.canonicalKey !== pending.canonicalKey) {
+      this.publish(this.composeSnapshot(this.snapshot.notice));
+      return;
+    }
+    if (pending.output.kind === 'print') this.startPrint();
+    else this.startExport(pending.output.format);
+  }
+
+  private startExport(format: ExportFormat): void {
+    this.exportRequest = { format, number: (this.exportRequest?.number ?? 0) + 1 };
+    this.publish(this.composeSnapshot(this.snapshot.notice));
+  }
+
+  private startPrint(): void {
+    if (this.editingActions.isActiveDocumentEditing()) {
+      this.dependencies.printer?.printActiveDocument();
+      return;
+    }
+    this.printRequest += 1;
+    this.publish(this.composeSnapshot(this.snapshot.notice));
   }
 
   private async saveExport(format: ExportFormat, contents: string): Promise<void> {

@@ -1,3 +1,4 @@
+import { protectedNoteLocation } from '@mdx/platform';
 import { describe, expect, it } from 'vitest';
 import { WORKSPACE_KINDS, workspaceKindsFor } from '../workspace-kinds/workspaceKinds';
 import { locationOfPath } from './windowsPaths';
@@ -71,6 +72,46 @@ describe('workspace file', () => {
     expect(text).not.toContain('secret.md');
     expect(text).not.toContain('diary.md');
     expect(text).not.toContain('isSidebarVisible');
+  });
+
+  it('holds no protected title or id, even when a protected note or section file was a favourite', () => {
+    const noteId = '4f1c0a2e9b7d4c3a8e6f5d4c3b2a1f0e';
+    const withProtected: PortableWorkspace = {
+      ...HANDBOOK,
+      roots: [...HANDBOOK.roots, locationOfPath(String.raw`D:\team\.mdx-notes\protected`)],
+      favourites: [
+        ...HANDBOOK.favourites,
+        { location: protectedNoteLocation(String.raw`d:\team`, noteId, 'Bank details'), kind: 'file' },
+        {
+          location: locationOfPath(`D:\\team\\.mdx-notes\\protected\\notes\\${noteId}.mdxp`),
+          kind: 'file',
+        },
+      ],
+    };
+
+    const text = writeWorkspaceFile(withProtected, 'D:\\team').text;
+
+    expect(text).not.toContain('Bank details');
+    expect(text).not.toContain(noteId);
+    expect(text).not.toContain('protected');
+    expect(JSON.parse(text)).toMatchObject({ roots: ['docs', 'E:/shared'] });
+  });
+
+  it('reads no protected location from a file written elsewhere', () => {
+    const text = JSON.stringify({
+      format: 'mdx-workspace',
+      formatVersion: 1,
+      name: 'Shared',
+      kind: 'markdownViewer',
+      roots: ['docs', '.mdx-notes/protected'],
+      favourites: [{ path: '.mdx-notes/protected/notes/a.mdxp', kind: 'file' }],
+    });
+
+    const reading = readWorkspaceFile(text, READ_OPTIONS);
+
+    if (reading.outcome !== 'read') throw new Error('the file was not read');
+    expect(reading.workspace.roots.map((root) => root.displayPath)).toEqual(['D:\\team\\docs']);
+    expect(reading.workspace.favourites).toEqual([]);
   });
 
   it('relative paths resolve against the file folder, so a written file reads back the same', () => {

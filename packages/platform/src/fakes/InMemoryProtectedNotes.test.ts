@@ -239,6 +239,28 @@ describe('InMemoryProtectedNotes', () => {
     expect(await failureOf(notes.openAttachment(LOCATION, noteId))).toBe('notFound');
   });
 
+  it('restores a backup elsewhere, locked, with its notes and password', async () => {
+    const notes = await withPlainNote();
+    const noteId = await notes.create(LOCATION, { title: 'Bank details', folder: '' });
+    const backup = await notes.backUp(LOCATION);
+    notes.chosenFolder = backup;
+
+    expect(await notes.restore('E:\\Restored')).toBe(true);
+    expect((await notes.status('E:\\Restored')).isUnlocked).toBe(false);
+    await notes.unlock('E:\\Restored', PASSWORD, false);
+    expect((await notes.open('E:\\Restored', noteId)).text).toBe('');
+    expect(await failureOf(notes.restore(LOCATION))).toBe('alreadySetUp');
+  });
+
+  it('changes nothing when the backup or restore dialog is cancelled', async () => {
+    const notes = await withPlainNote();
+    notes.chosenFolder = undefined;
+
+    expect(await notes.backUp(LOCATION)).toBeUndefined();
+    expect(await notes.restore('E:\\Restored')).toBe(false);
+    expect((await notes.status('E:\\Restored')).isSetUp).toBe(false);
+  });
+
   it('refuses moves the user did not confirm and plain notes outside the location', async () => {
     const notes = await withPlainNote();
     const noteId = await notes.create(LOCATION, { title: 'Kept', folder: '' });

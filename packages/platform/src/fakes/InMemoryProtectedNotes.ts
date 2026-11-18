@@ -64,6 +64,10 @@ export class InMemoryProtectedNotes implements ProtectedNotesPort {
   readonly plainNotes = new Map<string, string>();
   /** Picture files the user dropped on the window, by path, as the native layer remembers them. */
   readonly droppedPictures = new Map<string, Uint8Array>();
+  /** The folder the backup and restore dialogs return; `undefined` acts as if the user cancelled. */
+  chosenFolder: string | undefined = 'D:\\Backups';
+  /** Backups by their folder, as they were when made. */
+  private readonly backups = new Map<string, Section>();
   private nextNote = 0;
   private recoveryKeyCount = 0;
   private clock = FIRST_TIME_MS;
@@ -276,6 +280,30 @@ export class InMemoryProtectedNotes implements ProtectedNotesPort {
     return bytes ? Uint8Array.from(bytes) : refused('notFound');
   }
 
+  async backUp(location: string): Promise<string | undefined> {
+    const section = await this.sectionOf(location);
+    if (this.chosenFolder === undefined) return undefined;
+    const folder = this.freeBackupFolder(this.chosenFolder);
+    this.backups.set(folder, copyOf(section));
+    return folder;
+  }
+
+  async restore(location: string): Promise<boolean> {
+    if (this.sections.has(location)) return refused('alreadySetUp');
+    if (this.chosenFolder === undefined) return false;
+    const backup = this.backups.get(this.chosenFolder);
+    if (!backup) return refused('notSetUp');
+    this.sections.set(location, { ...copyOf(backup), isUnlocked: false, isRemembered: false });
+    return Promise.resolve(true);
+  }
+
+  private freeBackupFolder(into: string): string {
+    const name = `${into}\\MDX protected notes backup`;
+    let folder = name;
+    for (let number = 2; this.backups.has(folder); number += 1) folder = `${name} ${String(number)}`;
+    return folder;
+  }
+
   private addPicture(section: Section, name: string, bytes: Uint8Array): Promise<AddedProtectedAttachment> {
     const extension = PICTURE_SIGNATURES.find(
       ([, signature]) => String.fromCharCode(...bytes.subarray(0, signature.length)) === signature,
@@ -373,6 +401,10 @@ export class InMemoryProtectedNotes implements ProtectedNotesPort {
     this.clock += 1;
     return this.clock;
   }
+}
+
+function copyOf(section: Section): Section {
+  return { ...section, notes: new Map(section.notes) };
 }
 
 function fileNameOf(path: string): string {

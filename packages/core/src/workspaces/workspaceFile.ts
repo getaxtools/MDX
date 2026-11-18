@@ -1,5 +1,6 @@
 import type { DocumentLocation } from '@mdx/platform';
 import type { Favourite, FavouriteGroup } from '../favourites/FavouritesList';
+import { isProtectedLocation } from '../protected-notes/protectedLocations';
 import { isRecord } from '../session/savedValues';
 import { parseWorkspaceOverrides, type WorkspaceOverrides } from '../view/viewSettingsScopes';
 import { isBuiltKind, type WorkspaceKind } from '../workspace-kinds/workspaceKinds';
@@ -35,7 +36,10 @@ export type WorkspaceFileReading =
   | { readonly outcome: 'read'; readonly workspace: PortableWorkspace }
   | { readonly outcome: 'refused'; readonly reason: WorkspaceFileRefusal };
 
-/** Writes only the allowlisted fields; paths on the file's drive or share become relative. */
+/**
+ * Writes only the allowlisted fields; paths on the file's drive or share become relative. A protected
+ * note or a file of a protected section is never written, so the file names no protected title or id.
+ */
 export function writeWorkspaceFile(workspace: PortableWorkspace, fileFolder: string): WrittenWorkspaceFile {
   let absolutePathCount = 0;
   const portablePath = (path: string) => {
@@ -51,13 +55,17 @@ export function writeWorkspaceFile(workspace: PortableWorkspace, fileFolder: str
     kind: workspace.kindId,
     icon: workspace.icon,
     colour: workspace.colour,
-    roots: workspace.roots.map((root) => portablePath(root.displayPath)),
-    favourites: workspace.favourites.map((favourite) => ({
-      path: portablePath(favourite.location.displayPath),
-      kind: favourite.kind,
-      ...(favourite.label === undefined ? {} : { label: favourite.label }),
-      ...(favourite.groupId === undefined ? {} : { group: favourite.groupId }),
-    })),
+    roots: workspace.roots
+      .filter((root) => !isProtectedLocation(root))
+      .map((root) => portablePath(root.displayPath)),
+    favourites: workspace.favourites
+      .filter((favourite) => !isProtectedLocation(favourite.location))
+      .map((favourite) => ({
+        path: portablePath(favourite.location.displayPath),
+        kind: favourite.kind,
+        ...(favourite.label === undefined ? {} : { label: favourite.label }),
+        ...(favourite.groupId === undefined ? {} : { group: favourite.groupId }),
+      })),
     favouriteGroups: workspace.favouriteGroups.map(({ id, name }) => ({ id, name })),
     settingsOverrides: workspace.settingsOverrides,
   };
@@ -87,8 +95,12 @@ export function readWorkspaceFile(
       kindId: file.kind,
       icon: typeof file.icon === 'string' ? file.icon : null,
       colour: typeof file.colour === 'string' ? file.colour : null,
-      roots: arrayOf(file.roots).flatMap((root) => pathLocation(resolve(root))),
-      favourites: arrayOf(file.favourites).flatMap((entry) => favouriteFrom(entry, resolve)),
+      roots: arrayOf(file.roots)
+        .flatMap((root) => pathLocation(resolve(root)))
+        .filter((root) => !isProtectedLocation(root)),
+      favourites: arrayOf(file.favourites)
+        .flatMap((entry) => favouriteFrom(entry, resolve))
+        .filter((favourite) => !isProtectedLocation(favourite.location)),
       favouriteGroups: arrayOf(file.favouriteGroups).flatMap(groupFrom),
       settingsOverrides: parseWorkspaceOverrides(file.settingsOverrides),
     },
