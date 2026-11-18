@@ -1,4 +1,4 @@
-import { WorkspaceKindsState, type KindSwitcher, type WorkspaceKind } from '@mdx/core';
+import { WORKSPACE_KINDS, WorkspaceKindsState, type KindSwitcher, type WorkspaceKind } from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
@@ -41,6 +41,22 @@ describe('KindBar', () => {
     expect(screen.getByRole('group', { name: 'Workspace kinds' })).toBeTruthy();
     expect(kindButton('Markdown viewer').getAttribute('aria-pressed')).toBe('false');
     expect(kindButton('Notes').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('lists the three kinds of this version in the fixed order', () => {
+    const kinds = WorkspaceKindsState.fromSaved(
+      { enabledKindIds: ['specViewer', 'markdownViewer', 'notes'], activeKindId: 'specViewer' },
+      WORKSPACE_KINDS,
+    );
+    render(KindBar, { kinds, kindSwitcher: 'both', translator: createTranslator(), onCommand: vi.fn() });
+
+    const names = screen
+      .getAllByRole('button')
+      .map((button) => button.getAttribute('aria-label'))
+      .filter((name) => name !== 'Choose workspace kinds');
+
+    expect(names).toEqual(['Markdown viewer', 'Notes', 'Spec viewer']);
+    expect(kindButton('Spec viewer').getAttribute('aria-pressed')).toBe('true');
   });
 
   it('clicking a kind sends the switch command', async () => {

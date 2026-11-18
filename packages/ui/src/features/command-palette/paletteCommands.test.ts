@@ -102,6 +102,22 @@ describe('paletteCommands', () => {
     expect(kindSwitchesIn(['markdownViewer', 'notes'], 'notes')).toEqual(['Workspace Kind: Markdown viewer']);
   });
 
+  it('offers every enabled kind of this version, Spec viewer included, in the fixed order', () => {
+    const workspaceKinds = WorkspaceKindsState.fromSaved(
+      { enabledKindIds: ['specViewer', 'notes', 'markdownViewer'], activeKindId: 'markdownViewer' },
+      WORKSPACE_KINDS,
+    );
+
+    const offered = paletteCommands(createTranslator(), {
+      shortcuts: effectiveCommandShortcuts({}),
+      workspaceKinds,
+    })
+      .filter(({ command }) => command.kind === 'switchWorkspaceKind')
+      .map(({ label }) => label);
+
+    expect(offered).toEqual(['Workspace Kind: Notes', 'Workspace Kind: Spec viewer']);
+  });
+
   it('never offers a planned or disabled kind', () => {
     expect(kindSwitchesIn(['markdownViewer', 'specViewer'], 'markdownViewer')).toEqual([]);
     expect(kindSwitchesIn(['markdownViewer'], 'markdownViewer')).toEqual([]);

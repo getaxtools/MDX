@@ -47,6 +47,7 @@
   <p>{translator.translate('about.privacy')}</p>
   <p>{translator.translate('about.dataLocation', { path: appInfo.dataFolder })}</p>
   <p>{translator.translate('about.projectAddress', { address: PROJECT_ADDRESS })}</p>
+  <p>{translator.translate('specViewer.notAffiliated')}</p>
   <p class="legal">
     {translator.translate('about.copyright', { year: String(COPYRIGHT_YEAR) })}<br />
     {translator.translate('about.license')}

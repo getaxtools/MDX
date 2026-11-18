@@ -103,13 +103,21 @@ describe('workspace file', () => {
       '{"format":"mdx-workspace","formatVersion":1,"name":"A","kind":"timeMachine"}',
       'unknownKind',
     ],
-    [
-      'a kind not built yet',
-      '{"format":"mdx-workspace","formatVersion":1,"name":"A","kind":"specViewer"}',
-      'unknownKind',
-    ],
   ])('refuses %s with a reason', (_description, text, reason) => {
     expect(readWorkspaceFile(text, READ_OPTIONS)).toEqual({ outcome: 'refused', reason });
+  });
+
+  it('refuses a kind not built yet with a reason', () => {
+    const withPlannedSpecViewer = WORKSPACE_KINDS.map((kind) =>
+      kind.id === 'specViewer' ? { ...kind, availability: 'planned' as const } : kind,
+    );
+    const text = '{"format":"mdx-workspace","formatVersion":1,"name":"A","kind":"specViewer"}';
+
+    expect(readWorkspaceFile(text, { ...READ_OPTIONS, kindRegistry: withPlannedSpecViewer })).toEqual({
+      outcome: 'refused',
+      reason: 'unknownKind',
+    });
+    expect(readWorkspaceFile(text, READ_OPTIONS).outcome).toBe('read');
   });
 
   it('refuses a file larger than 1 MB', () => {

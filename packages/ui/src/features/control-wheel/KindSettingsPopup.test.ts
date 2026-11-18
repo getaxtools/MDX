@@ -1,4 +1,4 @@
-import { WorkspaceKindsState, type WorkspaceKind } from '@mdx/core';
+import { WORKSPACE_KINDS, WorkspaceKindsState, type WorkspaceKind } from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
 import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
@@ -38,6 +38,25 @@ describe('KindSettingsPopup', () => {
 
     expect(kindSwitch('Spec viewer').getAttribute('aria-disabled')).toBe('true');
     expect(kindSwitch('Spec viewer').textContent).toContain('Later');
+  });
+
+  it('offers every kind of this version, Spec viewer included, in the fixed order', () => {
+    const kinds = WorkspaceKindsState.fromSaved(
+      { enabledKindIds: ['markdownViewer'], activeKindId: 'markdownViewer' },
+      WORKSPACE_KINDS,
+    );
+    render(KindSettingsPopup, {
+      kinds,
+      translator: createTranslator(),
+      onCommand: vi.fn(),
+      onClose: vi.fn(),
+    });
+
+    const switches = screen.getAllByRole('switch');
+
+    expect(switches).toEqual([kindSwitch('Markdown viewer'), kindSwitch('Notes'), kindSwitch('Spec viewer')]);
+    expect(kindSwitch('Spec viewer').getAttribute('aria-disabled')).not.toBe('true');
+    expect(kindSwitch('Spec viewer').textContent).not.toContain('Later');
   });
 
   it('marks the last enabled kind unavailable and says why', () => {
