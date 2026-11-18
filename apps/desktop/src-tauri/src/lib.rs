@@ -13,6 +13,8 @@ mod notes_location;
 mod notes_transfer;
 mod open_requests;
 mod platform;
+/// Public until the protected section's commands use it, so its parts are checked as finished code.
+pub mod protected_notes;
 mod spec_projects;
 #[cfg(dev)]
 mod startup_page;
