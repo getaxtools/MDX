@@ -171,6 +171,37 @@ export class ProtectedNotesPage {
       .click();
   }
 
+  async lockFromHeader(): Promise<void> {
+    await this.section()
+      .$(`button[aria-label="${text('protectedNotes.lock.command')}"]`)
+      .click();
+    await this.waitForState('protectedNotes.section.locked');
+  }
+
+  async lockFromStatusBar(): Promise<void> {
+    await this.browser
+      .$(
+        `footer[aria-label="${text('statusBar.label')}"] button[aria-label="${text('protectedNotes.lock.command')}"]`,
+      )
+      .click();
+  }
+
+  /** Unlocks a section this PC remembers, with its one Unlock button. */
+  async unlockOnThisPc(): Promise<void> {
+    await this.section()
+      .$(`p=${text('protectedNotes.unlock.rememberedHere')}`)
+      .waitForDisplayed();
+    await this.section()
+      .$(`button=${text('protectedNotes.unlock.unlock')}`)
+      .click();
+  }
+
+  async forgetThisPc(): Promise<void> {
+    await this.section()
+      .$(`button=${text('protectedNotes.unlock.forgetThisPc')}`)
+      .click();
+  }
+
   private async turnOnNotes(): Promise<void> {
     const controlWheel = new ControlWheelPage(this.browser, this.mainWindow);
     await controlWheel.openControlWheel();

@@ -2,6 +2,7 @@
   import type { MessageKey, Translator } from '@mdx/i18n';
   import type { ProtectedFolderWarning } from '@mdx/platform';
   import ExplorerSectionHeader from '../explorer/ExplorerSectionHeader.svelte';
+  import { shortcutLabelFor, tooltipWithShortcut } from '../shortcuts/commandShortcuts';
   import type { ViewerCommand } from '../viewer/viewerCommands';
   import type { ProtectedNotesView } from './ProtectedNotesActions';
   import ProtectedUnlockPanel from './ProtectedUnlockPanel.svelte';
@@ -22,6 +23,11 @@
     changedVault: 'protectedNotes.folderWarning.changedVault',
     checkUnavailable: 'protectedNotes.folderWarning.checkUnavailable',
   };
+
+  const lockLabel = $derived(translator.translate('protectedNotes.lock.command'));
+  const lockTooltip = $derived(
+    tooltipWithShortcut(lockLabel, shortcutLabelFor({ kind: 'lockProtectedNotes' }, translator)),
+  );
 
   let isCreating = $state(false);
   let newTitle = $state('');
@@ -72,6 +78,19 @@
       {/if}
     {/snippet}
     {#snippet actions()}
+      {#if view.state === 'unlocked'}
+        <button
+          class="header-action"
+          aria-label={lockLabel}
+          title={lockTooltip}
+          onclick={() => onCommand({ kind: 'lockProtectedNotes' })}
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <rect x="3.5" y="7" width="9" height="6.5" rx="1" />
+            <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+          </svg>
+        </button>
+      {/if}
       {#if view.state === 'unlocked' && view.folderWarning === undefined}
         <button
           class="header-action"
@@ -98,6 +117,9 @@
           <p>{translator.translate(FOLDER_WARNINGS[view.folderWarning])}</p>
           <button class="action" onclick={() => onCommand({ kind: 'acceptProtectedFolder' })}>
             {translator.translate('protectedNotes.folderWarning.keep')}
+          </button>
+          <button class="action" onclick={() => onCommand({ kind: 'lockProtectedNotes' })}>
+            {translator.translate('protectedNotes.lock.button')}
           </button>
         </div>
       {:else}
@@ -280,6 +302,16 @@
     color: var(--color-text-secondary);
     font: inherit;
     font-size: 1.1em;
+  }
+
+  .header-action svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.3;
+    stroke-linecap: round;
+    vertical-align: -2px;
   }
 
   .header-action:hover {

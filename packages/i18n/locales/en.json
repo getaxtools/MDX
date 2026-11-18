@@ -1511,5 +1511,9 @@
   "protectedNotes.open.damaged": "The protected note \"{name}\" is damaged or was changed outside MDX.",
   "protectedNotes.open.failed": "The protected note \"{name}\" could not be opened.",
   "protectedNotes.create.failed": "The protected note could not be created.",
-  "protectedNotes.attachments.unavailable": "Pictures cannot be added to protected notes yet."
+  "protectedNotes.attachments.unavailable": "Pictures cannot be added to protected notes yet.",
+  "protectedNotes.lock.command": "Lock Protected Notes",
+  "protectedNotes.lock.button": "Lock",
+  "protectedNotes.status.unlocked": "Protected notes unlocked",
+  "protectedNotes.lock.editsLost": "Some edits to protected notes could not be saved before the section locked."
 }

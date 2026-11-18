@@ -125,6 +125,21 @@ describe('commandForShortcut on Windows', () => {
     expect(commandForShortcut({ ...ctrlAltW, isComposing: true }, 'windows')).toBeUndefined();
   });
 
+  it('Ctrl+Alt+L locks the protected notes, a combination no other command or editor key uses', () => {
+    const lockCombination = 'ctrl+alt+l';
+    const others = [
+      ...COMMAND_SHORTCUTS.filter(({ command }) => command.kind !== 'lockProtectedNotes').flatMap(
+        ({ combinations }) => combinations,
+      ),
+      ...EDITOR_SHORTCUTS.map(({ combination }) => combination),
+    ].map((combination) => combination.join('+').toLowerCase());
+
+    expect(commandForShortcut(keys('l', { ctrlKey: true, altKey: true }), 'windows')).toEqual({
+      kind: 'lockProtectedNotes',
+    });
+    expect(others).not.toContain(lockCombination);
+  });
+
   it('the shortcut table has no duplicate combination', () => {
     const combinations = COMMAND_SHORTCUTS.flatMap((shortcut) =>
       shortcut.combinations.map((combination) => combination.join('+').toLowerCase()),

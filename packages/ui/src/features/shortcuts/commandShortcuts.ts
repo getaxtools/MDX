@@ -157,6 +157,11 @@ export const COMMAND_SHORTCUTS: readonly CommandShortcut[] = [
     actionKey: 'workspaces.switch',
   },
   {
+    command: { kind: 'lockProtectedNotes' },
+    combinations: [['ctrl', 'alt', 'L']],
+    actionKey: 'protectedNotes.lock.command',
+  },
+  {
     command: { kind: 'showKeyboardShortcuts' },
     combinations: [['F1']],
     actionKey: 'menu.help.keyboardShortcuts',

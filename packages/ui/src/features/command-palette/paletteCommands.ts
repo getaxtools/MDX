@@ -102,7 +102,9 @@ export function paletteCommands(
   }: PaletteContext = DEFAULT_PALETTE_CONTEXT,
 ): PaletteCommand[] {
   return [
-    ...menuCommands(shortcuts, translator),
+    ...menuCommands(shortcuts, translator).filter(
+      ({ command }) => isNotesWorkspace || command.kind !== 'lockProtectedNotes',
+    ),
     ...(isCaretInLink ? [openLinkCommand(translator)] : []),
     ...workspaceKindCommands(workspaceKinds, translator),
     ...(workspaces ? workspaceCommands(workspaces, workspaceKinds, translator) : []),

@@ -161,6 +161,23 @@ describe('paletteCommands', () => {
     );
   });
 
+  it('offers Lock Protected Notes, with its shortcut, only in a Notes workspace', () => {
+    const translator = createTranslator();
+    const outside = paletteCommands(translator).map((entry) => entry.command.kind);
+    const inNotes = paletteCommands(translator, {
+      shortcuts: COMMAND_SHORTCUTS,
+      workspaceKinds: WorkspaceKindsState.initial(WORKSPACE_KINDS),
+      isNotesWorkspace: true,
+    });
+
+    expect(outside).not.toContain('lockProtectedNotes');
+    expect(inNotes).toContainEqual({
+      command: { kind: 'lockProtectedNotes' },
+      label: 'Lock Protected Notes',
+      shortcut: 'Ctrl+Alt+L',
+    });
+  });
+
   it('offers Check for Prompt Injection only while a document is shown', () => {
     const translator = createTranslator();
     const context = {

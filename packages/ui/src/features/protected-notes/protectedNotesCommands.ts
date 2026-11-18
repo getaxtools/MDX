@@ -12,7 +12,8 @@ export type ProtectedNotesCommand =
   | { readonly kind: 'acceptProtectedFolder' }
   | { readonly kind: 'forgetProtectedOnThisPc' }
   | { readonly kind: 'openProtectedNote'; readonly noteId: string }
-  | { readonly kind: 'createProtectedNote'; readonly title: string };
+  | { readonly kind: 'createProtectedNote'; readonly title: string }
+  | { readonly kind: 'lockProtectedNotes' };
 
 const PROTECTED_NOTES_COMMAND_KINDS: ReadonlySet<string> = new Set<ProtectedNotesCommand['kind']>([
   'showProtectedSetUp',
@@ -25,6 +26,7 @@ const PROTECTED_NOTES_COMMAND_KINDS: ReadonlySet<string> = new Set<ProtectedNote
   'forgetProtectedOnThisPc',
   'openProtectedNote',
   'createProtectedNote',
+  'lockProtectedNotes',
 ]);
 
 export function isProtectedNotesCommand(command: {

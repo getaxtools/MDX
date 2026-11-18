@@ -153,6 +153,30 @@ describe('StatusBar', () => {
     expect(screen.getByRole('status').textContent.trim()).toBe('3 cursors');
   });
 
+  it('shows that protected notes are unlocked, with a Lock button', async () => {
+    const onLockProtectedNotes = vi.fn();
+    render(StatusBar, {
+      document: savedDocument,
+      zoomPercent: 100,
+      isSourceView: false,
+      translator: createTranslator(),
+      onResetZoom: vi.fn(),
+      isProtectedSectionUnlocked: true,
+      onLockProtectedNotes,
+    });
+
+    expect(screen.getByRole('contentinfo').textContent).toContain('Protected notes unlocked');
+    await userEvent.click(screen.getByRole('button', { name: 'Lock Protected Notes' }));
+
+    expect(onLockProtectedNotes).toHaveBeenCalledOnce();
+  });
+
+  it('shows no Lock button while no protected section is unlocked', () => {
+    renderStatusBar(savedDocument);
+
+    expect(screen.queryByRole('button', { name: 'Lock Protected Notes' })).toBeNull();
+  });
+
   it('says nothing about cursors with one', () => {
     renderStatusBar(savedDocument);
 

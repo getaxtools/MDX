@@ -102,6 +102,31 @@ describe('ProtectedNotesSection', () => {
     expect(onCommand).toHaveBeenCalledWith({ kind: 'acceptProtectedFolder' });
   });
 
+  it('locks from the section header, whose tooltip names the shortcut', async () => {
+    const { onCommand } = renderSection(UNLOCKED_EMPTY);
+    const lock = screen.getByRole('button', { name: 'Lock Protected Notes' });
+
+    await userEvent.click(lock);
+
+    expect(lock.getAttribute('title')).toBe('Lock Protected Notes (Ctrl+Alt+L)');
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'lockProtectedNotes' });
+  });
+
+  it('offers to lock instead of keeping a folder the user does not trust', async () => {
+    const { onCommand } = renderSection({ ...UNLOCKED_EMPTY, folderWarning: 'changedVault' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Lock' }));
+
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'lockProtectedNotes' });
+    expect(onCommand).not.toHaveBeenCalledWith({ kind: 'acceptProtectedFolder' });
+  });
+
+  it('offers no Lock button while the section is locked', () => {
+    renderSection({ ...UNLOCKED_EMPTY, state: 'locked' });
+
+    expect(screen.queryByRole('button', { name: 'Lock Protected Notes' })).toBeNull();
+  });
+
   it('offers Forget This PC only while this PC remembers the section', async () => {
     const { onCommand } = renderSection({ ...UNLOCKED_EMPTY, canUnlockOnThisPc: true });
 

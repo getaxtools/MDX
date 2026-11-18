@@ -850,6 +850,8 @@
         {wordsThisSession}
         selectedWords={editedDocument ? selectedWords : 0}
         statusMessage={snapshot.notesMoveStatus}
+        isProtectedSectionUnlocked={snapshot.protectedNotes?.state === 'unlocked'}
+        onLockProtectedNotes={() => void controller.execute({ kind: 'lockProtectedNotes' })}
         onShowWordGoal={() => void controller.execute({ kind: 'showWordGoal' })}
         injectionCheck={snapshot.injectionCheck}
         onShowInjectionCheck={() =>

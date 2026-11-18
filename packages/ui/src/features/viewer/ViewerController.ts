@@ -34,6 +34,7 @@ import type { MessageKey, Translator } from '@mdx/i18n';
 import {
   DocumentOpenError,
   hasFile,
+  isProtectedNoteIn,
   isUntitledLocation,
   type AppMenuPort,
   type JumpListPort,
@@ -698,11 +699,28 @@ export class ViewerController {
         this.publish(this.composeSnapshot(this.snapshot.notice));
       },
       showNotice: (key, values) => this.showNotice(key, values),
+      saveEditsOf: (locationKey) => this.saveProtectedEditsOf(locationKey),
       startEditing: () => this.editingActions.startEditingActiveDocument(),
       wait: (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)),
       now: () => (this.dependencies.now ?? (() => new Date()))().getTime(),
       onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
     });
+  }
+
+  private async saveProtectedEditsOf(locationKey: string): Promise<boolean> {
+    const unsaved = this.dependencies.session
+      .currentState()
+      .tabStrip.tabs()
+      .map((tab) => tab.location)
+      .filter(
+        (location) =>
+          isProtectedNoteIn(location, locationKey) && this.editing.hasUnsavedChanges(location.canonicalKey),
+      );
+    let isEverythingSaved = true;
+    for (const location of unsaved) {
+      isEverythingSaved = (await this.saving.saveUnsavedChanges(location)) && isEverythingSaved;
+    }
+    return isEverythingSaved;
   }
 
   private async runProtectedNotesCommand(command: ProtectedNotesCommand): Promise<void> {
@@ -1083,6 +1101,7 @@ export class ViewerController {
   /** The protected section is read once the app knows which workspace this window shows. */
   private async startWindowFeatures(): Promise<void> {
     if (this.appWindowActions) this.stopActions.push(await this.appWindowActions.start());
+    if (this.protectedNotesActions) this.stopActions.push(this.protectedNotesActions.start());
     await this.protectedNotesActions?.refreshIfChanged();
   }
 

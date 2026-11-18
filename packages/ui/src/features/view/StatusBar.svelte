@@ -40,6 +40,9 @@
     /** The prompt injection check of the shown document; the badge shows once it has finished. */
     injectionCheck?: InjectionCheckView | undefined;
     onShowInjectionCheck?: () => void;
+    /** The shown Notes workspace's protected section is unlocked, so a Lock button is shown. */
+    isProtectedSectionUnlocked?: boolean;
+    onLockProtectedNotes?: () => void;
   }
 
   const {
@@ -60,6 +63,8 @@
     onReopenWithEncoding = () => undefined,
     injectionCheck,
     onShowInjectionCheck = () => undefined,
+    isProtectedSectionUnlocked = false,
+    onLockProtectedNotes = () => undefined,
   }: Props = $props();
 
   let encodingMenuRequest: ContextMenuRequest | undefined = $state();
@@ -121,6 +126,17 @@
     {#each details as detail (detail)}
       <span>{detail}</span>
     {/each}
+    {#if isProtectedSectionUnlocked}
+      <span class="protected-status">
+        {translator.translate('protectedNotes.status.unlocked')}
+        <button
+          aria-label={translator.translate('protectedNotes.lock.command')}
+          onclick={onLockProtectedNotes}
+        >
+          {translator.translate('protectedNotes.lock.button')}
+        </button>
+      </span>
+    {/if}
     {#if document && injectionCheck}
       <InjectionCheckBadge check={injectionCheck} {translator} onShow={onShowInjectionCheck} />
     {/if}
@@ -190,6 +206,12 @@
 {/if}
 
 <style>
+  .protected-status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
   .status-bar {
     display: flex;
     gap: var(--space-4);
