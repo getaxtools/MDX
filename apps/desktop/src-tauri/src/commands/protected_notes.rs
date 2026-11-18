@@ -250,6 +250,8 @@ pub enum ProtectedCommandError {
     AccessDenied,
     #[error("a re-encryption is not finished")]
     ReencryptionPending,
+    #[error("a re-encryption holds files back that would be dropped")]
+    ReencryptionUnverifiable,
 }
 
 impl From<ProtectedError> for ProtectedCommandError {
@@ -269,6 +271,7 @@ impl From<ProtectedError> for ProtectedCommandError {
             ProtectedError::NoteNotFound => Self::NotFound,
             ProtectedError::NotRemembered => Self::NotRemembered,
             ProtectedError::ReencryptionPending => Self::ReencryptionPending,
+            ProtectedError::ReencryptionUnverifiable => Self::ReencryptionUnverifiable,
             ProtectedError::RandomUnavailable
             | ProtectedError::SecretStoreUnavailable
             | ProtectedError::Storage => Self::Unavailable,
@@ -329,6 +332,9 @@ pub struct ReencryptionProgress {
     /// Files sealed with the old key that were not recorded when it started or changed since, such
     /// as an older copy; the old key is kept for them until the user finishes the re-encryption.
     held_back: usize,
+    /// Which files are notes cannot be told: the manifest that records them is lost or the old
+    /// key's slot does not open. Restore `manifest.mdxp` or `vault.json` from history first.
+    is_unverifiable: bool,
 }
 
 /// An unlocked section, and a warning when its folder is older than this PC last saw it.
@@ -638,23 +644,28 @@ impl ProtectedNotes {
                 remaining,
                 damaged,
                 held_back,
+                is_unverifiable,
             } = section.continue_reencryption(REENCRYPTION_BATCH)?;
             Ok(ReencryptionProgress {
                 remaining,
                 damaged,
                 held_back,
+                is_unverifiable,
             })
         })
     }
 
-    /// Ends a re-encryption that holds files back, at the user's word and with the password: those
-    /// files stay sealed with the previous key and no longer open.
-    fn finish_reencryption(&self, place: &SectionPlace, password: &str) -> Answer<()> {
-        self.with_current_password(
-            place,
-            password,
-            |section| Ok(section.finish_reencryption()?),
-        )
+    /// Ends a re-encryption that holds files back, at the user's word, with the password and the
+    /// number of files it leaves unreadable, as the last step reported.
+    fn finish_reencryption(
+        &self,
+        place: &SectionPlace,
+        password: &str,
+        discard_count: Option<usize>,
+    ) -> Answer<()> {
+        self.with_current_password(place, password, |section| {
+            Ok(section.finish_reencryption(discard_count)?)
+        })
     }
 
     fn new_recovery_key(&self, place: &SectionPlace, password: &str) -> Answer<SetUpAnswer> {
@@ -865,17 +876,19 @@ pub async fn protected_continue_reencryption(
     run_blocking(move || state.continue_reencryption(&place)).await?
 }
 
-/// Ends a re-encryption that holds files back, after the password is confirmed; they no longer open.
+/// Ends a re-encryption that holds files back, after the password is confirmed and given the number
+/// of files it leaves unreadable, as the last step reported; they no longer open.
 #[tauri::command]
 pub async fn protected_finish_reencryption(
     location: String,
     password: Zeroizing<String>,
+    discard_count: Option<usize>,
     window: WebviewWindow,
 ) -> Answer<()> {
     let password = password_of(password)?;
     let place = section_place(&window, &location)?;
     let state = state_of(&window);
-    run_blocking(move || state.finish_reencryption(&place, &password)).await?
+    run_blocking(move || state.finish_reencryption(&place, &password, discard_count)).await?
 }
 
 /// A new recovery key in place of the old one, after the password is confirmed; shown once.

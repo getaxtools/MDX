@@ -411,7 +411,12 @@ describe('TauriProtectedNotes', () => {
       }),
       protected_save: () => 3,
       protected_change_password: () => ({ recoveryKey: 'IJKL-MNOP' }),
-      protected_continue_reencryption: () => ({ remaining: 0, damaged: 0, heldBack: 0 }),
+      protected_continue_reencryption: () => ({
+        remaining: 0,
+        damaged: 0,
+        heldBack: 0,
+        isUnverifiable: false,
+      }),
       protected_finish_reencryption: () => null,
       protected_new_recovery_key: () => ({ recoveryKey: 'QRST-UVWX' }),
     });
@@ -442,7 +447,7 @@ describe('TauriProtectedNotes', () => {
       shouldReencrypt: true,
     });
     await notes.continueReencryption(LOCATION);
-    await notes.finishReencryption(LOCATION, NEW_PASSWORD);
+    await notes.finishReencryption(LOCATION, NEW_PASSWORD, 2);
     await notes.newRecoveryKey(LOCATION, PASSWORD);
     return revision;
   }
@@ -482,6 +487,11 @@ describe('TauriProtectedNotes', () => {
       'protected_new_recovery_key',
     ]);
     expect(calls[2]?.args).toEqual({ location: LOCATION, password: PASSWORD, remember: true });
+    expect(calls.find((call) => call.command === 'protected_finish_reencryption')?.args).toEqual({
+      location: LOCATION,
+      password: NEW_PASSWORD,
+      discardCount: 2,
+    });
     expect(calls.find((call) => call.command === 'protected_change_password')?.args).toEqual({
       location: LOCATION,
       change: { currentPassword: PASSWORD, newPassword: NEW_PASSWORD, reencrypt: true },

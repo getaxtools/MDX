@@ -94,7 +94,8 @@ fn previous_key_of(vault: &Vault, data_key: &DataKey) -> Option<DataKey> {
         .slots
         .iter()
         .find(|slot| slot.kind == SlotKind::PreviousKey)?;
-    unwrap_data_key(slot, &previous_key_wrapping_key(data_key), &vault.vault_id)
+    let wrapping_key = previous_key_wrapping_key(data_key).ok()?;
+    unwrap_data_key(slot, &wrapping_key, &vault.vault_id)
         .ok()
         .filter(|previous| previous.id != data_key.id)
 }

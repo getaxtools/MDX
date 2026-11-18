@@ -75,8 +75,8 @@ export class TauriProtectedNotes implements ProtectedNotesPort {
     return call('protected_continue_reencryption', { location });
   }
 
-  finishReencryption(location: string, password: string): Promise<void> {
-    return call('protected_finish_reencryption', { location, password });
+  finishReencryption(location: string, password: string, discardCount?: number): Promise<void> {
+    return call('protected_finish_reencryption', { location, password, discardCount: discardCount ?? null });
   }
 
   newRecoveryKey(location: string, password: string): Promise<{ readonly recoveryKey: string }> {

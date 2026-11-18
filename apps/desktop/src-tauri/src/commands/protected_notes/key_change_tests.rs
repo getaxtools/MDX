@@ -448,32 +448,38 @@ fn a_new_password_given_with_the_recovery_key_waits_until_the_folder_is_accepted
 }
 
 #[test]
-fn finishing_a_re_encryption_that_holds_files_back_needs_the_password() {
-    let (folder, place, first_pc, _notes, _recovery) = section_with_notes(1);
-    let notes_folder = folder
+fn finishing_a_re_encryption_that_holds_files_back_needs_the_password_and_the_count() {
+    let (folder, place, first_pc, notes, _recovery) = section_with_notes(1);
+    let note_file = folder
         .path()
         .join(NOTES_APP_FOLDER)
         .join(SECTION_FOLDER_NAME)
-        .join("notes");
-    let note_file = std::fs::read_dir(&notes_folder)
-        .unwrap()
-        .filter_map(Result::ok)
-        .next()
-        .unwrap()
-        .path();
-    let old_key_header = std::fs::read(note_file).unwrap()[..64].to_vec();
+        .join("notes")
+        .join(format!("{}.mdxp", notes[0]));
+    let older_copy = std::fs::read(&note_file).unwrap();
+    first_pc
+        .save(&place, &edit(&notes[0], "newer text"), 3)
+        .unwrap();
     first_pc
         .change_password(&place, &change(OLD_PASSWORD, NEW_PASSWORD, true), QUICK)
         .unwrap();
-    std::fs::write(notes_folder.join("zz01.mdxp"), old_key_header).unwrap();
+    std::fs::write(&note_file, older_copy).unwrap();
 
     let progress = first_pc.continue_reencryption(&place).unwrap();
-    let refused = first_pc.finish_reencryption(&place, "not the password");
+    let wrong_password = first_pc.finish_reencryption(&place, "not the password", Some(1));
+    let without_count = first_pc.finish_reencryption(&place, NEW_PASSWORD, None);
     let is_still_reencrypting = first_pc.status(&place).is_reencrypting;
-    let finished = first_pc.finish_reencryption(&place, NEW_PASSWORD);
+    let finished = first_pc.finish_reencryption(&place, NEW_PASSWORD, Some(1));
 
     assert_eq!((progress.remaining, progress.held_back), (0, 1));
-    assert_eq!(refused.err(), Some(ProtectedCommandError::WrongPassword));
+    assert_eq!(
+        wrong_password.err(),
+        Some(ProtectedCommandError::WrongPassword)
+    );
+    assert_eq!(
+        without_count.err(),
+        Some(ProtectedCommandError::ReencryptionUnverifiable)
+    );
     assert!(is_still_reencrypting);
     assert!(finished.is_ok());
     assert!(!first_pc.status(&place).is_reencrypting);

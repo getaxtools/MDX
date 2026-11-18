@@ -17,6 +17,9 @@ pub const COMMITMENT_BYTES: usize = 32;
 const SLOT_CONTEXT: &[u8] = b"mdx-protected-v1-slot";
 const COMMITMENT_CONTEXT: &[u8] = b"mdx-protected-v1-commit";
 const PREVIOUS_KEY_CONTEXT: &[u8] = b"mdx-protected-v1-previous-key";
+/// The nonce the previous-key wrapping key is derived with; no file is ever sealed with it, as file
+/// nonces are random.
+const PREVIOUS_KEY_NONCE: [u8; NONCE_BYTES] = *b"mdx-v1-previous-key-wrap";
 
 /// The random key every protected file is encrypted with, with the id that names it in their headers.
 /// Its bytes stay in one place on the heap, so moving the key copies no key bytes.
@@ -172,15 +175,28 @@ fn commitment_of(slot_key: &[u8; KEY_BYTES]) -> [u8; COMMITMENT_BYTES] {
     hash.finalize().into()
 }
 
-/// The key a previous-key slot is wrapped with, derived from the new data key with its own context,
-/// so the data key itself encrypts nothing but files.
-pub fn previous_key_wrapping_key(data_key: &DataKey) -> Zeroizing<[u8; KEY_BYTES]> {
-    let mut hash = Sha256::new();
-    hash.update(PREVIOUS_KEY_CONTEXT);
-    hash.update(data_key.bytes());
+/// The key a previous-key slot is wrapped with, derived from the new data key, so the data key
+/// itself encrypts nothing but files: the XChaCha20 keystream for a nonce of its own. The cipher wipes
+/// its state when dropped, and the keystream is kept only in memory that is wiped.
+pub fn previous_key_wrapping_key(
+    data_key: &DataKey,
+) -> Result<Zeroizing<[u8; KEY_BYTES]>, ProtectedError> {
+    let cipher = XChaCha20Poly1305::new_from_slice(data_key.bytes())
+        .map_err(|_| ProtectedError::WrongKey)?;
+    let stream = Zeroizing::new(
+        cipher
+            .encrypt(
+                &XNonce::from(PREVIOUS_KEY_NONCE),
+                Payload {
+                    msg: &[0_u8; KEY_BYTES],
+                    aad: PREVIOUS_KEY_CONTEXT,
+                },
+            )
+            .map_err(|_| ProtectedError::WrongKey)?,
+    );
     let mut key = Zeroizing::new([0_u8; KEY_BYTES]);
-    key.copy_from_slice(&hash.finalize());
-    key
+    key.copy_from_slice(stream.get(..KEY_BYTES).ok_or(ProtectedError::WrongKey)?);
+    Ok(key)
 }
 
 /// Whether a slot was made for this key, from its commitment alone, without unwrapping anything; as

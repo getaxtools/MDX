@@ -272,6 +272,7 @@ fn a_finished_re_encryption_leaves_every_note_readable_under_the_new_key_only() 
         remaining: 0,
         damaged: 0,
         held_back: 0,
+        is_unverifiable: false,
     };
     assert_eq!(progress, expected_progress);
     assert_eq!(header_key_ids(&opened.folder.notes_folder()), vec![2, 2, 2]);
@@ -379,6 +380,7 @@ fn a_crash_while_a_file_was_being_written_leaves_its_old_copy_and_the_re_encrypt
             remaining: 0,
             damaged: 0,
             held_back: 0,
+            is_unverifiable: false,
         }
     );
     assert_notes_open(&resumed, &opened.notes);
@@ -567,27 +569,57 @@ fn a_previous_key_forgery_at_the_listed_revision_is_refused_and_not_carried_over
 }
 
 #[test]
-fn files_not_recorded_hold_the_previous_key_until_the_user_finishes_and_directories_are_skipped() {
+fn an_unrecorded_file_that_opens_with_the_old_key_holds_it_back_and_one_that_does_not_is_damaged() {
     let mut opened = section_with_notes();
     start_reencryption(&mut opened);
+    let previous_key = previous_key_copy(&opened);
     let notes_folder = opened.folder.notes_folder();
-    let previous_header = {
+    let header_only = {
         let (listed_note, _) = &opened.notes[0];
         fs::read(opened.folder.note_path(listed_note)).unwrap()[..HEADER_BYTES].to_vec()
     };
-    for name in ["zz01.mdxp", "x.MDXP", "not-a-note.mdxp"] {
-        fs::write(notes_folder.join(name), &previous_header).unwrap();
+    for name in ["zz01.mdxp", "x.MDXP"] {
+        fs::write(notes_folder.join(name), &header_only).unwrap();
     }
     fs::create_dir(notes_folder.join("a.mdxp")).unwrap();
+    forge_with_previous_key(&opened, &previous_key, ([0xCD; 16], 1), b"planted text");
 
     let progress = opened.section.continue_reencryption(100).unwrap();
     let is_kept = opened.section.is_reencrypting();
-    opened.section.finish_reencryption().unwrap();
+    let without_count = opened.section.finish_reencryption(None);
+    opened.section.finish_reencryption(Some(1)).unwrap();
 
-    assert_eq!((progress.remaining, progress.held_back), (0, 3));
+    assert_eq!(
+        (progress.remaining, progress.held_back, progress.damaged),
+        (0, 1, 2)
+    );
     assert!(is_kept);
+    assert_eq!(
+        without_count.err(),
+        Some(ProtectedError::ReencryptionUnverifiable)
+    );
     assert!(!opened.section.is_reencrypting());
     assert_notes_open(&opened.section, &opened.notes);
+}
+
+#[test]
+fn files_that_do_not_open_with_the_old_key_do_not_stall_a_re_encryption() {
+    let mut opened = section_with_notes();
+    start_reencryption(&mut opened);
+    let notes_folder = opened.folder.notes_folder();
+    let header_only = {
+        let (listed_note, _) = &opened.notes[0];
+        fs::read(opened.folder.note_path(listed_note)).unwrap()[..HEADER_BYTES].to_vec()
+    };
+    fs::write(notes_folder.join("zz01.mdxp"), header_only).unwrap();
+
+    let progress = opened.section.continue_reencryption(100).unwrap();
+
+    assert_eq!(
+        (progress.remaining, progress.held_back, progress.damaged),
+        (0, 0, 1)
+    );
+    assert!(!opened.section.is_reencrypting());
 }
 
 /// The bytes of the files a test puts back, as a sync tool or an attacker would.
@@ -604,22 +636,16 @@ fn an_old_key_manifest_planted_after_the_start_is_refused_and_the_re_encryption_
     fs::write(opened.folder.as_ref().join("manifest.mdxp"), old_manifest).unwrap();
 
     let mut resumed = UnlockedSection::unlock_with_password(&opened.folder, NEW_PASSWORD).unwrap();
-    let refused = resumed.continue_reencryption(100);
+    let progress = resumed.continue_reencryption(100).unwrap();
 
-    assert_eq!(refused.err(), Some(ProtectedError::Tampered));
-    assert!(
-        opened
-            .folder
-            .read_vault()
-            .unwrap()
-            .slots
-            .iter()
-            .any(|slot| slot.kind == SlotKind::PreviousKey)
-    );
+    assert!(progress.is_unverifiable);
+    assert_eq!(progress.held_back, 3);
+    assert!(resumed.is_reencrypting());
+    assert_eq!(header_key_ids(&opened.folder.notes_folder()), vec![1, 1, 1]);
 }
 
 #[test]
-fn a_deleted_manifest_during_a_stopped_re_encryption_keeps_the_old_key() {
+fn a_deleted_manifest_keeps_the_old_key_until_the_user_gives_the_count_of_files_dropped() {
     let mut opened = section_with_notes();
     start_reencryption(&mut opened);
     opened.section.continue_reencryption(1).unwrap();
@@ -627,23 +653,29 @@ fn a_deleted_manifest_during_a_stopped_re_encryption_keeps_the_old_key() {
     fs::remove_file(opened.folder.as_ref().join("manifest.mdxp")).unwrap();
 
     let mut resumed = UnlockedSection::unlock_with_password(&opened.folder, NEW_PASSWORD).unwrap();
-    let refused = resumed.continue_reencryption(100);
+    let progress = resumed.continue_reencryption(100).unwrap();
+    let without_count = resumed.finish_reencryption(None);
+    let with_wrong_count = resumed.finish_reencryption(Some(1));
+    let is_kept = resumed.is_reencrypting();
+    let with_count = resumed.finish_reencryption(Some(2));
 
-    assert_eq!(refused.err(), Some(ProtectedError::Tampered));
-    assert!(resumed.is_reencrypting());
-    assert!(
-        opened
-            .folder
-            .read_vault()
-            .unwrap()
-            .slots
-            .iter()
-            .any(|slot| slot.kind == SlotKind::PreviousKey)
+    assert!(progress.is_unverifiable);
+    assert_eq!((progress.remaining, progress.held_back), (0, 2));
+    assert_eq!(
+        without_count.err(),
+        Some(ProtectedError::ReencryptionUnverifiable)
     );
+    assert_eq!(
+        with_wrong_count.err(),
+        Some(ProtectedError::ReencryptionUnverifiable)
+    );
+    assert!(is_kept);
+    assert_eq!(with_count, Ok(()));
+    assert!(!resumed.is_reencrypting());
 }
 
 #[test]
-fn a_damaged_previous_key_slot_during_a_stopped_re_encryption_keeps_the_old_key() {
+fn a_damaged_previous_key_slot_keeps_the_old_key_until_the_user_gives_the_count_of_files_dropped() {
     let mut opened = section_with_notes();
     start_reencryption(&mut opened);
     drop(opened.section);
@@ -662,11 +694,20 @@ fn a_damaged_previous_key_slot_during_a_stopped_re_encryption_keeps_the_old_key(
     .unwrap();
 
     let mut resumed = UnlockedSection::unlock_with_password(&opened.folder, NEW_PASSWORD).unwrap();
-    let refused = resumed.continue_reencryption(100);
+    let progress = resumed.continue_reencryption(100).unwrap();
+    let vault_after_the_step = opened.folder.read_vault().unwrap();
+    let without_count = resumed.finish_reencryption(None);
+    let with_count = resumed.finish_reencryption(Some(3));
 
-    assert_eq!(refused.err(), Some(ProtectedError::Tampered));
-    assert!(resumed.is_reencrypting());
-    assert_eq!(opened.folder.read_vault().unwrap(), vault);
+    assert!(progress.is_unverifiable);
+    assert_eq!(progress.held_back, 3);
+    assert_eq!(vault_after_the_step, vault);
+    assert_eq!(
+        without_count.err(),
+        Some(ProtectedError::ReencryptionUnverifiable)
+    );
+    assert_eq!(with_count, Ok(()));
+    assert!(!resumed.is_reencrypting());
 }
 
 #[test]
@@ -718,7 +759,7 @@ fn an_older_copy_put_back_during_a_re_encryption_holds_the_old_key_until_the_use
 
     let progress = opened.section.continue_reencryption(100).unwrap();
     let is_kept = opened.section.is_reencrypting();
-    opened.section.finish_reencryption().unwrap();
+    opened.section.finish_reencryption(Some(1)).unwrap();
 
     assert_eq!((progress.remaining, progress.held_back), (0, 1));
     assert!(is_kept);
@@ -730,7 +771,7 @@ fn finishing_waits_for_the_recorded_files() {
     let mut opened = section_with_notes();
     start_reencryption(&mut opened);
 
-    let early = opened.section.finish_reencryption();
+    let early = opened.section.finish_reencryption(None);
 
     assert_eq!(early.err(), Some(ProtectedError::ReencryptionPending));
     assert!(opened.section.is_reencrypting());
@@ -784,4 +825,52 @@ fn an_appended_slot_does_not_push_out_the_current_password_after_a_device_or_old
     assert!(!by_device.was_opened_with_newest_password());
     assert!(!by_older_password.was_opened_with_newest_password());
     assert_eq!(by_device.password_slot_count(), 2);
+}
+
+#[test]
+fn a_file_swapped_after_the_scan_is_not_carried_over() {
+    let mut opened = section_with_notes();
+    let (swapped, _) = opened.notes[0].clone();
+    let listed_revision = opened.section.entry(&swapped).unwrap().revision;
+    start_reencryption(&mut opened);
+    let previous_key = previous_key_copy(&opened);
+    let scan = opened
+        .section
+        .scan_previous_key_files(previous_key.id)
+        .unwrap();
+    let swapped_id: [u8; 16] = note_id_of_file_name(&format!("{swapped}.mdxp")).unwrap();
+    forge_with_previous_key(
+        &opened,
+        &previous_key,
+        (swapped_id, listed_revision),
+        b"swapped text",
+    );
+
+    let outcome = opened.section.reseal(&swapped).unwrap();
+    let progress = opened.section.continue_reencryption(100).unwrap();
+
+    assert!(scan.pending.contains(&swapped));
+    assert!(matches!(outcome, Resealed::Changed));
+    assert_eq!((progress.remaining, progress.held_back), (0, 1));
+    let file = fs::read(opened.folder.note_path(&swapped)).unwrap();
+    assert_eq!(
+        FileHeader::parse(&file).unwrap().data_key_id,
+        previous_key.id
+    );
+}
+
+#[test]
+fn a_recorded_note_whose_file_is_gone_or_cut_short_holds_the_old_key_back() {
+    let mut opened = section_with_notes();
+    start_reencryption(&mut opened);
+    let (gone, _) = &opened.notes[0];
+    let (cut_short, _) = &opened.notes[1];
+    fs::remove_file(opened.folder.note_path(gone)).unwrap();
+    let bytes = fs::read(opened.folder.note_path(cut_short)).unwrap();
+    fs::write(opened.folder.note_path(cut_short), &bytes[..20]).unwrap();
+
+    let progress = opened.section.continue_reencryption(100).unwrap();
+
+    assert_eq!((progress.remaining, progress.held_back), (0, 2));
+    assert!(opened.section.is_reencrypting());
 }

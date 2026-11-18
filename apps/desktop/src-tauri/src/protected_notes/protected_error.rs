@@ -36,6 +36,8 @@ pub enum ProtectedError {
     Storage,
     #[error("a re-encryption of the protected notes is not finished yet")]
     ReencryptionPending,
+    #[error("the re-encryption cannot tell which files are notes and holds files back")]
+    ReencryptionUnverifiable,
 }
 
 impl From<std::io::Error> for ProtectedError {

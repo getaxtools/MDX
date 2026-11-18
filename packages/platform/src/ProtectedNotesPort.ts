@@ -19,6 +19,7 @@ export const PROTECTED_NOTES_FAILURES = [
   'invalidRequest',
   'accessDenied',
   'reencryptionPending',
+  'reencryptionUnverifiable',
 ] as const;
 
 export type ProtectedNotesFailure = (typeof PROTECTED_NOTES_FAILURES)[number];
@@ -67,11 +68,18 @@ export interface ReencryptionProgress {
   /** Files that were damaged already and are left as they were. */
   readonly damaged: number;
   /**
-   * Files sealed with the old key that were not there when the re-encryption started or changed
-   * since, such as an older copy a sync tool put back. The old key is kept for them until the user
-   * decides with `finishReencryption`, after which they no longer open.
+   * Files the old key is kept for until the user decides with `finishReencryption`, after which
+   * they no longer open: a note changed since the re-encryption started, gone or cut short, or a
+   * file that opens with the old key but was not there, such as an older copy a sync tool put back.
+   * When `isUnverifiable`, every file whose header names the old key.
    */
   readonly heldBack: number;
+  /**
+   * Which files are notes cannot be told: the manifest that records them is lost, or the old key's
+   * slot does not open. The window asks the user to restore `manifest.mdxp` or `vault.json` from
+   * the folder's history first; finishing anyway leaves `heldBack` files unreadable.
+   */
+  readonly isUnverifiable: boolean;
 }
 
 export type ProtectedNoteState = 'current' | 'olderCopy' | 'newerThanManifest' | 'unlisted' | 'missing';
@@ -153,8 +161,12 @@ export interface ProtectedNotesPort {
   changePassword(location: string, change: PasswordChange): Promise<PasswordChangeResult>;
   /** Seals the next few files again; resolves to how many remain. Resumes after a restart once unlocked. */
   continueReencryption(location: string): Promise<ReencryptionProgress>;
-  /** Ends a re-encryption that holds files back, after the password is confirmed; those files no longer open. */
-  finishReencryption(location: string, password: string): Promise<void>;
+  /**
+   * Ends a re-encryption that holds files back, after the password is confirmed; those files no
+   * longer open. `discardCount` is the `heldBack` the last step reported, so nothing is dropped
+   * unseen; refused with `reencryptionUnverifiable` when it does not match.
+   */
+  finishReencryption(location: string, password: string, discardCount?: number): Promise<void>;
   /** A new recovery key in place of the old one, after the password is confirmed; resolves to it, to show once. */
   newRecoveryKey(location: string, password: string): Promise<{ readonly recoveryKey: string }>;
   /** Keeps the folder as it is after a folder warning; this PC remembers it as seen. */
