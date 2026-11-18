@@ -7,27 +7,25 @@ const PASSWORD: &str = "correct horse battery";
 const QUICK: KdfParameters = KdfParameters::FLOOR;
 const BYTES: &[u8] = b"\xEF\xBB\xBFPIN 4821\r\nsecond line\r\n";
 
-/// A Recycle Bin that takes the files it is given, or refuses them all, and remembers what it saw.
+/// Deletes the plain notes it is given as the command does, or refuses them all, or has another
+/// program change each one first; remembers what it was asked to delete.
 #[derive(Default)]
-struct FakeRecycleBin {
+struct Deletions {
     refuses: bool,
-    recycled: Mutex<Vec<PathBuf>>,
+    changes_first: bool,
+    asked: Mutex<Vec<PathBuf>>,
 }
 
-impl RecycleBin for FakeRecycleBin {
-    fn capacity_for(&self, _folder: &Path) -> Option<u64> {
-        None
-    }
-
-    fn recycle(&self, paths: &[PathBuf]) -> std::io::Result<Vec<PathBuf>> {
-        self.recycled.lock().unwrap().extend_from_slice(paths);
+impl Deletions {
+    fn delete(&self, path: &Path, sealed: &[u8]) -> std::io::Result<PlainDeletion> {
+        self.asked.lock().unwrap().push(path.to_path_buf());
         if self.refuses {
-            return Ok(paths.to_vec());
+            return Err(std::io::ErrorKind::PermissionDenied.into());
         }
-        for path in paths {
-            fs::remove_file(path)?;
+        if self.changes_first {
+            fs::write(path, b"PIN 9999, typed after the move started")?;
         }
-        Ok(Vec::new())
+        delete_if_unchanged(path, sealed)
     }
 }
 
@@ -74,20 +72,24 @@ fn move_out_request(note_id: &str, into: &Path, confirmed: bool) -> ProtectedMov
 }
 
 #[test]
-fn a_moved_in_note_opens_with_its_exact_bytes_and_only_then_goes_to_the_recycle_bin() {
+fn a_moved_in_note_opens_with_its_exact_bytes_and_only_then_is_deleted_for_good() {
     let opened = opened();
     let plain = opened.notes_folder.join("Bank details.md");
-    let recycle_bin = FakeRecycleBin::default();
+    let deletions = Deletions::default();
 
     let answer = opened
         .notes
-        .move_in(&opened.place, &move_in_request(&plain, true), &recycle_bin)
+        .move_in(
+            &opened.place,
+            &move_in_request(&plain, true),
+            &|path, sealed| deletions.delete(path, sealed),
+        )
         .unwrap();
     let listed = opened.notes.list(&opened.place).unwrap();
     let text = opened.notes.open(&opened.place, &answer.note_id).unwrap();
 
     assert!(!answer.is_plain_copy_kept);
-    assert_eq!(*recycle_bin.recycled.lock().unwrap(), vec![plain.clone()]);
+    assert_eq!(*deletions.asked.lock().unwrap(), vec![plain.clone()]);
     assert!(!plain.exists());
     assert_eq!(listed[0].title, "Bank details");
     assert_eq!(text.text, "PIN 4821\r\nsecond line\r\n");
@@ -95,40 +97,48 @@ fn a_moved_in_note_opens_with_its_exact_bytes_and_only_then_goes_to_the_recycle_
 }
 
 #[test]
-fn a_failed_encrypt_leaves_the_plain_note_and_never_asks_the_recycle_bin() {
+fn a_failed_encrypt_leaves_the_plain_note_and_never_deletes_it() {
     let opened = opened();
     let plain = opened.notes_folder.join("Bank details.md");
     let section_notes = opened.place.folder.as_ref().join("notes");
     fs::remove_dir_all(&section_notes).unwrap();
     fs::write(&section_notes, b"not a folder").unwrap();
-    let recycle_bin = FakeRecycleBin::default();
+    let deletions = Deletions::default();
 
-    let failed = opened
-        .notes
-        .move_in(&opened.place, &move_in_request(&plain, true), &recycle_bin);
+    let failed = opened.notes.move_in(
+        &opened.place,
+        &move_in_request(&plain, true),
+        &|path, sealed| deletions.delete(path, sealed),
+    );
     let _ = opened.notes.lock(&opened.place);
-    let locked = opened
-        .notes
-        .move_in(&opened.place, &move_in_request(&plain, true), &recycle_bin);
+    let locked = opened.notes.move_in(
+        &opened.place,
+        &move_in_request(&plain, true),
+        &|path, sealed| deletions.delete(path, sealed),
+    );
 
     assert_eq!(failed.err(), Some(ProtectedCommandError::Unavailable));
     assert_eq!(locked.err(), Some(ProtectedCommandError::Locked));
-    assert!(recycle_bin.recycled.lock().unwrap().is_empty());
+    assert!(deletions.asked.lock().unwrap().is_empty());
     assert_eq!(fs::read(&plain).unwrap(), BYTES);
 }
 
 #[test]
-fn a_plain_note_the_recycle_bin_refuses_is_kept_and_said_so() {
+fn a_plain_note_that_cannot_be_deleted_is_kept_and_said_so() {
     let opened = opened();
     let plain = opened.notes_folder.join("Bank details.md");
-    let recycle_bin = FakeRecycleBin {
+    let deletions = Deletions {
         refuses: true,
-        ..FakeRecycleBin::default()
+        ..Deletions::default()
     };
 
     let answer = opened
         .notes
-        .move_in(&opened.place, &move_in_request(&plain, true), &recycle_bin)
+        .move_in(
+            &opened.place,
+            &move_in_request(&plain, true),
+            &|path, sealed| deletions.delete(path, sealed),
+        )
         .unwrap();
 
     assert!(answer.is_plain_copy_kept);
@@ -138,7 +148,7 @@ fn a_plain_note_the_recycle_bin_refuses_is_kept_and_said_so() {
 #[test]
 fn moves_in_that_are_not_confirmed_or_not_plain_notes_of_the_location_are_refused() {
     let opened = opened();
-    let recycle_bin = FakeRecycleBin::default();
+    let deletions = Deletions::default();
     let plain = opened.notes_folder.join("Bank details.md");
     fs::create_dir(opened.notes_folder.join("Bank details")).unwrap();
     let app_folder_note = opened.place.folder.as_ref().join("inside.md");
@@ -152,7 +162,7 @@ fn moves_in_that_are_not_confirmed_or_not_plain_notes_of_the_location_are_refuse
             .move_in(
                 &opened.place,
                 &move_in_request(note, confirmed),
-                &recycle_bin,
+                &|path, sealed| deletions.delete(path, sealed),
             )
             .err()
     };
@@ -173,7 +183,7 @@ fn moves_in_that_are_not_confirmed_or_not_plain_notes_of_the_location_are_refuse
         move_in(&outside_note, true),
         Some(ProtectedCommandError::AccessDenied)
     );
-    assert!(recycle_bin.recycled.lock().unwrap().is_empty());
+    assert!(deletions.asked.lock().unwrap().is_empty());
     assert!(opened.notes.list(&opened.place).unwrap().is_empty());
 }
 
@@ -181,10 +191,14 @@ fn moves_in_that_are_not_confirmed_or_not_plain_notes_of_the_location_are_refuse
 fn a_moved_out_note_is_a_new_plain_note_with_the_same_bytes_and_leaves_the_section() {
     let opened = opened();
     let plain = opened.notes_folder.join("Bank details.md");
-    let recycle_bin = FakeRecycleBin::default();
+    let deletions = Deletions::default();
     let note_id = opened
         .notes
-        .move_in(&opened.place, &move_in_request(&plain, true), &recycle_bin)
+        .move_in(
+            &opened.place,
+            &move_in_request(&plain, true),
+            &|path, sealed| deletions.delete(path, sealed),
+        )
         .unwrap()
         .note_id;
     fs::write(&plain, b"a new note took the name").unwrap();
@@ -207,4 +221,47 @@ fn a_moved_out_note_is_a_new_plain_note_with_the_same_bytes_and_leaves_the_secti
     assert_eq!(fs::read(&plain).unwrap(), b"a new note took the name");
     assert!(opened.notes.list(&opened.place).unwrap().is_empty());
     drop(opened.folder);
+}
+
+#[test]
+fn a_plain_note_changed_before_its_delete_is_kept_and_the_move_undone() {
+    let opened = opened();
+    let plain = opened.notes_folder.join("Bank details.md");
+    let deletions = Deletions {
+        changes_first: true,
+        ..Deletions::default()
+    };
+
+    let moved = opened.notes.move_in(
+        &opened.place,
+        &move_in_request(&plain, true),
+        &|path, sealed| deletions.delete(path, sealed),
+    );
+
+    assert_eq!(moved.err(), Some(ProtectedCommandError::PlainNoteChanged));
+    assert_eq!(
+        fs::read(&plain).unwrap(),
+        b"PIN 9999, typed after the move started"
+    );
+    assert!(opened.notes.list(&opened.place).unwrap().is_empty());
+}
+
+#[test]
+fn nothing_moves_in_while_a_folder_warning_waits() {
+    let opened = opened();
+    let plain = opened.notes_folder.join("Bank details.md");
+    let deletions = Deletions::default();
+    opened
+        .notes
+        .awaiting()
+        .insert(opened.place.location_key.clone());
+
+    let moved = opened.notes.move_in(
+        &opened.place,
+        &move_in_request(&plain, true),
+        &|path, sealed| deletions.delete(path, sealed),
+    );
+
+    assert_eq!(moved.err(), Some(ProtectedCommandError::InvalidRequest));
+    assert_eq!(fs::read(&plain).unwrap(), BYTES);
 }

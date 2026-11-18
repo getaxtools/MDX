@@ -21,6 +21,7 @@ export const PROTECTED_NOTES_FAILURES = [
   'accessDenied',
   'reencryptionPending',
   'reencryptionUnverifiable',
+  'plainNoteChanged',
 ] as const;
 
 export type ProtectedNotesFailure = (typeof PROTECTED_NOTES_FAILURES)[number];
@@ -143,15 +144,15 @@ export interface ProtectedMoveIn {
   /** The folder inside the section, with `/` between parts; empty at its top. */
   readonly intoFolder: string;
   /**
-   * The user confirmed that plain copies may remain in backups, cloud version history and on the
-   * disk; without it the move is refused.
+   * The user confirmed that the plain note is deleted for good and that copies made before, in sync
+   * history, backups or the Recycle Bin, are not touched; without it the move is refused.
    */
   readonly isConfirmed: boolean;
 }
 
 export interface MoveInResult {
   readonly noteId: string;
-  /** The Recycle Bin would not take the plain note, so it is still there; the window says so. */
+  /** The plain note could not be deleted, so it is still there; the window says so. */
   readonly isPlainCopyKept: boolean;
 }
 
@@ -228,8 +229,11 @@ export interface ProtectedNotesPort {
   /** Resolves to the note's new revision. */
   save(location: string, edit: ProtectedNoteEdit): Promise<number>;
   /**
-   * Brings a plain note into the section. The plain note goes to the Recycle Bin only once its
-   * protected copy has been read back and opens to the same bytes.
+   * Brings a plain note into the section. The plain note is deleted for good, not sent to the
+   * Recycle Bin, and only once its protected copy has been read back and opens to the same bytes
+   * and the plain note, read again with writers kept out, still holds them; otherwise the move is
+   * undone and refused with `plainNoteChanged`. Refused with `invalidRequest` while a folder warning
+   * waits. The window closes any tab of the plain note first.
    */
   moveIn(location: string, move: ProtectedMoveIn): Promise<MoveInResult>;
   /**

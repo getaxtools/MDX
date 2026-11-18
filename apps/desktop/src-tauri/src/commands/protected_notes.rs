@@ -20,7 +20,6 @@ use crate::documents::{
 };
 use crate::notes::{NotesRoot, create_note};
 use crate::notes_location::{NOTES_APP_FOLDER, read_marker};
-use crate::platform::{RecycleBin, SystemRecycleBin};
 use crate::protected_notes::{
     FileKind, FolderWarning, KEY_BYTES, KdfParameters, NoteMovedIn, NoteState, ProtectedError,
     Reencryption, ReencryptionFinish, SectionFolder, SectionRecords, SlotKind, UnlockedSection,
@@ -29,6 +28,7 @@ use crate::protected_notes::{
 };
 use crate::secrets::DeviceSecretStore;
 use crate::storage::WorkspaceDatabase;
+use plain_deletion::{PlainDeletion, delete_if_unchanged};
 
 /// The protected section's folder inside the notes location's app folder, which plain-note features
 /// never list, index or watch.
@@ -256,6 +256,8 @@ pub enum ProtectedCommandError {
     ReencryptionPending,
     #[error("a re-encryption holds files back that would be dropped")]
     ReencryptionUnverifiable,
+    #[error("the plain note changed while it was moved")]
+    PlainNoteChanged,
 }
 
 impl From<ProtectedError> for ProtectedCommandError {
@@ -798,8 +800,8 @@ impl ProtectedNotes {
 }
 
 /// A plain note of the notes location to bring into the section, the folder inside the section it
-/// goes to, and the user's confirmation that copies may remain in backups, cloud version history and
-/// on the disk.
+/// goes to, and the user's confirmation that the plain note is deleted for good while copies made
+/// before, in sync history, backups or the Recycle Bin, are not touched.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProtectedMoveIn {
@@ -812,7 +814,7 @@ pub struct ProtectedMoveIn {
 #[serde(rename_all = "camelCase")]
 pub struct MoveInAnswer {
     note_id: String,
-    /// The Recycle Bin would not take the plain note, so it is still there and the window says so.
+    /// The plain note could not be deleted, so it is still there and the window says so.
     is_plain_copy_kept: bool,
 }
 
@@ -833,32 +835,19 @@ const FALLBACK_NOTE_NAME: &str = "Protected note";
 
 impl ProtectedNotes {
     /// Moves a plain note into the section: sealed, read back and opened to the same bytes, and only
-    /// then sent to the Recycle Bin, which never deletes for good. A note with child notes, or
-    /// outside the notes location, is refused.
+    /// then deleted for good with `delete_plain`, not sent to the Recycle Bin, where anyone at the
+    /// PC could read it. A note with child notes, or outside the notes location, is refused.
     fn move_in(
         &self,
         place: &SectionPlace,
         request: &ProtectedMoveIn,
-        recycle_bin: &dyn RecycleBin,
+        delete_plain: &dyn Fn(&Path, &[u8]) -> std::io::Result<PlainDeletion>,
     ) -> Answer<MoveInAnswer> {
-        if !request.confirmed || request.into_folder.len() > MAX_FOLDER_BYTES {
+        // An older folder put back may not be what the user thinks it is, so nothing moves in yet.
+        if self.awaiting().contains(&place.location_key) {
             return Err(ProtectedCommandError::InvalidRequest);
         }
-        let root = NotesRoot::new(&place.notes_folder)?;
-        let plain = root.resolve_inside(Path::new(&request.note))?;
-        let has_children = plain.with_extension("").is_dir();
-        if !plain.is_file() || !is_markdown_path(&plain) || has_children {
-            return Err(ProtectedCommandError::InvalidRequest);
-        }
-        if fs::metadata(&plain)
-            .map_err(|_| ProtectedCommandError::NotFound)?
-            .len()
-            > MAX_NOTE_TEXT_BYTES as u64
-        {
-            return Err(ProtectedCommandError::TooLarge);
-        }
-        let bytes =
-            Zeroizing::new(fs::read(&plain).map_err(|_| ProtectedCommandError::Unavailable)?);
+        let (plain, bytes) = readable_plain_note(place, request)?;
         let title = plain
             .file_stem()
             .map(|stem| stem.to_string_lossy().into_owned())
@@ -871,9 +860,15 @@ impl ProtectedNotes {
                 now_ms: now_ms(),
             })?)
         })?;
-        let is_plain_copy_kept = recycle_bin
-            .recycle(std::slice::from_ref(&plain))
-            .map_or(true, |still_there| !still_there.is_empty());
+        let is_plain_copy_kept = match delete_plain(&plain, &bytes) {
+            Ok(PlainDeletion::Deleted) => false,
+            Ok(PlainDeletion::Changed) => {
+                // The protected copy would hold text the user no longer has, so the move is undone.
+                let _ = self.with_section(place, |section| Ok(section.remove(&note_id)?));
+                return Err(ProtectedCommandError::PlainNoteChanged);
+            }
+            Err(error) => error.kind() != std::io::ErrorKind::NotFound,
+        };
         Ok(MoveInAnswer {
             note_id,
             is_plain_copy_kept,
@@ -898,6 +893,30 @@ impl ProtectedNotes {
         self.with_section(place, |section| Ok(section.remove(note_id)?))?;
         Ok(written)
     }
+}
+
+/// A plain Markdown note of the notes location without child notes, and its exact bytes.
+fn readable_plain_note(
+    place: &SectionPlace,
+    request: &ProtectedMoveIn,
+) -> Answer<(PathBuf, Zeroizing<Vec<u8>>)> {
+    if !request.confirmed || request.into_folder.len() > MAX_FOLDER_BYTES {
+        return Err(ProtectedCommandError::InvalidRequest);
+    }
+    let root = NotesRoot::new(&place.notes_folder)?;
+    let plain = root.resolve_inside(Path::new(&request.note))?;
+    let has_children = plain.with_extension("").is_dir();
+    if !plain.is_file() || !is_markdown_path(&plain) || has_children {
+        return Err(ProtectedCommandError::InvalidRequest);
+    }
+    let size = fs::metadata(&plain)
+        .map_err(|_| ProtectedCommandError::NotFound)?
+        .len();
+    if size > MAX_NOTE_TEXT_BYTES as u64 {
+        return Err(ProtectedCommandError::TooLarge);
+    }
+    let bytes = Zeroizing::new(fs::read(&plain).map_err(|_| ProtectedCommandError::Unavailable)?);
+    Ok((plain, bytes))
 }
 
 /// A new plain note with these bytes, under the first free name; removed again unless it reads back
@@ -934,8 +953,8 @@ fn plain_name_candidates(title: &str) -> Vec<String> {
     names
 }
 
-/// Moves a plain note into the section after the user confirmed that copies may remain elsewhere;
-/// the plain note goes to the Recycle Bin once its protected copy opens.
+/// Moves a plain note into the section after the user confirmed that it is deleted for good; it is
+/// deleted once its protected copy opens.
 #[tauri::command]
 pub async fn protected_move_in(
     location: String,
@@ -944,7 +963,7 @@ pub async fn protected_move_in(
 ) -> Answer<MoveInAnswer> {
     let place = writable_section_place(&window, &location)?;
     let state = state_of(&window);
-    run_blocking(move || state.move_in(&place, &request, &SystemRecycleBin)).await?
+    run_blocking(move || state.move_in(&place, &request, &delete_if_unchanged)).await?
 }
 
 /// Writes a protected note out as a plain note after the user confirmed it will not be protected,
@@ -1191,6 +1210,7 @@ pub async fn protected_save(
 }
 
 pub mod attachments;
+mod plain_deletion;
 pub mod section_backups;
 
 #[cfg(test)]
