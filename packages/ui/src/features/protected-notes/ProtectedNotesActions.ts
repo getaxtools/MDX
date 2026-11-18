@@ -1,5 +1,4 @@
 import { notesLocationOf, type ViewerSession } from '@mdx/core';
-import { SHARED_RENDER_CACHE } from '@mdx/editor';
 import type { MessageKey } from '@mdx/i18n';
 import {
   ProtectedNotesError,
@@ -434,7 +433,7 @@ export class ProtectedNotesActions {
     try {
       await this.dependencies.protectedNotes.lock(section.path);
     } finally {
-      this.closeNotesOf(section);
+      await this.closeNotesOf(section);
       await this.readSection(section);
       this.dependencies.onChange();
     }
@@ -444,14 +443,14 @@ export class ProtectedNotesActions {
   private async followLock(locationKeys: readonly string[]): Promise<void> {
     const { section } = this;
     if (!section) return;
-    if (locationKeys.includes(section.key)) this.closeNotesOf(section);
+    if (locationKeys.includes(section.key)) await this.closeNotesOf(section);
     await this.readSection(section);
-    if (this.status?.isUnlocked === false) this.closeNotesOf(section);
+    if (this.status?.isUnlocked === false) await this.closeNotesOf(section);
     this.dependencies.onChange();
   }
 
   /** Closes the section's tabs and drops whatever was rendered of them. */
-  private closeNotesOf(section: ShownSection): void {
+  private async closeNotesOf(section: ShownSection): Promise<void> {
     this.notes = [];
     this.folderWarning = undefined;
     this.isAskingToLock = false;
@@ -464,6 +463,9 @@ export class ProtectedNotesActions {
       .filter((location) => isProtectedNoteIn(location, section.key))
       .map((location) => location.canonicalKey);
     session.closeProtectedNotesOf(section.key);
+    if (closingKeys.length === 0) return;
+    // The editor's code loads on first use, not at start, and only an editor renders into this cache.
+    const { SHARED_RENDER_CACHE } = await import('@mdx/editor');
     for (const canonicalKey of closingKeys) SHARED_RENDER_CACHE.forgetDocument(canonicalKey);
   }
 
