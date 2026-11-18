@@ -388,9 +388,12 @@
 </div>
 
 <style>
+  /* The wheel is drawn outside the app shell, so it sets the interface font and colour itself. */
   .control-wheel {
     position: fixed;
     z-index: 25;
+    font-family: var(--font-ui);
+    color: var(--color-text);
   }
 
   .control-wheel.is-closing {
