@@ -4,6 +4,7 @@ import {
   type ProtectedNoteEdit,
   type ProtectedNoteSummary,
   type ProtectedNoteText,
+  type ProtectedNotesLockedListener,
   type ProtectedNotesPort,
   type ProtectedStatus,
 } from '../ProtectedNotesPort';
@@ -32,6 +33,7 @@ interface Section {
 /** Protected sections in memory, behaving as the native ones do, for UI tests and component tests. */
 export class InMemoryProtectedNotes implements ProtectedNotesPort {
   private readonly sections = new Map<string, Section>();
+  private readonly lockListeners = new Set<ProtectedNotesLockedListener>();
   private nextNote = 0;
   private clock = FIRST_TIME_MS;
 
@@ -90,13 +92,29 @@ export class InMemoryProtectedNotes implements ProtectedNotesPort {
 
   lock(location: string): Promise<void> {
     const section = this.sections.get(location);
-    if (section) section.isUnlocked = false;
+    if (section?.isUnlocked === true) {
+      section.isUnlocked = false;
+      this.announceLocked([location]);
+    }
     return Promise.resolve();
   }
 
   lockAll(): Promise<void> {
-    for (const section of this.sections.values()) section.isUnlocked = false;
+    const unlocked = [...this.sections].filter(([, section]) => section.isUnlocked);
+    for (const [, section] of unlocked) section.isUnlocked = false;
+    this.announceLocked(unlocked.map(([location]) => location));
     return Promise.resolve();
+  }
+
+  /** The fake names sections by the location it was given, which tests use as the canonical key. */
+  onLocked(listener: ProtectedNotesLockedListener): () => void {
+    this.lockListeners.add(listener);
+    return () => this.lockListeners.delete(listener);
+  }
+
+  private announceLocked(locationKeys: readonly string[]): void {
+    if (locationKeys.length === 0) return;
+    for (const listener of this.lockListeners) listener(locationKeys);
   }
 
   async list(location: string): Promise<ProtectedNoteSummary[]> {

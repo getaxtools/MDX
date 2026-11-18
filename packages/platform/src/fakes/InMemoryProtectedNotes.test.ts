@@ -73,6 +73,24 @@ function describeProtectedNotesContract(create: () => ProtectedNotesPort) {
     expect(await failureOf(notes.unlockOnThisPc(LOCATION))).toBe('notRemembered');
   });
 
+  it('tells every subscriber which sections locked, once each', async () => {
+    const notes = create();
+    await notes.setUp(LOCATION, PASSWORD);
+    const first: (readonly string[])[] = [];
+    const second: (readonly string[])[] = [];
+    notes.onLocked((keys) => first.push(keys));
+    const stop = notes.onLocked((keys) => second.push(keys));
+
+    await notes.lock(LOCATION);
+    await notes.lock(LOCATION);
+    stop();
+    await notes.unlock(LOCATION, PASSWORD, false);
+    await notes.lockAll();
+
+    expect(first).toEqual([[LOCATION], [LOCATION]]);
+    expect(second).toEqual([[LOCATION]]);
+  });
+
   it('refuses ids that are not note ids', async () => {
     const notes = create();
     await notes.setUp(LOCATION, PASSWORD);

@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use tauri::{Manager, WebviewWindow};
+use tauri::{Emitter, Manager, WebviewWindow};
 use zeroize::Zeroizing;
 
 use crate::app_windows::OpenWindows;
@@ -64,6 +64,47 @@ impl ProtectedNotes {
             .map(|(location, _)| location)
             .collect()
     }
+}
+
+/// Sent to every window when sections lock, so each closes their notes; it names the notes
+/// locations by their canonical keys and holds nothing of the notes.
+pub const PROTECTED_NOTES_LOCKED_EVENT: &str = "protected-notes-locked";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LockedSections {
+    location_keys: Vec<String>,
+}
+
+/// Sends an event to one window by its label.
+pub trait WindowEmitter {
+    fn emit_to_window(&self, label: &str, locked: &LockedSections);
+}
+
+impl WindowEmitter for WebviewWindow {
+    fn emit_to_window(&self, label: &str, locked: &LockedSections) {
+        let _ = self.emit_to(label, PROTECTED_NOTES_LOCKED_EVENT, locked.clone());
+    }
+}
+
+/// Tells every open window which sections locked; nothing is sent when none did.
+pub fn broadcast_locked(
+    emitter: &impl WindowEmitter,
+    window_labels: &[String],
+    location_keys: Vec<String>,
+) {
+    if location_keys.is_empty() {
+        return;
+    }
+    let locked = LockedSections { location_keys };
+    for label in window_labels {
+        emitter.emit_to_window(label, &locked);
+    }
+}
+
+fn broadcast_from(window: &WebviewWindow, location_keys: Vec<String>) {
+    let labels = window.state::<Arc<OpenWindows>>().labels();
+    broadcast_locked(window, &labels, location_keys);
 }
 
 /// Why a protected section command failed, as a code only: never a key, a title or any note text.
@@ -346,8 +387,9 @@ impl ProtectedNotes {
         Ok(section.forget_this_pc(self.secrets.as_ref())?)
     }
 
-    fn lock(&self, place: &SectionPlace) {
-        self.sections().remove(&place.location_key);
+    /// Returns whether the section was unlocked.
+    fn lock(&self, place: &SectionPlace) -> bool {
+        self.sections().remove(&place.location_key).is_some()
     }
 
     fn with_section<T>(
@@ -494,7 +536,8 @@ pub async fn protected_unlock_with_recovery(
 /// Locks every section, as on sleep, a Windows session lock or quit.
 #[tauri::command]
 pub async fn protected_lock_all(window: WebviewWindow) -> Answer<()> {
-    state_of(&window).lock_all();
+    let locked = state_of(&window).lock_all();
+    broadcast_from(&window, locked);
     Ok(())
 }
 
@@ -518,7 +561,9 @@ pub async fn protected_forget_this_pc(location: String, window: WebviewWindow) -
 #[tauri::command]
 pub async fn protected_lock(location: String, window: WebviewWindow) -> Answer<()> {
     let place = section_place(&window, &location)?;
-    state_of(&window).lock(&place);
+    if state_of(&window).lock(&place) {
+        broadcast_from(&window, vec![place.location_key]);
+    }
     Ok(())
 }
 
@@ -624,7 +669,7 @@ mod tests {
         notes.set_up(&place, PASSWORD, QUICK).unwrap();
         let note_id = notes.create(&place, &new_note("Note"), 1).unwrap();
 
-        notes.lock(&place);
+        let _ = notes.lock(&place);
 
         assert_eq!(
             notes.open(&place, &note_id).map(|_| ()),
@@ -643,7 +688,7 @@ mod tests {
     fn the_recovery_key_unlocks_with_a_new_password() {
         let (_folder, notes, place) = start();
         let recovery_key = notes.set_up(&place, PASSWORD, QUICK).unwrap().recovery_key;
-        notes.lock(&place);
+        let _ = notes.lock(&place);
 
         let recovery = RecoveryUnlock {
             recovery_key: Zeroizing::new(recovery_key.to_lowercase()),
@@ -652,7 +697,7 @@ mod tests {
         notes
             .unlock_with_recovery(&place, &recovery, QUICK)
             .unwrap();
-        notes.lock(&place);
+        let _ = notes.lock(&place);
 
         assert_eq!(
             notes.unlock(&place, PASSWORD, false),
@@ -668,18 +713,18 @@ mod tests {
     fn remembering_this_pc_unlocks_without_a_password_until_forgotten() {
         let (_folder, notes, place) = start();
         notes.set_up(&place, PASSWORD, QUICK).unwrap();
-        notes.lock(&place);
+        let _ = notes.lock(&place);
         assert_eq!(
             notes.unlock_on_this_pc(&place),
             Err(ProtectedCommandError::NotRemembered)
         );
 
         notes.unlock(&place, PASSWORD, true).unwrap();
-        notes.lock(&place);
+        let _ = notes.lock(&place);
         assert!(notes.status(&place).can_unlock_on_this_pc);
         notes.unlock_on_this_pc(&place).unwrap();
         notes.forget_this_pc(&place).unwrap();
-        notes.lock(&place);
+        let _ = notes.lock(&place);
 
         assert!(!notes.status(&place).can_unlock_on_this_pc);
         assert_eq!(
@@ -754,6 +799,43 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&error).unwrap(),
             r#"{"code":"tampered"}"#
+        );
+    }
+
+    #[derive(Default)]
+    struct RecordingEmitter(std::sync::Mutex<Vec<(String, LockedSections)>>);
+
+    impl WindowEmitter for RecordingEmitter {
+        fn emit_to_window(&self, label: &str, locked: &LockedSections) {
+            self.0
+                .lock()
+                .unwrap()
+                .push((label.to_owned(), locked.clone()));
+        }
+    }
+
+    #[test]
+    fn a_lock_event_reaches_every_open_window_and_names_only_locations() {
+        let emitter = RecordingEmitter::default();
+        let windows = [
+            "main".to_owned(),
+            "window-2".to_owned(),
+            "window-3".to_owned(),
+        ];
+
+        broadcast_locked(&emitter, &windows, vec!["c:\\notes".to_owned()]);
+        broadcast_locked(&emitter, &windows, Vec::new());
+
+        let sent = emitter.0.lock().unwrap();
+        assert_eq!(
+            sent.iter()
+                .map(|(label, _)| label.as_str())
+                .collect::<Vec<_>>(),
+            ["main", "window-2", "window-3"]
+        );
+        assert_eq!(
+            serde_json::to_string(&sent[0].1).unwrap(),
+            r#"{"locationKeys":["c:\\notes"]}"#
         );
     }
 

@@ -179,6 +179,7 @@ export {
   type NewProtectedNote,
   type ProtectedNoteEdit,
   type ProtectedNotesFailure,
+  type ProtectedNotesLockedListener,
   type ProtectedNoteState,
   type ProtectedNoteSummary,
   type ProtectedNoteText,

@@ -5,10 +5,14 @@ import {
   type ProtectedNoteEdit,
   type ProtectedNoteSummary,
   type ProtectedNoteText,
+  type ProtectedNotesLockedListener,
   type ProtectedNotesPort,
   type ProtectedStatus,
 } from '@mdx/platform';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+
+export const PROTECTED_NOTES_LOCKED_EVENT = 'protected-notes-locked';
 
 /** A code from the native layer, or `unavailable` for anything else; never more than the code. */
 function protectedNotesErrorOf(error: unknown): ProtectedNotesError {
@@ -76,5 +80,12 @@ export class TauriProtectedNotes implements ProtectedNotesPort {
 
   save(location: string, edit: ProtectedNoteEdit): Promise<number> {
     return call('protected_save', { location, note: edit });
+  }
+
+  onLocked(listener: ProtectedNotesLockedListener): () => void {
+    const stopListening = listen<{ readonly locationKeys: string[] }>(PROTECTED_NOTES_LOCKED_EVENT, (event) =>
+      listener(event.payload.locationKeys),
+    );
+    return () => void stopListening.then((unlisten) => unlisten());
   }
 }

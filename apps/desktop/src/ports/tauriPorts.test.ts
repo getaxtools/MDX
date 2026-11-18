@@ -1,5 +1,6 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { InMemoryDocumentFiles, ProtectedNotesError } from '@mdx/platform';
+import { emit } from '@tauri-apps/api/event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TauriAppMenu } from './TauriAppMenu';
 import { TauriAppState } from './TauriAppState';
@@ -463,6 +464,18 @@ describe('TauriProtectedNotes', () => {
       'revision',
       'text',
     ]);
+  });
+
+  it('passes on the sections that locked in any window', async () => {
+    mockIPC(() => null, { shouldMockEvents: true });
+    const listener = vi.fn();
+    const stop = new TauriProtectedNotes().onLocked(listener);
+
+    await vi.waitFor(async () => {
+      await emit('protected-notes-locked', { locationKeys: ['c:\\notes'] });
+      expect(listener).toHaveBeenCalledWith(['c:\\notes']);
+    });
+    stop();
   });
 
   it('turns a refusal into a code and nothing more', async () => {

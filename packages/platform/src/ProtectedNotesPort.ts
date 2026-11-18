@@ -74,6 +74,8 @@ export interface NewProtectedNote {
   readonly folder: string;
 }
 
+export type ProtectedNotesLockedListener = (locationKeys: readonly string[]) => void;
+
 /**
  * The protected section of a Notes workspace, by its notes location. Keys stay in the app's native
  * layer: the window sends a password only to set up or unlock, gets the recovery key once at set-up,
@@ -99,4 +101,9 @@ export interface ProtectedNotesPort {
   open(location: string, noteId: string): Promise<ProtectedNoteText>;
   /** Resolves to the note's new revision. */
   save(location: string, edit: ProtectedNoteEdit): Promise<number>;
+  /**
+   * Tells the listener which sections locked, in any window, by their notes locations' canonical keys,
+   * so every window closes their notes; returns how to stop listening.
+   */
+  onLocked(listener: ProtectedNotesLockedListener): () => void;
 }
