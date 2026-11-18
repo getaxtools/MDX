@@ -4,6 +4,9 @@
 #[cfg(any(test, feature = "webdriver"))]
 mod in_memory_secrets;
 
+/// Windows Credential Manager, the store the app uses on Windows.
+#[cfg(windows)]
+pub use crate::platform::CredentialManagerSecrets;
 #[cfg(any(test, feature = "webdriver"))]
 pub use in_memory_secrets::InMemoryDeviceSecrets;
 use zeroize::Zeroizing;

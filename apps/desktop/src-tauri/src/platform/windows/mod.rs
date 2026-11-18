@@ -1,8 +1,10 @@
+mod credential_store;
 mod recycle_bin;
 
 use std::fs::Metadata;
 use std::os::windows::fs::MetadataExt;
 
+pub use credential_store::CredentialManagerSecrets;
 pub use mdx_native_windows::read_clipboard_text;
 pub use recycle_bin::{move_to_recycle_bin, recycle_bin_capacity};
 

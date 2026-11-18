@@ -46,6 +46,9 @@ zeroize = { version = "=1.9.1", features = ["derive"] }
 [target.'cfg(windows)'.dependencies]
 # The Windows calls that need unsafe code (Recycle Bin, volume names, registry), kept out of this crate.
 mdx-native-windows = { version = "0.8.1", path = "../native-windows" }
+# Remember protected notes on this PC: a device key in Credential Manager, kept local to the PC.
+keyring-core = "=1.0.1"
+windows-native-keyring-store = { version = "=1.1.0", default-features = false }
 
 [features]
 webdriver = ["dep:tauri-plugin-wdio-webdriver"]

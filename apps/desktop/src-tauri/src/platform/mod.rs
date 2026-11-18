@@ -7,7 +7,8 @@ pub use jump_list::{JumpListLink, JumpListResult, show_jump_list_category};
 pub use recycle_bin::{RecycleBin, SystemRecycleBin};
 #[cfg(windows)]
 pub use windows::{
-    is_cloud_only, is_locked_error_code, is_network_error_code, read_clipboard_text,
+    CredentialManagerSecrets, is_cloud_only, is_locked_error_code, is_network_error_code,
+    read_clipboard_text,
 };
 
 /// The clipboard's text is read natively on Windows only so far.
