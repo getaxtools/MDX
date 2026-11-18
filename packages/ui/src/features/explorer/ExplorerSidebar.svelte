@@ -8,6 +8,8 @@
   import NotesSection from '../notes/NotesSection.svelte';
   import NoteTagsSection from '../notes/NoteTagsSection.svelte';
   import type { NotesView } from '../notes/NotesActions';
+  import ProtectedNotesSection from '../protected-notes/ProtectedNotesSection.svelte';
+  import type { ProtectedNotesView } from '../protected-notes/ProtectedNotesActions';
   import SpecProjectsSection from '../spec-viewer/SpecProjectsSection.svelte';
   import type { SpecProjectsView } from '../spec-viewer/SpecViewerActions';
   import { FolderTreeState } from '../folder-tree/FolderTreeState';
@@ -34,6 +36,8 @@
     activeDocumentKey?: string | undefined;
     /** In a Notes workspace, the note tree takes the place of Folders. */
     notes?: NotesView | undefined;
+    /** The protected section of the shown Notes workspace, under its note tree. */
+    protectedNotes?: ProtectedNotesView | undefined;
     /** In a Spec viewer workspace, its spec projects take the place of Folders. */
     specProjects?: SpecProjectsView | undefined;
     isNoteDeletionConfirmed?: boolean;
@@ -63,6 +67,7 @@
     onShowFolder = () => () => undefined,
     activeDocumentKey,
     notes,
+    protectedNotes,
     specProjects,
     isNoteDeletionConfirmed = true,
     onNotesCommand = (command) => {
@@ -84,6 +89,7 @@
   const SECTION_TITLE_KEYS = {
     favourites: 'favourites.sidebar.title',
     folders: 'explorer.folders.title',
+    protectedNotes: 'protectedNotes.section.title',
     tags: 'notes.tags.title',
     recentFiles: 'recentFiles.title',
   } as const;
@@ -199,6 +205,19 @@
   </div>
   <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a snippet is not a value -->
   {@render divider('folders')}
+  {#if notes && protectedNotes}
+    <div class="section-slot">
+      <ProtectedNotesSection
+        view={protectedNotes}
+        {translator}
+        isExpanded={isExpanded('protectedNotes')}
+        onToggleExpanded={() => toggle('protectedNotes')}
+        {activeDocumentKey}
+        onCommand={(command: ViewerCommand) => void onNotesCommand(command)}
+      />
+    </div>
+    <div class="section-divider" aria-hidden="true"></div>
+  {/if}
   {#if notes}
     <div class="section-slot">
       <NoteTagsSection

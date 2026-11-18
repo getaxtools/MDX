@@ -62,6 +62,7 @@ import {
   type NoteFilesPort,
   type NoteTransferPort,
   type NotesIndexPort,
+  type ProtectedNotesPort,
   type SpecProjectPort,
   type NotesFolderInspection,
   type NotesLocationPort,
@@ -154,6 +155,11 @@ import {
 } from '../prompt-injection/InjectionCheckWorker';
 import { commandForMenuItem, type ViewerCommand } from './viewerCommands';
 import { NO_PROTECTED_DOCUMENTS, type ProtectedDocuments } from '../editing/editorSpellCheck';
+import { ProtectedNotesActions, type ProtectedNotesView } from '../protected-notes/ProtectedNotesActions';
+import {
+  isProtectedNotesCommand,
+  type ProtectedNotesCommand,
+} from '../protected-notes/protectedNotesCommands';
 
 export const STATE_SAVE_DELAY_MS = 500;
 const MOVE_NOTICE_ACTION_LABELS: Readonly<Record<NotesMoveCommand['kind'], MessageKey>> = {
@@ -226,6 +232,8 @@ export interface ViewerControllerDependencies {
   readonly afterPaint?: (run: () => void) => void;
   /** Which documents belong to a protected section; none until protected notes supply the rule. */
   readonly protectedDocuments?: ProtectedDocuments;
+  /** The encrypted section of a Notes workspace; without it no section is offered. */
+  readonly protectedNotes?: ProtectedNotesPort;
 }
 
 export interface RenderedActiveDocument {
@@ -298,6 +306,8 @@ export interface ViewerSnapshot {
   readonly missingNotesLocation?: string;
   /** The note tree, shown in place of Folders in a Notes workspace whose folder is there. */
   readonly notes?: NotesView;
+  /** The protected section of the shown Notes workspace, once it has been read. */
+  readonly protectedNotes?: ProtectedNotesView;
   /** The spec projects, shown in place of Folders in a Spec viewer workspace. */
   readonly specProjects?: SpecProjectsView;
   /** The "Spec after this change" previews open in tabs, by tab key. */
@@ -364,6 +374,7 @@ export type ViewerDialog =
   | 'noteTrash'
   | 'noteFromTemplate'
   | 'noteLinkUpdates'
+  | 'protectedSetUp'
   | NoteTransferDialog
   | WorkspaceDialog;
 
@@ -405,6 +416,7 @@ export class ViewerController {
   private readonly notesMoveActions: NotesMoveActions | undefined;
   private readonly notesActions: NotesActions | undefined;
   private readonly notesIndexActions: NotesIndexActions | undefined;
+  private readonly protectedNotesActions: ProtectedNotesActions | undefined;
   private readonly specViewerActions: SpecViewerActions | undefined;
   private readonly specProjectChecks: SpecProjectChecks;
   /** The scan whose documents were last checked for prompt injection without the user asking. */
@@ -481,6 +493,7 @@ export class ViewerController {
     this.notesMoveActions = this.createNotesMoveActions();
     this.notesActions = this.createNotesActions();
     this.notesIndexActions = this.createNotesIndexActions();
+    this.protectedNotesActions = this.createProtectedNotesActions();
     this.specDocumentRenderings = this.createSpecDocumentRenderings();
     this.specProjectChecks = this.createSpecProjectChecks();
     this.specViewerActions = this.createSpecViewerActions();
@@ -667,6 +680,30 @@ export class ViewerController {
       openDocument: (path) => this.openDocument(path),
       onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
     });
+  }
+
+  private createProtectedNotesActions(): ProtectedNotesActions | undefined {
+    const { session, protectedNotes } = this.dependencies;
+    if (!protectedNotes) return undefined;
+    return new ProtectedNotesActions({
+      session,
+      protectedNotes,
+      whenWindowReported: () => this.appWindowActions?.whenReported() ?? Promise.resolve(),
+      showSetUpDialog: () => {
+        this.openDialog = 'protectedSetUp';
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+      },
+      closeSetUpDialog: () => {
+        if (this.openDialog === 'protectedSetUp') this.openDialog = undefined;
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+      },
+      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+    });
+  }
+
+  private async runProtectedNotesCommand(command: ProtectedNotesCommand): Promise<void> {
+    if (this.refuseWhileNotesMove()) return;
+    await this.protectedNotesActions?.run(command);
   }
 
   private noteTransferPart(): Pick<
@@ -1036,7 +1073,13 @@ export class ViewerController {
     this.showSpecProjects();
     await this.notesMoveActions?.offerUnfinishedMoves();
     await this.offerWorkspaceFiles();
+    await this.startWindowFeatures();
+  }
+
+  /** The protected section is read once the app knows which workspace this window shows. */
+  private async startWindowFeatures(): Promise<void> {
     if (this.appWindowActions) this.stopActions.push(await this.appWindowActions.start());
+    await this.protectedNotesActions?.refreshIfChanged();
   }
 
   private reportRestoreOutcome({
@@ -1330,6 +1373,11 @@ export class ViewerController {
     if (isNotesLocationCommand(command)) return this.notesLocationActions?.run(command) ?? Promise.resolve();
     if (isNotesMoveCommand(command)) return this.runNotesMoveCommand(command);
     if (isNotesCommand(command)) return this.runNotesCommand(command);
+    if (isProtectedNotesCommand(command)) return this.runProtectedNotesCommand(command);
+    return this.runWorkspaceFeatureCommand(command);
+  }
+
+  private runWorkspaceFeatureCommand(command: ViewerCommand): Promise<void> | undefined {
     if (isSpecViewerCommand(command)) return this.runSpecViewerCommand(command);
     if (isWorkspaceFileCommand(command)) return this.runWorkspaceFileCommand(command);
     if (isWorkspaceCommand(command)) return this.workspaceActions.run(command);
@@ -1922,6 +1970,7 @@ export class ViewerController {
     this.scheduleSave();
     this.injectionChecks.viewChanged();
     this.appWindowActions?.reportState();
+    void this.protectedNotesActions?.refreshIfChanged();
     void this.refreshActiveDocument();
   }
 
@@ -2192,7 +2241,16 @@ export class ViewerController {
     if (missingNotesLocation !== undefined) return { missingNotesLocation };
     const notes = this.notesActions?.view();
     if (!notes) return {};
-    return { notes: { ...notes, ...this.notesIndexPart() }, ...this.noteBacklinksPart() };
+    return {
+      notes: { ...notes, ...this.notesIndexPart() },
+      ...this.noteBacklinksPart(),
+      ...this.protectedNotesPart(),
+    };
+  }
+
+  private protectedNotesPart(): Pick<ViewerSnapshot, 'protectedNotes'> {
+    const protectedNotes = this.protectedNotesActions?.view();
+    return protectedNotes ? { protectedNotes } : {};
   }
 
   private notesIndexPart(): Pick<NotesView, 'indexStatus' | 'tags'> {

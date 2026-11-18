@@ -10,9 +10,11 @@
     isExpanded: boolean;
     onToggle: () => void;
     actions?: Snippet;
+    /** A word after the title that is part of the heading, such as whether a section is locked. */
+    status?: Snippet;
   }
 
-  const { section, headingId, title, isExpanded, onToggle, actions }: Props = $props();
+  const { section, headingId, title, isExpanded, onToggle, actions, status }: Props = $props();
 </script>
 
 <div class="section-header">
@@ -26,6 +28,9 @@
           <path
             d="M3.5 18.5v-12A1.5 1.5 0 0 1 5 5h4.2l2 2.2H19a1.5 1.5 0 0 1 1.5 1.5v9.8A1.5 1.5 0 0 1 19 20H5a1.5 1.5 0 0 1-1.5-1.5z"
           />
+        {:else if section === 'protectedNotes'}
+          <rect x="5.5" y="10.5" width="13" height="9.5" rx="1.5" />
+          <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" />
         {:else if section === 'tags'}
           <path d="M9.5 4l-2 16M16.5 4l-2 16M4.5 9h15M3.5 15h15" />
         {:else}
@@ -34,6 +39,7 @@
         {/if}
       </svg>
       <span class="section-title">{title}</span>
+      {@render status?.()}
     </button>
   </h2>
   {@render actions?.()}

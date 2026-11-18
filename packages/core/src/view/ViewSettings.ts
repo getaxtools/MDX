@@ -6,7 +6,7 @@ export type Typography = 'github' | 'book' | 'academic';
 export type EditingModeSetting = 'richText' | 'source';
 /** A language tag such as `hi` or `pt-BR`, or `system` to follow the language of Windows. */
 export type LanguagePreference = 'system' | (string & {});
-export type ExplorerSection = 'favourites' | 'folders' | 'tags' | 'recentFiles';
+export type ExplorerSection = 'favourites' | 'folders' | 'protectedNotes' | 'tags' | 'recentFiles';
 /** The side bar, whatever view it shows; saved as `explorer` by earlier versions. */
 export type ResizablePanel = 'explorer';
 export type SidebarView = 'explorer' | 'search' | 'outline' | 'promptInjection';
@@ -88,7 +88,13 @@ export const TYPOGRAPHIES: readonly Typography[] = ['github', 'book', 'academic'
 export const EDITING_MODES: readonly EditingModeSetting[] = ['richText', 'source'];
 /** What saved settings from before Rich text existed mean, so upgraded installations keep Source. */
 const EDITING_MODE_OF_EARLIER_SETTINGS: EditingModeSetting = 'source';
-export const EXPLORER_SECTIONS: readonly ExplorerSection[] = ['favourites', 'folders', 'tags', 'recentFiles'];
+export const EXPLORER_SECTIONS: readonly ExplorerSection[] = [
+  'favourites',
+  'folders',
+  'protectedNotes',
+  'tags',
+  'recentFiles',
+];
 export const MIN_EXPLORER_SECTION_HEIGHT_PX = 48;
 export const MAX_EXPLORER_SECTION_HEIGHT_PX = 4000;
 export const RESIZABLE_PANELS: readonly ResizablePanel[] = ['explorer'];

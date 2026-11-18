@@ -1,4 +1,4 @@
-import { ViewerSession, workspaceKindsFor } from '@mdx/core';
+import { ViewerSession, isProtectedLocation, workspaceKindsFor } from '@mdx/core';
 import { DEFAULT_LOCALE, type Translator } from '@mdx/i18n';
 import { createCodeHighlighter, createMarkdownRenderer, createRichBlockRenderer } from '@mdx/renderer';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -26,6 +26,7 @@ import { TauriSpecProjects } from './ports/TauriSpecProjects';
 import { TauriNotesIndex } from './ports/TauriNotesIndex';
 import { TauriNotesLocations } from './ports/TauriNotesLocations';
 import { TauriNotesMoves } from './ports/TauriNotesMoves';
+import { TauriProtectedNotes } from './ports/TauriProtectedNotes';
 import { TauriWorkspaceFiles } from './ports/TauriWorkspaceFiles';
 import { TauriWorkspaceStore } from './ports/TauriWorkspaceStore';
 import { WebViewPrinter } from './ports/WebViewPrinter';
@@ -113,6 +114,8 @@ function createViewerController({
     noteTransfer: new TauriNoteTransfer(),
     specProjects: new TauriSpecProjects(),
     notesIndex: new TauriNotesIndex(),
+    protectedNotes: new TauriProtectedNotes(),
+    protectedDocuments: { isProtected: isProtectedLocation },
   });
 }
 

@@ -22,6 +22,7 @@ import type { PropertyCommand } from '../document-view/propertyCommands';
 import type { SpecViewerCommand } from '../spec-viewer/specViewerCommands';
 import type { ViewCommand } from '../view/viewCommands';
 import type { InjectionCheckCommand } from '../prompt-injection/injectionCheckCommands';
+import type { ProtectedNotesCommand } from '../protected-notes/protectedNotesCommands';
 
 export type ViewerCommand =
   | TabCommand
@@ -44,6 +45,7 @@ export type ViewerCommand =
   | NotesMoveCommand
   | NotesCommand
   | NotesLinkCommand
+  | ProtectedNotesCommand
   | PropertyCommand
   | SpecViewerCommand
   | InjectionCheckCommand

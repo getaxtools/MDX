@@ -16,6 +16,7 @@ export interface AppWindowActionsDependencies {
 /** New Window, and what this window tells the others: its workspace, tabs and folders. */
 export class AppWindowActions {
   private reportedJson: string | undefined;
+  private lastReport: Promise<void> = Promise.resolve();
 
   constructor(private readonly dependencies: AppWindowActionsDependencies) {}
 
@@ -43,9 +44,14 @@ export class AppWindowActions {
     const json = JSON.stringify(report);
     if (json === this.reportedJson) return;
     this.reportedJson = json;
-    void this.dependencies.appWindows.reportState(report).catch(() => {
+    this.lastReport = this.dependencies.appWindows.reportState(report).catch(() => {
       this.reportedJson = undefined;
     });
+  }
+
+  /** Resolves once the app has heard the window's last report, such as the workspace it shows now. */
+  whenReported(): Promise<void> {
+    return this.lastReport;
   }
 
   private async leaveDeletedWorkspace(workspaceId: string): Promise<void> {

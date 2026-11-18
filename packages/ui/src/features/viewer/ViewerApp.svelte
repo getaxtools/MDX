@@ -84,6 +84,7 @@
   import NotesLocationMissing from '../notes-location/NotesLocationMissing.svelte';
   import NotesMoveDialog from '../notes-location/NotesMoveDialog.svelte';
   import NoteTrashDialog from '../notes/NoteTrashDialog.svelte';
+  import ProtectedSetUpDialog from '../protected-notes/ProtectedSetUpDialog.svelte';
   import NoteBacklinks from '../notes/NoteBacklinks.svelte';
   import NoteFromTemplateDialog from '../notes/NoteFromTemplateDialog.svelte';
   import NoteLinkUpdatesDialog from '../notes/NoteLinkUpdatesDialog.svelte';
@@ -527,6 +528,7 @@
               onCommand={(command: ViewerCommand) => void controller.execute(command)}
               onListFolder={(folderPath: string) => controller.listFolderContents(folderPath)}
               notes={snapshot.notes}
+              protectedNotes={snapshot.protectedNotes}
               specProjects={snapshot.specProjects}
               isNoteDeletionConfirmed={viewSettings.isNoteDeletionConfirmed}
               onNotesCommand={(command: ViewerCommand) => controller.execute(command)}
@@ -917,6 +919,15 @@
   {:else if snapshot.openDialog === 'noteTrash' && snapshot.notes?.trash}
     <NoteTrashDialog
       entries={snapshot.notes.trash}
+      {translator}
+      onCommand={(command: ViewerCommand) => void controller.execute(command)}
+      onClose={() => controller.closeDialog()}
+    />
+  {:else if snapshot.openDialog === 'protectedSetUp' && snapshot.protectedNotes}
+    <ProtectedSetUpDialog
+      recoveryKey={snapshot.protectedNotes.recoveryKey}
+      problem={snapshot.protectedNotes.setUpProblem}
+      isBusy={snapshot.protectedNotes.isBusy}
       {translator}
       onCommand={(command: ViewerCommand) => void controller.execute(command)}
       onClose={() => controller.closeDialog()}

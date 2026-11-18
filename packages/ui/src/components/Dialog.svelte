@@ -8,16 +8,18 @@
     children: Snippet;
     /** More controls for the fixed footer, shown before the close button. */
     footer?: Snippet;
+    /** False while the dialog must be finished, not closed: it then has no close button and ignores Escape. */
+    canClose?: boolean;
   }
 
-  const { title, closeLabel, onClose, children, footer }: Props = $props();
+  const { title, closeLabel, onClose, children, footer, canClose = true }: Props = $props();
 
   let closeButton: HTMLButtonElement | undefined = $state();
 
   $effect(() => closeButton?.focus());
 
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key !== 'Escape') return;
+    if (event.key !== 'Escape' || !canClose) return;
     event.stopPropagation();
     onClose();
   }
@@ -38,7 +40,9 @@
     <div class="content" role="region" aria-labelledby="dialog-title" tabindex="0">{@render children()}</div>
     <div class="actions">
       {@render footer?.()}
-      <button bind:this={closeButton} onclick={onClose}>{closeLabel}</button>
+      {#if canClose}
+        <button bind:this={closeButton} onclick={onClose}>{closeLabel}</button>
+      {/if}
     </div>
   </div>
 </div>
