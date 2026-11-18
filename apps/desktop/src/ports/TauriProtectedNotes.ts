@@ -6,14 +6,21 @@ import {
   type ProtectedNoteSummary,
   type ProtectedNoteText,
   type ProtectedNotesLockedListener,
+  type ProtectedNotesLockRequestListener,
   type ProtectedNotesPort,
   type ProtectedStatus,
   type UnlockResult,
 } from '@mdx/platform';
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
+import { listenInThisWindow } from './windowEvents';
 
 export const PROTECTED_NOTES_LOCKED_EVENT = 'protected-notes-locked';
+export const PROTECTED_NOTES_LOCK_REQUESTED_EVENT = 'protected-notes-lock-requested';
+
+interface LockRequest {
+  readonly requestId: number;
+  readonly locationKeys: string[];
+}
 
 /** A code from the native layer, or `unavailable` for anything else; never more than the code. */
 function protectedNotesErrorOf(error: unknown): ProtectedNotesError {
@@ -87,10 +94,29 @@ export class TauriProtectedNotes implements ProtectedNotesPort {
     return call('protected_save', { location, note: edit });
   }
 
+  async saveBeforeLock(location: string): Promise<boolean> {
+    const { isEverythingSaved } = await call<{ readonly isEverythingSaved: boolean }>(
+      'protected_save_before_lock',
+      { location },
+    );
+    return isEverythingSaved;
+  }
+
   onLocked(listener: ProtectedNotesLockedListener): () => void {
-    const stopListening = listen<{ readonly locationKeys: string[] }>(PROTECTED_NOTES_LOCKED_EVENT, (event) =>
+    return listenInThisWindow<{ readonly locationKeys: string[] }>(PROTECTED_NOTES_LOCKED_EVENT, (event) =>
       listener(event.payload.locationKeys),
     );
-    return () => void stopListening.then((unlisten) => unlisten());
+  }
+
+  /** Answers every lock request, saved or not, so the lock waits no longer than it must. */
+  onLockRequested(listener: ProtectedNotesLockRequestListener): () => void {
+    return listenInThisWindow<LockRequest>(PROTECTED_NOTES_LOCK_REQUESTED_EVENT, (event) => {
+      const { requestId, locationKeys } = event.payload;
+      void listener(locationKeys)
+        .catch(() => false)
+        .then((isEverythingSaved) =>
+          invoke('protected_answer_lock_request', { answer: { requestId, isEverythingSaved } }),
+        );
+    });
   }
 }

@@ -1,4 +1,6 @@
 const MAX_CACHED_RENDERS = 200;
+/** The kinds of render whose cache key names their document after the kind, as `table:<document>:<source>`. */
+const DOCUMENT_RENDER_KINDS = ['table', 'html', 'image'];
 /** About 2 MB of HTML, counted in UTF-16 code units. */
 const MAX_CACHED_CHARACTERS = 1_000_000;
 
@@ -27,6 +29,19 @@ export class RenderCache {
       if (oldest.done === true) return;
       this.remove(oldest.value);
     }
+  }
+
+  /** Drops every render of one document, as when a protected note closes. */
+  forgetDocument(documentKey: string): void {
+    const prefixes = DOCUMENT_RENDER_KINDS.map((kind) => `${kind}:${documentKey}:`);
+    for (const key of [...this.entries.keys()]) {
+      if (prefixes.some((prefix) => key.startsWith(prefix))) this.remove(key);
+    }
+  }
+
+  /** Whether any render holds this text, in its key or its HTML. */
+  holdsText(text: string): boolean {
+    return [...this.entries].some(([key, html]) => key.includes(text) || html.includes(text));
   }
 
   get size(): number {

@@ -91,6 +91,12 @@ export interface NewProtectedNote {
 export type ProtectedNotesLockedListener = (locationKeys: readonly string[]) => void;
 
 /**
+ * Saves this window's unsaved edits of the notes of these sections, by their notes locations'
+ * canonical keys, before they lock; resolves to whether everything was saved.
+ */
+export type ProtectedNotesLockRequestListener = (locationKeys: readonly string[]) => Promise<boolean>;
+
+/**
  * The protected section of a Notes workspace, by its notes location. Keys stay in the app's native
  * layer: the window sends a password only to set up or unlock, gets the recovery key once at set-up,
  * and never receives a key.
@@ -109,7 +115,13 @@ export interface ProtectedNotesPort {
   /** Keeps the folder as it is after a folder warning; this PC remembers it as seen. */
   acceptFolder(location: string): Promise<void>;
   forgetThisPc(location: string): Promise<void>;
+  /**
+   * Asks every window to save its unsaved edits of the section's notes, waiting a few seconds at most,
+   * before the user locks it; resolves to whether all of them were saved.
+   */
+  saveBeforeLock(location: string): Promise<boolean>;
   lock(location: string): Promise<void>;
+  /** Locks every section once every window has saved what it could, as on sleep or quit. */
   lockAll(): Promise<void>;
   list(location: string): Promise<ProtectedNoteSummary[]>;
   /** Resolves to the new note's id. */
@@ -122,4 +134,6 @@ export interface ProtectedNotesPort {
    * so every window closes their notes; returns how to stop listening.
    */
   onLocked(listener: ProtectedNotesLockedListener): () => void;
+  /** Hears that sections are about to lock, so this window saves its edits of them first; returns how to stop. */
+  onLockRequested(listener: ProtectedNotesLockRequestListener): () => void;
 }

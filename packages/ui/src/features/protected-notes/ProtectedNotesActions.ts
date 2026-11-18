@@ -1,7 +1,9 @@
 import { notesLocationOf, type ViewerSession } from '@mdx/core';
+import { SHARED_RENDER_CACHE } from '@mdx/editor';
 import type { MessageKey } from '@mdx/i18n';
 import {
   ProtectedNotesError,
+  isProtectedNoteIn,
   protectedNoteLocation,
   type DocumentLocation,
   type OpenedDocument,
@@ -31,12 +33,16 @@ export interface ProtectedNotesView {
   readonly notes: readonly ProtectedNoteListing[];
   /** A password is being checked, which takes a moment on purpose. */
   readonly isBusy: boolean;
-  /** Shown only during set-up, until the user has typed its end back. */
+  /** Shown only during set-up while the section is unlocked, until the user has typed its end back. */
   readonly recoveryKey?: string;
+  /** The section locked before its recovery key was confirmed; unlocking shows the key again. */
+  readonly isRecoveryKeyCovered?: boolean;
   readonly setUpProblem?: MessageKey;
   readonly unlockProblem?: MessageKey;
   /** The folder looks older than this PC last saw it; the notes stay hidden until the user keeps it. */
   readonly folderWarning?: ProtectedFolderWarning;
+  /** Some edits could not be saved before a lock the user asked for, so the user chooses. */
+  readonly isAskingToLock?: boolean;
 }
 
 export interface ProtectedNotesActionsDependencies {
@@ -47,8 +53,10 @@ export interface ProtectedNotesActionsDependencies {
   readonly showSetUpDialog: () => void;
   readonly closeSetUpDialog: () => void;
   readonly showNotice: (key: MessageKey, values?: Readonly<Record<string, string>>) => void;
-  /** Saves the unsaved edits of the section's open notes before it locks; false when one was not saved. */
-  readonly saveEditsOf: (locationKey: string) => Promise<boolean>;
+  /** Saves the unsaved edits of this window's protected notes before a lock; false when one was not saved. */
+  readonly saveProtectedEdits: () => Promise<boolean>;
+  /** Whether this window still has unsaved edits of protected notes. */
+  readonly hasUnsavedProtectedEdits: () => boolean;
   /** Starts editing the active document, as a new note is opened for typing. */
   readonly startEditing: () => void;
   /** Waits before a password is tried again; a real timer unless a test sets it. */
@@ -98,11 +106,13 @@ export class ProtectedNotesActions {
   private status: ProtectedStatus | undefined;
   private notes: readonly ProtectedNoteListing[] = [];
   private isBusy = false;
-  private recoveryKey: string | undefined;
+  /** Recovery keys not confirmed yet, by section: kept for this session, shown only while unlocked. */
+  private readonly unconfirmedRecoveryKeys = new Map<string, string>();
   private setUpProblem: MessageKey | undefined;
   private unlockProblem: MessageKey | undefined;
   private folderWarning: ProtectedFolderWarning | undefined;
   private wrongPasswordsInARow = 0;
+  private isAskingToLock = false;
   private readingKey: string | undefined;
 
   constructor(private readonly dependencies: ProtectedNotesActionsDependencies) {}
@@ -115,16 +125,23 @@ export class ProtectedNotesActions {
       canUnlockOnThisPc: status.canUnlockOnThisPc,
       notes: this.folderWarning ? [] : this.notes,
       isBusy: this.isBusy,
-      ...(this.recoveryKey === undefined ? {} : { recoveryKey: this.recoveryKey }),
+      ...this.recoveryKeyPart(status),
       ...(this.setUpProblem === undefined ? {} : { setUpProblem: this.setUpProblem }),
       ...(this.unlockProblem === undefined ? {} : { unlockProblem: this.unlockProblem }),
       ...(this.folderWarning === undefined ? {} : { folderWarning: this.folderWarning }),
+      ...(this.isAskingToLock ? { isAskingToLock: true } : {}),
     };
   }
 
   /** Follows sections locking in any window, whose notes then close here too; returns how to stop. */
   start(): () => void {
-    return this.dependencies.protectedNotes.onLocked((locationKeys) => void this.followLock(locationKeys));
+    const { protectedNotes, saveProtectedEdits } = this.dependencies;
+    const stopFollowingLocks = protectedNotes.onLocked((locationKeys) => void this.followLock(locationKeys));
+    const stopSavingBeforeLocks = protectedNotes.onLockRequested(() => saveProtectedEdits());
+    return () => {
+      stopFollowingLocks();
+      stopSavingBeforeLocks();
+    };
   }
 
   /** Reads the section again when another workspace is shown, or when it could not be read before. */
@@ -169,20 +186,43 @@ export class ProtectedNotesActions {
     },
     createProtectedNote: ({ title }) => this.createNote(title),
     lockProtectedNotes: () => this.lock(),
+    confirmProtectedLock: () => this.confirmLock(),
+    cancelProtectedLock: () => this.cancelLock(),
   };
+
+  private recoveryKeyPart(
+    status: ProtectedStatus,
+  ): Pick<ProtectedNotesView, 'recoveryKey' | 'isRecoveryKeyCovered'> {
+    const recoveryKey = this.section ? this.unconfirmedRecoveryKeys.get(this.section.key) : undefined;
+    if (recoveryKey === undefined) return {};
+    return status.isUnlocked ? { recoveryKey } : { isRecoveryKeyCovered: true };
+  }
 
   private async refresh(): Promise<void> {
     const shown = this.shownSection();
     if (shown?.key !== this.section?.key) this.forgetSection();
     this.section = shown;
     if (shown) await this.readSection(shown);
+    this.offerUnconfirmedRecoveryKey();
     this.dependencies.onChange();
   }
 
+  /** Set-up waits for its recovery key to be confirmed, so the key shows again once its section is unlocked. */
+  private offerUnconfirmedRecoveryKey(): void {
+    const { section } = this;
+    if (section && this.status?.isUnlocked === true && this.unconfirmedRecoveryKeys.has(section.key)) {
+      this.dependencies.showSetUpDialog();
+    }
+  }
+
+  /** Another workspace is shown; an unfinished set-up waits, and the user is told it does. */
   private forgetSection(): void {
+    if (this.section && this.unconfirmedRecoveryKeys.has(this.section.key)) {
+      this.dependencies.closeSetUpDialog();
+      this.dependencies.showNotice('protectedNotes.setUp.unfinished');
+    }
     this.status = undefined;
     this.notes = [];
-    this.recoveryKey = undefined;
     this.setUpProblem = undefined;
     this.unlockProblem = undefined;
     this.folderWarning = undefined;
@@ -232,7 +272,7 @@ export class ProtectedNotesActions {
       this.setUpProblem = undefined;
       try {
         const { recoveryKey } = await this.dependencies.protectedNotes.setUp(section.path, password);
-        this.recoveryKey = recoveryKey;
+        this.unconfirmedRecoveryKeys.set(section.key, recoveryKey);
         this.status = { isSetUp: true, isUnlocked: true, canUnlockOnThisPc: false };
       } catch (error) {
         this.setUpProblem = problemOf(error, SET_UP_PROBLEMS, 'protectedNotes.setUp.failed');
@@ -242,8 +282,9 @@ export class ProtectedNotesActions {
 
   /** The user typed the end of the recovery key back, so it is never shown again. */
   private async finishSetUp(): Promise<void> {
-    if (this.recoveryKey === undefined) return;
-    this.recoveryKey = undefined;
+    const { section } = this;
+    if (!section || this.status?.isUnlocked !== true || !this.unconfirmedRecoveryKeys.delete(section.key))
+      return;
     this.dependencies.closeSetUpDialog();
     await this.refresh();
   }
@@ -264,6 +305,7 @@ export class ProtectedNotesActions {
         this.wrongPasswordsInARow = 0;
         this.folderWarning = folderWarning;
         await this.readSection(section);
+        this.offerUnconfirmedRecoveryKey();
       } catch (error) {
         if (error instanceof ProtectedNotesError && error.failure === 'wrongPassword')
           this.wrongPasswordsInARow += 1;
@@ -360,11 +402,35 @@ export class ProtectedNotesActions {
     }
   }
 
-  /** Saves what can be saved, locks, and closes the section's tabs, which forgets their text. */
+  /** Every window saves its edits of the section's notes first; when one could not, the user chooses. */
   private async lock(): Promise<void> {
     const { section } = this;
-    if (!section || this.status?.isUnlocked !== true) return;
-    const isEverythingSaved = await this.dependencies.saveEditsOf(section.key);
+    if (!section || this.status?.isUnlocked !== true || this.isAskingToLock) return;
+    const isEverythingSaved = await this.dependencies.protectedNotes
+      .saveBeforeLock(section.path)
+      .catch(() => false);
+    if (isEverythingSaved) {
+      await this.lockNow(section);
+      return;
+    }
+    this.isAskingToLock = true;
+    this.dependencies.onChange();
+  }
+
+  private async confirmLock(): Promise<void> {
+    const { section } = this;
+    if (!section || !this.isAskingToLock) return;
+    this.isAskingToLock = false;
+    await this.lockNow(section);
+  }
+
+  private cancelLock(): void {
+    this.isAskingToLock = false;
+    this.dependencies.onChange();
+  }
+
+  /** Locks and closes the section's tabs, which forgets their text. */
+  private async lockNow(section: ShownSection): Promise<void> {
     try {
       await this.dependencies.protectedNotes.lock(section.path);
     } finally {
@@ -372,7 +438,6 @@ export class ProtectedNotesActions {
       await this.readSection(section);
       this.dependencies.onChange();
     }
-    if (!isEverythingSaved) this.dependencies.showNotice('protectedNotes.lock.editsLost');
   }
 
   /** Another window or the app locked sections; this one is read again in case it was among them. */
@@ -385,10 +450,21 @@ export class ProtectedNotesActions {
     this.dependencies.onChange();
   }
 
+  /** Closes the section's tabs and drops whatever was rendered of them. */
   private closeNotesOf(section: ShownSection): void {
     this.notes = [];
     this.folderWarning = undefined;
-    this.dependencies.session.closeProtectedNotesOf(section.key);
+    this.isAskingToLock = false;
+    const { session, hasUnsavedProtectedEdits, showNotice } = this.dependencies;
+    if (hasUnsavedProtectedEdits()) showNotice('protectedNotes.lock.editsLost');
+    const closingKeys = session
+      .currentState()
+      .tabStrip.tabs()
+      .map((tab) => tab.location)
+      .filter((location) => isProtectedNoteIn(location, section.key))
+      .map((location) => location.canonicalKey);
+    session.closeProtectedNotesOf(section.key);
+    for (const canonicalKey of closingKeys) SHARED_RENDER_CACHE.forgetDocument(canonicalKey);
   }
 
   private async whileBusy(work: () => Promise<void>): Promise<void> {

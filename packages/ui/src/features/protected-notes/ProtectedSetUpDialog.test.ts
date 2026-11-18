@@ -9,15 +9,22 @@ const RECOVERY_KEY = 'ABCD-EFGH-JKMN-PQRS-TVWX-YZ01-2345-6789-ABCD-EFGH-JKMN-PQR
 
 interface DialogState {
   readonly recoveryKey?: string;
+  readonly isRecoveryKeyCovered?: boolean;
   readonly problem?: MessageKey;
   readonly isBusy?: boolean;
 }
 
-function renderDialog({ recoveryKey, problem, isBusy = false }: DialogState = {}) {
+function renderDialog({
+  recoveryKey,
+  isRecoveryKeyCovered = false,
+  problem,
+  isBusy = false,
+}: DialogState = {}) {
   const onCommand = vi.fn<(command: ViewerCommand) => void>();
   const onClose = vi.fn();
   render(ProtectedSetUpDialog, {
     recoveryKey,
+    isRecoveryKeyCovered,
     problem,
     isBusy,
     translator: createTranslator(),
@@ -75,13 +82,39 @@ describe('ProtectedSetUpDialog', () => {
     expect(screen.getByLabelText<HTMLInputElement>('Password').value).toBe('');
   });
 
-  it('keeps the password fields out of autofill', async () => {
+  it('asks for a new password, so no saved password is filled in', async () => {
     renderDialog();
 
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
 
-    expect(screen.getByLabelText('Password').getAttribute('autocomplete')).toBe('off');
-    expect(screen.getByLabelText('Password again').getAttribute('autocomplete')).toBe('off');
+    expect(screen.getByLabelText('Password').getAttribute('autocomplete')).toBe('new-password');
+    expect(screen.getByLabelText('Password again').getAttribute('autocomplete')).toBe('new-password');
+  });
+
+  it('warns against copying the recovery key', () => {
+    renderDialog({ recoveryKey: RECOVERY_KEY });
+
+    expect(screen.getByText(/Write the key down rather than copying it/)).toBeTruthy();
+  });
+
+  it('empties the confirmation field after each try', async () => {
+    renderDialog({ recoveryKey: RECOVERY_KEY });
+    const field = screen.getByLabelText<HTMLInputElement>('Type the last two groups of the recovery key');
+
+    await userEvent.type(field, 'TV1Z-7R');
+    await userEvent.click(screen.getByRole('button', { name: 'Finish' }));
+
+    expect(field.value).toBe('');
+  });
+
+  it('covers the recovery key while the section is locked, and can then be closed', async () => {
+    const { onClose } = renderDialog({ isRecoveryKeyCovered: true });
+
+    expect(screen.queryByLabelText('Recovery key')).toBeNull();
+    expect(screen.getByRole('dialog').textContent).toContain('Unlock them to see the recovery key again');
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    expect(onClose).toHaveBeenCalled();
   });
 
   it('shows why set-up failed', async () => {

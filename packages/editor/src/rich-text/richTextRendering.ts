@@ -27,6 +27,8 @@ export interface CalloutPresentation {
 export interface RichTextRendering {
   /** Names the document whose links and pictures `renderBlock` resolves, so renders of two documents never mix. */
   readonly documentKey: string;
+  /** A protected note's renders never go into the cache that other documents share. */
+  readonly keepsRendersPrivate?: boolean;
   /** Sanitized HTML for Markdown, as the preview renders it for this document. */
   renderBlock(markdown: string): string;
   /** Sanitized HTML for one formula with the preview's typesetting options, or undefined when it fails. */

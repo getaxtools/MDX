@@ -19,6 +19,7 @@ pub mod notes_index;
 pub mod notes_location;
 pub mod notes_move;
 pub mod notes_transfer;
+pub mod protected_lock_requests;
 pub mod protected_notes;
 pub mod spec_project_link;
 pub mod spec_projects;

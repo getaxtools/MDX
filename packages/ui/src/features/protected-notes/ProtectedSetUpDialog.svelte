@@ -7,6 +7,8 @@
   interface Props {
     /** Present once the section is set up, until the user typed its end back. */
     recoveryKey?: string | undefined;
+    /** The section locked before the key was confirmed; it shows again once the section is unlocked. */
+    isRecoveryKeyCovered?: boolean;
     problem?: MessageKey | undefined;
     isBusy: boolean;
     translator: Translator;
@@ -14,7 +16,15 @@
     onClose: () => void;
   }
 
-  const { recoveryKey, problem, isBusy, translator, onCommand, onClose }: Props = $props();
+  const {
+    recoveryKey,
+    isRecoveryKeyCovered = false,
+    problem,
+    isBusy,
+    translator,
+    onCommand,
+    onClose,
+  }: Props = $props();
 
   const PASSWORD_PROBLEMS: Record<PasswordProblem, MessageKey> = {
     tooShort: 'protectedNotes.setUp.tooShort',
@@ -45,22 +55,28 @@
   function finish(event: SubmitEvent) {
     event.preventDefault();
     isEndWrong = recoveryKey === undefined || !isRecoveryKeyConfirmed(recoveryKey, typedEnd);
+    typedEnd = '';
     if (!isEndWrong) onCommand({ kind: 'finishProtectedSetUp' });
   }
 </script>
 
 <Dialog
   title={translator.translate('protectedNotes.setUp.title')}
-  closeLabel={translator.translate('protectedNotes.setUp.cancel')}
+  closeLabel={translator.translate(
+    isRecoveryKeyCovered ? 'protectedNotes.setUp.close' : 'protectedNotes.setUp.cancel',
+  )}
   canClose={recoveryKey === undefined && !isBusy}
   {onClose}
 >
-  {#if recoveryKey !== undefined}
+  {#if isRecoveryKeyCovered}
+    <p>{translator.translate('protectedNotes.setUp.recoveryKeyCovered')}</p>
+  {:else if recoveryKey !== undefined}
     <form onsubmit={finish} autocomplete="off">
       <p>{translator.translate('protectedNotes.setUp.recoveryKeyIntro')}</p>
       <p class="recovery-key" aria-label={translator.translate('protectedNotes.setUp.recoveryKey')}>
         <code>{recoveryKey}</code>
       </p>
+      <p class="hint">{translator.translate('protectedNotes.setUp.doNotCopy')}</p>
       <label for="protected-recovery-end">{translator.translate('protectedNotes.setUp.confirmEnd')}</label>
       <input
         bind:this={firstField}
@@ -86,7 +102,7 @@
         bind:value={password}
         id="protected-password"
         type="password"
-        autocomplete="off"
+        autocomplete="new-password"
         aria-invalid={passwordProblem === 'tooShort'}
         aria-describedby="protected-password-hint protected-password-error"
         disabled={isBusy}
@@ -101,7 +117,7 @@
         bind:value={repeatedPassword}
         id="protected-password-again"
         type="password"
-        autocomplete="off"
+        autocomplete="new-password"
         aria-invalid={passwordProblem === 'mismatch'}
         aria-describedby="protected-password-error"
         disabled={isBusy}
@@ -159,7 +175,7 @@
     font-family: var(--font-mono);
     letter-spacing: 0.05em;
     overflow-wrap: anywhere;
-    user-select: all;
+    user-select: none;
   }
 
   .hint,

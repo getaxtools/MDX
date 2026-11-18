@@ -53,6 +53,7 @@
     newPasswordProblem = passwordProblemOf(newPassword, repeatedNewPassword);
     if (newPasswordProblem || recoveryKey.trim() === '') return;
     onCommand({ kind: 'unlockProtectedWithRecoveryKey', recoveryKey, newPassword });
+    recoveryKey = '';
     newPassword = '';
     repeatedNewPassword = '';
   }
@@ -134,7 +135,7 @@
         bind:value={newPassword}
         id="protected-unlock-new-password"
         type="password"
-        autocomplete="off"
+        autocomplete="new-password"
         aria-invalid={newPasswordProblem === 'tooShort'}
         aria-describedby="protected-unlock-problem"
         disabled={view.isBusy}
@@ -146,7 +147,7 @@
         bind:value={repeatedNewPassword}
         id="protected-unlock-new-password-again"
         type="password"
-        autocomplete="off"
+        autocomplete="new-password"
         aria-invalid={newPasswordProblem === 'mismatch'}
         aria-describedby="protected-unlock-problem"
         disabled={view.isBusy}

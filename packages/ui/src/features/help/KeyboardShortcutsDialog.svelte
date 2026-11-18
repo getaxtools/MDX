@@ -76,6 +76,7 @@
       ? translator.translate('help.controlWheel.mouseButton', { shortcut: wheelShortcut })
       : translator.translate('help.controlWheel.mouseButtonWithoutShortcut')}
   </p>
+  <p class="mouse-button-help">{translator.translate('help.shortcuts.altGrLayouts')}</p>
 </Dialog>
 
 <style>

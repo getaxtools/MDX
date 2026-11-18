@@ -1,4 +1,4 @@
-import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
+import { clearMocks, mockIPC, mockWindows } from '@tauri-apps/api/mocks';
 import { InMemoryDocumentFiles, ProtectedNotesError } from '@mdx/platform';
 import { emit } from '@tauri-apps/api/event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -470,6 +470,7 @@ describe('TauriProtectedNotes', () => {
   });
 
   it('passes on the sections that locked in any window', async () => {
+    mockWindows('main');
     mockIPC(() => null, { shouldMockEvents: true });
     const listener = vi.fn();
     const stop = new TauriProtectedNotes().onLocked(listener);
@@ -477,6 +478,34 @@ describe('TauriProtectedNotes', () => {
     await vi.waitFor(async () => {
       await emit('protected-notes-locked', { locationKeys: ['c:\\notes'] });
       expect(listener).toHaveBeenCalledWith(['c:\\notes']);
+    });
+    stop();
+  });
+
+  it('asks every window to save before a lock, and says whether all of them did', async () => {
+    const calls = mockCommands({ protected_save_before_lock: () => ({ isEverythingSaved: false }) });
+
+    const isEverythingSaved = await new TauriProtectedNotes().saveBeforeLock(LOCATION);
+
+    expect(isEverythingSaved).toBe(false);
+    expect(calls).toEqual([{ command: 'protected_save_before_lock', args: { location: LOCATION } }]);
+  });
+
+  it('answers a lock request with whether this window saved its edits', async () => {
+    mockWindows('window-2');
+    const answers: unknown[] = [];
+    mockIPC(
+      (command, args) => {
+        if (command === 'protected_answer_lock_request') answers.push(args);
+        return null;
+      },
+      { shouldMockEvents: true },
+    );
+    const stop = new TauriProtectedNotes().onLockRequested(() => Promise.resolve(true));
+
+    await vi.waitFor(async () => {
+      await emit('protected-notes-lock-requested', { requestId: 7, locationKeys: ['c:\\notes'] });
+      expect(answers).toContainEqual({ answer: { requestId: 7, isEverythingSaved: true } });
     });
     stop();
   });

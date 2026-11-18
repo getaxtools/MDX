@@ -140,6 +140,10 @@ describe('commandForShortcut on Windows', () => {
     expect(others).not.toContain(lockCombination);
   });
 
+  it('AltGr+L typing ł does not lock, as Windows sends AltGr as Ctrl+Alt', () => {
+    expect(commandForShortcut(keys('ł', { ctrlKey: true, altKey: true }), 'windows')).toBeUndefined();
+  });
+
   it('the shortcut table has no duplicate combination', () => {
     const combinations = COMMAND_SHORTCUTS.flatMap((shortcut) =>
       shortcut.combinations.map((combination) => combination.join('+').toLowerCase()),

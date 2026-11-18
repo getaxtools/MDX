@@ -175,6 +175,8 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::protected_notes::protected_lock,
         commands::protected_notes::protected_accept_folder,
         commands::protected_notes::protected_lock_all,
+        commands::protected_lock_requests::protected_save_before_lock,
+        commands::protected_lock_requests::protected_answer_lock_request,
         commands::protected_notes::protected_list,
         commands::protected_notes::protected_create,
         commands::protected_notes::protected_open,

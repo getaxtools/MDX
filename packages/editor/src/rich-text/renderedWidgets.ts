@@ -66,12 +66,21 @@ export abstract class RenderedWidget extends WidgetType {
   }
 }
 
+/** The key a render is shared under, or undefined for a document whose renders stay its own. */
+export function sharedCacheKey(rendering: RichTextRendering, key: string): string | undefined {
+  return rendering.keepsRendersPrivate === true ? undefined : key;
+}
+
 /** Fills an element with HTML the app rendered, from the shared cache when the same source was rendered before. */
-export function showRenderedHtml(element: HTMLElement, cacheKey: string, render: () => string): void {
-  let html = SHARED_RENDER_CACHE.get(cacheKey);
+export function showRenderedHtml(
+  element: HTMLElement,
+  cacheKey: string | undefined,
+  render: () => string,
+): void {
+  let html = cacheKey === undefined ? undefined : SHARED_RENDER_CACHE.get(cacheKey);
   if (html === undefined) {
     html = render();
-    SHARED_RENDER_CACHE.set(cacheKey, html);
+    if (cacheKey !== undefined) SHARED_RENDER_CACHE.set(cacheKey, html);
   }
   element.innerHTML = html;
 }
@@ -80,16 +89,19 @@ export function showRenderedHtml(element: HTMLElement, cacheKey: string, render:
 export function showRenderedHtmlWhenReady(
   element: HTMLElement,
   view: EditorView,
-  { cacheKey, render }: { readonly cacheKey: string; readonly render: () => Promise<string | undefined> },
+  {
+    cacheKey,
+    render,
+  }: { readonly cacheKey: string | undefined; readonly render: () => Promise<string | undefined> },
 ): void {
-  const cached = SHARED_RENDER_CACHE.get(cacheKey);
+  const cached = cacheKey === undefined ? undefined : SHARED_RENDER_CACHE.get(cacheKey);
   if (cached !== undefined) {
     element.innerHTML = cached;
     return;
   }
   void render().then((html) => {
     if (html === undefined) return;
-    SHARED_RENDER_CACHE.set(cacheKey, html);
+    if (cacheKey !== undefined) SHARED_RENDER_CACHE.set(cacheKey, html);
     element.innerHTML = html;
     if (view.dom.isConnected) view.requestMeasure();
   });

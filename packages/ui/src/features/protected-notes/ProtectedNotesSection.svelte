@@ -111,6 +111,9 @@
           {translator.translate('protectedNotes.section.protectNotes')}
         </button>
       {:else if view.state === 'locked'}
+        {#if view.isRecoveryKeyCovered}
+          <p class="explanation">{translator.translate('protectedNotes.setUp.recoveryKeyCovered')}</p>
+        {/if}
         <ProtectedUnlockPanel {view} {translator} {onCommand} />
       {:else if view.folderWarning}
         <div class="folder-warning" role="alert">

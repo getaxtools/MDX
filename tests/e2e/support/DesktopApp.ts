@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer, type AddressInfo } from 'node:net';
-import { readdirSync, rmSync } from 'node:fs';
+import { readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -22,6 +22,8 @@ const APP_EXIT_TIMEOUT_MS = 10_000;
  * after the app exits, so the profiles live outside the test's folder, which is removed at once.
  */
 const WEBVIEW_PROFILES_FOLDER = join(tmpdir(), 'mdx-ui-test-webview');
+/** Another run's profile is left alone, unless it is this old and so cannot be in use any more. */
+const ABANDONED_PROFILE_AGE_MS = 24 * 60 * 60 * 1000;
 let launchCount = 0;
 
 export interface LaunchOptions {
@@ -121,7 +123,11 @@ async function exitsWithin(exited: Promise<unknown>, timeoutMs: number): Promise
   return hasExitedInTime;
 }
 
-/** Profiles of earlier launches; one WebView2 still holds is left for a later launch to remove. */
+/**
+ * This run's profiles of earlier launches, and other runs' long abandoned ones; another run's
+ * recent profile may be in use by a run going on beside this one. A profile WebView2 still holds is
+ * left for a later launch to remove.
+ */
 function removeUnusedWebViewProfiles(): void {
   let profiles: string[];
   try {
@@ -129,13 +135,20 @@ function removeUnusedWebViewProfiles(): void {
   } catch {
     return;
   }
+  const ownPrefix = `${String(process.pid)}-`;
   for (const profile of profiles) {
+    const folder = join(WEBVIEW_PROFILES_FOLDER, profile);
     try {
-      rmSync(join(WEBVIEW_PROFILES_FOLDER, profile), { recursive: true, force: true });
+      if (!profile.startsWith(ownPrefix) && !isAbandoned(folder)) continue;
+      rmSync(folder, { recursive: true, force: true });
     } catch {
       // Still in use by a WebView2 that has not let go of it yet.
     }
   }
+}
+
+function isAbandoned(folder: string): boolean {
+  return Date.now() - statSync(folder).mtimeMs > ABANDONED_PROFILE_AGE_MS;
 }
 
 function documentPaths(workspace: TestWorkspace, fileNames: readonly string[]): string[] {

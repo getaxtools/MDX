@@ -93,6 +93,22 @@ describe('ProtectedUnlockPanel', () => {
     });
   });
 
+  it('leaves no password or key in its fields once they are sent', async () => {
+    renderPanel();
+    await userEvent.click(screen.getByRole('button', { name: 'Use the Recovery Key' }));
+    const fields = ['Recovery key', 'New password', 'New password again'].map((label) =>
+      screen.getByLabelText<HTMLInputElement>(label),
+    );
+
+    await userEvent.type(screen.getByLabelText('Recovery key'), 'ABCD-EFGH');
+    await userEvent.type(screen.getByLabelText('New password'), 'a new long password');
+    await userEvent.type(screen.getByLabelText('New password again'), 'a new long password');
+    await userEvent.click(screen.getByRole('button', { name: 'Unlock' }));
+
+    expect(fields.map((field) => field.value)).toEqual(['', '', '']);
+    expect(screen.getByLabelText('New password').getAttribute('autocomplete')).toBe('new-password');
+  });
+
   it('refuses a new password that is too short before trying the recovery key', async () => {
     const { onCommand } = renderPanel();
 

@@ -5,6 +5,7 @@ import {
   type ProtectedNoteSummary,
   type ProtectedNoteText,
   type ProtectedNotesLockedListener,
+  type ProtectedNotesLockRequestListener,
   type ProtectedNotesPort,
   type ProtectedStatus,
   type UnlockResult,
@@ -35,6 +36,7 @@ interface Section {
 export class InMemoryProtectedNotes implements ProtectedNotesPort {
   private readonly sections = new Map<string, Section>();
   private readonly lockListeners = new Set<ProtectedNotesLockedListener>();
+  private readonly lockRequestListeners = new Set<ProtectedNotesLockRequestListener>();
   private nextNote = 0;
   private clock = FIRST_TIME_MS;
 
@@ -107,11 +109,29 @@ export class InMemoryProtectedNotes implements ProtectedNotesPort {
     return Promise.resolve();
   }
 
-  lockAll(): Promise<void> {
+  /** Every window that listens saves first, as the native side asks each open window. */
+  async saveBeforeLock(location: string): Promise<boolean> {
+    return this.askToSave([location]);
+  }
+
+  async lockAll(): Promise<void> {
+    await this.askToSave([...this.sections].filter(([, section]) => section.isUnlocked).map(([key]) => key));
     const unlocked = [...this.sections].filter(([, section]) => section.isUnlocked);
     for (const [, section] of unlocked) section.isUnlocked = false;
     this.announceLocked(unlocked.map(([location]) => location));
-    return Promise.resolve();
+  }
+
+  onLockRequested(listener: ProtectedNotesLockRequestListener): () => void {
+    this.lockRequestListeners.add(listener);
+    return () => this.lockRequestListeners.delete(listener);
+  }
+
+  private async askToSave(locationKeys: readonly string[]): Promise<boolean> {
+    if (locationKeys.length === 0) return true;
+    const answers = await Promise.all(
+      [...this.lockRequestListeners].map((listener) => listener(locationKeys).catch(() => false)),
+    );
+    return answers.every(Boolean);
   }
 
   /** The fake names sections by the location it was given, which tests use as the canonical key. */

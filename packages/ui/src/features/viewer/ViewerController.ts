@@ -34,7 +34,7 @@ import type { MessageKey, Translator } from '@mdx/i18n';
 import {
   DocumentOpenError,
   hasFile,
-  isProtectedNoteIn,
+  isProtectedNoteLocation,
   isUntitledLocation,
   type AppMenuPort,
   type JumpListPort,
@@ -699,7 +699,8 @@ export class ViewerController {
         this.publish(this.composeSnapshot(this.snapshot.notice));
       },
       showNotice: (key, values) => this.showNotice(key, values),
-      saveEditsOf: (locationKey) => this.saveProtectedEditsOf(locationKey),
+      saveProtectedEdits: () => this.saveProtectedEdits(),
+      hasUnsavedProtectedEdits: () => this.unsavedProtectedLocations().length > 0,
       startEditing: () => this.editingActions.startEditingActiveDocument(),
       wait: (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)),
       now: () => (this.dependencies.now ?? (() => new Date()))().getTime(),
@@ -707,20 +708,32 @@ export class ViewerController {
     });
   }
 
-  private async saveProtectedEditsOf(locationKey: string): Promise<boolean> {
-    const unsaved = this.dependencies.session
+  private unsavedProtectedLocations(): DocumentLocation[] {
+    return this.dependencies.session
       .currentState()
       .tabStrip.tabs()
       .map((tab) => tab.location)
       .filter(
         (location) =>
-          isProtectedNoteIn(location, locationKey) && this.editing.hasUnsavedChanges(location.canonicalKey),
+          isProtectedNoteLocation(location) && this.editing.hasUnsavedChanges(location.canonicalKey),
       );
+  }
+
+  /** A lock waits for this, in every window, so no edit of a protected note is lost unasked. */
+  private async saveProtectedEdits(): Promise<boolean> {
     let isEverythingSaved = true;
-    for (const location of unsaved) {
+    for (const location of this.unsavedProtectedLocations()) {
       isEverythingSaved = (await this.saving.saveUnsavedChanges(location)) && isEverythingSaved;
     }
     return isEverythingSaved;
+  }
+
+  /** A protected note is not exported, printed or copied as HTML, which would leave it unprotected. */
+  private refusesProtectedOutput(): boolean {
+    const location = this.dependencies.session.currentState().tabStrip.activeTab()?.location;
+    if (!location || !isProtectedNoteLocation(location)) return false;
+    this.showNotice('protectedNotes.output.unavailable');
+    return true;
   }
 
   private async runProtectedNotesCommand(command: ProtectedNotesCommand): Promise<void> {
@@ -1483,7 +1496,7 @@ export class ViewerController {
     reloadFromDisk: ({ canonicalKey }) => this.editingActions.reloadFromDisk(canonicalKey),
     overwriteChangesOnDisk: ({ canonicalKey }) => this.saving.overwriteChangesOnDisk(canonicalKey),
     print: () => {
-      if (!this.activeDocument) return;
+      if (!this.activeDocument || this.refusesProtectedOutput()) return;
       if (this.editingActions.isActiveDocumentEditing()) {
         this.dependencies.printer?.printActiveDocument();
         return;
@@ -1515,17 +1528,21 @@ export class ViewerController {
       this.publish(this.composeSnapshot(this.snapshot.notice));
     },
     copyAsHtml: () => {
-      if (!this.activeDocument) return;
+      if (!this.activeDocument || this.refusesProtectedOutput()) return;
       this.copyAsHtmlRequest += 1;
       this.publish(this.composeSnapshot(this.snapshot.notice));
     },
-    copyHtml: ({ html }) => this.copyHtml(html),
+    copyHtml: ({ html }) => {
+      if (!this.refusesProtectedOutput()) void this.copyHtml(html);
+    },
     exportDocument: ({ format }) => {
-      if (!this.activeDocument) return;
+      if (!this.activeDocument || this.refusesProtectedOutput()) return;
       this.exportRequest = { format, number: (this.exportRequest?.number ?? 0) + 1 };
       this.publish(this.composeSnapshot(this.snapshot.notice));
     },
-    saveExport: ({ format, contents }) => this.saveExport(format, contents),
+    saveExport: async ({ format, contents }) => {
+      if (!this.refusesProtectedOutput()) await this.saveExport(format, contents);
+    },
     confirmClearAllData: () => this.confirmClearAllData(),
     clearAllData: () => this.clearAllData(),
     toggleSourceView: () => {

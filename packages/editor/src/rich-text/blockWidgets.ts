@@ -4,6 +4,7 @@ import {
   RenderedWidget,
   renderingOf,
   settleRenderedHtml,
+  sharedCacheKey,
   showRenderedHtml,
   showRenderedHtmlWhenReady,
 } from './renderedWidgets';
@@ -35,7 +36,7 @@ export class FormulaWidget extends RenderedWidget {
     formula.setAttribute('role', 'img');
     formula.setAttribute('aria-label', rendering.labels.formula(this.tex));
     showRenderedHtmlWhenReady(formula, view, {
-      cacheKey: `formula:${String(this.isDisplay)}:${this.tex}`,
+      cacheKey: sharedCacheKey(rendering, `formula:${String(this.isDisplay)}:${this.tex}`),
       render: () => rendering.typesetMath(this.tex, this.isDisplay),
     });
     return formula;
@@ -55,8 +56,10 @@ export class TableWidget extends RenderedWidget {
     const wrapper = this.container(view, 'div', TABLE_CLASS);
     const rendering = renderingOf(view);
     if (!rendering) return wrapper;
-    showRenderedHtml(wrapper, `table:${rendering.documentKey}:${this.source}`, () =>
-      rendering.renderBlock(this.source),
+    showRenderedHtml(
+      wrapper,
+      sharedCacheKey(rendering, `table:${rendering.documentKey}:${this.source}`),
+      () => rendering.renderBlock(this.source),
     );
     wrapper
       .querySelector('table')
@@ -90,7 +93,7 @@ export class HtmlBlockWidget extends RenderedWidget {
     const wrapper = this.container(view, 'div', HTML_BLOCK_CLASS);
     const rendering = renderingOf(view);
     if (!rendering) return wrapper;
-    showRenderedHtml(wrapper, `html:${rendering.documentKey}:${this.source}`, () =>
+    showRenderedHtml(wrapper, sharedCacheKey(rendering, `html:${rendering.documentKey}:${this.source}`), () =>
       rendering.renderBlock(this.source),
     );
     settleRenderedHtml(wrapper, view);
@@ -116,7 +119,7 @@ export class DiagramWidget extends RenderedWidget {
     wrapper.setAttribute('role', 'img');
     wrapper.setAttribute('aria-label', rendering.labels.diagram(this.diagram.type));
     showRenderedHtmlWhenReady(wrapper, view, {
-      cacheKey: `diagram:${this.diagram.type}:${this.diagram.code}`,
+      cacheKey: sharedCacheKey(rendering, `diagram:${this.diagram.type}:${this.diagram.code}`),
       render: () => draw(this.diagram.type, this.diagram.code),
     });
     return wrapper;
@@ -136,8 +139,10 @@ export class ImageWidget extends RenderedWidget {
     const wrapper = this.container(view, 'span', IMAGE_CLASS);
     const rendering = renderingOf(view);
     if (!rendering) return wrapper;
-    showRenderedHtml(wrapper, `image:${rendering.documentKey}:${this.source}`, () =>
-      rendering.renderBlock(this.source),
+    showRenderedHtml(
+      wrapper,
+      sharedCacheKey(rendering, `image:${rendering.documentKey}:${this.source}`),
+      () => rendering.renderBlock(this.source),
     );
     unwrapParagraphs(wrapper);
     for (const picture of wrapper.querySelectorAll('img')) {

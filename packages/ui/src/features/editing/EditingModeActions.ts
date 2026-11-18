@@ -1,6 +1,6 @@
 import { isTooLargeForRichText, type EditingModeSetting, type ViewerSession } from '@mdx/core';
 import type { MessageKey } from '@mdx/i18n';
-import type { DocumentLocation } from '@mdx/platform';
+import type { DocumentLocation, OpenedDocument } from '@mdx/platform';
 
 /** A mode change to announce once to screen readers; the number tells one change from the next. */
 export interface EditingModeAnnouncement {
@@ -19,7 +19,8 @@ const TOO_LARGE_NOTICE: MessageKey = 'editing.richTextTooLarge';
 /** The editing mode setting, and the documents too large for Rich text that stay in Source. */
 export class EditingModeActions {
   private latestAnnouncement: EditingModeAnnouncement | undefined;
-  private readonly sizeChecks = new Map<string, { readonly text: string; readonly isTooLarge: boolean }>();
+  /** Held by the document itself, so no text outlives the session's copy of it, as when a section locks. */
+  private readonly sizeChecks = new WeakMap<OpenedDocument, boolean>();
 
   constructor(
     private readonly session: ViewerSession,
@@ -71,11 +72,12 @@ export class EditingModeActions {
 
   /** Measured on the saved text, once per text, as the file's size decides it. */
   private isTooLarge(canonicalKey: string): boolean {
-    const text = this.session.openedDocument(canonicalKey)?.text ?? '';
-    const known = this.sizeChecks.get(canonicalKey);
-    if (known?.text === text) return known.isTooLarge;
-    const isTooLarge = isTooLargeForRichText(text);
-    this.sizeChecks.set(canonicalKey, { text, isTooLarge });
+    const document = this.session.openedDocument(canonicalKey);
+    if (!document) return false;
+    const wasTooLarge = this.sizeChecks.get(document);
+    if (wasTooLarge !== undefined) return wasTooLarge;
+    const isTooLarge = isTooLargeForRichText(document.text);
+    this.sizeChecks.set(document, isTooLarge);
     return isTooLarge;
   }
 }

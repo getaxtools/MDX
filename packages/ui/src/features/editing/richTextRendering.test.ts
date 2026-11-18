@@ -30,6 +30,7 @@ async function renderRichText(text: string) {
     translator,
     onChange,
     richTextRendering: createRichTextRendering({
+      keepsRendersPrivate: false,
       documentKey: `widgets-${String(documentNumber)}`,
       renderMarkdown,
       richBlocks: createRichBlockRenderer({ window }),

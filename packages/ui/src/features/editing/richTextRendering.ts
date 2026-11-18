@@ -5,6 +5,8 @@ import { showBlockedRemoteImages } from '../document-view/showBlockedRemoteImage
 
 export interface RichTextRenderingOptions {
   readonly documentKey: string;
+  /** A protected note keeps its renders out of the cache other documents share. */
+  readonly keepsRendersPrivate: boolean;
   /** The preview's renderer and sanitizer, resolving pictures and links for this document. */
   readonly renderMarkdown: (markdown: string) => string;
   readonly richBlocks: RichBlockRenderer | undefined;
@@ -28,12 +30,14 @@ function calloutTitle(type: string, ownTitle: string, translator: Translator): s
 /** Rich text renders its widgets with exactly what the preview of the same document shows. */
 export function createRichTextRendering({
   documentKey,
+  keepsRendersPrivate,
   renderMarkdown,
   richBlocks,
   translator,
 }: RichTextRenderingOptions): RichTextRendering {
   return {
     documentKey,
+    keepsRendersPrivate,
     renderBlock: (markdown) => withBlockedImageNotes(renderMarkdown(markdown), translator),
     typesetMath: (tex, isDisplay) => richBlocks?.typesetMath(tex, isDisplay) ?? Promise.resolve(undefined),
     callout: (type, ownTitle) => {

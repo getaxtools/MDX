@@ -61,3 +61,4 @@ export {
   type TexCommand,
 } from './formulas/formulaSuggestions';
 export { texWithFields } from './formulas/texFields';
+export { SHARED_RENDER_CACHE } from './rich-text/renderCache';

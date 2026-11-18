@@ -711,6 +711,7 @@
                     typography={viewSettings.typography}
                     richTextRendering={createRichTextRendering({
                       documentKey: editedDocument.canonicalKey,
+                      keepsRendersPrivate: controller.isProtectedDocument(editedDocument),
                       renderMarkdown: (markdown: string) =>
                         controller.renderDocumentBlock(editedDocument.canonicalKey, markdown),
                       richBlocks,
@@ -928,6 +929,7 @@
   {:else if snapshot.openDialog === 'protectedSetUp' && snapshot.protectedNotes}
     <ProtectedSetUpDialog
       recoveryKey={snapshot.protectedNotes.recoveryKey}
+      isRecoveryKeyCovered={snapshot.protectedNotes.isRecoveryKeyCovered ?? false}
       problem={snapshot.protectedNotes.setUpProblem}
       isBusy={snapshot.protectedNotes.isBusy}
       {translator}
@@ -1026,6 +1028,16 @@
         onClosed={() => (isControlWheelFading = false)}
       />
     {/await}
+  {/if}
+  {#if snapshot.protectedNotes?.isAskingToLock}
+    <ConfirmDialog
+      title={translator.translate('protectedNotes.lock.unsavedTitle')}
+      message={translator.translate('protectedNotes.lock.unsavedMessage')}
+      confirmLabel={translator.translate('protectedNotes.lock.lockAnyway')}
+      cancelLabel={translator.translate('protectedNotes.lock.cancel')}
+      onConfirm={() => void controller.execute({ kind: 'confirmProtectedLock' })}
+      onCancel={() => void controller.execute({ kind: 'cancelProtectedLock' })}
+    />
   {/if}
   {#if snapshot.notesMoveDialog}
     <NotesMoveDialog

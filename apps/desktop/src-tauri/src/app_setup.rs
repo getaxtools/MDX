@@ -9,6 +9,7 @@ use crate::attachments::DroppedImages;
 use crate::commands::app_windows::StartupWorkspaceNotice;
 use crate::commands::notes_move::NotesMoves;
 use crate::commands::notes_transfer::{NotesImports, PendingImportSource};
+use crate::commands::protected_lock_requests::LockRequests;
 use crate::commands::protected_notes::ProtectedNotes;
 use crate::commands::spec_project_link::LinkQuestions;
 use crate::documents::DocumentAccessList;
@@ -65,6 +66,7 @@ pub fn initialize(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(Arc::new(NotesImports::default()));
     app.manage(Arc::new(PendingImportSource::default()));
     app.manage(Arc::new(OpenWindows::default()));
+    app.manage(Arc::new(LockRequests::default()));
     app.manage(Arc::new(ProtectedNotes::new(
         device_secret_store(),
         data_folder.join(PROTECTED_SECTION_RECORDS_FILE),

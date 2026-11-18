@@ -92,6 +92,7 @@ describe('note embeds in Rich text', () => {
       'Hello <script>window.hacked = true</script>\n\n<img src="x" onerror="window.hacked = true">';
     const { resolver } = resolverWith({ [String.raw`E:\Notes\Projects\Plan.md`]: hostile });
     const rendering = createRichTextRendering({
+      keepsRendersPrivate: false,
       documentKey: 'today',
       renderMarkdown: (markdown: string) => preview.render(markdown).html,
       richBlocks: undefined,

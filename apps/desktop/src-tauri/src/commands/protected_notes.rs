@@ -11,6 +11,7 @@ use crate::app_windows::OpenWindows;
 use crate::commands::documents::run_blocking;
 use crate::commands::notes::allowed_root;
 use crate::commands::notes_location::now_ms;
+use crate::commands::protected_lock_requests::save_everywhere_before_lock;
 use crate::documents::{
     DocumentAccessList, DocumentError, LineEnding, canonical_key_of, decode_document_bytes,
     detect_line_ending, encode_document_text, encoding_for_label, locate_document,
@@ -93,6 +94,11 @@ impl ProtectedNotes {
 
     fn sections(&self) -> MutexGuard<'_, HashMap<String, UnlockedSection>> {
         self.sections.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// The notes locations whose sections are unlocked now.
+    pub fn unlocked_location_keys(&self) -> Vec<String> {
+        self.sections().keys().cloned().collect()
     }
 
     /// Locks every section, as on sleep, session lock or quit; returns the locations that were open.
@@ -218,7 +224,7 @@ impl From<DocumentError> for ProtectedCommandError {
     }
 }
 
-type Answer<T> = Result<T, ProtectedCommandError>;
+pub type Answer<T> = Result<T, ProtectedCommandError>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -299,6 +305,11 @@ fn section_place(window: &WebviewWindow, location: &str) -> Answer<SectionPlace>
         return Err(ProtectedCommandError::AccessDenied);
     }
     Ok(section_place_of(root.folder()))
+}
+
+/// The canonical key of the section the window's Notes workspace shows, checked as every command checks it.
+pub fn location_key_of_shown_section(window: &WebviewWindow, location: &str) -> Answer<String> {
+    section_place(window, location).map(|place| place.location_key)
 }
 
 fn section_place_of(notes_folder: &Path) -> SectionPlace {
@@ -600,9 +611,12 @@ pub async fn protected_unlock_with_recovery(
         .await?
 }
 
-/// Locks every section, as on sleep, a Windows session lock or quit.
+/// Locks every section, as on sleep, a Windows session lock or quit, once every window has saved
+/// what it could of their notes; edits a window could not save are lost and that window says so.
 #[tauri::command]
 pub async fn protected_lock_all(window: WebviewWindow) -> Answer<()> {
+    let unlocked = state_of(&window).unlocked_location_keys();
+    save_everywhere_before_lock(&window, unlocked).await;
     let locked = state_of(&window).lock_all();
     broadcast_from(&window, locked);
     Ok(())
