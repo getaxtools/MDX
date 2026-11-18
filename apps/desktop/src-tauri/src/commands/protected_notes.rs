@@ -83,8 +83,11 @@ impl ProtectedNotes {
     }
 
     /// The user accepts the folder as it is: what this PC saw of it is updated.
+    /// Refused unless a folder warning waits for this location, so nothing else can update the record.
     fn accept_folder(&self, place: &SectionPlace) -> Answer<()> {
-        self.awaiting().remove(&place.location_key);
+        if !self.awaiting().remove(&place.location_key) {
+            return Err(ProtectedCommandError::InvalidRequest);
+        }
         self.with_section(place, |_| Ok(()))
     }
 
@@ -807,6 +810,10 @@ mod tests {
         notes.accept_folder(&place).unwrap();
         let _ = notes.lock(&place);
         let accepted = notes.unlock(&place, PASSWORD, false).unwrap();
+        assert_eq!(
+            notes.accept_folder(&place),
+            Err(ProtectedCommandError::InvalidRequest)
+        );
 
         assert_eq!(answer.folder_warning, Some(FolderWarning::OlderNotes));
         assert_eq!(again.folder_warning, Some(FolderWarning::OlderNotes));
@@ -816,9 +823,15 @@ mod tests {
     #[test]
     fn an_older_vault_file_is_named_on_unlock_and_a_new_pc_sees_no_warning() {
         let (folder, notes, place) = start();
-        notes.set_up(&place, PASSWORD, QUICK).unwrap();
+        let recovery_key = notes.set_up(&place, PASSWORD, QUICK).unwrap().recovery_key;
         let older_vault = std::fs::read(section_file(&folder, "vault.json")).unwrap();
-        notes.unlock(&place, PASSWORD, true).unwrap();
+        let recovery = RecoveryUnlock {
+            recovery_key: Zeroizing::new(recovery_key),
+            new_password: Zeroizing::new("a new long passphrase".to_owned()),
+        };
+        notes
+            .unlock_with_recovery(&place, &recovery, QUICK)
+            .unwrap();
         let _ = notes.lock(&place);
         std::fs::write(section_file(&folder, "vault.json"), older_vault).unwrap();
 
@@ -831,6 +844,24 @@ mod tests {
         assert_eq!(answer.folder_warning, Some(FolderWarning::ChangedVault));
         assert_eq!(
             other_pc
+                .unlock(&place, PASSWORD, false)
+                .unwrap()
+                .folder_warning,
+            None
+        );
+    }
+
+    #[test]
+    fn forgetting_this_pc_in_an_older_copy_of_the_vault_is_not_a_warning() {
+        let (folder, notes, place) = start();
+        notes.set_up(&place, PASSWORD, QUICK).unwrap();
+        let without_device_slot = std::fs::read(section_file(&folder, "vault.json")).unwrap();
+        notes.unlock(&place, PASSWORD, true).unwrap();
+        let _ = notes.lock(&place);
+        std::fs::write(section_file(&folder, "vault.json"), without_device_slot).unwrap();
+
+        assert_eq!(
+            notes
                 .unlock(&place, PASSWORD, false)
                 .unwrap()
                 .folder_warning,

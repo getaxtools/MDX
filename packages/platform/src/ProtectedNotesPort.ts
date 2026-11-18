@@ -73,10 +73,11 @@ export interface ProtectedNoteEdit {
 
 /**
  * `olderNotes`: the section's manifest is older than this PC last saw, as when an older copy of the
- * folder was put back. `changedVault`: its vault file changed outside MDX, which can bring back an old
- * password. The user may keep the folder as it is with `acceptFolder`, or lock.
+ * folder was put back. `changedVault`: its password or unlock methods were changed on another PC or
+ * restored from a backup, which can bring back an old password. `checkUnavailable`: what this PC saw
+ * before could not be read. The user may keep the folder as it is with `acceptFolder`, or lock.
  */
-export type ProtectedFolderWarning = 'olderNotes' | 'changedVault';
+export type ProtectedFolderWarning = 'olderNotes' | 'changedVault' | 'checkUnavailable';
 
 export interface UnlockResult {
   readonly folderWarning?: ProtectedFolderWarning;

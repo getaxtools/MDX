@@ -17,6 +17,8 @@ const ARGON2_VERSION: u32 = 0x13;
 /// A vault file is a few slots; anything larger is not one of ours.
 pub const MAX_VAULT_FILE_BYTES: usize = 64 * 1_024;
 const MAX_SLOTS: usize = 32;
+/// One password slot never asks for more than four times the default memory when read from a file.
+const MAX_SLOT_MEMORY_KIB: u32 = 4 * 64 * 1_024;
 /// Two password slots at most: change password may hold the old and the new one for a moment.
 const MAX_PASSWORD_SLOTS: usize = 2;
 /// The most key derivation work a vault file may ask for across its password slots, in KiB times
@@ -67,17 +69,22 @@ impl Vault {
     /// The data key from the password; every password slot is tried, and a wrong password says only so.
     /// Any other failure, such as too little memory, is passed on as itself.
     pub fn unlock_with_password(&self, password: &str) -> Result<DataKey, ProtectedError> {
+        let mut first_failure = None;
         for slot in &self.slots {
             let SlotKind::Password { parameters, salt } = slot.kind else {
                 continue;
             };
-            let key = derive_password_key(password, &salt, parameters)?;
-            match unwrap_data_key(slot, &key, &self.vault_id) {
+            let opened = derive_password_key(password, &salt, parameters)
+                .and_then(|key| unwrap_data_key(slot, &key, &self.vault_id));
+            match opened {
+                Ok(data_key) => return Ok(data_key),
                 Err(ProtectedError::WrongKey) => {}
-                result => return result,
+                Err(failure) => {
+                    first_failure.get_or_insert(failure);
+                }
             }
         }
-        Err(ProtectedError::WrongKey)
+        Err(first_failure.unwrap_or(ProtectedError::WrongKey))
     }
 
     /// The data key from the recovery key or this PC's remembered key.
@@ -256,6 +263,16 @@ impl SavedKdf {
             parallelism: self.parallelism,
         }
         .checked_for_reading()?;
+        let is_usable = argon2::Params::new(
+            parameters.memory_kib,
+            parameters.iterations,
+            parameters.parallelism,
+            Some(KEY_BYTES),
+        )
+        .is_ok();
+        if !is_usable || parameters.memory_kib > MAX_SLOT_MEMORY_KIB {
+            return Err(ProtectedError::Tampered);
+        }
         Ok(SlotKind::Password {
             parameters,
             salt: bytes_of_hex::<PASSWORD_SALT_BYTES>(&self.salt)?,
@@ -401,6 +418,65 @@ mod tests {
             );
         }
         assert!(Vault::from_json(&created.vault.to_json().unwrap()).is_ok());
+    }
+
+    #[test]
+    fn a_slot_that_cannot_run_before_the_real_one_does_not_block_the_password() {
+        let created = Vault::create("correct horse battery", QUICK).unwrap();
+        let real = created.vault.slots[0].clone();
+        let unusable = KeySlot {
+            kind: SlotKind::Password {
+                parameters: KdfParameters {
+                    memory_kib: 64,
+                    iterations: 1,
+                    parallelism: 0,
+                },
+                salt: [1; PASSWORD_SALT_BYTES],
+            },
+            ..real.clone()
+        };
+        let vault = Vault {
+            slots: vec![unusable, real],
+            ..created.vault.clone()
+        };
+
+        assert!(vault.unlock_with_password("correct horse battery").is_ok());
+        assert_eq!(
+            vault.unlock_with_password("wrong password").map(|_| ()),
+            Err(ProtectedError::KeyDerivationFailed)
+        );
+    }
+
+    #[test]
+    fn unusable_or_memory_heavy_settings_in_a_slot_are_refused_on_read() {
+        let created = Vault::create("correct horse battery", QUICK).unwrap();
+        let real = created.vault.slots[0].clone();
+        let with_settings = |memory_kib, parallelism| KeySlot {
+            kind: SlotKind::Password {
+                parameters: KdfParameters {
+                    memory_kib,
+                    iterations: 1,
+                    parallelism,
+                },
+                salt: [1; PASSWORD_SALT_BYTES],
+            },
+            ..real.clone()
+        };
+
+        for bad in [
+            with_settings(64, 0),
+            with_settings(32, 8),
+            with_settings(MAX_SLOT_MEMORY_KIB + 1, 1),
+        ] {
+            let vault = Vault {
+                slots: vec![bad, real.clone()],
+                ..created.vault.clone()
+            };
+            assert_eq!(
+                Vault::from_json(&vault.to_json().unwrap()),
+                Err(ProtectedError::Tampered)
+            );
+        }
     }
 
     #[test]
