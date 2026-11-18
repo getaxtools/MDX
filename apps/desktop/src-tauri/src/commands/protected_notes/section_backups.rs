@@ -32,8 +32,7 @@ impl ProtectedNotes {
         if into.starts_with(&section) {
             return Err(ProtectedCommandError::AccessDenied);
         }
-        // Held so that no save of this app lands in the middle of the copy.
-        let _sections = self.sections();
+        let _copying = self.copying_files();
         let backup = place.folder.back_up(&into)?;
         Ok(Some(backup.to_string_lossy().into_owned()))
     }
@@ -51,8 +50,8 @@ impl ProtectedNotes {
         let Some(backup) = choose_folder() else {
             return Ok(false);
         };
-        let sections = self.sections();
-        if sections.contains_key(&place.location_key) {
+        let _copying = self.copying_files();
+        if self.sections().contains_key(&place.location_key) {
             return Err(ProtectedCommandError::AlreadySetUp);
         }
         place.folder.restore_from(&backup)?;

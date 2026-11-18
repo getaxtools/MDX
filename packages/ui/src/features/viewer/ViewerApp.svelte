@@ -413,6 +413,20 @@
     void controller.execute(command);
   }
 
+  /**
+   * WebView2 prints by itself on Ctrl+P and Ctrl+Shift+P unless the page stops the key, which would
+   * print a protected note past its warning. So those keys are taken here first, in the capture
+   * phase, before any part of the page can stop them, and run what they are bound to in the app.
+   */
+  function takeBrowserPrintKeys(event: KeyboardEvent) {
+    const isPrintKey = (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'p';
+    if (!isPrintKey) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const command = commandForShortcut(event, platform, shortcuts);
+    if (command) void controller.execute(command);
+  }
+
   /** The arc keys do nothing while a dialog, a menu, the palette or the control wheel is open. */
   function stepFileArc(event: KeyboardEvent, command: FileArcCommand) {
     if (snapshot?.openDialog !== undefined || isOverlayOpenIn(globalThis.document)) return;
@@ -432,6 +446,7 @@
 {/snippet}
 
 <svelte:window
+  onkeydowncapture={takeBrowserPrintKeys}
   onkeydown={handleKeydown}
   onmouseup={handleMouseUp}
   oncontextmenu={preventBrowserContextMenu}

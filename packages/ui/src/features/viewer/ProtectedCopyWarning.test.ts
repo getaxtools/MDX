@@ -71,6 +71,32 @@ describe('exporting or printing a protected note', () => {
     await waitFor(() => expect(documentExport.exported.map((copy) => copy.format)).toEqual(['html']));
   });
 
+  it('takes Ctrl+P before any part of the page, so the browser never prints past the warning', async () => {
+    const { controller, documentExport, translator } = await openedViewer(SECTION_NOTE);
+    render(ViewerApp, {
+      controller,
+      translator,
+      platform: 'windows',
+      appInfo: { version: '1.0.0', dataFolder: 'C:\\Data' },
+    });
+    const stopsKeys = document.createElement('div');
+    stopsKeys.addEventListener('keydown', (event) => event.stopPropagation(), { capture: true });
+    document.body.append(stopsKeys);
+    const printKey = new KeyboardEvent('keydown', {
+      key: 'p',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+
+    stopsKeys.dispatchEvent(printKey);
+
+    expect(printKey.defaultPrevented).toBe(true);
+    expect(await screen.findByRole('alertdialog', { name: 'Print an unprotected copy?' })).toBeTruthy();
+    expect(documentExport.exported).toEqual([]);
+    stopsKeys.remove();
+  });
+
   it('asks before printing, and prints only once the user accepts', async () => {
     const { controller, printer, snapshot } = await openedViewer(SECTION_NOTE);
 

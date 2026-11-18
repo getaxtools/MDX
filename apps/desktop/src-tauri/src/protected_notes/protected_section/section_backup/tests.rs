@@ -32,6 +32,16 @@ fn backed_up() -> BackedUp {
     }
 }
 
+/// The names in the folder that holds a section's folder.
+fn entries_beside(section: &SectionFolder) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(section.as_ref().parent().unwrap())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
 #[test]
 fn a_restored_backup_unlocks_with_the_password_and_the_recovery_key_and_keeps_its_notes() {
     let backed_up = backed_up();
@@ -54,7 +64,7 @@ fn a_restored_backup_unlocks_with_the_password_and_the_recovery_key_and_keeps_it
     );
     assert_eq!(with_password.notes()[0].title, "Bank details");
     assert!(with_recovery_key.is_ok());
-    assert!(!backed_up.restored.restoring_folder().exists());
+    assert_eq!(entries_beside(&backed_up.restored), ["protected"]);
 }
 
 #[test]
@@ -100,4 +110,81 @@ fn a_backup_is_never_restored_over_a_section_or_from_a_folder_without_a_vault() 
         Some(ProtectedError::NotSetUp)
     );
     assert!(!elsewhere.as_ref().exists());
+}
+
+#[test]
+fn a_section_that_appears_while_a_backup_is_restored_is_kept() {
+    let backed_up = backed_up();
+    let target = backed_up.restored.as_ref().to_path_buf();
+
+    let restored = backed_up.restored.restore_from_with(&backed_up.backup, || {
+        fs::create_dir_all(target.join(NOTES_FOLDER)).unwrap();
+        fs::write(target.join(VAULT_FILE_NAME), b"a section set up meanwhile").unwrap();
+    });
+
+    assert_eq!(restored.err(), Some(ProtectedError::AlreadySetUp));
+    assert_eq!(
+        fs::read(target.join(VAULT_FILE_NAME)).unwrap(),
+        b"a section set up meanwhile"
+    );
+    assert_eq!(entries_beside(&backed_up.restored), ["protected"]);
+}
+
+#[test]
+fn a_folder_in_the_way_of_a_restore_is_set_aside_not_deleted() {
+    let backed_up = backed_up();
+    let target = backed_up.restored.as_ref().to_path_buf();
+    fs::create_dir_all(&target).unwrap();
+    fs::write(target.join("left here.txt"), b"kept").unwrap();
+
+    backed_up.restored.restore_from(&backed_up.backup).unwrap();
+    let aside = target.with_file_name("protected.replaced-1");
+
+    assert_eq!(fs::read(aside.join("left here.txt")).unwrap(), b"kept");
+    assert!(UnlockedSection::unlock_with_password(&backed_up.restored, PASSWORD).is_ok());
+}
+
+#[test]
+fn a_backup_with_a_hard_linked_file_or_a_vault_too_large_to_be_one_is_refused() {
+    let backed_up = backed_up();
+    let note_file = backed_up
+        .backup
+        .join(NOTES_FOLDER)
+        .join(format!("{}.mdxp", backed_up.note_id));
+    fs::hard_link(&note_file, backed_up.backup.join("elsewhere.mdxp")).unwrap();
+
+    let hard_linked = backed_up.restored.restore_from(&backed_up.backup);
+    fs::remove_file(backed_up.backup.join("elsewhere.mdxp")).unwrap();
+    fs::write(
+        backed_up.backup.join(VAULT_FILE_NAME),
+        vec![b' '; 1024 * 1024],
+    )
+    .unwrap();
+    let too_large = backed_up.restored.restore_from(&backed_up.backup);
+
+    assert_eq!(hard_linked.err(), Some(ProtectedError::Tampered));
+    assert_eq!(too_large.err(), Some(ProtectedError::TooLarge));
+    assert!(!backed_up.restored.as_ref().exists());
+}
+
+#[test]
+fn a_backup_reached_through_a_symbolic_link_is_refused() {
+    let backed_up = backed_up();
+    let link = backed_up.backup.with_file_name("linked backup");
+    // Creating a symbolic link needs Developer Mode or an administrator on Windows; without it the
+    // link cannot exist, so there is nothing to refuse.
+    if std::os::windows::fs::symlink_dir(&backed_up.backup, &link).is_err() {
+        return;
+    }
+
+    let restored = backed_up.restored.restore_from(&link);
+
+    assert_eq!(restored.err(), Some(ProtectedError::Tampered));
+}
+
+#[test]
+fn a_copy_needs_twice_its_size_free() {
+    assert!(has_room(10, 20));
+    assert!(!has_room(10, 19));
+    assert!(!has_room(u64::MAX, u64::MAX));
 }

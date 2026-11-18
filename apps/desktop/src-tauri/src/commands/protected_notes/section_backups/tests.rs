@@ -75,3 +75,46 @@ fn cancelled_dialogs_change_nothing_and_a_backup_never_goes_inside_the_section()
     );
     assert!(!empty.folder.is_set_up());
 }
+
+#[test]
+fn locking_never_waits_for_a_backup_in_progress() {
+    let root = tempfile::tempdir().unwrap();
+    let notes = notes_at(root.path());
+    let first = notes_location(root.path(), "First");
+    notes
+        .set_up(&first, PASSWORD, KdfParameters::FLOOR)
+        .unwrap();
+    let copying = notes.copying_files();
+
+    let locked = notes.lock_all();
+
+    assert_eq!(locked.len(), 1);
+    assert!(!notes.status(&first).is_unlocked);
+    drop(copying);
+}
+
+#[test]
+fn a_save_waits_for_the_backup_and_lands_after_it() {
+    let root = tempfile::tempdir().unwrap();
+    let backups = root.path().join("Backups");
+    fs::create_dir(&backups).unwrap();
+    let notes = std::sync::Arc::new(notes_at(root.path()));
+    let first = notes_location(root.path(), "First");
+    notes
+        .set_up(&first, PASSWORD, KdfParameters::FLOOR)
+        .unwrap();
+    let copying = notes.copying_files();
+    let saving = {
+        let notes = std::sync::Arc::clone(&notes);
+        let first = section_place_of(&first.notes_folder);
+        std::thread::spawn(move || {
+            notes.with_section(&first, |section| Ok(section.create("Later", "", 2)?))
+        })
+    };
+
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    assert!(!saving.is_finished());
+    drop(copying);
+
+    assert!(saving.join().unwrap().is_ok());
+}

@@ -7,6 +7,8 @@ mod clipboard;
 #[cfg(windows)]
 mod com_error;
 #[cfg(windows)]
+mod file_links;
+#[cfg(windows)]
 mod jump_list;
 #[cfg(windows)]
 mod private_clipboard;
@@ -21,6 +23,8 @@ mod volumes;
 
 #[cfg(windows)]
 pub use clipboard::read_clipboard_text;
+#[cfg(windows)]
+pub use file_links::link_count_of;
 #[cfg(windows)]
 pub use jump_list::{JumpListEntry, JumpListOutcome, JumpListUpdate, show_jump_list_category};
 #[cfg(windows)]

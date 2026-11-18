@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -58,6 +58,10 @@ pub struct ProtectedNotes {
     /// The new password given with a recovery key while a folder warning waited, written once the
     /// folder is accepted and dropped when the section locks.
     pending_recovery_passwords: Mutex<HashMap<String, (Zeroizing<String>, KdfParameters)>>,
+    /// Held shared by everything that writes a section's files and exclusively by a backup or a
+    /// restore, so a copy never sees half a save. Apart from the sections, so locking never waits
+    /// for a copy.
+    copies: RwLock<()>,
 }
 
 impl ProtectedNotes {
@@ -68,7 +72,17 @@ impl ProtectedNotes {
             records: SectionRecords::new(records_file),
             awaiting_acceptance: Mutex::new(HashSet::new()),
             pending_recovery_passwords: Mutex::new(HashMap::new()),
+            copies: RwLock::new(()),
         }
+    }
+
+    /// Taken before the sections, and never twice on one thread.
+    fn writing_files(&self) -> RwLockReadGuard<'_, ()> {
+        self.copies.read().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn copying_files(&self) -> RwLockWriteGuard<'_, ()> {
+        self.copies.write().unwrap_or_else(PoisonError::into_inner)
     }
 
     fn pending_recovery_passwords(
@@ -531,7 +545,10 @@ impl ProtectedNotes {
         password: &str,
         parameters: KdfParameters,
     ) -> Answer<SetUpAnswer> {
-        let (section, recovery_key) = place.folder.set_up(password, parameters)?;
+        let (section, recovery_key) = {
+            let _writing = self.writing_files();
+            place.folder.set_up(password, parameters)?
+        };
         self.keep_unlocked(place, section)?;
         Ok(SetUpAnswer {
             recovery_key: recovery_key_text(&recovery_key),
@@ -544,7 +561,10 @@ impl ProtectedNotes {
         password: &str,
         should_remember: bool,
     ) -> Answer<UnlockAnswer> {
-        let section = UnlockedSection::unlock_with_password(&place.folder, password)?;
+        let section = {
+            let _writing = self.writing_files();
+            UnlockedSection::unlock_with_password(&place.folder, password)?
+        };
         let answer = self.keep_unlocked(place, section)?;
         if should_remember {
             self.with_section(place, |section| {
@@ -562,7 +582,10 @@ impl ProtectedNotes {
         parameters: KdfParameters,
     ) -> Answer<UnlockAnswer> {
         let key = recovery_key_from_text(&recovery.recovery_key)?;
-        let section = UnlockedSection::unlock_with_key(&place.folder, SlotKind::Recovery, &key)?;
+        let section = {
+            let _writing = self.writing_files();
+            UnlockedSection::unlock_with_key(&place.folder, SlotKind::Recovery, &key)?
+        };
         let answer = self.keep_unlocked(place, section)?;
         if answer.folder_warning.is_some() {
             // Like any other change, the new password waits until the folder is accepted.
@@ -697,7 +720,10 @@ impl ProtectedNotes {
     }
 
     fn unlock_on_this_pc(&self, place: &SectionPlace) -> Answer<UnlockAnswer> {
-        let section = unlock_on_this_pc(&place.folder, self.secrets.as_ref())?;
+        let section = {
+            let _writing = self.writing_files();
+            unlock_on_this_pc(&place.folder, self.secrets.as_ref())?
+        };
         self.keep_unlocked(place, section)
     }
 
@@ -723,6 +749,7 @@ impl ProtectedNotes {
         place: &SectionPlace,
         work: impl FnOnce(&mut UnlockedSection) -> Answer<T>,
     ) -> Answer<T> {
+        let _writing = self.writing_files();
         let mut sections = self.sections();
         let section = sections
             .get_mut(&place.location_key)

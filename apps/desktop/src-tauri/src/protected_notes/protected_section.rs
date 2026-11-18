@@ -18,7 +18,9 @@ use super::key_slots::{
 use super::manifest::{MANIFEST_FILE_NAME, Manifest, ManifestEntry, NoteState};
 use super::random::{random_bytes, random_key};
 use super::section_records::SectionRecord;
-use super::vault_file::{SetUpRefusal, VAULT_FILE_NAME, Vault, set_up_refusal};
+use super::vault_file::{
+    MAX_VAULT_FILE_BYTES, SetUpRefusal, VAULT_FILE_NAME, Vault, set_up_refusal,
+};
 use super::{KEY_BYTES, ProtectedError};
 use crate::documents::write_bytes_atomically;
 use crate::secrets::{DeviceSecretStore, SecretName};
@@ -136,6 +138,17 @@ impl std::fmt::Debug for NoteSummary {
     }
 }
 
+/// A file's bytes, reading one past `limit` at most, so a huge file is never read whole; the
+/// caller refuses what is longer than the limit.
+fn read_at_most(path: &Path, limit: usize) -> std::io::Result<Vec<u8>> {
+    use std::io::Read;
+    let mut bytes = Vec::new();
+    fs::File::open(path)?
+        .take(limit as u64 + 1)
+        .read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
+
 /// The note id a file's name gives, such as `<32 hex>.mdxp`; `None` for any other name.
 fn note_id_of_file_name(name: &str) -> Option<[u8; NOTE_ID_BYTES]> {
     let stem = name.strip_suffix(&format!(".{NOTE_EXTENSION}"))?;
@@ -182,7 +195,7 @@ impl SectionFolder {
     }
 
     pub fn read_vault(&self) -> Result<Vault, ProtectedError> {
-        match fs::read(self.vault_path()) {
+        match read_at_most(&self.vault_path(), MAX_VAULT_FILE_BYTES) {
             Ok(bytes) => Vault::from_json(&bytes),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 Err(if self.note_file_names()?.is_empty() {
