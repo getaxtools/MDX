@@ -1,4 +1,4 @@
-import type { DocumentLocation } from '@mdx/platform';
+import { isProtectedNoteLocation, type DocumentLocation } from '@mdx/platform';
 
 export const MAX_REOPENABLE_TABS = 20;
 export const LAST_TAB_NUMBER_KEY = 9;
@@ -207,6 +207,8 @@ function insertAtEndOfRegion(tabs: readonly Tab[], tab: Tab): readonly Tab[] {
   return tab.isPinned ? insertTabAt(tabs, tab, pinnedCountOf(tabs)) : [...tabs, tab];
 }
 
+/** A closed protected note is not kept: its text is gone once its tab closes. */
 function rememberClosed(recentlyClosed: readonly Tab[], closedTabs: readonly Tab[]): readonly Tab[] {
-  return [...closedTabs, ...recentlyClosed].slice(0, MAX_REOPENABLE_TABS);
+  const reopenable = closedTabs.filter((tab) => !isProtectedNoteLocation(tab.location));
+  return [...reopenable, ...recentlyClosed].slice(0, MAX_REOPENABLE_TABS);
 }

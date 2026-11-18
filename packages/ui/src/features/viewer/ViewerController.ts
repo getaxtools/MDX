@@ -697,6 +697,10 @@ export class ViewerController {
         if (this.openDialog === 'protectedSetUp') this.openDialog = undefined;
         this.publish(this.composeSnapshot(this.snapshot.notice));
       },
+      showNotice: (key, values) => this.showNotice(key, values),
+      startEditing: () => this.editingActions.startEditingActiveDocument(),
+      wait: (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)),
+      now: () => (this.dependencies.now ?? (() => new Date()))().getTime(),
       onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
     });
   }
@@ -1214,8 +1218,7 @@ export class ViewerController {
 
   private resourceResolverFor(location: DocumentLocation): ResourceUrlResolver {
     const { resources } = this.dependencies;
-    return (source) =>
-      isUntitledLocation(location) ? undefined : resources?.imageUrl(location.displayPath, source);
+    return (source) => (hasFile(location) ? resources?.imageUrl(location.displayPath, source) : undefined);
   }
 
   hasUnsavedDocuments(): boolean {

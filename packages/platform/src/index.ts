@@ -23,6 +23,7 @@ export {
   isUntitledLocation,
   isViewLocation,
   isProtectedNoteLocation,
+  isProtectedNoteIn,
   protectedNoteLocation,
   viewLocation,
   untitledLocation,

@@ -5,6 +5,7 @@ import {
   InMemoryDocumentFiles,
   type ChosenPicture,
   InMemoryWorkspaceStore,
+  protectedNoteLocation,
 } from '@mdx/platform';
 import { describe, expect, it, vi } from 'vitest';
 import { DocumentAttachments, type AttachmentCallbacks, type LinkPlace } from './DocumentAttachments';
@@ -13,7 +14,7 @@ const GUIDE = 'C:\\Docs\\Guide.md';
 const NOTES = 'C:\\Docs\\Notes.md';
 const GUIDE_KEY = GUIDE.toLowerCase();
 
-async function attachmentsFor({ isUntitled = false, isEditing = true } = {}) {
+async function attachmentsFor({ isUntitled = false, isEditing = true, isProtected = false } = {}) {
   const session = new ViewerSession({
     documentFiles: new InMemoryDocumentFiles({ [GUIDE]: '# Guide', [NOTES]: '# Notes' }),
     appState: new InMemoryAppState(),
@@ -21,6 +22,13 @@ async function attachmentsFor({ isUntitled = false, isEditing = true } = {}) {
   });
   if (isUntitled) session.openUntitledDocument('', (number) => `Untitled-${String(number)}.md`);
   else await session.openDocument(GUIDE);
+  if (isProtected) {
+    const location = protectedNoteLocation('c:\\docs', 'a'.repeat(32), 'Bank details');
+    session.openProtectedNote(
+      { location, text: '', encoding: 'utf-8', hasByteOrderMark: false, lineEnding: 'lf', modifiedAtMs: 0 },
+      () => Promise.resolve(),
+    );
+  }
   const port = new InMemoryAttachments();
   const callbacks: AttachmentCallbacks = {
     isEditing: () => isEditing,
@@ -74,6 +82,15 @@ describe('DocumentAttachments', () => {
     await attachments.addDroppedPictures({ paths: ['C:\\Pictures\\a.png'], x: 0, y: 0 });
 
     expect(callbacks.askToSaveFirst).toHaveBeenCalledOnce();
+    expect(port.saved).toEqual([]);
+  });
+
+  it('adds no picture to a protected note, which would leave it outside the section', async () => {
+    const { attachments, port, callbacks } = await attachmentsFor({ isProtected: true });
+
+    await attachments.addDroppedPictures({ paths: ['C:\\Pictures\\a.png'], x: 0, y: 0 });
+
+    expect(callbacks.notify).toHaveBeenCalledWith('protectedNotes.attachments.unavailable');
     expect(port.saved).toEqual([]);
   });
 

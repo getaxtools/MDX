@@ -420,3 +420,4 @@ export {
   isProtectedLocation,
   withoutProtectedLocations,
 } from './protected-notes/protectedLocations';
+export type { ProtectedNoteSaver } from './protected-notes/OpenProtectedNotes';

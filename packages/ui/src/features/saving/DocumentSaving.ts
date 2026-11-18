@@ -1,5 +1,11 @@
 import { renameWordGoal, type ViewerSession } from '@mdx/core';
-import { DocumentOpenError, isUntitledLocation, isViewLocation, type DocumentLocation } from '@mdx/platform';
+import {
+  DocumentOpenError,
+  isProtectedNoteLocation,
+  isUntitledLocation,
+  isViewLocation,
+  type DocumentLocation,
+} from '@mdx/platform';
 import type { DocumentEditing } from '../editing/DocumentEditing';
 import { applyTabCommand, type TabCommand } from '../tabs/tabCommands';
 
@@ -55,9 +61,11 @@ export class DocumentSaving {
     if (location && this.isUnsaved(location)) await this.save(location);
   }
 
+  /** A protected note is never saved as a plain file this way. */
   async saveActiveAs(): Promise<void> {
     const location = this.session.currentState().tabStrip.activeTab()?.location;
-    if (location && !isViewLocation(location)) await this.saveAs(location);
+    if (location && !isViewLocation(location) && !isProtectedNoteLocation(location))
+      await this.saveAs(location);
   }
 
   async saveAll(): Promise<void> {

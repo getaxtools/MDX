@@ -1,8 +1,10 @@
 <script lang="ts">
-  import type { Translator } from '@mdx/i18n';
+  import type { MessageKey, Translator } from '@mdx/i18n';
+  import type { ProtectedFolderWarning } from '@mdx/platform';
   import ExplorerSectionHeader from '../explorer/ExplorerSectionHeader.svelte';
   import type { ViewerCommand } from '../viewer/viewerCommands';
   import type { ProtectedNotesView } from './ProtectedNotesActions';
+  import ProtectedUnlockPanel from './ProtectedUnlockPanel.svelte';
 
   interface Props {
     view: ProtectedNotesView;
@@ -14,6 +16,36 @@
   }
 
   const { view, translator, isExpanded, onToggleExpanded, activeDocumentKey, onCommand }: Props = $props();
+
+  const FOLDER_WARNINGS: Record<ProtectedFolderWarning, MessageKey> = {
+    olderNotes: 'protectedNotes.folderWarning.olderNotes',
+    changedVault: 'protectedNotes.folderWarning.changedVault',
+    checkUnavailable: 'protectedNotes.folderWarning.checkUnavailable',
+  };
+
+  let isCreating = $state(false);
+  let newTitle = $state('');
+
+  function startCreating() {
+    if (!isExpanded) onToggleExpanded();
+    newTitle = '';
+    isCreating = true;
+  }
+
+  /** Enter creates the note and Escape gives up, as when naming a note in the note tree. */
+  function handleTitleKeydown(event: KeyboardEvent) {
+    if (event.isComposing || (event.key !== 'Enter' && event.key !== 'Escape')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    isCreating = false;
+    if (event.key === 'Enter' && newTitle.trim() !== '') {
+      onCommand({ kind: 'createProtectedNote', title: newTitle });
+    }
+  }
+
+  function focusOnShow(element: HTMLElement) {
+    element.focus();
+  }
 </script>
 
 <section class="protected-notes" aria-labelledby="protected-notes-heading">
@@ -39,6 +71,18 @@
         </span>
       {/if}
     {/snippet}
+    {#snippet actions()}
+      {#if view.state === 'unlocked' && view.folderWarning === undefined}
+        <button
+          class="header-action"
+          aria-label={translator.translate('protectedNotes.section.newNote')}
+          title={translator.translate('protectedNotes.section.newNote')}
+          onclick={startCreating}
+        >
+          <span aria-hidden="true">+</span>
+        </button>
+      {/if}
+    {/snippet}
   </ExplorerSectionHeader>
   {#if isExpanded}
     <div class="body">
@@ -47,22 +91,48 @@
         <button class="action" onclick={() => onCommand({ kind: 'showProtectedSetUp' })}>
           {translator.translate('protectedNotes.section.protectNotes')}
         </button>
-      {:else if view.state === 'unlocked'}
+      {:else if view.state === 'locked'}
+        <ProtectedUnlockPanel {view} {translator} {onCommand} />
+      {:else if view.folderWarning}
+        <div class="folder-warning" role="alert">
+          <p>{translator.translate(FOLDER_WARNINGS[view.folderWarning])}</p>
+          <button class="action" onclick={() => onCommand({ kind: 'acceptProtectedFolder' })}>
+            {translator.translate('protectedNotes.folderWarning.keep')}
+          </button>
+        </div>
+      {:else}
+        {#if isCreating}
+          <input
+            use:focusOnShow
+            bind:value={newTitle}
+            aria-label={translator.translate('protectedNotes.section.newNoteTitle')}
+            autocomplete="off"
+            spellcheck="false"
+            onkeydown={handleTitleKeydown}
+            onblur={() => (isCreating = false)}
+          />
+        {/if}
         {#if view.notes.length === 0}
           <p class="explanation">{translator.translate('protectedNotes.section.empty')}</p>
         {:else}
           <ul aria-labelledby="protected-notes-heading">
             {#each view.notes as note (note.noteId)}
               <li>
-                <span
+                <button
                   class="note"
                   aria-current={note.canonicalKey === activeDocumentKey ? 'page' : undefined}
+                  onclick={() => onCommand({ kind: 'openProtectedNote', noteId: note.noteId })}
                 >
                   {note.title}
-                </span>
+                </button>
               </li>
             {/each}
           </ul>
+        {/if}
+        {#if view.canUnlockOnThisPc}
+          <button class="link" onclick={() => onCommand({ kind: 'forgetProtectedOnThisPc' })}>
+            {translator.translate('protectedNotes.unlock.forgetThisPc')}
+          </button>
         {/if}
       {/if}
     </div>
@@ -134,9 +204,86 @@
 
   .note {
     display: block;
+    width: 100%;
+    min-height: 24px;
     padding: 2px var(--space-2);
     overflow: hidden;
+    border: 0;
+    border-radius: var(--radius-small);
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: start;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .note:hover {
+    background: var(--color-surface-hover);
+  }
+
+  .note[aria-current='page'] {
+    background: var(--color-surface-selected, var(--color-surface-hover));
+    font-weight: 600;
+  }
+
+  .note:focus-visible,
+  .link:focus-visible,
+  .header-action:focus-visible,
+  input:focus-visible {
+    outline: 2px solid var(--color-focus);
+  }
+
+  .folder-warning {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    border-inline-start: 3px solid var(--color-alert-warning);
+    background: var(--color-surface-raised);
+  }
+
+  .folder-warning p {
+    margin: 0;
+  }
+
+  input {
+    width: 100%;
+    height: 26px;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-small);
+    background: var(--color-background);
+    color: var(--color-text);
+    font: inherit;
+  }
+
+  .link {
+    justify-self: start;
+    min-height: 24px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--color-accent);
+    font: inherit;
+    font-size: var(--text-size-small);
+    text-decoration: underline;
+  }
+
+  .header-action {
+    min-width: 24px;
+    min-height: 24px;
+    margin-inline-end: var(--space-1);
+    padding: 0 var(--space-2);
+    border: 0;
+    border-radius: var(--radius-small);
+    background: none;
+    color: var(--color-text-secondary);
+    font: inherit;
+    font-size: 1.1em;
+  }
+
+  .header-action:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
   }
 </style>

@@ -50,6 +50,11 @@ export function isProtectedNoteLocation(location: DocumentLocation): boolean {
   return location.canonicalKey.startsWith(PROTECTED_NOTE_KEY_PREFIX);
 }
 
+/** Whether a location is a note of the protected section of the notes location with this canonical key. */
+export function isProtectedNoteIn(location: DocumentLocation, locationKey: string): boolean {
+  return location.canonicalKey.startsWith(`${PROTECTED_NOTE_KEY_PREFIX}${locationKey}|`);
+}
+
 /**
  * Whether a tab shows a plain file on disk, rather than a document not saved yet, a view of the app
  * or a protected note.

@@ -10,6 +10,7 @@ import {
 import type { MessageKey } from '@mdx/i18n';
 import {
   DocumentOpenError,
+  isProtectedNoteLocation,
   isUntitledLocation,
   type AttachmentPort,
   type AttachmentTarget,
@@ -131,6 +132,10 @@ export class DocumentAttachments {
   private activeDocumentTarget(): DocumentTarget | undefined {
     const location = this.session.currentState().tabStrip.activeTab()?.location;
     if (!location) return undefined;
+    if (isProtectedNoteLocation(location)) {
+      this.callbacks.notify('protectedNotes.attachments.unavailable');
+      return undefined;
+    }
     if (isUntitledLocation(location)) {
       this.callbacks.askToSaveFirst();
       return undefined;

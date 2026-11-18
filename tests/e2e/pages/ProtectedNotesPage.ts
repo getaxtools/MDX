@@ -100,6 +100,77 @@ export class ProtectedNotesPage {
     return recoveryKey;
   }
 
+  /** Types the password into the unlock panel, ticking Remember on this PC when asked to. */
+  async enterPassword(password: string, { shouldRemember = false } = {}): Promise<void> {
+    const section = this.section();
+    const field = section.$('#protected-unlock-password');
+    await field.waitForDisplayed();
+    await field.setValue(password);
+    if (shouldRemember) await section.$(`label=${text('protectedNotes.unlock.remember')}`).click();
+    await section.$(`button=${text('protectedNotes.unlock.unlock')}`).click();
+  }
+
+  async unlock(password: string, options: { readonly shouldRemember?: boolean } = {}): Promise<void> {
+    await this.enterPassword(password, options);
+    await this.waitForState('protectedNotes.section.unlocked');
+  }
+
+  /** The problem the unlock panel reports, once it reports one. */
+  async unlockProblem(): Promise<string> {
+    const problem = this.section().$('#protected-unlock-problem');
+    await this.browser.waitUntil(async () => (await problem.getText()) !== '', {
+      timeout: PASSWORD_CHECK_LIMIT_MS,
+    });
+    return problem.getText();
+  }
+
+  async hasPasswordField(): Promise<boolean> {
+    return this.section().$('#protected-unlock-password').isDisplayed();
+  }
+
+  async createNote(title: string): Promise<void> {
+    await this.section()
+      .$(`button[aria-label="${text('protectedNotes.section.newNote')}"]`)
+      .click();
+    const field = this.section().$(`input[aria-label="${text('protectedNotes.section.newNoteTitle')}"]`);
+    await field.setValue(title);
+    await this.mainWindow.pressKeyOn(field, 'Enter');
+    await this.mainWindow.waitForActiveTab(title);
+  }
+
+  async noteTitles(): Promise<string[]> {
+    return this.section()
+      .$$('ul button')
+      .map((button) => button.getText());
+  }
+
+  async waitForNoteTitles(expectedTitles: readonly string[]): Promise<void> {
+    await this.browser.waitUntil(
+      async () => (await this.noteTitles()).join('|') === expectedTitles.join('|'),
+      {
+        timeoutMsg: `The protected notes are not ${expectedTitles.join(', ')}`,
+      },
+    );
+  }
+
+  async openNote(title: string): Promise<void> {
+    await this.section().$('ul').$(`button=${title}`).click();
+    await this.mainWindow.waitForActiveTab(title);
+  }
+
+  /** The folder warning shown in place of the notes, once it shows. */
+  async folderWarning(): Promise<string> {
+    const warning = this.section().$('[role="alert"]');
+    await warning.waitForDisplayed({ timeout: PASSWORD_CHECK_LIMIT_MS });
+    return warning.getText();
+  }
+
+  async keepFolder(): Promise<void> {
+    await this.section()
+      .$(`button=${text('protectedNotes.folderWarning.keep')}`)
+      .click();
+  }
+
   private async turnOnNotes(): Promise<void> {
     const controlWheel = new ControlWheelPage(this.browser, this.mainWindow);
     await controlWheel.openControlWheel();

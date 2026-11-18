@@ -1,6 +1,9 @@
 import { NO_JUMP_LIST_REMOVALS, type JumpListRemovals } from '../workspaces/jumpListRemovals';
 import {
   DocumentOpenError,
+  hasFile,
+  isProtectedNoteIn,
+  isProtectedNoteLocation,
   isViewLocation,
   untitledLocation,
   type AppStatePort,
@@ -17,6 +20,7 @@ import { withDocumentLineBreaks } from '../documents/lineEndings';
 import { ExplorerFolders } from '../explorer/ExplorerFolders';
 import { FavouritesList } from '../favourites/FavouritesList';
 import { locationAfterNoteMove, type MovedNote } from '../notes/noteMoves';
+import { OpenProtectedNotes, type ProtectedNoteSaver } from '../protected-notes/OpenProtectedNotes';
 import { RecentFilesList } from '../recent-files/RecentFilesList';
 import type { ShortcutOverrides } from '../shortcuts/parseShortcutOverrides';
 import type { WordGoals } from '../word-goals/wordGoals';
@@ -138,6 +142,7 @@ export class ViewerSession {
   private state: ViewerState;
   private readonly openedDocuments = new Map<string, OpenedDocument>();
   private readonly untitledDocuments = new Map<string, OpenedDocument>();
+  private readonly protectedNotes = new OpenProtectedNotes();
   /** Encodings the user chose with Reopen with Encoding, kept for live reload. */
   private readonly chosenEncodings = new Map<string, string>();
   private untitledCount = 0;
@@ -174,6 +179,7 @@ export class ViewerSession {
   async restore(preferredWorkspaceId?: string): Promise<RestoreOutcome> {
     const restored = await this.storage.restore(preferredWorkspaceId);
     this.openedDocuments.clear();
+    this.protectedNotes.clear();
     this.replaceState(viewerStateOf(restored));
     const { wasReset, newerSavedState, hasEarlierVersionChanges } = restored;
     return { wasReset, newerSavedState, hasEarlierVersionChanges };
@@ -182,6 +188,7 @@ export class ViewerSession {
   /** Forgets every tab, recent file, favourite, opened folder, setting and kind choice, as on a first start. */
   clearAllData(): void {
     this.openedDocuments.clear();
+    this.protectedNotes.clear();
     this.untitledDocuments.clear();
     this.chosenEncodings.clear();
     this.untitledCount = 0;
@@ -303,6 +310,7 @@ export class ViewerSession {
     const restored = await this.workspaceStorage.switchTo(workspaceId, this.state, { shouldSaveCurrent });
     this.openedDocuments.clear();
     this.untitledDocuments.clear();
+    this.protectedNotes.clear();
     this.untitledCount = 0;
     const kindId = this.shownWorkspace()?.kindId ?? DEFAULT_WORKSPACE_KIND_ID;
     const workspaceKinds = restored.workspaceKinds.isEnabled(kindId)
@@ -331,6 +339,24 @@ export class ViewerSession {
     this.replaceState({ ...this.state, tabStrip: this.state.tabStrip.openOrFocus(location) });
   }
 
+  /**
+   * Opens a note of an unlocked protected section in a tab, from text its section decrypted; it stays
+   * out of recent files and is saved only through `saveText`.
+   */
+  openProtectedNote(document: OpenedDocument, saveText: ProtectedNoteSaver): void {
+    this.protectedNotes.add(document, saveText);
+    this.replaceState({ ...this.state, tabStrip: this.state.tabStrip.openOrFocus(document.location) });
+  }
+
+  /** Closes the tabs of a protected section's notes and forgets their text, as when it locks. */
+  closeProtectedNotesOf(locationKey: string): void {
+    const closing = this.state.tabStrip.tabs().filter((tab) => isProtectedNoteIn(tab.location, locationKey));
+    if (closing.length === 0) return;
+    this.updateTabs((tabStrip) =>
+      closing.reduce((remaining, tab) => remaining.close(tab.location.canonicalKey), tabStrip),
+    );
+  }
+
   /** Opens text that has no file yet, such as a converted table, in a new tab named by `nameFor`. */
   openUntitledDocument(text: string, nameFor: (number: number) => string): OpenedDocument {
     this.untitledCount += 1;
@@ -356,6 +382,7 @@ export class ViewerSession {
       .tabs()
       .find((candidate) => candidate.location.canonicalKey === canonicalKey);
     if (!tab) return undefined;
+    if (isProtectedNoteLocation(tab.location)) throw new DocumentOpenError('unreadable', canonicalKey);
     const source = this.saveSourceFor(tab.location, editedText);
     const savedPath = await this.dependencies.documentFiles.saveAs(source);
     if (savedPath === undefined) return undefined;
@@ -379,6 +406,11 @@ export class ViewerSession {
     editedText: string,
     { shouldOverwriteChangesOnDisk = false } = {},
   ): Promise<void> {
+    if (this.protectedNotes.has(canonicalKey)) {
+      await this.protectedNotes.save(canonicalKey, editedText);
+      this.replaceState({ ...this.state });
+      return;
+    }
     const document = this.openedDocuments.get(canonicalKey);
     if (!document) throw new DocumentOpenError('unreadable', canonicalKey);
     if (document.hasDecodingErrors === true) {
@@ -403,6 +435,7 @@ export class ViewerSession {
     if (!activeTab) return undefined;
     if (isViewLocation(activeTab.location)) return undefined;
     const { canonicalKey, displayPath } = activeTab.location;
+    if (isProtectedNoteLocation(activeTab.location)) return this.protectedNotes.document(canonicalKey);
     return (
       this.untitledDocuments.get(canonicalKey) ??
       this.openedDocuments.get(canonicalKey) ??
@@ -414,7 +447,7 @@ export class ViewerSession {
   async reloadDocuments(displayPaths: readonly string[]): Promise<void> {
     const changedTabs = this.state.tabStrip
       .tabs()
-      .filter((tab) => !isViewLocation(tab.location) && displayPaths.includes(tab.location.displayPath));
+      .filter((tab) => hasFile(tab.location) && displayPaths.includes(tab.location.displayPath));
     if (changedTabs.length === 0) return;
     for (const { location } of changedTabs) {
       try {
@@ -437,7 +470,7 @@ export class ViewerSession {
     const tab = this.state.tabStrip
       .tabs()
       .find((candidate) => candidate.location.canonicalKey === canonicalKey);
-    if (!tab) return;
+    if (!tab || !hasFile(tab.location)) return;
     const document = await this.dependencies.documentFiles.open(tab.location.displayPath, encoding);
     if (encoding === undefined) this.chosenEncodings.delete(canonicalKey);
     else this.chosenEncodings.set(canonicalKey, encoding);
@@ -447,7 +480,11 @@ export class ViewerSession {
 
   /** An open document as last read or saved, including documents that have no file yet. */
   openedDocument(canonicalKey: string): OpenedDocument | undefined {
-    return this.openedDocuments.get(canonicalKey) ?? this.untitledDocuments.get(canonicalKey);
+    return (
+      this.openedDocuments.get(canonicalKey) ??
+      this.untitledDocuments.get(canonicalKey) ??
+      this.protectedNotes.document(canonicalKey)
+    );
   }
 
   updateTabs(change: (tabStrip: TabStrip) => TabStrip): void {
@@ -455,6 +492,7 @@ export class ViewerSession {
     for (const canonicalKey of this.openedDocuments.keys()) {
       if (!tabStrip.isOpen(canonicalKey)) this.openedDocuments.delete(canonicalKey);
     }
+    this.protectedNotes.keepOnly((canonicalKey) => tabStrip.isOpen(canonicalKey));
     this.replaceState({ ...this.state, tabStrip });
   }
 
