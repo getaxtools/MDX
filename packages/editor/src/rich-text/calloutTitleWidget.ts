@@ -1,10 +1,10 @@
 import { Facet } from '@codemirror/state';
 import { WidgetType, type EditorView } from '@codemirror/view';
 import { toggleCalloutFold, type CalloutFoldRange } from './calloutFolds';
+import { CALLOUT_TYPE_PHRASE } from '../plain/calloutPhrases';
 import { CALLOUT_TITLE_CLASS } from './richTextClasses';
 
-/** The name of the button that opens a callout's type menu. */
-export const CALLOUT_TYPE_PHRASE = 'Change callout type';
+export { CALLOUT_TYPE_PHRASE } from '../plain/calloutPhrases';
 
 /** Where a callout's type word is, which the type menu replaces. */
 export interface CalloutTypeRange {

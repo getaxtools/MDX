@@ -1,5 +1,8 @@
 import type { SlashMenuProvider } from '../slash-menu/slashMenu';
 import { snippetInsertion, type SnippetExpander } from './snippetFields';
+import { SNIPPETS_SECTION } from '../plain/snippetPhrases';
+
+export { SNIPPETS_SECTION } from '../plain/snippetPhrases';
 
 /** A snippet as the editor offers it; the app expands its variables when it is inserted. */
 export interface EditorSnippet {
@@ -8,8 +11,6 @@ export interface EditorSnippet {
   readonly trigger: string;
   readonly expand: SnippetExpander;
 }
-
-export const SNIPPETS_SECTION = 'Snippets';
 
 /** Snippets as a group of the insert menu, found by name and trigger word. */
 export function snippetMenuProvider(snippets: readonly EditorSnippet[]): SlashMenuProvider {

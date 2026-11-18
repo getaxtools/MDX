@@ -3,10 +3,9 @@ import { Direction, EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/
 import { isComposing } from '../rich-text/compositionHold';
 import { blockMoveToGap, nearestGapIndex, type BlockBox } from './blockDrag';
 import { blockAt, siblingBlocksAt, type MarkdownBlock } from './markdownBlocks';
-import { BLOCK_KIND_PHRASES, BLOCK_MOVE_PHRASES } from './moveBlocks';
+import { BLOCK_HANDLE_PHRASE, BLOCK_KIND_PHRASES, BLOCK_MOVE_PHRASES } from '../plain/blockPhrases';
 
-/** The handle's accessible name: the block's kind, then its first words. */
-export const BLOCK_HANDLE_PHRASE = 'Actions for the $1 starting “$2”';
+export { BLOCK_HANDLE_PHRASE } from '../plain/blockPhrases';
 
 /** Opens the block menu at a point on screen, for the block at the caret. */
 export const blockMenuOpener = Facet.define<

@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./shortcuts": "./src/editorShortcuts.ts"
+    "./shortcuts": "./src/editorShortcuts.ts",
+    "./plain": "./src/plain/index.ts"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.20.4",

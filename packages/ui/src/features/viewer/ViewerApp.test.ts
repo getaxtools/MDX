@@ -11,7 +11,7 @@ import { createMarkdownRenderer } from '@mdx/renderer';
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { tick } from 'svelte';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ViewerApp from './ViewerApp.svelte';
 import { ViewerController } from './ViewerController';
 
@@ -73,6 +73,11 @@ async function renderViewerWithNotesBuilt() {
   await tick();
   return viewer;
 }
+
+// The editor is a separate chunk loaded on first use; loading it once here keeps each test within its time.
+beforeAll(async () => {
+  await import('@mdx/editor');
+}, 60_000);
 
 describe('ViewerApp', () => {
   afterEach(() => {

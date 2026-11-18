@@ -1,11 +1,5 @@
 import { withUnixLineBreaks, type ViewerSession } from '@mdx/core';
-import {
-  changeSectionInText,
-  type EditorMenuCommand,
-  type EditorTextRange,
-  type SectionAction,
-  type SectionRefusal,
-} from '@mdx/editor';
+import type { EditorMenuCommand, EditorTextRange, SectionAction, SectionRefusal } from '@mdx/editor';
 import { hasFile, type DocumentLocation } from '@mdx/platform';
 import type { DocumentEditing } from './DocumentEditing';
 import type { EditorRequest } from './editingCommands';
@@ -108,9 +102,11 @@ export class EditingActions {
    * Moves, promotes or demotes a section chosen in the outline. An open editor makes the change itself,
    * so it can be undone there; otherwise the document opens in the editor with the change unsaved.
    */
-  changeOutlineSection(line: number, action: SectionAction): SectionRefusal | undefined {
+  async changeOutlineSection(line: number, action: SectionAction): Promise<SectionRefusal | undefined> {
     const location = this.activeLocation();
     if (!location) return undefined;
+    // The editor's code loads on first use, not at start; moving a section is such a use.
+    const { changeSectionInText } = await import('@mdx/editor');
     const { canonicalKey } = location;
     const savedText = withUnixLineBreaks(this.session.openedDocument(canonicalKey)?.text ?? '');
     const change = changeSectionInText(this.editing.editedTextOf(canonicalKey) ?? savedText, line, action);

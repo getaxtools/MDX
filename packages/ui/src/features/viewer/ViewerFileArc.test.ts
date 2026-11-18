@@ -90,6 +90,11 @@ function highlightedName(): string {
   return highlightedLabel().split(', ').slice(0, 2).join(', ');
 }
 
+// The editor is a separate chunk loaded on first use; loading it once here keeps each test within its time.
+beforeAll(async () => {
+  await import('@mdx/editor');
+}, 60_000);
+
 describe('the file arc in the viewer', () => {
   beforeAll(() => {
     Element.prototype.scrollIntoView = vi.fn();

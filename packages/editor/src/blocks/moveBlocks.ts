@@ -1,6 +1,9 @@
 import type { EditorState, TransactionSpec } from '@codemirror/state';
 import { EditorView, type Command } from '@codemirror/view';
+import { BLOCK_KIND_PHRASES, BLOCK_MOVE_PHRASES } from '../plain/blockPhrases';
 import { siblingBlocksAt, type BlockKind, type MarkdownBlock } from './markdownBlocks';
+
+export { BLOCK_KIND_PHRASES, BLOCK_MOVE_PHRASES } from '../plain/blockPhrases';
 
 export type MoveDirection = 'up' | 'down';
 
@@ -9,26 +12,6 @@ export type BlockMove =
   | { readonly outcome: 'atEdge'; readonly direction: MoveDirection };
 
 /** CodeMirror's own words for block kinds, translated through the editor phrases. */
-export const BLOCK_KIND_PHRASES: Readonly<Record<BlockKind, string>> = {
-  paragraph: 'paragraph',
-  heading: 'heading',
-  list: 'list',
-  listItem: 'list item',
-  codeBlock: 'code block',
-  table: 'table',
-  quote: 'quote',
-  mathBlock: 'math block',
-  htmlBlock: 'HTML block',
-  horizontalRule: 'horizontal rule',
-};
-
-export const BLOCK_MOVE_PHRASES = {
-  movedUp: 'Moved $1 up.',
-  movedDown: 'Moved $1 down.',
-  first: 'This is the first block.',
-  last: 'This is the last block.',
-} as const;
-
 /**
  * Swaps the blocks under the selection with the block before or after them, keeping the blank lines
  * between them where they were, so moving up and then down gives back the same text.

@@ -10,7 +10,7 @@ import {
 import { createMarkdownRenderer } from '@mdx/renderer';
 import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import type { ProtectedDocuments } from '../editing/editorSpellCheck';
 import ViewerApp from './ViewerApp.svelte';
 import { ViewerController } from './ViewerController';
@@ -50,6 +50,11 @@ function rightClick(target: Element, init: PointerEventInit = { pointerType: 'mo
   const event = new PointerEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, ...init });
   return target.dispatchEvent(event);
 }
+
+// The editor is a separate chunk loaded on first use; loading it once here keeps each test within its time.
+beforeAll(async () => {
+  await import('@mdx/editor');
+}, 60_000);
 
 describe('spell check in the viewer', () => {
   it('right-click in the editor is not prevented when spelling is on', async () => {

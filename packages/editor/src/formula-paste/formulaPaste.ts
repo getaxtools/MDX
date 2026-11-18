@@ -11,12 +11,10 @@ import { EditorView, keymap, showTooltip, type Tooltip } from '@codemirror/view'
 import { richTextRenderingFacet, type RichTextRendering } from '../rich-text/richTextRendering';
 import { formulaMarkdown, type FormulaConversion } from './formulaMarkdown';
 import { texOfMathml } from './mathmlToTex';
+import { FORMULA_PASTE_PHRASES } from '../plain/formulaPastePhrases';
 import { readClipboardFormulas } from './readClipboardFormulas';
 
-export const FORMULA_PASTE_PHRASES = {
-  notice: 'Pasted as equation',
-  pasteAsText: 'Paste as text',
-} as const;
+export { FORMULA_PASTE_PHRASES } from '../plain/formulaPastePhrases';
 
 interface PasteNotice {
   /** Where the converted text ends, which the notice is shown at. */

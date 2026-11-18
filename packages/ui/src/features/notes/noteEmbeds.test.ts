@@ -1,7 +1,7 @@
 import { createTranslator } from '@mdx/i18n';
 import { createMarkdownRenderer } from '@mdx/renderer';
 import { render, screen, waitFor } from '@testing-library/svelte';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { createRichTextRendering } from '../editing/richTextRendering';
 import SourceEditorPane from '../editing/SourceEditorPane.svelte';
 import { noteEmbedResolver, type NoteEmbedSources } from './noteEmbeds';
@@ -29,6 +29,11 @@ function resolverWith(texts: Readonly<Record<string, string>>, overrides: Partia
   });
   return { resolver, readNote, openNote, offerNote };
 }
+
+// The editor is a separate chunk loaded on first use; loading it once here keeps each test within its time.
+beforeAll(async () => {
+  await import('@mdx/editor');
+}, 60_000);
 
 describe('note embeds', () => {
   it('a line that is only an embed names its target', () => {

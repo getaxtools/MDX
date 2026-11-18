@@ -17,6 +17,9 @@ import { Prec, type EditorState, type Extension } from '@codemirror/state';
 import { keymap, type Command, type KeyBinding } from '@codemirror/view';
 import { frontMatterEndOf } from '../blocks/markdownBlocks';
 import { BUILT_IN_SLASH_ITEMS, type SlashMenuItem } from './slashMenuItems';
+import { SLASH_MENU_SECTION } from '../plain/slashMenuPhrases';
+
+export { SLASH_MENU_SECTION } from '../plain/slashMenuPhrases';
 
 /** More items for the menu, such as note templates from a workspace kind or the user's snippets. */
 export interface SlashMenuProvider {
@@ -39,7 +42,6 @@ const NODES_WHERE_A_SLASH_IS_TEXT: ReadonlySet<string> = new Set([
   'URL',
   'LinkReference',
 ]);
-export const SLASH_MENU_SECTION = 'Blocks';
 /** CodeMirror waits 100 ms by default, the whole budget for showing wiki-link suggestions. */
 const TYPING_PAUSE_BEFORE_COMPLETIONS_MS = 25;
 const PROVIDED_SECTION_RANK = 1;

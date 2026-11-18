@@ -4,9 +4,9 @@ import { siblingBlocksAt, type MarkdownBlock } from './markdownBlocks';
 import { calloutStartChange } from '../rich-text/calloutFolds';
 import { calloutLineAt, type CalloutFoldSign } from '../rich-text/calloutMarker';
 import { tableAsTextAtCaret } from '../tables/grid/tablesAsText';
+import type { TurnIntoKind } from '../plain/turnIntoKinds';
 
-export type TurnIntoKind =
-  'paragraph' | 'heading1' | 'heading2' | 'heading3' | 'quote' | 'bulletList' | 'codeBlock';
+export { TURN_INTO_KINDS, type TurnIntoKind } from '../plain/turnIntoKinds';
 
 export type BlockAction =
   | 'moveUp'
@@ -17,16 +17,6 @@ export type BlockAction =
   | 'startExpanded'
   | 'editTableAsText'
   | `turnInto.${TurnIntoKind}`;
-
-export const TURN_INTO_KINDS: readonly TurnIntoKind[] = [
-  'paragraph',
-  'heading1',
-  'heading2',
-  'heading3',
-  'quote',
-  'bulletList',
-  'codeBlock',
-];
 
 /** Heading, quote and list markers at the start of a line, removed before another kind is applied. */
 const LINE_MARKERS = /^(\s{0,3})(?:#{1,6}\s+|>\s?|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)/;

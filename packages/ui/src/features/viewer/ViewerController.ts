@@ -1403,8 +1403,8 @@ export class ViewerController {
     },
     pastePlainText: () => this.pastePlainText(),
     revertDocument: () => this.editingActions.revertActiveDocument(),
-    changeOutlineSection: ({ line, action }) => {
-      const refusal = this.editingActions.changeOutlineSection(line, action);
+    changeOutlineSection: async ({ line, action }) => {
+      const refusal = await this.editingActions.changeOutlineSection(line, action);
       if (refusal) this.showNotice(`outline.section.refused.${refusal}`);
     },
     reloadActiveDocument: () => this.reloadActiveDocument(),

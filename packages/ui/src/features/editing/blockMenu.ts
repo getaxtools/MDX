@@ -1,4 +1,5 @@
-import { TURN_INTO_KINDS, type BlockAction, type CalloutFoldSign } from '@mdx/editor';
+import type { BlockAction, CalloutFoldSign } from '@mdx/editor';
+import { TURN_INTO_KINDS } from '@mdx/editor/plain';
 import type { Translator } from '@mdx/i18n';
 import type { ContextMenuItem } from '../../components/ContextMenuItem';
 
