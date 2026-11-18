@@ -1,6 +1,8 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer, type AddressInfo } from 'node:net';
+import { readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { remote } from 'webdriverio';
@@ -15,6 +17,12 @@ const LOCALHOST = '127.0.0.1';
 const DRIVER_READY_TIMEOUT_MS = 30_000;
 const DRIVER_POLL_INTERVAL_MS = 100;
 const APP_EXIT_TIMEOUT_MS = 10_000;
+/**
+ * Each launch gets a WebView2 profile of its own here. WebView2 still holds its profile for a moment
+ * after the app exits, so the profiles live outside the test's folder, which is removed at once.
+ */
+const WEBVIEW_PROFILES_FOLDER = join(tmpdir(), 'mdx-ui-test-webview');
+let launchCount = 0;
 
 export interface LaunchOptions {
   readonly workspace: TestWorkspace;
@@ -36,8 +44,17 @@ export class DesktopApp {
     environment = {},
   }: LaunchOptions): Promise<DesktopApp> {
     const driverPort = await findFreePort();
+    launchCount += 1;
+    removeUnusedWebViewProfiles();
     const appProcess = spawn(UI_TEST_APP_PATH, documentPaths(workspace, documentFileNames), {
       env: {
+        // WebView2 lets go of its profile a little after the app exits, and an app started
+        // meanwhile on the same profile fails to start, so no two launches share one, unless the
+        // spec chose a profile itself.
+        WEBVIEW2_USER_DATA_FOLDER: join(
+          WEBVIEW_PROFILES_FOLDER,
+          `${String(process.pid)}-${String(launchCount)}`,
+        ),
         ...process.env,
         MDX_DATA_DIR: workspace.profileFolder,
         MDX_DOCUMENTS_DIR: workspace.homeDocumentsFolder,
@@ -47,14 +64,20 @@ export class DesktopApp {
       stdio: 'ignore',
       windowsHide: true,
     });
-    await waitForDriver(driverPort, appProcess);
-    const browser = await remote({
-      hostname: LOCALHOST,
-      port: driverPort,
-      logLevel: 'warn',
-      capabilities: { 'wdio:enforceWebDriverClassic': true },
-    });
-    return new DesktopApp(browser, appProcess, driverPort);
+    try {
+      await waitForDriver(driverPort, appProcess);
+      const browser = await remote({
+        hostname: LOCALHOST,
+        port: driverPort,
+        logLevel: 'warn',
+        capabilities: { 'wdio:enforceWebDriverClassic': true },
+      });
+      return new DesktopApp(browser, appProcess, driverPort);
+    } catch (error) {
+      // An app left running would take every later launch as a second instance of it.
+      appProcess.kill();
+      throw error;
+    }
   }
 
   /** Starts a second copy of the app, the way Explorer does, and waits for it to hand over and exit. */
@@ -96,6 +119,23 @@ async function exitsWithin(exited: Promise<unknown>, timeoutMs: number): Promise
   const hasExitedInTime = await Promise.race([exited.then(() => true), timedOut]);
   timeout.abort();
   return hasExitedInTime;
+}
+
+/** Profiles of earlier launches; one WebView2 still holds is left for a later launch to remove. */
+function removeUnusedWebViewProfiles(): void {
+  let profiles: string[];
+  try {
+    profiles = readdirSync(WEBVIEW_PROFILES_FOLDER);
+  } catch {
+    return;
+  }
+  for (const profile of profiles) {
+    try {
+      rmSync(join(WEBVIEW_PROFILES_FOLDER, profile), { recursive: true, force: true });
+    } catch {
+      // Still in use by a WebView2 that has not let go of it yet.
+    }
+  }
 }
 
 function documentPaths(workspace: TestWorkspace, fileNames: readonly string[]): string[] {
