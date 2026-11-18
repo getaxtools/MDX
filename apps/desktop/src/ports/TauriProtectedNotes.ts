@@ -4,6 +4,7 @@ import {
   type NewProtectedNote,
   type PasswordChange,
   type PasswordChangeResult,
+  type ReencryptionFinish,
   type ReencryptionProgress,
   type ProtectedNoteEdit,
   type ProtectedNoteSummary,
@@ -75,8 +76,19 @@ export class TauriProtectedNotes implements ProtectedNotesPort {
     return call('protected_continue_reencryption', { location });
   }
 
-  finishReencryption(location: string, password: string, discardCount?: number): Promise<void> {
-    return call('protected_finish_reencryption', { location, password, discardCount: discardCount ?? null });
+  finishReencryption(
+    location: string,
+    password: string,
+    { discardCount, acknowledgeUnverifiable }: ReencryptionFinish,
+  ): Promise<void> {
+    return call('protected_finish_reencryption', {
+      location,
+      password,
+      finish: {
+        discardCount: discardCount ?? null,
+        acknowledgeUnverifiable: acknowledgeUnverifiable === true,
+      },
+    });
   }
 
   newRecoveryKey(location: string, password: string): Promise<{ readonly recoveryKey: string }> {

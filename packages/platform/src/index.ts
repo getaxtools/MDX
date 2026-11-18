@@ -190,6 +190,7 @@ export {
   type ProtectedNotesPort,
   type ProtectedFolderWarning,
   type ProtectedStatus,
+  type ReencryptionFinish,
   type ReencryptionProgress,
   type UnlockResult,
 } from './ProtectedNotesPort';

@@ -62,6 +62,11 @@ export interface PasswordChangeResult {
   readonly recoveryKey?: string;
 }
 
+export interface ReencryptionFinish {
+  readonly discardCount?: number;
+  readonly acknowledgeUnverifiable?: boolean;
+}
+
 export interface ReencryptionProgress {
   /** Files still to seal again; none once the re-encryption is over. */
   readonly remaining: number;
@@ -164,9 +169,11 @@ export interface ProtectedNotesPort {
   /**
    * Ends a re-encryption that holds files back, after the password is confirmed; those files no
    * longer open. `discardCount` is the `heldBack` the last step reported, so nothing is dropped
-   * unseen; refused with `reencryptionUnverifiable` when it does not match.
+   * unseen. When the step reported `isUnverifiable`, the window first tells the user to restore
+   * `manifest.mdxp` or `vault.json` from history and passes `acknowledgeUnverifiable` only if they
+   * finish anyway, even with nothing held back. Refused with `reencryptionUnverifiable` otherwise.
    */
-  finishReencryption(location: string, password: string, discardCount?: number): Promise<void>;
+  finishReencryption(location: string, password: string, finish: ReencryptionFinish): Promise<void>;
   /** A new recovery key in place of the old one, after the password is confirmed; resolves to it, to show once. */
   newRecoveryKey(location: string, password: string): Promise<{ readonly recoveryKey: string }>;
   /** Keeps the folder as it is after a folder warning; this PC remembers it as seen. */

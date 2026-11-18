@@ -125,6 +125,23 @@ fn any_note_opens_with(folder: &SectionFolder, notes: &[(String, Vec<u8>)], key:
     })
 }
 
+/// The user's word on finishing: the count of files left unreadable, for a re-encryption that can
+/// be checked.
+fn finish(discard_count: Option<usize>) -> ReencryptionFinish {
+    ReencryptionFinish {
+        discard_count,
+        is_unverifiable_acknowledged: false,
+    }
+}
+
+/// The same, for one that cannot be checked, after the user was told to restore files first.
+fn finish_unverified(discard_count: Option<usize>) -> ReencryptionFinish {
+    ReencryptionFinish {
+        discard_count,
+        is_unverifiable_acknowledged: true,
+    }
+}
+
 fn start_reencryption(opened: &mut Section) {
     opened
         .section
@@ -586,8 +603,8 @@ fn an_unrecorded_file_that_opens_with_the_old_key_holds_it_back_and_one_that_doe
 
     let progress = opened.section.continue_reencryption(100).unwrap();
     let is_kept = opened.section.is_reencrypting();
-    let without_count = opened.section.finish_reencryption(None);
-    opened.section.finish_reencryption(Some(1)).unwrap();
+    let without_count = opened.section.finish_reencryption(finish(None));
+    opened.section.finish_reencryption(finish(Some(1))).unwrap();
 
     assert_eq!(
         (progress.remaining, progress.held_back, progress.damaged),
@@ -654,13 +671,18 @@ fn a_deleted_manifest_keeps_the_old_key_until_the_user_gives_the_count_of_files_
 
     let mut resumed = UnlockedSection::unlock_with_password(&opened.folder, NEW_PASSWORD).unwrap();
     let progress = resumed.continue_reencryption(100).unwrap();
-    let without_count = resumed.finish_reencryption(None);
-    let with_wrong_count = resumed.finish_reencryption(Some(1));
+    let without_acknowledging = resumed.finish_reencryption(finish(Some(2)));
+    let without_count = resumed.finish_reencryption(finish_unverified(None));
+    let with_wrong_count = resumed.finish_reencryption(finish_unverified(Some(1)));
     let is_kept = resumed.is_reencrypting();
-    let with_count = resumed.finish_reencryption(Some(2));
+    let with_count = resumed.finish_reencryption(finish_unverified(Some(2)));
 
     assert!(progress.is_unverifiable);
     assert_eq!((progress.remaining, progress.held_back), (0, 2));
+    assert_eq!(
+        without_acknowledging.err(),
+        Some(ProtectedError::ReencryptionUnverifiable)
+    );
     assert_eq!(
         without_count.err(),
         Some(ProtectedError::ReencryptionUnverifiable)
@@ -696,8 +718,8 @@ fn a_damaged_previous_key_slot_keeps_the_old_key_until_the_user_gives_the_count_
     let mut resumed = UnlockedSection::unlock_with_password(&opened.folder, NEW_PASSWORD).unwrap();
     let progress = resumed.continue_reencryption(100).unwrap();
     let vault_after_the_step = opened.folder.read_vault().unwrap();
-    let without_count = resumed.finish_reencryption(None);
-    let with_count = resumed.finish_reencryption(Some(3));
+    let without_count = resumed.finish_reencryption(finish_unverified(None));
+    let with_count = resumed.finish_reencryption(finish_unverified(Some(3)));
 
     assert!(progress.is_unverifiable);
     assert_eq!(progress.held_back, 3);
@@ -759,7 +781,7 @@ fn an_older_copy_put_back_during_a_re_encryption_holds_the_old_key_until_the_use
 
     let progress = opened.section.continue_reencryption(100).unwrap();
     let is_kept = opened.section.is_reencrypting();
-    opened.section.finish_reencryption(Some(1)).unwrap();
+    opened.section.finish_reencryption(finish(Some(1))).unwrap();
 
     assert_eq!((progress.remaining, progress.held_back), (0, 1));
     assert!(is_kept);
@@ -771,7 +793,7 @@ fn finishing_waits_for_the_recorded_files() {
     let mut opened = section_with_notes();
     start_reencryption(&mut opened);
 
-    let early = opened.section.finish_reencryption(None);
+    let early = opened.section.finish_reencryption(finish(None));
 
     assert_eq!(early.err(), Some(ProtectedError::ReencryptionPending));
     assert!(opened.section.is_reencrypting());
@@ -873,4 +895,64 @@ fn a_recorded_note_whose_file_is_gone_or_cut_short_holds_the_old_key_back() {
 
     assert_eq!((progress.remaining, progress.held_back), (0, 2));
     assert!(opened.section.is_reencrypting());
+}
+
+#[test]
+fn a_recorded_note_replaced_by_a_header_naming_the_new_key_keeps_the_old_key() {
+    let mut opened = section_with_notes();
+    start_reencryption(&mut opened);
+    let (replaced, _) = &opened.notes[0];
+    let header = FileHeader {
+        vault_id: opened.section.vault_id(),
+        data_key_id: opened.section.data_key.id,
+        note_id: note_id_of_file_name(&format!("{replaced}.mdxp")).unwrap(),
+        revision: 2,
+    };
+    fs::write(opened.folder.note_path(replaced), header.to_bytes()).unwrap();
+
+    let progress = opened.section.continue_reencryption(100).unwrap();
+
+    assert_eq!((progress.remaining, progress.held_back), (0, 1));
+    assert!(opened.section.is_reencrypting());
+}
+
+#[test]
+fn an_unverifiable_re_encryption_with_nothing_left_still_needs_the_user_to_acknowledge_it() {
+    let mut opened = section_with_notes();
+    start_reencryption(&mut opened);
+    let previous_id = previous_key_copy(&opened).id;
+    for note_id in opened
+        .section
+        .scan_previous_key_files(previous_id)
+        .unwrap()
+        .pending
+    {
+        opened.section.reseal(&note_id).unwrap();
+    }
+    drop(opened.section);
+    let mut vault = opened.folder.read_vault().unwrap();
+    for slot in vault
+        .slots
+        .iter_mut()
+        .filter(|slot| slot.kind == SlotKind::PreviousKey)
+    {
+        slot.wrapped_key[0] ^= 1;
+    }
+    fs::write(
+        opened.folder.as_ref().join("vault.json"),
+        vault.to_json().unwrap(),
+    )
+    .unwrap();
+
+    let mut resumed = UnlockedSection::unlock_with_password(&opened.folder, NEW_PASSWORD).unwrap();
+    let progress = resumed.continue_reencryption(100).unwrap();
+    let silent = resumed.finish_reencryption(finish(None));
+    let acknowledged = resumed.finish_reencryption(finish_unverified(None));
+
+    assert!(progress.is_unverifiable);
+    assert_eq!(progress.held_back, 0);
+    assert_eq!(silent.err(), Some(ProtectedError::ReencryptionUnverifiable));
+    assert_eq!(acknowledged, Ok(()));
+    assert!(!resumed.is_reencrypting());
+    assert_notes_open(&resumed, &opened.notes);
 }

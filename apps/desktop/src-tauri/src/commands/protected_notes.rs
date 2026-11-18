@@ -19,9 +19,9 @@ use crate::documents::{
 use crate::notes_location::{NOTES_APP_FOLDER, read_marker};
 use crate::protected_notes::{
     FileKind, FolderWarning, KEY_BYTES, KdfParameters, NoteState, ProtectedError, Reencryption,
-    SectionFolder, SectionRecords, SlotKind, UnlockedSection, calibrate, derive_password_key,
-    has_this_pc_device_slot, has_unfinished_reencryption, recovery_key_from_text,
-    recovery_key_text, stored_device_key, unlock_on_this_pc,
+    ReencryptionFinish, SectionFolder, SectionRecords, SlotKind, UnlockedSection, calibrate,
+    derive_password_key, has_this_pc_device_slot, has_unfinished_reencryption,
+    recovery_key_from_text, recovery_key_text, stored_device_key, unlock_on_this_pc,
 };
 use crate::secrets::DeviceSecretStore;
 use crate::storage::WorkspaceDatabase;
@@ -335,6 +335,16 @@ pub struct ReencryptionProgress {
     /// Which files are notes cannot be told: the manifest that records them is lost or the old
     /// key's slot does not open. Restore `manifest.mdxp` or `vault.json` from history first.
     is_unverifiable: bool,
+}
+
+/// The user's word on ending a re-encryption: the number of files left unreadable, as the last step
+/// reported, and, when it cannot be checked, that the user was told to restore the section's files
+/// from history first and finishes anyway.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FinishReencryption {
+    discard_count: Option<usize>,
+    acknowledge_unverifiable: bool,
 }
 
 /// An unlocked section, and a warning when its folder is older than this PC last saw it.
@@ -661,10 +671,10 @@ impl ProtectedNotes {
         &self,
         place: &SectionPlace,
         password: &str,
-        discard_count: Option<usize>,
+        finish: ReencryptionFinish,
     ) -> Answer<()> {
         self.with_current_password(place, password, |section| {
-            Ok(section.finish_reencryption(discard_count)?)
+            Ok(section.finish_reencryption(finish)?)
         })
     }
 
@@ -882,13 +892,17 @@ pub async fn protected_continue_reencryption(
 pub async fn protected_finish_reencryption(
     location: String,
     password: Zeroizing<String>,
-    discard_count: Option<usize>,
+    finish: FinishReencryption,
     window: WebviewWindow,
 ) -> Answer<()> {
     let password = password_of(password)?;
     let place = section_place(&window, &location)?;
     let state = state_of(&window);
-    run_blocking(move || state.finish_reencryption(&place, &password, discard_count)).await?
+    let finish = ReencryptionFinish {
+        discard_count: finish.discard_count,
+        is_unverifiable_acknowledged: finish.acknowledge_unverifiable,
+    };
+    run_blocking(move || state.finish_reencryption(&place, &password, finish)).await?
 }
 
 /// A new recovery key in place of the old one, after the password is confirmed; shown once.

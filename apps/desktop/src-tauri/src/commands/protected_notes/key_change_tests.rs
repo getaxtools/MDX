@@ -31,6 +31,14 @@ fn edit(note_id: &str, text: &str) -> ProtectedNoteEdit {
     }
 }
 
+/// The user's word on finishing a re-encryption that can be checked.
+fn counted(discard_count: Option<usize>) -> ReencryptionFinish {
+    ReencryptionFinish {
+        discard_count,
+        is_unverifiable_acknowledged: false,
+    }
+}
+
 fn change(current: &str, new: &str, reencrypt: bool) -> PasswordChange {
     PasswordChange {
         current_password: Zeroizing::new(current.to_owned()),
@@ -466,10 +474,10 @@ fn finishing_a_re_encryption_that_holds_files_back_needs_the_password_and_the_co
     std::fs::write(&note_file, older_copy).unwrap();
 
     let progress = first_pc.continue_reencryption(&place).unwrap();
-    let wrong_password = first_pc.finish_reencryption(&place, "not the password", Some(1));
-    let without_count = first_pc.finish_reencryption(&place, NEW_PASSWORD, None);
+    let wrong_password = first_pc.finish_reencryption(&place, "not the password", counted(Some(1)));
+    let without_count = first_pc.finish_reencryption(&place, NEW_PASSWORD, counted(None));
     let is_still_reencrypting = first_pc.status(&place).is_reencrypting;
-    let finished = first_pc.finish_reencryption(&place, NEW_PASSWORD, Some(1));
+    let finished = first_pc.finish_reencryption(&place, NEW_PASSWORD, counted(Some(1)));
 
     assert_eq!((progress.remaining, progress.held_back), (0, 1));
     assert_eq!(

@@ -447,7 +447,10 @@ describe('TauriProtectedNotes', () => {
       shouldReencrypt: true,
     });
     await notes.continueReencryption(LOCATION);
-    await notes.finishReencryption(LOCATION, NEW_PASSWORD, 2);
+    await notes.finishReencryption(LOCATION, NEW_PASSWORD, {
+      discardCount: 2,
+      acknowledgeUnverifiable: true,
+    });
     await notes.newRecoveryKey(LOCATION, PASSWORD);
     return revision;
   }
@@ -490,7 +493,7 @@ describe('TauriProtectedNotes', () => {
     expect(calls.find((call) => call.command === 'protected_finish_reencryption')?.args).toEqual({
       location: LOCATION,
       password: NEW_PASSWORD,
-      discardCount: 2,
+      finish: { discardCount: 2, acknowledgeUnverifiable: true },
     });
     expect(calls.find((call) => call.command === 'protected_change_password')?.args).toEqual({
       location: LOCATION,

@@ -25,7 +25,7 @@ use crate::secrets::{DeviceSecretStore, SecretName};
 
 mod key_changes;
 
-pub use key_changes::Reencryption;
+pub use key_changes::{Reencryption, ReencryptionFinish};
 
 const NOTES_FOLDER: &str = "notes";
 const STAGED_MANIFEST_FILE_NAME: &str = "manifest.mdxp.staged";
@@ -49,6 +49,8 @@ pub struct UnlockedSection {
     previous_key: Option<DataKey>,
     /// Files a re-encryption found damaged in this session, so it does not try them again.
     damaged_during_reencryption: HashSet<String>,
+    /// Notes a re-encryption sealed again in this session, known to open with the current key.
+    sealed_during_reencryption: HashSet<String>,
     manifest: Manifest,
     states: Vec<(String, NoteState)>,
     /// The password slot the typed password opened, when the section was unlocked with one.
@@ -227,6 +229,7 @@ impl SectionFolder {
             data_key: created.data_key,
             previous_key: None,
             damaged_during_reencryption: HashSet::new(),
+            sealed_during_reencryption: HashSet::new(),
             manifest,
             states: Vec::new(),
             opened_with_password_slot: None,
@@ -302,6 +305,7 @@ impl UnlockedSection {
             data_key,
             previous_key,
             damaged_during_reencryption: HashSet::new(),
+            sealed_during_reencryption: HashSet::new(),
             manifest,
             states: Vec::new(),
             opened_with_password_slot: None,

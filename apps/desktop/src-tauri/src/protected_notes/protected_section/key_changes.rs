@@ -45,6 +45,15 @@ pub struct Reencryption {
     pub is_unverifiable: bool,
 }
 
+/// The user's word on ending a re-encryption that holds files back: the number of files it leaves
+/// unreadable, as the last step reported, and, when which files are notes cannot be told, that the
+/// user was asked to restore the section's files from history first and finishes anyway.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ReencryptionFinish {
+    pub discard_count: Option<usize>,
+    pub is_unverifiable_acknowledged: bool,
+}
+
 /// What unlocks the section after a re-encryption: a new password with its measured settings, a new
 /// recovery key, and this PC's device key when it remembers the section.
 pub struct NewUnlocks<'unlocks> {
@@ -389,7 +398,7 @@ impl UnlockedSection {
     /// files it would leave unreadable, as the last step reported, so nothing is dropped unseen.
     pub fn finish_reencryption(
         &mut self,
-        discard_count: Option<usize>,
+        finish: ReencryptionFinish,
     ) -> Result<(), ProtectedError> {
         if !self.is_reencrypting() {
             return Ok(());
@@ -402,9 +411,10 @@ impl UnlockedSection {
                 }
                 scan.held_back
             }
-            None => self.previous_key_header_count()?,
+            None if finish.is_unverifiable_acknowledged => self.previous_key_header_count()?,
+            None => return Err(ProtectedError::ReencryptionUnverifiable),
         };
-        if left_behind > 0 && discard_count != Some(left_behind) {
+        if left_behind > 0 && finish.discard_count != Some(left_behind) {
             return Err(ProtectedError::ReencryptionUnverifiable);
         }
         self.end_reencryption()
@@ -517,7 +527,11 @@ impl UnlockedSection {
                 self.sealed_key_id(&path)?
             };
             match key_id {
-                Some(id) if id == self.data_key.id => {}
+                Some(id) if id == self.data_key.id => {
+                    if !self.is_sealed_with_current_key(note_id, &path)? {
+                        scan.held_back += 1;
+                    }
+                }
                 Some(id)
                     if id == previous_id && self.is_as_recorded(note_id, &fs::read(&path)?) =>
                 {
@@ -550,6 +564,29 @@ impl UnlockedSection {
             }
         }
         Ok(())
+    }
+
+    /// Whether a note's file opens with the current key: its header alone proves nothing, as anyone
+    /// can write one. Files this re-encryption sealed itself are known to.
+    fn is_sealed_with_current_key(
+        &self,
+        note_id: &str,
+        path: &Path,
+    ) -> Result<bool, ProtectedError> {
+        if self.sealed_during_reencryption.contains(note_id) {
+            return Ok(true);
+        }
+        let bytes = fs::read(path).map_err(|_| ProtectedError::Storage)?;
+        let Ok(id) = super::bytes_of_hex(note_id) else {
+            return Ok(false);
+        };
+        Ok(open_file(
+            &bytes,
+            &self.data_key,
+            &self.vault.vault_id,
+            &ExpectedFile::note(id),
+        )
+        .is_ok())
     }
 
     /// Whether a note's file is, byte for byte, the one the re-encryption recorded at its start.
@@ -605,6 +642,7 @@ impl UnlockedSection {
         };
         let sealed = seal_file(&header, &opened.metadata, &opened.content, &self.data_key)?;
         write_bytes_atomically(&path, &sealed).map_err(|_| ProtectedError::Storage)?;
+        self.sealed_during_reencryption.insert(note_id.to_owned());
         Ok(Resealed::Done)
     }
 }
