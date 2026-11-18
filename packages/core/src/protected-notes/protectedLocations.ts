@@ -1,7 +1,8 @@
 import { isProtectedNoteLocation, type DocumentLocation } from '@mdx/platform';
 
 /** Where a protected section keeps its encrypted files, inside its notes location. */
-const SECTION_FOLDER_PARTS = ['.mdx-notes', 'protected'];
+const APP_FOLDER = '.mdx-notes';
+const SECTION_FOLDER = 'protected';
 
 function pathParts(path: string): string[] {
   return path
@@ -10,12 +11,18 @@ function pathParts(path: string): string[] {
     .map((part) => part.toLowerCase());
 }
 
+/**
+ * The section's folder, or a copy of it set aside beside it, such as `protected.replaced-1` or
+ * `protected.restoring-1` during a restore; each holds the same encrypted files.
+ */
+function isSectionFolderName(part: string | undefined): boolean {
+  return part === SECTION_FOLDER || (part?.startsWith(`${SECTION_FOLDER}.`) ?? false);
+}
+
 /** Whether a path is a protected section's folder or lies inside one, in any notes location. */
 export function isInsideProtectedSection(path: string): boolean {
   const parts = pathParts(path);
-  return parts.some((part, index) =>
-    SECTION_FOLDER_PARTS.every((sectionPart, offset) => parts[index + offset] === sectionPart),
-  );
+  return parts.some((part, index) => part === APP_FOLDER && isSectionFolderName(parts[index + 1]));
 }
 
 /**

@@ -44,13 +44,14 @@ impl SectionFolder {
     /// there and still no section has appeared; a folder in the way is set aside, never deleted.
     /// The section then unlocks with the password or recovery key it had when it was backed up.
     pub fn restore_from(&self, backup: &Path) -> Result<(), ProtectedError> {
-        self.restore_from_with(backup, || {})
+        self.restore_from_with(backup, || {}, &|from, to| fs::rename(from, to))
     }
 
     fn restore_from_with(
         &self,
         backup: &Path,
         before_swap: impl FnOnce(),
+        rename: &dyn Fn(&Path, &Path) -> std::io::Result<()>,
     ) -> Result<(), ProtectedError> {
         let source = self.checked_backup(backup)?;
         let files = source.section_files()?;
@@ -61,7 +62,7 @@ impl SectionFolder {
         let restored = copy_checked(backup, &staging, &files).and_then(|()| {
             before_swap();
             self.refuse_a_section_here()?;
-            self.swap_in(parent, &staging)
+            self.swap_in(parent, &staging, rename)
         });
         if restored.is_err() {
             let _ = fs::remove_dir_all(&staging);
@@ -72,10 +73,10 @@ impl SectionFolder {
     /// The backup as a section, once its folders are plain folders and it has a vault, and once
     /// there is no section here to replace.
     fn checked_backup(&self, backup: &Path) -> Result<Self, ProtectedError> {
-        ensure_plain(backup, true)?;
+        ensure_plain_folder(backup)?;
         let notes = backup.join(NOTES_FOLDER);
         if fs::symlink_metadata(&notes).is_ok() {
-            ensure_plain(&notes, true)?;
+            ensure_plain_folder(&notes)?;
         }
         let source = Self::new(backup.to_path_buf());
         source.read_vault()?;
@@ -97,13 +98,28 @@ impl SectionFolder {
         }
     }
 
-    /// Moves whatever is where the section goes aside, then the restored folder into its place.
-    fn swap_in(&self, parent: &Path, staging: &Path) -> Result<(), ProtectedError> {
-        if fs::symlink_metadata(&self.folder).is_ok() {
+    /// Moves whatever is where the section goes aside, then the restored folder into its place; if
+    /// that fails, what was set aside goes back.
+    fn swap_in(
+        &self,
+        parent: &Path,
+        staging: &Path,
+        rename: &dyn Fn(&Path, &Path) -> std::io::Result<()>,
+    ) -> Result<(), ProtectedError> {
+        let aside = if fs::symlink_metadata(&self.folder).is_ok() {
             let aside = free_name(parent, |number| self.beside_name(REPLACED_SUFFIX, number))?;
-            fs::rename(&self.folder, aside).map_err(|_| ProtectedError::Storage)?;
+            rename(&self.folder, &aside).map_err(|_| ProtectedError::Storage)?;
+            Some(aside)
+        } else {
+            None
+        };
+        if rename(staging, &self.folder).is_ok() {
+            return Ok(());
         }
-        fs::rename(staging, &self.folder).map_err(|_| ProtectedError::Storage)
+        if let Some(aside) = aside {
+            let _ = rename(&aside, &self.folder);
+        }
+        Err(ProtectedError::Storage)
     }
 
     /// `protected.restoring-1`, `protected.replaced-2` and so on, beside the section's folder.
@@ -134,16 +150,11 @@ impl SectionFolder {
     }
 }
 
-/// Refuses a symbolic link, a junction or any other reparse point, and a folder or file that is
-/// not what is expected, so a crafted backup cannot make MDX read or write somewhere else.
-fn ensure_plain(path: &Path, is_folder: bool) -> Result<(), ProtectedError> {
+/// Refuses a symbolic link, a junction or any other reparse point, and anything but a folder, so a
+/// crafted backup cannot make MDX read somewhere else.
+fn ensure_plain_folder(path: &Path) -> Result<(), ProtectedError> {
     let metadata = fs::symlink_metadata(path).map_err(|_| ProtectedError::NotSetUp)?;
-    let is_expected = if is_folder {
-        metadata.is_dir()
-    } else {
-        metadata.is_file()
-    };
-    if !is_expected || metadata.file_type().is_symlink() || is_reparse_point(&metadata) {
+    if !metadata.is_dir() || metadata.file_type().is_symlink() || is_reparse_point(&metadata) {
         return Err(ProtectedError::Tampered);
     }
     Ok(())
@@ -159,6 +170,23 @@ fn is_reparse_point(metadata: &fs::Metadata) -> bool {
 #[cfg(not(windows))]
 fn is_reparse_point(_metadata: &fs::Metadata) -> bool {
     false
+}
+
+/// Opens a link itself rather than what it points at, so the checks on the open handle see what is
+/// really there and nothing can be swapped in between a check and the read.
+#[cfg(windows)]
+fn open_not_following_links(path: &Path) -> std::io::Result<File> {
+    use std::os::windows::fs::OpenOptionsExt;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)
+}
+
+#[cfg(not(windows))]
+fn open_not_following_links(path: &Path) -> std::io::Result<File> {
+    File::open(path)
 }
 
 #[cfg(windows)]
@@ -232,9 +260,9 @@ fn copy_checked(from: &Path, to: &Path, files: &[PathBuf]) -> Result<(), Protect
 /// Reads one plain file, never a link, no larger than a section file can be; one byte past the
 /// limit is read, so a file that grew after it was checked is refused, not cut.
 fn read_section_file(path: &Path) -> Result<Vec<u8>, ProtectedError> {
-    ensure_plain(path, false)?;
-    let file = File::open(path).map_err(|_| ProtectedError::Storage)?;
-    if is_hard_link(&file)? {
+    let file = open_not_following_links(path).map_err(|_| ProtectedError::Storage)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file() || is_reparse_point(&metadata) || is_hard_link(&file)? {
         return Err(ProtectedError::Tampered);
     }
     let mut bytes = Vec::new();

@@ -20,11 +20,13 @@ mod registry;
 mod session_events;
 #[cfg(windows)]
 mod volumes;
+#[cfg(windows)]
+mod webview_settings;
 
 #[cfg(windows)]
 pub use clipboard::read_clipboard_text;
 #[cfg(windows)]
-pub use file_links::link_count_of;
+pub use file_links::{delete_open_file, link_count_of};
 #[cfg(windows)]
 pub use jump_list::{JumpListEntry, JumpListOutcome, JumpListUpdate, show_jump_list_category};
 #[cfg(windows)]
@@ -37,3 +39,5 @@ pub use registry::{RegistryRoot, read_registry_number};
 pub use session_events::{ShellEvent, ShellEventWatcher, watch_shell_events};
 #[cfg(windows)]
 pub use volumes::volume_name_of;
+#[cfg(windows)]
+pub use webview_settings::turn_off_browser_keys;

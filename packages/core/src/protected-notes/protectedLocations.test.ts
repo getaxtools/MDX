@@ -27,6 +27,14 @@ describe('protected locations', () => {
     expect(isInsideProtectedSection(String.raw`E:\Notes\.mdx-notes\protected`)).toBe(true);
   });
 
+  it('a section folder set aside or being restored is protected too', () => {
+    expect(isInsideProtectedSection(String.raw`E:\Notes\.mdx-notes\protected.replaced-1\notes\a.mdxp`)).toBe(
+      true,
+    );
+    expect(isInsideProtectedSection('E:/Notes/.mdx-notes/Protected.Restoring-2/vault.json')).toBe(true);
+    expect(isInsideProtectedSection(String.raw`E:\Notes\.mdx-notes\protectedness\Plan.md`)).toBe(false);
+  });
+
   it('plain notes, even ones named like the section, are not protected', () => {
     for (const path of [
       String.raw`E:\Notes\Plan.md`,

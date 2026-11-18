@@ -117,10 +117,14 @@ fn a_section_that_appears_while_a_backup_is_restored_is_kept() {
     let backed_up = backed_up();
     let target = backed_up.restored.as_ref().to_path_buf();
 
-    let restored = backed_up.restored.restore_from_with(&backed_up.backup, || {
-        fs::create_dir_all(target.join(NOTES_FOLDER)).unwrap();
-        fs::write(target.join(VAULT_FILE_NAME), b"a section set up meanwhile").unwrap();
-    });
+    let restored = backed_up.restored.restore_from_with(
+        &backed_up.backup,
+        || {
+            fs::create_dir_all(target.join(NOTES_FOLDER)).unwrap();
+            fs::write(target.join(VAULT_FILE_NAME), b"a section set up meanwhile").unwrap();
+        },
+        &|from, to| fs::rename(from, to),
+    );
 
     assert_eq!(restored.err(), Some(ProtectedError::AlreadySetUp));
     assert_eq!(
@@ -187,4 +191,30 @@ fn a_copy_needs_twice_its_size_free() {
     assert!(has_room(10, 20));
     assert!(!has_room(10, 19));
     assert!(!has_room(u64::MAX, u64::MAX));
+}
+
+#[test]
+fn a_folder_set_aside_goes_back_when_the_restored_one_cannot_take_its_place() {
+    let backed_up = backed_up();
+    let target = backed_up.restored.as_ref().to_path_buf();
+    fs::create_dir_all(&target).unwrap();
+    fs::write(target.join("left here.txt"), b"kept").unwrap();
+
+    let restored = backed_up
+        .restored
+        .restore_from_with(&backed_up.backup, || {}, &|from, to| {
+            if from
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .contains(".restoring-")
+            {
+                return Err(std::io::ErrorKind::PermissionDenied.into());
+            }
+            fs::rename(from, to)
+        });
+
+    assert_eq!(restored.err(), Some(ProtectedError::Storage));
+    assert_eq!(fs::read(target.join("left here.txt")).unwrap(), b"kept");
+    assert_eq!(entries_beside(&backed_up.restored), ["protected"]);
 }

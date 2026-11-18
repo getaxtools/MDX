@@ -37,6 +37,8 @@ windows = { version = "0.62.2", features = [
 ] }
 # The `implement` macro that builds the progress sink names this crate; already in the lock with windows.
 windows-core = "0.62.2"
+# Turn off the webview's own keys (print, reload, find); the version wry already uses, so no second copy.
+webview2-com = "=0.39.1"
 
 [target.'cfg(windows)'.dev-dependencies]
 tempfile = "3.27.0"

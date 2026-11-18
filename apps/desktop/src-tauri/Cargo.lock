@@ -2442,6 +2442,7 @@ dependencies = [
 name = "mdx-native-windows"
 version = "0.8.1"
 dependencies = [
+ "webview2-com",
  "windows",
  "windows-core",
 ]

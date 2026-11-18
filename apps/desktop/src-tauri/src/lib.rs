@@ -1,6 +1,8 @@
 mod app_setup;
 mod app_windows;
 mod attachments;
+#[cfg(windows)]
+mod browser_keys;
 mod commands;
 mod document_images;
 mod documents;
@@ -68,6 +70,8 @@ fn with_plugins(builder: Builder<Wry>) -> Builder<Wry> {
         ))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init());
+    #[cfg(windows)]
+    let builder = builder.plugin(browser_keys::plugin());
     with_ui_test_driver(builder)
 }
 
