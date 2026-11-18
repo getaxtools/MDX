@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 
 use super::ProtectedError;
 use super::hex_text::{bytes_of_hex, hex_of};
-use super::key_slots::{SlotKind, VAULT_ID_BYTES};
+use super::key_slots::{SLOT_ID_BYTES, SlotKind, VAULT_ID_BYTES};
 use super::vault_file::Vault;
 use crate::documents::write_bytes_atomically;
 
@@ -72,6 +72,9 @@ pub struct SectionRecords {
 #[serde(rename_all = "camelCase")]
 struct SavedRecords {
     sections: BTreeMap<String, SavedRecord>,
+    /// The id of the device slot this PC remembers each section with, by vault id; never a secret.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    this_pc_device_slots: BTreeMap<String, String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -144,7 +147,51 @@ impl SectionRecords {
                 slot_ids: seen.slot_ids.clone(),
             },
         );
-        if let Ok(bytes) = serde_json::to_vec_pretty(&records) {
+        self.save(&records);
+    }
+
+    /// Notes which device slot this PC remembers a section with, or that it remembers none.
+    pub fn note_this_pc_device_slot(
+        &self,
+        vault_id: &[u8; VAULT_ID_BYTES],
+        slot_id: Option<&[u8; SLOT_ID_BYTES]>,
+    ) {
+        let _one_at_a_time = self
+            .one_at_a_time
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let mut records = match self.load() {
+            LoadedRecords::Readable(records) => records,
+            LoadedRecords::SetAside => SavedRecords::default(),
+        };
+        let vault = hex_of(vault_id);
+        let previous = match slot_id {
+            Some(slot_id) => records.this_pc_device_slots.insert(vault, hex_of(slot_id)),
+            None => records.this_pc_device_slots.remove(&vault),
+        };
+        if previous != slot_id.map(|slot_id| hex_of(slot_id)) {
+            self.save(&records);
+        }
+    }
+
+    /// The id of the device slot this PC remembers a section with, as noted; none when it has not
+    /// noted one or the records cannot be read.
+    pub fn this_pc_device_slot(&self, vault_id: &[u8; VAULT_ID_BYTES]) -> Option<String> {
+        let _one_at_a_time = self
+            .one_at_a_time
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        match self.load() {
+            LoadedRecords::Readable(mut records) => {
+                records.this_pc_device_slots.remove(&hex_of(vault_id))
+            }
+            LoadedRecords::SetAside => None,
+        }
+    }
+
+    /// Writes the records; a failure to write leaves the old file.
+    fn save(&self, records: &SavedRecords) {
+        if let Ok(bytes) = serde_json::to_vec_pretty(records) {
             let _ = write_bytes_atomically(&self.path, &bytes);
         }
     }
@@ -233,6 +280,25 @@ mod tests {
             records.warning_for(&VAULT, &seen(5, 1, &["password"])),
             None
         );
+    }
+
+    #[test]
+    fn the_device_slot_this_pc_remembers_a_section_with_is_kept_beside_its_record() {
+        let folder = tempfile::tempdir().unwrap();
+        let records = records_in(&folder);
+        let other_vault = [8; VAULT_ID_BYTES];
+
+        records.note_this_pc_device_slot(&VAULT, Some(&[3; SLOT_ID_BYTES]));
+        records.remember(&VAULT, &seen(5, 1, &["a"]));
+        records.note_this_pc_device_slot(&other_vault, Some(&[4; SLOT_ID_BYTES]));
+        records.note_this_pc_device_slot(&other_vault, None);
+
+        assert_eq!(
+            records.this_pc_device_slot(&VAULT),
+            Some(hex_of(&[3; SLOT_ID_BYTES]))
+        );
+        assert_eq!(records.this_pc_device_slot(&other_vault), None);
+        assert_eq!(records.warning_for(&VAULT, &seen(5, 1, &["a"])), None);
     }
 
     #[test]

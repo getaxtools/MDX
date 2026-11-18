@@ -332,3 +332,31 @@ fn changes_wait_while_a_folder_warning_is_not_answered() {
     assert_eq!(refused.err(), Some(ProtectedCommandError::InvalidRequest));
     assert!(accepted.is_ok());
 }
+
+#[test]
+fn can_unlock_on_this_pc_tells_this_pcs_own_slot_with_two_pcs_remembered() {
+    let (folder, place, first_pc, _notes, _recovery) = section_with_notes(1);
+    let second_pc = pc(folder.path(), "second");
+    let third_pc = pc(folder.path(), "third");
+    let _ = first_pc.lock(&place);
+    first_pc.unlock(&place, OLD_PASSWORD, true).unwrap();
+    second_pc.unlock(&place, OLD_PASSWORD, true).unwrap();
+    let can_unlock = |pc: &ProtectedNotes| pc.status(&place).can_unlock_on_this_pc;
+    let while_both = [
+        can_unlock(&first_pc),
+        can_unlock(&second_pc),
+        can_unlock(&third_pc),
+    ];
+
+    second_pc.forget_this_pc(&place).unwrap();
+    let after_forgetting = [can_unlock(&first_pc), can_unlock(&second_pc)];
+    first_pc
+        .change_password(&place, &change(OLD_PASSWORD, NEW_PASSWORD, true), QUICK)
+        .unwrap();
+
+    assert_eq!(while_both, [true, true, false]);
+    assert_eq!(after_forgetting, [true, false]);
+    assert!(can_unlock(&first_pc));
+    let _ = first_pc.lock(&place);
+    assert!(first_pc.unlock_on_this_pc(&place).is_ok());
+}

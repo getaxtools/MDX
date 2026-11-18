@@ -29,7 +29,7 @@ pub use key_slots::{
 pub use manifest::{MANIFEST_FILE_NAME, MAX_MANIFEST_ENTRIES, Manifest, ManifestEntry, NoteState};
 pub use protected_error::ProtectedError;
 pub use protected_section::{
-    NoteSummary, OpenedNote, Reencryption, SectionFolder, UnlockedSection, has_device_slot,
+    NoteSummary, OpenedNote, Reencryption, SectionFolder, UnlockedSection, has_this_pc_device_slot,
     has_unfinished_reencryption, stored_device_key, unlock_on_this_pc,
 };
 pub use random::{random_bytes, random_key};

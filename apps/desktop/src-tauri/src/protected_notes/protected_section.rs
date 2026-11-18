@@ -556,6 +556,15 @@ impl UnlockedSection {
             .map_err(|_| ProtectedError::SecretStoreUnavailable)
     }
 
+    /// The id of the device slot made for this device key, if the vault has one.
+    pub fn device_slot_id_for(&self, device_key: &[u8; KEY_BYTES]) -> Option<[u8; 16]> {
+        self.vault
+            .slots
+            .iter()
+            .find(|slot| is_device_slot_of(slot, Some(device_key)))
+            .map(|slot| slot.slot_id)
+    }
+
     pub fn is_remembered(&self) -> bool {
         self.vault
             .slots
@@ -616,11 +625,20 @@ pub fn has_unfinished_reencryption(folder: &SectionFolder) -> bool {
     })
 }
 
-/// Whether the folder holds a vault that this PC remembers, without reading any secret.
-pub fn has_device_slot(folder: &SectionFolder) -> bool {
-    folder
-        .read_vault()
-        .is_ok_and(|vault| vault.slots.iter().any(|slot| slot.kind == SlotKind::Device))
+/// Whether the folder's vault still has the device slot this PC noted it remembers the section
+/// with; no secret is read.
+pub fn has_this_pc_device_slot(
+    folder: &SectionFolder,
+    noted_slot: impl FnOnce(&[u8; 16]) -> Option<String>,
+) -> bool {
+    folder.read_vault().is_ok_and(|vault| {
+        noted_slot(&vault.vault_id).is_some_and(|noted| {
+            vault
+                .slots
+                .iter()
+                .any(|slot| slot.kind == SlotKind::Device && hex_of(&slot.slot_id) == noted)
+        })
+    })
 }
 
 impl AsRef<Path> for SectionFolder {
@@ -721,6 +739,15 @@ mod tests {
         ));
     }
 
+    fn has_any_device_slot(folder: &SectionFolder) -> bool {
+        folder
+            .read_vault()
+            .unwrap()
+            .slots
+            .iter()
+            .any(|slot| slot.kind == SlotKind::Device)
+    }
+
     #[test]
     fn a_remembered_pc_unlocks_without_the_password_until_it_is_forgotten() {
         let (_root, folder) = new_section();
@@ -732,7 +759,7 @@ mod tests {
             Err(ProtectedError::NotRemembered)
         ));
         section.remember_on_this_pc(&store).unwrap();
-        assert!(has_device_slot(&folder));
+        assert!(has_any_device_slot(&folder));
         let mut remembered = unlock_on_this_pc(&folder, &store).unwrap();
         let stored = store
             .load(&SecretName::for_vault(&remembered.vault_id()))
@@ -746,7 +773,7 @@ mod tests {
 
         remembered.forget_this_pc(&store).unwrap();
 
-        assert!(!has_device_slot(&folder));
+        assert!(!has_any_device_slot(&folder));
         assert!(matches!(
             unlock_on_this_pc(&folder, &store),
             Err(ProtectedError::NotRemembered)

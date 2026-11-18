@@ -20,8 +20,8 @@ use crate::notes_location::{NOTES_APP_FOLDER, read_marker};
 use crate::protected_notes::{
     FileKind, FolderWarning, KEY_BYTES, KdfParameters, NoteState, ProtectedError, Reencryption,
     SectionFolder, SectionRecords, SlotKind, UnlockedSection, calibrate, derive_password_key,
-    has_device_slot, has_unfinished_reencryption, recovery_key_from_text, recovery_key_text,
-    stored_device_key, unlock_on_this_pc,
+    has_this_pc_device_slot, has_unfinished_reencryption, recovery_key_from_text,
+    recovery_key_text, stored_device_key, unlock_on_this_pc,
 };
 use crate::secrets::DeviceSecretStore;
 use crate::storage::WorkspaceDatabase;
@@ -87,7 +87,22 @@ impl ProtectedNotes {
         if folder_warning.is_none() {
             self.finish_stopped_password_change(place)?;
         }
+        self.note_this_pc_device_slot(place)?;
         Ok(UnlockAnswer { folder_warning })
+    }
+
+    /// Notes which device slot this PC remembers the section with, after anything that may have
+    /// added, removed or remade it, so the status can tell without reading the secret.
+    fn note_this_pc_device_slot(&self, place: &SectionPlace) -> Answer<()> {
+        self.with_section(place, |section| {
+            let vault_id = section.vault_id();
+            let slot_id = self
+                .this_pc_key(&vault_id)
+                .and_then(|key| section.device_slot_id_for(&key));
+            self.records
+                .note_this_pc_device_slot(&vault_id, slot_id.as_ref());
+            Ok(())
+        })
     }
 
     /// This PC's remembered device key for a vault, when it has one; none when the store cannot be
@@ -258,7 +273,8 @@ pub type Answer<T> = Result<T, ProtectedCommandError>;
 pub struct ProtectedStatus {
     is_set_up: bool,
     is_unlocked: bool,
-    /// The vault has a slot for this PC; whether its key is still stored is known only on unlock.
+    /// The vault still has the device slot this PC noted when it was remembered; whether its key is
+    /// still stored is known only on unlock.
     can_unlock_on_this_pc: bool,
     /// A re-encryption is not finished; it goes on once the section is unlocked.
     is_reencrypting: bool,
@@ -453,7 +469,9 @@ impl ProtectedNotes {
         ProtectedStatus {
             is_set_up: place.folder.is_set_up(),
             is_unlocked: self.sections().contains_key(&place.location_key),
-            can_unlock_on_this_pc: has_device_slot(&place.folder),
+            can_unlock_on_this_pc: has_this_pc_device_slot(&place.folder, |vault_id| {
+                self.records.this_pc_device_slot(vault_id)
+            }),
             is_reencrypting: has_unfinished_reencryption(&place.folder),
         }
     }
@@ -483,6 +501,7 @@ impl ProtectedNotes {
             self.with_section(place, |section| {
                 Ok(section.remember_on_this_pc(self.secrets.as_ref())?)
             })?;
+            self.note_this_pc_device_slot(place)?;
         }
         Ok(answer)
     }
@@ -555,6 +574,7 @@ impl ProtectedNotes {
                         this_pc_key.as_deref(),
                     )?)
                 })?;
+            self.note_this_pc_device_slot(place)?;
             return Ok(PasswordChangeAnswer {
                 recovery_key: Some(recovery_key_text(&recovery_key).to_string()),
             });
@@ -566,6 +586,7 @@ impl ProtectedNotes {
             Ok(())
         })?;
         self.replace_password(place, &change.new_password, parameters)?;
+        self.note_this_pc_device_slot(place)?;
         Ok(PasswordChangeAnswer { recovery_key: None })
     }
 
@@ -594,7 +615,8 @@ impl ProtectedNotes {
     fn forget_this_pc(&self, place: &SectionPlace) -> Answer<()> {
         self.with_section(place, |section| {
             Ok(section.forget_this_pc(self.secrets.as_ref())?)
-        })
+        })?;
+        self.note_this_pc_device_slot(place)
     }
 
     /// Returns whether the section was unlocked.
