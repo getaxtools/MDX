@@ -1,5 +1,7 @@
+import type { DocumentLocation } from '../DocumentLocation';
 import {
   ProtectedNotesError,
+  type MoveInResult,
   type NewProtectedNote,
   type PasswordChange,
   type PasswordChangeResult,
@@ -8,6 +10,8 @@ import {
   type ProtectedNoteSummary,
   type ProtectedNoteText,
   type ProtectedNotesLockedListener,
+  type ProtectedMoveIn,
+  type ProtectedMoveOut,
   type ProtectedNotesLockRequestListener,
   type ProtectedNotesPort,
   type ProtectedStatus,
@@ -20,6 +24,8 @@ const HEX_RADIX = 16;
 const NOTE_ID_LENGTH = 32;
 const RECOVERY_NUMBER_LENGTH = 4;
 const NOTE_ID = /^[0-9a-f]{32}$/;
+const MARKDOWN_EXTENSION = '.md';
+const MAX_NAME_ATTEMPTS = 20;
 
 interface StoredNote {
   readonly summary: ProtectedNoteSummary;
@@ -45,6 +51,8 @@ export class InMemoryProtectedNotes implements ProtectedNotesPort {
   private readonly sections = new Map<string, Section>();
   private readonly lockListeners = new Set<ProtectedNotesLockedListener>();
   private readonly lockRequestListeners = new Set<ProtectedNotesLockRequestListener>();
+  /** The plain notes of every notes location, by path, which notes move in from and out to. */
+  readonly plainNotes = new Map<string, string>();
   private nextNote = 0;
   private recoveryKeyCount = 0;
   private clock = FIRST_TIME_MS;
@@ -200,6 +208,49 @@ export class InMemoryProtectedNotes implements ProtectedNotesPort {
   async create(location: string, { title, folder }: NewProtectedNote): Promise<string> {
     const section = await this.unlockedSectionOf(location);
     if (title.trim() === '') return refused('invalidRequest');
+    return this.addNote(section, { title, folder }, '');
+  }
+
+  async moveIn(
+    location: string,
+    { notePath, intoFolder, isConfirmed }: ProtectedMoveIn,
+  ): Promise<MoveInResult> {
+    if (!isConfirmed) return refused('invalidRequest');
+    if (!notePath.startsWith(`${location}\\`)) return refused('accessDenied');
+    const text = this.plainNotes.get(notePath);
+    if (text === undefined) return refused('notFound');
+    const section = await this.unlockedSectionOf(location);
+    const title = fileNameOf(notePath).slice(0, -MARKDOWN_EXTENSION.length);
+    const noteId = this.addNote(section, { title, folder: intoFolder }, text);
+    this.plainNotes.delete(notePath);
+    return { noteId, isPlainCopyKept: false };
+  }
+
+  async moveOut(
+    location: string,
+    { noteId, intoFolder, isConfirmed }: ProtectedMoveOut,
+  ): Promise<DocumentLocation> {
+    if (!isConfirmed || !NOTE_ID.test(noteId)) return refused('invalidRequest');
+    if (intoFolder !== location && !intoFolder.startsWith(`${location}\\`)) return refused('accessDenied');
+    const section = await this.unlockedSectionOf(location);
+    const note = section.notes.get(noteId);
+    if (!note) return refused('notFound');
+    const path = this.freePlainNotePath(intoFolder, note.summary.title);
+    if (path === undefined) return refused('invalidRequest');
+    this.plainNotes.set(path, note.text);
+    section.notes.delete(noteId);
+    return { canonicalKey: path.toLowerCase(), displayPath: path, fileName: fileNameOf(path) };
+  }
+
+  private freePlainNotePath(folder: string, title: string): string | undefined {
+    const names = [title];
+    for (let number = 2; number <= MAX_NAME_ATTEMPTS; number += 1) names.push(`${title} ${String(number)}`);
+    return names
+      .map((name) => `${folder}\\${name}${MARKDOWN_EXTENSION}`)
+      .find((path) => !this.plainNotes.has(path));
+  }
+
+  private addNote(section: Section, { title, folder }: NewProtectedNote, text: string): string {
     this.nextNote += 1;
     const noteId = this.nextNote.toString(HEX_RADIX).padStart(NOTE_ID_LENGTH, '0');
     const summary: ProtectedNoteSummary = {
@@ -210,7 +261,7 @@ export class InMemoryProtectedNotes implements ProtectedNotesPort {
       modifiedMs: this.tick(),
       state: 'current',
     };
-    section.notes.set(noteId, { summary, text: '', revision: 1 });
+    section.notes.set(noteId, { summary, text, revision: 1 });
     return noteId;
   }
 
@@ -264,6 +315,10 @@ export class InMemoryProtectedNotes implements ProtectedNotesPort {
     this.clock += 1;
     return this.clock;
   }
+}
+
+function fileNameOf(path: string): string {
+  return path.slice(path.lastIndexOf('\\') + 1);
 }
 
 /** Characters as the native layer counts them: Unicode code points. */

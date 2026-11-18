@@ -381,6 +381,7 @@ describe('TauriProtectedNotes', () => {
   const PASSWORD = 'correct horse battery';
   const NEW_PASSWORD = 'staple tuna lighthouse';
   const NOTE_ID = 'a'.repeat(32);
+  const PLAIN_NOTE = 'C:\\Notes\\Bank details.md';
 
   function mockProtectedCommands() {
     return mockCommands({
@@ -419,6 +420,12 @@ describe('TauriProtectedNotes', () => {
       }),
       protected_finish_reencryption: () => null,
       protected_new_recovery_key: () => ({ recoveryKey: 'QRST-UVWX' }),
+      protected_move_in: () => ({ noteId: NOTE_ID, isPlainCopyKept: false }),
+      protected_move_out: () => ({
+        canonicalKey: 'c:\\notes\\bank details.md',
+        displayPath: 'C:\\Notes\\Bank details.md',
+        fileName: 'Bank details.md',
+      }),
     });
   }
 
@@ -452,6 +459,8 @@ describe('TauriProtectedNotes', () => {
       acknowledgeUnverifiable: true,
     });
     await notes.newRecoveryKey(LOCATION, PASSWORD);
+    await notes.moveIn(LOCATION, { notePath: PLAIN_NOTE, intoFolder: 'Finance', isConfirmed: true });
+    await notes.moveOut(LOCATION, { noteId: NOTE_ID, intoFolder: LOCATION, isConfirmed: true });
     return revision;
   }
 
@@ -478,6 +487,8 @@ describe('TauriProtectedNotes', () => {
       'protected_continue_reencryption',
       'protected_finish_reencryption',
       'protected_new_recovery_key',
+      'protected_move_in',
+      'protected_move_out',
     ]);
     const withPassword = calls
       .filter((call) => JSON.stringify(call.args).includes(PASSWORD))
@@ -494,6 +505,14 @@ describe('TauriProtectedNotes', () => {
       location: LOCATION,
       password: NEW_PASSWORD,
       finish: { discardCount: 2, acknowledgeUnverifiable: true },
+    });
+    expect(calls.find((call) => call.command === 'protected_move_in')?.args).toEqual({
+      location: LOCATION,
+      request: { note: PLAIN_NOTE, intoFolder: 'Finance', confirmed: true },
+    });
+    expect(calls.find((call) => call.command === 'protected_move_out')?.args).toEqual({
+      location: LOCATION,
+      request: { noteId: NOTE_ID, intoFolder: LOCATION, confirmed: true },
     });
     expect(calls.find((call) => call.command === 'protected_change_password')?.args).toEqual({
       location: LOCATION,

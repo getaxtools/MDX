@@ -174,4 +174,59 @@ function describeProtectedNotesContract(create: () => ProtectedNotesPort) {
 
 describe('InMemoryProtectedNotes', () => {
   describeProtectedNotesContract(() => new InMemoryProtectedNotes());
+
+  const PLAIN_NOTE = `${LOCATION}\\Bank details.md`;
+
+  async function withPlainNote(): Promise<InMemoryProtectedNotes> {
+    const notes = new InMemoryProtectedNotes();
+    notes.plainNotes.set(PLAIN_NOTE, 'PIN 4821\r\n');
+    await notes.setUp(LOCATION, PASSWORD);
+    return notes;
+  }
+
+  it('moves a plain note in, after which it is protected and the plain note is gone', async () => {
+    const notes = await withPlainNote();
+
+    const moved = await notes.moveIn(LOCATION, { notePath: PLAIN_NOTE, intoFolder: '', isConfirmed: true });
+
+    expect(moved.isPlainCopyKept).toBe(false);
+    expect((await notes.open(LOCATION, moved.noteId)).text).toBe('PIN 4821\r\n');
+    expect((await notes.list(LOCATION)).map((note) => note.title)).toEqual(['Bank details']);
+    expect(notes.plainNotes.has(PLAIN_NOTE)).toBe(false);
+  });
+
+  it('moves a note out under a free name, after which it is no longer protected', async () => {
+    const notes = await withPlainNote();
+    const { noteId } = await notes.moveIn(LOCATION, {
+      notePath: PLAIN_NOTE,
+      intoFolder: '',
+      isConfirmed: true,
+    });
+    notes.plainNotes.set(PLAIN_NOTE, 'a new note took the name');
+
+    const written = await notes.moveOut(LOCATION, { noteId, intoFolder: LOCATION, isConfirmed: true });
+
+    expect(written.fileName).toBe('Bank details 2.md');
+    expect(notes.plainNotes.get(written.displayPath)).toBe('PIN 4821\r\n');
+    expect(await notes.list(LOCATION)).toEqual([]);
+  });
+
+  it('refuses moves the user did not confirm and plain notes outside the location', async () => {
+    const notes = await withPlainNote();
+    const noteId = await notes.create(LOCATION, { title: 'Kept', folder: '' });
+
+    expect(
+      await failureOf(notes.moveIn(LOCATION, { notePath: PLAIN_NOTE, intoFolder: '', isConfirmed: false })),
+    ).toBe('invalidRequest');
+    expect(
+      await failureOf(
+        notes.moveIn(LOCATION, { notePath: 'D:\\Elsewhere\\note.md', intoFolder: '', isConfirmed: true }),
+      ),
+    ).toBe('accessDenied');
+    expect(
+      await failureOf(notes.moveOut(LOCATION, { noteId, intoFolder: LOCATION, isConfirmed: false })),
+    ).toBe('invalidRequest');
+    expect(notes.plainNotes.has(PLAIN_NOTE)).toBe(true);
+    expect((await notes.list(LOCATION)).map((note) => note.title)).toEqual(['Kept']);
+  });
 });

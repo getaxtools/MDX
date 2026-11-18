@@ -1,6 +1,8 @@
 import {
   isProtectedNotesFailure,
   ProtectedNotesError,
+  type DocumentLocation,
+  type MoveInResult,
   type NewProtectedNote,
   type PasswordChange,
   type PasswordChangeResult,
@@ -10,6 +12,8 @@ import {
   type ProtectedNoteSummary,
   type ProtectedNoteText,
   type ProtectedNotesLockedListener,
+  type ProtectedMoveIn,
+  type ProtectedMoveOut,
   type ProtectedNotesLockRequestListener,
   type ProtectedNotesPort,
   type ProtectedStatus,
@@ -137,6 +141,23 @@ export class TauriProtectedNotes implements ProtectedNotesPort {
       { location },
     );
     return isEverythingSaved;
+  }
+
+  moveIn(location: string, { notePath, intoFolder, isConfirmed }: ProtectedMoveIn): Promise<MoveInResult> {
+    return call('protected_move_in', {
+      location,
+      request: { note: notePath, intoFolder, confirmed: isConfirmed },
+    });
+  }
+
+  moveOut(
+    location: string,
+    { noteId, intoFolder, isConfirmed }: ProtectedMoveOut,
+  ): Promise<DocumentLocation> {
+    return call('protected_move_out', {
+      location,
+      request: { noteId, intoFolder, confirmed: isConfirmed },
+    });
   }
 
   onLocked(listener: ProtectedNotesLockedListener): () => void {

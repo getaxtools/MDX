@@ -1,4 +1,5 @@
 import type { LineEnding } from './DocumentFilePort';
+import type { DocumentLocation } from './DocumentLocation';
 
 /** Why a protected section operation failed; never more than a code. */
 export const PROTECTED_NOTES_FAILURES = [
@@ -135,6 +136,33 @@ export interface NewProtectedNote {
   readonly folder: string;
 }
 
+/** A plain note of the notes location to bring into its protected section. */
+export interface ProtectedMoveIn {
+  /** The plain note's path; a note with child notes is refused. */
+  readonly notePath: string;
+  /** The folder inside the section, with `/` between parts; empty at its top. */
+  readonly intoFolder: string;
+  /**
+   * The user confirmed that plain copies may remain in backups, cloud version history and on the
+   * disk; without it the move is refused.
+   */
+  readonly isConfirmed: boolean;
+}
+
+export interface MoveInResult {
+  readonly noteId: string;
+  /** The Recycle Bin would not take the plain note, so it is still there; the window says so. */
+  readonly isPlainCopyKept: boolean;
+}
+
+/** A protected note to write out as a plain note, after the user confirmed it will not be protected. */
+export interface ProtectedMoveOut {
+  readonly noteId: string;
+  /** A folder of the notes location, by its path. */
+  readonly intoFolder: string;
+  readonly isConfirmed: boolean;
+}
+
 export type ProtectedNotesLockedListener = (locationKeys: readonly string[]) => void;
 
 /**
@@ -193,6 +221,16 @@ export interface ProtectedNotesPort {
   open(location: string, noteId: string): Promise<ProtectedNoteText>;
   /** Resolves to the note's new revision. */
   save(location: string, edit: ProtectedNoteEdit): Promise<number>;
+  /**
+   * Brings a plain note into the section. The plain note goes to the Recycle Bin only once its
+   * protected copy has been read back and opens to the same bytes.
+   */
+  moveIn(location: string, move: ProtectedMoveIn): Promise<MoveInResult>;
+  /**
+   * Writes a protected note out as a new plain note, never over another, and then removes it from
+   * the section; resolves to the plain note.
+   */
+  moveOut(location: string, move: ProtectedMoveOut): Promise<DocumentLocation>;
   /**
    * Tells the listener which sections locked, in any window, by their notes locations' canonical keys,
    * so every window closes their notes; returns how to stop listening.

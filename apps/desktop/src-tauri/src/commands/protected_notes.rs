@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
@@ -13,14 +14,17 @@ use crate::commands::notes::allowed_root;
 use crate::commands::notes_location::now_ms;
 use crate::commands::protected_lock_requests::save_everywhere_before_lock;
 use crate::documents::{
-    DocumentAccessList, DocumentError, LineEnding, canonical_key_of, decode_document_bytes,
-    detect_line_ending, encode_document_text, encoding_for_label, locate_document,
+    DocumentAccessList, DocumentError, DocumentLocation, LineEnding, canonical_key_of,
+    decode_document_bytes, detect_line_ending, encode_document_text, encoding_for_label,
+    is_markdown_path, locate_document, write_bytes_atomically,
 };
+use crate::notes::{NotesRoot, create_note};
 use crate::notes_location::{NOTES_APP_FOLDER, read_marker};
+use crate::platform::{RecycleBin, SystemRecycleBin};
 use crate::protected_notes::{
-    FileKind, FolderWarning, KEY_BYTES, KdfParameters, NoteState, ProtectedError, Reencryption,
-    ReencryptionFinish, SectionFolder, SectionRecords, SlotKind, UnlockedSection, calibrate,
-    derive_password_key, has_this_pc_device_slot, has_unfinished_reencryption,
+    FileKind, FolderWarning, KEY_BYTES, KdfParameters, NoteMovedIn, NoteState, ProtectedError,
+    Reencryption, ReencryptionFinish, SectionFolder, SectionRecords, SlotKind, UnlockedSection,
+    calibrate, derive_password_key, has_this_pc_device_slot, has_unfinished_reencryption,
     recovery_key_from_text, recovery_key_text, stored_device_key, unlock_on_this_pc,
 };
 use crate::secrets::DeviceSecretStore;
@@ -406,6 +410,8 @@ pub struct NewProtectedNote {
 struct SectionPlace {
     location_key: String,
     folder: SectionFolder,
+    /// The notes location itself, whose plain notes move in and out.
+    notes_folder: PathBuf,
 }
 
 /// The section of a granted notes location shown by this window's Notes workspace; any other window
@@ -426,6 +432,7 @@ pub fn location_key_of_shown_section(window: &WebviewWindow, location: &str) -> 
 
 fn section_place_of(notes_folder: &Path) -> SectionPlace {
     SectionPlace {
+        notes_folder: notes_folder.to_path_buf(),
         location_key: canonical_key_of(&notes_folder.to_string_lossy()),
         folder: SectionFolder::new(
             notes_folder
@@ -788,6 +795,179 @@ impl ProtectedNotes {
         )?);
         self.with_section(place, |section| Ok(section.save(note_id, &bytes, now_ms)?))
     }
+}
+
+/// A plain note of the notes location to bring into the section, the folder inside the section it
+/// goes to, and the user's confirmation that copies may remain in backups, cloud version history and
+/// on the disk.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProtectedMoveIn {
+    note: String,
+    into_folder: String,
+    confirmed: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MoveInAnswer {
+    note_id: String,
+    /// The Recycle Bin would not take the plain note, so it is still there and the window says so.
+    is_plain_copy_kept: bool,
+}
+
+/// A protected note to write out as a plain note in a folder of the notes location, after the user
+/// confirmed that the copy is not protected.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProtectedMoveOut {
+    note_id: String,
+    into_folder: String,
+    confirmed: bool,
+}
+
+/// Names a plain note written out may take: its title, then numbered, then a plain name when the
+/// title cannot be a file name.
+const MAX_NAME_ATTEMPTS: usize = 20;
+const FALLBACK_NOTE_NAME: &str = "Protected note";
+
+impl ProtectedNotes {
+    /// Moves a plain note into the section: sealed, read back and opened to the same bytes, and only
+    /// then sent to the Recycle Bin, which never deletes for good. A note with child notes, or
+    /// outside the notes location, is refused.
+    fn move_in(
+        &self,
+        place: &SectionPlace,
+        request: &ProtectedMoveIn,
+        recycle_bin: &dyn RecycleBin,
+    ) -> Answer<MoveInAnswer> {
+        if !request.confirmed || request.into_folder.len() > MAX_FOLDER_BYTES {
+            return Err(ProtectedCommandError::InvalidRequest);
+        }
+        let root = NotesRoot::new(&place.notes_folder)?;
+        let plain = root.resolve_inside(Path::new(&request.note))?;
+        let has_children = plain.with_extension("").is_dir();
+        if !plain.is_file() || !is_markdown_path(&plain) || has_children {
+            return Err(ProtectedCommandError::InvalidRequest);
+        }
+        if fs::metadata(&plain)
+            .map_err(|_| ProtectedCommandError::NotFound)?
+            .len()
+            > MAX_NOTE_TEXT_BYTES as u64
+        {
+            return Err(ProtectedCommandError::TooLarge);
+        }
+        let bytes =
+            Zeroizing::new(fs::read(&plain).map_err(|_| ProtectedCommandError::Unavailable)?);
+        let title = plain
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let note_id = self.with_section(place, |section| {
+            Ok(section.move_in(&NoteMovedIn {
+                title: &title,
+                folder: &request.into_folder,
+                bytes: &bytes,
+                now_ms: now_ms(),
+            })?)
+        })?;
+        let is_plain_copy_kept = recycle_bin
+            .recycle(std::slice::from_ref(&plain))
+            .map_or(true, |still_there| !still_there.is_empty());
+        Ok(MoveInAnswer {
+            note_id,
+            is_plain_copy_kept,
+        })
+    }
+
+    /// Writes a protected note out as a new plain note, never over another, checks it reads back
+    /// the same, and only then removes the protected note.
+    fn move_out(
+        &self,
+        place: &SectionPlace,
+        request: &ProtectedMoveOut,
+    ) -> Answer<DocumentLocation> {
+        if !request.confirmed {
+            return Err(ProtectedCommandError::InvalidRequest);
+        }
+        let note_id = validated_note_id(&request.note_id)?;
+        let root = NotesRoot::new(&place.notes_folder)?;
+        let into = root.resolve_inside(Path::new(&request.into_folder))?;
+        let taken = self.with_section(place, |section| Ok(section.take_out(note_id)?))?;
+        let written = write_plain_note(&root, &into, &taken.title, &taken.bytes)?;
+        self.with_section(place, |section| Ok(section.remove(note_id)?))?;
+        Ok(written)
+    }
+}
+
+/// A new plain note with these bytes, under the first free name; removed again unless it reads back
+/// the same.
+fn write_plain_note(
+    root: &NotesRoot,
+    into: &Path,
+    title: &str,
+    bytes: &[u8],
+) -> Answer<DocumentLocation> {
+    let created = plain_name_candidates(title)
+        .into_iter()
+        .find_map(|name| match create_note(root, into, &name) {
+            Err(DocumentError::NameTaken | DocumentError::InvalidName) => None,
+            other => Some(other),
+        })
+        .ok_or(ProtectedCommandError::InvalidRequest)??;
+    let path = PathBuf::from(&created.display_path);
+    let is_written = write_bytes_atomically(&path, bytes).is_ok()
+        && fs::read(&path).is_ok_and(|read| read == bytes);
+    if !is_written {
+        let _ = fs::remove_file(&path);
+        return Err(ProtectedCommandError::Unavailable);
+    }
+    Ok(created)
+}
+
+fn plain_name_candidates(title: &str) -> Vec<String> {
+    let mut names: Vec<String> = std::iter::once(title.to_owned())
+        .chain((2..=MAX_NAME_ATTEMPTS).map(|number| format!("{title} {number}")))
+        .collect();
+    names.push(FALLBACK_NOTE_NAME.to_owned());
+    names.extend((2..=MAX_NAME_ATTEMPTS).map(|number| format!("{FALLBACK_NOTE_NAME} {number}")));
+    names
+}
+
+/// Moves a plain note into the section after the user confirmed that copies may remain elsewhere;
+/// the plain note goes to the Recycle Bin once its protected copy opens.
+#[tauri::command]
+pub async fn protected_move_in(
+    location: String,
+    request: ProtectedMoveIn,
+    window: WebviewWindow,
+) -> Answer<MoveInAnswer> {
+    let place = writable_section_place(&window, &location)?;
+    let state = state_of(&window);
+    run_blocking(move || state.move_in(&place, &request, &SystemRecycleBin)).await?
+}
+
+/// Writes a protected note out as a plain note after the user confirmed it will not be protected,
+/// then removes it from the section.
+#[tauri::command]
+pub async fn protected_move_out(
+    location: String,
+    request: ProtectedMoveOut,
+    window: WebviewWindow,
+) -> Answer<DocumentLocation> {
+    let place = writable_section_place(&window, &location)?;
+    let state = state_of(&window);
+    run_blocking(move || state.move_out(&place, &request)).await?
+}
+
+/// The section of a notes location this window shows, which plain notes may be written in.
+fn writable_section_place(window: &WebviewWindow, location: &str) -> Answer<SectionPlace> {
+    let place = section_place(window, location)?;
+    let access = window.state::<Arc<DocumentAccessList>>();
+    if access.is_read_only(&locate_document(&place.notes_folder)?) {
+        return Err(ProtectedCommandError::AccessDenied);
+    }
+    Ok(place)
 }
 
 /// Whether this notes location has a protected section, and whether it is unlocked.
@@ -1332,3 +1512,6 @@ mod tests {
 
 #[cfg(test)]
 mod key_change_tests;
+
+#[cfg(test)]
+mod move_tests;

@@ -24,8 +24,10 @@ use crate::documents::write_bytes_atomically;
 use crate::secrets::{DeviceSecretStore, SecretName};
 
 mod key_changes;
+mod note_moves;
 
 pub use key_changes::{Reencryption, ReencryptionFinish};
+pub use note_moves::{NoteMovedIn, NoteTakenOut};
 
 const NOTES_FOLDER: &str = "notes";
 const STAGED_MANIFEST_FILE_NAME: &str = "manifest.mdxp.staged";
@@ -549,6 +551,15 @@ impl UnlockedSection {
     fn is_accepted(&self, header: &FileHeader, bytes: &[u8]) -> bool {
         header.data_key_id == self.data_key.id
             || is_recorded_previous_key_file(&self.manifest, &header.note_id, bytes)
+    }
+
+    /// Writes the manifest as it is now, sealed with the current key.
+    fn write_manifest_now(&self) -> Result<(), ProtectedError> {
+        write_bytes_atomically(
+            &self.folder.manifest_path(),
+            &self.manifest.seal(&self.vault.vault_id, &self.data_key)?,
+        )
+        .map_err(|_| ProtectedError::Storage)
     }
 
     /// The key a file of this section is sealed with, by its header.
