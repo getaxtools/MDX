@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { alertsPlugin, calloutLookOf } from './alertsPlugin';
 
 const markdown = new MarkdownIt().use(alertsPlugin);
+const MANY_CALLOUTS = 20_000;
+/** Far above what editing the tokens in one pass takes, far below what inserting once per callout took. */
+const MANY_CALLOUTS_BUDGET_MS = 5_000;
 
 describe('alertsPlugin', () => {
   it.each(['note', 'tip', 'important', 'warning', 'caution'])('turns a [!%s] quote into an alert', (kind) => {
@@ -90,5 +93,20 @@ describe('alertsPlugin', () => {
     expect(calloutLookOf('TIP')).toBe('tip');
     expect(calloutLookOf('danger')).toBe('caution');
     expect(calloutLookOf('mystery')).toBeUndefined();
+  });
+
+  it('turns thousands of quotes into callouts quickly', () => {
+    const callouts = Array.from(
+      { length: MANY_CALLOUTS },
+      (_, index) => `> [!NOTE]\n> Callout ${String(index)}.`,
+    );
+    const startedAt = performance.now();
+
+    const tokens = markdown.parse(callouts.join('\n\n'), {});
+
+    expect(performance.now() - startedAt).toBeLessThan(MANY_CALLOUTS_BUDGET_MS);
+    expect(tokens.filter((token) => token.attrGet('class') === 'markdown-alert-title')).toHaveLength(
+      MANY_CALLOUTS,
+    );
   });
 });
