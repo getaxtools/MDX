@@ -15,6 +15,8 @@ mod open_requests;
 mod platform;
 /// Public until the protected section's commands use it, so its parts are checked as finished code.
 pub mod protected_notes;
+/// Public until the protected section's commands use it, like `protected_notes`.
+pub mod secrets;
 mod spec_projects;
 #[cfg(dev)]
 mod startup_page;

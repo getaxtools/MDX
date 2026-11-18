@@ -17,6 +17,7 @@ pub use encrypted_file::{
     MAX_CONTENT_BYTES, MAX_METADATA_BYTES, NOTE_ID_BYTES, OpenedFile, PLAIN_CHUNK_BYTES, open_file,
     seal_file,
 };
+pub use hex_text::hex_of;
 pub use key_derivation::{KdfParameters, PASSWORD_SALT_BYTES, calibrate, derive_password_key};
 pub use key_slots::{
     COMMITMENT_BYTES, DataKey, FORMAT_VERSION, KeySlot, NONCE_BYTES, SLOT_ID_BYTES, SlotKind,
