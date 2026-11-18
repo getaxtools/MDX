@@ -4,7 +4,10 @@ use std::sync::Arc;
 use tauri::{Manager, State, WebviewWindow, Window};
 
 use crate::documents::{DocumentAccessList, DocumentError, locate_document};
-use crate::live_reload::{DocumentWatcher, FolderWatcher, WatchedFolder, WindowWatchSets};
+use crate::live_reload::{
+    DocumentWatcher, FolderWatcher, SpecProjectWatcher, WatchedFolder, WatchedSpecTree,
+    WindowWatchSets,
+};
 
 const MAX_WATCHED_DOCUMENTS: usize = 200;
 const MAX_WATCHED_FOLDERS: usize = 200;
@@ -55,7 +58,8 @@ pub async fn watch_folders(
     Ok(())
 }
 
-/// A closed window's documents and folders are watched no longer, unless another window shows them.
+/// A closed window's documents, folders and spec projects are watched no longer, unless another
+/// window shows them.
 pub fn stop_watching_for(window: &Window) {
     let document_watcher = window.state::<DocumentWatcher>();
     window
@@ -67,6 +71,10 @@ pub fn stop_watching_for(window: &Window) {
     window
         .state::<WindowWatchSets<WatchedFolder>>()
         .forget_and(window.label(), |folders| folder_watcher.watch(folders));
+    let spec_project_watcher = window.state::<SpecProjectWatcher>();
+    window
+        .state::<WindowWatchSets<WatchedSpecTree>>()
+        .forget_and(window.label(), |trees| spec_project_watcher.watch(trees));
 }
 
 fn allowed_folders(paths: Vec<String>, access: &DocumentAccessList) -> Vec<WatchedFolder> {

@@ -12,11 +12,35 @@ use crate::spec_projects::{ChangedEntry, ScanPattern, WatchedTree, may_hold_proj
 
 pub const SPEC_PROJECTS_CHANGED_EVENT: &str = "spec-projects-changed";
 
-/// The watched folders and the scan's extra locations, which together tell a change that matters.
+/// A watched folder with the scan's extra locations of the workspace watching it, which together tell
+/// a change that matters.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WatchedSpecTree {
+    pub tree: WatchedTree,
+    pub additional_locations: Vec<ScanPattern>,
+}
+
+impl WatchedSpecTree {
+    /// The trees of one window's projects, each with that window's extra locations.
+    pub fn all_of(trees: Vec<WatchedTree>, additional_locations: &[ScanPattern]) -> Vec<Self> {
+        trees
+            .into_iter()
+            .map(|tree| Self {
+                tree,
+                additional_locations: additional_locations.to_vec(),
+            })
+            .collect()
+    }
+
+    /// The project root a change below this folder is reported by.
+    pub fn root(&self) -> &str {
+        &self.tree.root
+    }
+}
+
 #[derive(Debug, Default)]
 struct WatchedProjects {
-    trees: Vec<WatchedTree>,
-    additional_locations: Vec<ScanPattern>,
+    trees: Vec<WatchedSpecTree>,
 }
 
 impl WatchedProjects {
@@ -28,17 +52,17 @@ impl WatchedProjects {
             .map(|path| (path, entry_at(path)))
             .collect();
         let mut roots: Vec<String> = Vec::new();
-        for tree in &self.trees {
+        for WatchedSpecTree {
+            tree,
+            additional_locations,
+        } in &self.trees
+        {
             let is_changed = changes.iter().any(|(path, entry)| {
                 path.as_os_str().is_empty()
                     || path.strip_prefix(&tree.path).is_ok_and(|below| {
                         let in_project = tree.place_in_project.join(below);
                         in_project.as_os_str().is_empty()
-                            || may_hold_project_files(
-                                &in_project,
-                                *entry,
-                                &self.additional_locations,
-                            )
+                            || may_hold_project_files(&in_project, *entry, additional_locations)
                     })
             });
             if is_changed && !roots.contains(&tree.root) {
@@ -78,12 +102,13 @@ impl SpecProjectWatcher {
         Self { watched, changes }
     }
 
-    pub fn watch(&self, trees: Vec<WatchedTree>, additional_locations: Vec<ScanPattern>) {
-        let paths: BTreeSet<PathBuf> = trees.iter().map(|tree| tree.path.clone()).collect();
-        *lock(&self.watched) = WatchedProjects {
-            trees,
-            additional_locations,
-        };
+    /// Watches these folders, which every window's Spec viewer workspace asks for together.
+    pub fn watch(&self, trees: Vec<WatchedSpecTree>) {
+        let paths: BTreeSet<PathBuf> = trees
+            .iter()
+            .map(|watched| watched.tree.path.clone())
+            .collect();
+        *lock(&self.watched) = WatchedProjects { trees };
         self.changes.watch_folders(&paths);
     }
 }
@@ -107,6 +132,7 @@ mod tests {
 
     use super::*;
     use crate::documents::DocumentAccessList;
+    use crate::live_reload::WindowWatchSets;
     use crate::spec_projects::{WatchedProject, watched_trees};
 
     const WAIT_FOR_CHANGE: Duration = Duration::from_secs(5);
@@ -131,7 +157,7 @@ mod tests {
 
     fn watch(root: &Path) -> (SpecProjectWatcher, Receiver<Vec<String>>) {
         let (watcher, changes) = start();
-        watcher.watch(vec![tree(root, "")], Vec::new());
+        watcher.watch(WatchedSpecTree::all_of(vec![tree(root, "")], &[]));
         (watcher, changes)
     }
 
@@ -189,7 +215,10 @@ mod tests {
             followed_links: vec!["openspec".to_owned()],
         }];
         let (watcher, changes) = start();
-        watcher.watch(watched_trees(&projects, &access), Vec::new());
+        watcher.watch(WatchedSpecTree::all_of(
+            watched_trees(&projects, &access),
+            &[],
+        ));
 
         fs::write(outside.path().join("specs/tabs/spec.md"), "# tabs\n").unwrap();
 
@@ -221,19 +250,21 @@ mod tests {
     #[test]
     fn tells_relevant_paths_inside_a_project_and_through_a_link() {
         let watched = WatchedProjects {
-            trees: vec![
-                WatchedTree {
-                    path: PathBuf::from(r"C:\node_modules\shop"),
-                    place_in_project: PathBuf::new(),
-                    root: "shop".to_owned(),
-                },
-                WatchedTree {
-                    path: PathBuf::from(r"D:\shared"),
-                    place_in_project: PathBuf::from("openspec"),
-                    root: "shop".to_owned(),
-                },
-            ],
-            additional_locations: vec![ScanPattern::parse("GEMINI.md").unwrap()],
+            trees: WatchedSpecTree::all_of(
+                vec![
+                    WatchedTree {
+                        path: PathBuf::from(r"C:\node_modules\shop"),
+                        place_in_project: PathBuf::new(),
+                        root: "shop".to_owned(),
+                    },
+                    WatchedTree {
+                        path: PathBuf::from(r"D:\shared"),
+                        place_in_project: PathBuf::from("openspec"),
+                        root: "shop".to_owned(),
+                    },
+                ],
+                &[ScanPattern::parse("GEMINI.md").unwrap()],
+            ),
         };
         let changed = |path: &str| watched.roots_holding(&[PathBuf::from(path)]);
 
@@ -251,8 +282,7 @@ mod tests {
         let change = root.path().join("openspec").join("changes").join("add-x");
         fs::create_dir_all(change.join("node_modules")).unwrap();
         let watched = WatchedProjects {
-            trees: vec![tree(root.path(), "")],
-            additional_locations: Vec::new(),
+            trees: WatchedSpecTree::all_of(vec![tree(root.path(), "")], &[]),
         };
         let change = dunce::canonicalize(&change).unwrap();
 
@@ -265,6 +295,66 @@ mod tests {
                 .roots_holding(&[change.join("node_modules").join("a.md")])
                 .is_empty()
         );
+    }
+
+    fn tree_of(root: &str) -> WatchedTree {
+        WatchedTree {
+            path: PathBuf::from(root),
+            place_in_project: PathBuf::new(),
+            root: root.to_owned(),
+        }
+    }
+
+    #[test]
+    fn extra_locations_count_only_for_the_trees_of_the_window_that_asked_for_them() {
+        let plans = ScanPattern::parse("plans/**").unwrap();
+        let mut trees = WatchedSpecTree::all_of(vec![tree_of(r"C:\shop")], &[plans]);
+        trees.extend(WatchedSpecTree::all_of(vec![tree_of(r"D:\docs")], &[]));
+        let watched = WatchedProjects { trees };
+        let changed = |path: &str| watched.roots_holding(&[PathBuf::from(path)]);
+
+        assert_eq!(changed(r"C:\shop\plans\q3.md"), [r"C:\shop"]);
+        assert!(changed(r"D:\docs\plans\q3.md").is_empty());
+    }
+
+    #[test]
+    fn a_changed_root_goes_only_to_the_windows_watching_it() {
+        let sets = WindowWatchSets::default();
+        sets.replace_and(
+            "main",
+            WatchedSpecTree::all_of(vec![tree_of(r"C:\shop")], &[]),
+            |_| (),
+        );
+        sets.replace_and(
+            "window-2",
+            WatchedSpecTree::all_of(vec![tree_of(r"D:\docs")], &[]),
+            |_| (),
+        );
+        sets.replace_and("window-3", Vec::new(), |_| ());
+
+        let shares = sets.share_of(&[r"c:\SHOP".to_owned()], WatchedSpecTree::root);
+
+        assert_eq!(shares, [("main".to_owned(), vec![r"c:\SHOP".to_owned()])]);
+    }
+
+    #[test]
+    fn a_window_watching_its_projects_keeps_the_other_windows_projects_watched() {
+        let sets = WindowWatchSets::default();
+        let mut watched = Vec::new();
+        sets.replace_and(
+            "main",
+            WatchedSpecTree::all_of(vec![tree_of(r"C:\shop")], &[]),
+            |_| (),
+        );
+
+        sets.replace_and(
+            "window-2",
+            WatchedSpecTree::all_of(vec![tree_of(r"D:\docs")], &[]),
+            |all| watched = all,
+        );
+
+        let roots: Vec<&str> = watched.iter().map(WatchedSpecTree::root).collect();
+        assert_eq!(roots, [r"C:\shop", r"D:\docs"]);
     }
 
     #[test]

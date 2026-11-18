@@ -1,5 +1,5 @@
 import { emit } from '@tauri-apps/api/event';
-import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
+import { clearMocks, mockIPC, mockWindows } from '@tauri-apps/api/mocks';
 import { DocumentOpenError } from '@mdx/platform';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TauriSpecProjects } from './TauriSpecProjects';
@@ -71,6 +71,7 @@ describe('TauriSpecProjects', () => {
   });
 
   it('watches project folders and passes on their changes', async () => {
+    mockWindows('main');
     const calls: { command: string; args: unknown }[] = [];
     mockIPC(
       (command, args) => {
@@ -95,6 +96,27 @@ describe('TauriSpecProjects', () => {
       command: 'watch_spec_projects',
       args: { projects, additionalLocations: ['GEMINI.md'] },
     });
+  });
+
+  it('listens for changed projects in this window only, not in every window', async () => {
+    mockWindows('window-2');
+    const listens: unknown[] = [];
+    mockIPC((command, args) => {
+      if (command === 'plugin:event|listen') listens.push(args);
+      return 1;
+    });
+
+    const stop = new TauriSpecProjects().onProjectsChanged(vi.fn());
+
+    await vi.waitFor(() =>
+      expect(listens).toEqual([
+        expect.objectContaining({
+          event: 'spec-projects-changed',
+          target: { kind: 'WebviewWindow', label: 'window-2' },
+        }),
+      ]),
+    );
+    stop();
   });
 
   it('turns a refused request into a typed error', async () => {

@@ -13,12 +13,13 @@ use crate::commands::spec_project_link::LinkQuestions;
 use crate::documents::DocumentAccessList;
 use crate::live_reload::{
     DOCUMENTS_CHANGED_EVENT, DocumentWatcher, FOLDERS_CHANGED_EVENT, FolderWatcher,
-    SPEC_PROJECTS_CHANGED_EVENT, SpecProjectWatcher, WatchedFolder, WindowWatchSets,
+    SPEC_PROJECTS_CHANGED_EVENT, SpecProjectWatcher, WatchedFolder, WatchedSpecTree,
+    WindowWatchSets,
 };
 use crate::notes_index::NotesIndexes;
 use crate::open_requests::{
-    MAIN_WINDOW_LABEL, StartupDocuments, StartupWorkspaceFile, grant_documents,
-    markdown_paths_from_arguments, workspace_file_from_arguments,
+    StartupDocuments, StartupWorkspaceFile, grant_documents, markdown_paths_from_arguments,
+    workspace_file_from_arguments,
 };
 use crate::storage::{AppStateStore, PendingWorkspaceExport, WorkspaceDatabase};
 
@@ -63,6 +64,7 @@ pub fn initialize(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(StartupWorkspaceNotice::default());
     app.manage(WindowWatchSets::<String>::default());
     app.manage(WindowWatchSets::<WatchedFolder>::default());
+    app.manage(WindowWatchSets::<WatchedSpecTree>::default());
     Ok(())
 }
 
@@ -113,10 +115,14 @@ fn start_folder_watcher(app: AppHandle) -> FolderWatcher {
     })
 }
 
+/// Each window hears only of the changed project roots its Spec viewer workspace shows.
 fn start_spec_project_watcher(app: AppHandle) -> SpecProjectWatcher {
     SpecProjectWatcher::start(move |root_paths| {
-        if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-            let _ = window.emit(SPEC_PROJECTS_CHANGED_EVENT, root_paths);
+        let shares = app
+            .state::<WindowWatchSets<WatchedSpecTree>>()
+            .share_of(&root_paths, WatchedSpecTree::root);
+        for (window_label, changed) in shares {
+            let _ = app.emit_to(window_label.as_str(), SPEC_PROJECTS_CHANGED_EVENT, changed);
         }
     })
 }

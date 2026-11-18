@@ -12,7 +12,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 pub use document_watcher::{DOCUMENTS_CHANGED_EVENT, DocumentWatcher};
 pub use folder_watcher::{FOLDERS_CHANGED_EVENT, FolderWatcher};
 pub use notes_folder_watcher::NotesFolderWatcher;
-pub use spec_project_watcher::{SPEC_PROJECTS_CHANGED_EVENT, SpecProjectWatcher};
+pub use spec_project_watcher::{SPEC_PROJECTS_CHANGED_EVENT, SpecProjectWatcher, WatchedSpecTree};
 pub use watched_folders::WatchedFolder;
 pub use window_watch_sets::WindowWatchSets;
 

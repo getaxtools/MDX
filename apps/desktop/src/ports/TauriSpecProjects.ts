@@ -1,4 +1,3 @@
-import { listen } from '@tauri-apps/api/event';
 import type {
   FolderSearchResults,
   ProjectDocuments,
@@ -11,6 +10,7 @@ import type {
 } from '@mdx/platform';
 import { documentOpenErrorOf } from './documentOpenErrorOf';
 import { SPEC_PROJECTS_CHANGED_EVENT, tauriCommands } from './tauriCommands';
+import { listenInThisWindow } from './windowEvents';
 
 export class TauriSpecProjects implements SpecProjectPort {
   async scanProject(root: string, additionalLocations: readonly string[]): Promise<SpecProjectManifest> {
@@ -44,9 +44,9 @@ export class TauriSpecProjects implements SpecProjectPort {
     await tauriCommands.watchSpecProjects(projects, additionalLocations);
   }
 
+  /** Hears only of the roots this window's Spec viewer workspace shows. */
   onProjectsChanged(listener: SpecProjectsChangedListener): () => void {
-    const stopListening = listen<string[]>(SPEC_PROJECTS_CHANGED_EVENT, (event) => listener(event.payload));
-    return () => void stopListening.then((unlisten) => unlisten());
+    return listenInThisWindow<string[]>(SPEC_PROJECTS_CHANGED_EVENT, (event) => listener(event.payload));
   }
 
   async readProjectFile(root: string, relativePath: string): Promise<OpenedDocument> {

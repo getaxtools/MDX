@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
 use serde::Deserialize;
-use tauri::State;
+use tauri::{Manager, State, WebviewWindow};
 
 use crate::commands::documents::{run_blocking, validated_path};
 use crate::commands::folder_text_search::{
     FolderSearchResults, MAX_QUERY_CHARACTERS, TextSearchOptions, search_documents,
 };
 use crate::documents::{DocumentAccessList, DocumentError, OpenedDocument};
-use crate::live_reload::SpecProjectWatcher;
+use crate::live_reload::{SpecProjectWatcher, WatchedSpecTree, WindowWatchSets};
 use crate::spec_projects::{self, ScanPattern, SpecProjectManifest, WatchedProject};
 
 const MAX_ADDITIONAL_LOCATIONS: usize = 64;
@@ -72,20 +72,28 @@ pub async fn search_spec_project_documents(
     .await?
 }
 
-/// Watches the folders of a Spec viewer workspace with every folder below them, and the folders their
-/// followed links lead to; replaces the previous set. Only granted folders are watched.
+/// Watches the folders of the window's Spec viewer workspace with every folder below them, and the
+/// folders their followed links lead to; replaces the window's previous set and keeps the other
+/// windows' sets. Only granted folders are watched.
 #[tauri::command]
 pub async fn watch_spec_projects(
     projects: Vec<WatchedProject>,
     additional_locations: Vec<String>,
-    watcher: State<'_, SpecProjectWatcher>,
+    window: WebviewWindow,
     access: State<'_, Arc<DocumentAccessList>>,
 ) -> Result<(), DocumentError> {
     validate_watched_projects(&projects)?;
     let additional_locations = validated_locations(&additional_locations)?;
     let access = Arc::clone(&access);
     let trees = run_blocking(move || spec_projects::watched_trees(&projects, &access)).await?;
-    watcher.watch(trees, additional_locations);
+    let watcher = window.state::<SpecProjectWatcher>();
+    window
+        .state::<WindowWatchSets<WatchedSpecTree>>()
+        .replace_and(
+            window.label(),
+            WatchedSpecTree::all_of(trees, &additional_locations),
+            |watched| watcher.watch(watched),
+        );
     Ok(())
 }
 
