@@ -173,6 +173,7 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::protected_notes::protected_unlock_on_this_pc,
         commands::protected_notes::protected_forget_this_pc,
         commands::protected_notes::protected_lock,
+        commands::protected_notes::protected_accept_folder,
         commands::protected_notes::protected_lock_all,
         commands::protected_notes::protected_list,
         commands::protected_notes::protected_create,

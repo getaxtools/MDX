@@ -17,6 +17,12 @@ const ARGON2_VERSION: u32 = 0x13;
 /// A vault file is a few slots; anything larger is not one of ours.
 pub const MAX_VAULT_FILE_BYTES: usize = 64 * 1_024;
 const MAX_SLOTS: usize = 32;
+/// Two password slots at most: change password may hold the old and the new one for a moment.
+const MAX_PASSWORD_SLOTS: usize = 2;
+/// The most key derivation work a vault file may ask for across its password slots, in KiB times
+/// passes: four times the default for each of two slots, so a crafted file cannot make unlocking take
+/// minutes.
+const MAX_TOTAL_KDF_COST: u64 = 2 * 4 * (64 * 1_024) * 3;
 
 /// The vault file: which vault this is, and the slots that unwrap its data key. Nothing in it is
 /// secret on its own.
@@ -59,18 +65,19 @@ impl Vault {
     }
 
     /// The data key from the password; every password slot is tried, and a wrong password says only so.
+    /// Any other failure, such as too little memory, is passed on as itself.
     pub fn unlock_with_password(&self, password: &str) -> Result<DataKey, ProtectedError> {
-        self.slots
-            .iter()
-            .filter_map(|slot| match slot.kind {
-                SlotKind::Password { parameters, salt } => Some((slot, parameters, salt)),
-                _ => None,
-            })
-            .find_map(|(slot, parameters, salt)| {
-                let key = derive_password_key(password, &salt, parameters).ok()?;
-                unwrap_data_key(slot, &key, &self.vault_id).ok()
-            })
-            .ok_or(ProtectedError::WrongKey)
+        for slot in &self.slots {
+            let SlotKind::Password { parameters, salt } = slot.kind else {
+                continue;
+            };
+            let key = derive_password_key(password, &salt, parameters)?;
+            match unwrap_data_key(slot, &key, &self.vault_id) {
+                Err(ProtectedError::WrongKey) => {}
+                result => return result,
+            }
+        }
+        Err(ProtectedError::WrongKey)
     }
 
     /// The data key from the recovery key or this PC's remembered key.
@@ -79,11 +86,13 @@ impl Vault {
         kind: SlotKind,
         key: &[u8; KEY_BYTES],
     ) -> Result<DataKey, ProtectedError> {
-        self.slots
-            .iter()
-            .filter(|slot| slot.kind == kind)
-            .find_map(|slot| unwrap_data_key(slot, key, &self.vault_id).ok())
-            .ok_or(ProtectedError::WrongKey)
+        for slot in self.slots.iter().filter(|slot| slot.kind == kind) {
+            match unwrap_data_key(slot, key, &self.vault_id) {
+                Err(ProtectedError::WrongKey) => {}
+                result => return result,
+            }
+        }
+        Err(ProtectedError::WrongKey)
     }
 
     pub fn to_json(&self) -> Result<Vec<u8>, ProtectedError> {
@@ -116,15 +125,33 @@ impl Vault {
         {
             return Err(ProtectedError::Tampered);
         }
+        let slots: Vec<KeySlot> = saved
+            .slots
+            .iter()
+            .map(SavedSlot::to_slot)
+            .collect::<Result<_, _>>()?;
+        if !is_affordable(&slots) {
+            return Err(ProtectedError::Tampered);
+        }
         Ok(Self {
             vault_id: bytes_of_hex(&saved.vault_id)?,
-            slots: saved
-                .slots
-                .iter()
-                .map(SavedSlot::to_slot)
-                .collect::<Result<_, _>>()?,
+            slots,
         })
     }
+}
+
+/// At most two password slots, and no more key derivation work across them than unlocking should take.
+fn is_affordable(slots: &[KeySlot]) -> bool {
+    let costs: Vec<u64> = slots
+        .iter()
+        .filter_map(|slot| match slot.kind {
+            SlotKind::Password { parameters, .. } => {
+                Some(u64::from(parameters.memory_kib) * u64::from(parameters.iterations))
+            }
+            _ => None,
+        })
+        .collect();
+    costs.len() <= MAX_PASSWORD_SLOTS && costs.iter().sum::<u64>() <= MAX_TOTAL_KDF_COST
 }
 
 #[derive(Serialize, Deserialize)]
@@ -345,6 +372,35 @@ mod tests {
             Vault::from_json(&vec![b' '; MAX_VAULT_FILE_BYTES + 1]),
             Err(ProtectedError::TooLarge)
         );
+    }
+
+    #[test]
+    fn a_vault_file_asking_for_too_much_key_derivation_work_is_refused_as_tampered() {
+        let created = Vault::create("correct horse battery", QUICK).unwrap();
+        let password_slot = created.vault.slots[0].clone();
+        let costly = KeySlot {
+            kind: SlotKind::Password {
+                parameters: KdfParameters::CEILING,
+                salt: [1; PASSWORD_SALT_BYTES],
+            },
+            ..password_slot.clone()
+        };
+        let three_slots = Vault {
+            slots: vec![password_slot.clone(), password_slot.clone(), password_slot],
+            ..created.vault.clone()
+        };
+        let one_costly = Vault {
+            slots: vec![costly],
+            ..created.vault.clone()
+        };
+
+        for vault in [three_slots, one_costly] {
+            assert_eq!(
+                Vault::from_json(&vault.to_json().unwrap()),
+                Err(ProtectedError::Tampered)
+            );
+        }
+        assert!(Vault::from_json(&created.vault.to_json().unwrap()).is_ok());
     }
 
     #[test]

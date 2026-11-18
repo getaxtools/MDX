@@ -8,6 +8,10 @@ pub enum ProtectedError {
     ExcessiveKeyDerivation,
     #[error("the key did not open the protected notes")]
     WrongKey,
+    #[error("the key derivation settings could not be used")]
+    KeyDerivationFailed,
+    #[error("the PC has too little free memory to unlock")]
+    NotEnoughMemory,
     #[error("the file was damaged or changed outside MDX")]
     Tampered,
     #[error("the file was written by a newer version of MDX")]

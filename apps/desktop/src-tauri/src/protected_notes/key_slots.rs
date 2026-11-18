@@ -1,5 +1,6 @@
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{XChaCha20Poly1305, XNonce};
+use ctutils::CtEq;
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
@@ -168,15 +169,7 @@ fn commitment_of(slot_key: &[u8; KEY_BYTES]) -> [u8; COMMITMENT_BYTES] {
 
 /// Compares every byte whatever the first difference, so the time taken says nothing about where.
 pub fn is_same_in_constant_time(first: &[u8], second: &[u8]) -> bool {
-    first.len() == second.len()
-        && std::hint::black_box(
-            first
-                .iter()
-                .zip(second)
-                .fold(0_u8, |difference, (left, right)| {
-                    difference | (left ^ right)
-                }),
-        ) == 0
+    first.len() == second.len() && first.ct_eq(second).to_bool()
 }
 
 #[cfg(test)]

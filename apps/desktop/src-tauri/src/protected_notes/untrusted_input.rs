@@ -3,7 +3,7 @@
 //! A fuzz target feeds them arbitrary bytes; they must refuse what they cannot read, never panic, and
 //! never allocate more than their limits allow.
 
-use super::encrypted_file::{FileHeader, open_file};
+use super::encrypted_file::{ExpectedFile, FileHeader, open_file};
 use super::key_slots::{DataKey, VAULT_ID_BYTES};
 use super::manifest::Manifest;
 use super::vault_file::Vault;
@@ -11,7 +11,7 @@ use super::vault_file::Vault;
 /// Reads `bytes` as each kind of protected input with a fixed key, as a fuzz target does.
 pub fn read_untrusted_input(bytes: &[u8], data_key: &DataKey, vault_id: &[u8; VAULT_ID_BYTES]) {
     let _ = FileHeader::parse(bytes);
-    let _ = open_file(bytes, data_key, vault_id);
+    let _ = open_file(bytes, data_key, vault_id, &ExpectedFile::note([0; 16]));
     let _ = Manifest::open(bytes, data_key, vault_id);
     let _ = Vault::from_json(bytes);
 }
@@ -88,7 +88,12 @@ mod tests {
             let input = mutated(seed, &mut random);
             read_untrusted_input(&input, &key, &VAULT);
             if input != *seed {
-                assert!(open_file(&input, &key, &VAULT).is_err(), "round {round}");
+                let expected =
+                    ExpectedFile::note(crate::protected_notes::encrypted_file::tests::NOTE);
+                assert!(
+                    open_file(&input, &key, &VAULT, &expected).is_err(),
+                    "round {round}"
+                );
             }
         }
     }

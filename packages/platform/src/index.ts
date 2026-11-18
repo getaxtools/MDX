@@ -184,6 +184,8 @@ export {
   type ProtectedNoteSummary,
   type ProtectedNoteText,
   type ProtectedNotesPort,
+  type ProtectedFolderWarning,
   type ProtectedStatus,
+  type UnlockResult,
 } from './ProtectedNotesPort';
 export { InMemoryProtectedNotes } from './fakes/InMemoryProtectedNotes';

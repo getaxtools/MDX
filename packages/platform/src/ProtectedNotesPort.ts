@@ -3,6 +3,8 @@ import type { LineEnding } from './DocumentFilePort';
 /** Why a protected section operation failed; never more than a code. */
 export const PROTECTED_NOTES_FAILURES = [
   'wrongPassword',
+  'unlockFailed',
+  'notEnoughMemory',
   'tampered',
   'vaultMissing',
   'locked',
@@ -69,6 +71,17 @@ export interface ProtectedNoteEdit {
   readonly hasByteOrderMark: boolean;
 }
 
+/**
+ * `olderNotes`: the section's manifest is older than this PC last saw, as when an older copy of the
+ * folder was put back. `changedVault`: its vault file changed outside MDX, which can bring back an old
+ * password. The user may keep the folder as it is with `acceptFolder`, or lock.
+ */
+export type ProtectedFolderWarning = 'olderNotes' | 'changedVault';
+
+export interface UnlockResult {
+  readonly folderWarning?: ProtectedFolderWarning;
+}
+
 export interface NewProtectedNote {
   readonly title: string;
   readonly folder: string;
@@ -85,13 +98,15 @@ export interface ProtectedNotesPort {
   status(location: string): Promise<ProtectedStatus>;
   /** Sets up a section with a password of at least 10 characters; resolves to the recovery key to show once. */
   setUp(location: string, password: string): Promise<{ readonly recoveryKey: string }>;
-  unlock(location: string, password: string, shouldRemember: boolean): Promise<void>;
+  unlock(location: string, password: string, shouldRemember: boolean): Promise<UnlockResult>;
   /** Unlocks with the recovery key and replaces the password with a new one. */
   unlockWithRecoveryKey(
     location: string,
     recovery: { readonly recoveryKey: string; readonly newPassword: string },
-  ): Promise<void>;
-  unlockOnThisPc(location: string): Promise<void>;
+  ): Promise<UnlockResult>;
+  unlockOnThisPc(location: string): Promise<UnlockResult>;
+  /** Keeps the folder as it is after a folder warning; this PC remembers it as seen. */
+  acceptFolder(location: string): Promise<void>;
   forgetThisPc(location: string): Promise<void>;
   lock(location: string): Promise<void>;
   lockAll(): Promise<void>;

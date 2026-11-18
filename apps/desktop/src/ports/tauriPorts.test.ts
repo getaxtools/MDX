@@ -385,9 +385,10 @@ describe('TauriProtectedNotes', () => {
     return mockCommands({
       protected_status: () => ({ isSetUp: true, isUnlocked: false, canUnlockOnThisPc: true }),
       protected_set_up: () => ({ recoveryKey: 'ABCD-EFGH' }),
-      protected_unlock: () => null,
-      protected_unlock_with_recovery: () => null,
-      protected_unlock_on_this_pc: () => null,
+      protected_unlock: () => ({ folderWarning: 'olderNotes' }),
+      protected_unlock_with_recovery: () => ({}),
+      protected_unlock_on_this_pc: () => ({}),
+      protected_accept_folder: () => null,
       protected_forget_this_pc: () => null,
       protected_lock: () => null,
       protected_lock_all: () => null,
@@ -409,7 +410,8 @@ describe('TauriProtectedNotes', () => {
   async function runEveryOperation(notes: TauriProtectedNotes) {
     await notes.status(LOCATION);
     await notes.setUp(LOCATION, PASSWORD);
-    await notes.unlock(LOCATION, PASSWORD, true);
+    expect(await notes.unlock(LOCATION, PASSWORD, true)).toEqual({ folderWarning: 'olderNotes' });
+    await notes.acceptFolder(LOCATION);
     await notes.unlockWithRecoveryKey(LOCATION, { recoveryKey: 'ABCD-EFGH', newPassword: PASSWORD });
     await notes.unlockOnThisPc(LOCATION);
     await notes.forgetThisPc(LOCATION);
@@ -430,6 +432,7 @@ describe('TauriProtectedNotes', () => {
       'protected_status',
       'protected_set_up',
       'protected_unlock',
+      'protected_accept_folder',
       'protected_unlock_with_recovery',
       'protected_unlock_on_this_pc',
       'protected_forget_this_pc',

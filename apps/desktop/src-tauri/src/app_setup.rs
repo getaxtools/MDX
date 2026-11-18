@@ -27,6 +27,8 @@ use crate::storage::{AppStateStore, PendingWorkspaceExport, WorkspaceDatabase};
 
 const DATA_FOLDER_OVERRIDE_VARIABLE: &str = "MDX_DATA_DIR";
 const NOTES_INDEX_FOLDER_NAME: &str = "notes-index";
+/// What this PC last saw of each protected section, kept apart from the sections themselves.
+const PROTECTED_SECTION_RECORDS_FILE: &str = "protected-sections.json";
 const NOTES_MOVES_FOLDER_NAME: &str = "notes-moves";
 /// UI tests slow a move down, so they can try to type while it runs.
 #[cfg(debug_assertions)]
@@ -63,7 +65,10 @@ pub fn initialize(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(Arc::new(NotesImports::default()));
     app.manage(Arc::new(PendingImportSource::default()));
     app.manage(Arc::new(OpenWindows::default()));
-    app.manage(Arc::new(ProtectedNotes::new(device_secret_store())));
+    app.manage(Arc::new(ProtectedNotes::new(
+        device_secret_store(),
+        data_folder.join(PROTECTED_SECTION_RECORDS_FILE),
+    )));
     app.manage(StartupWorkspaceNotice::default());
     app.manage(WindowWatchSets::<String>::default());
     app.manage(WindowWatchSets::<WatchedFolder>::default());

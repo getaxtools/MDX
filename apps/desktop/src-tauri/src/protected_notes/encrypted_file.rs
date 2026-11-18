@@ -1,7 +1,7 @@
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{XChaCha20Poly1305, XNonce};
 use serde::{Deserialize, Serialize};
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use super::ProtectedError;
 use super::key_slots::{DataKey, FORMAT_VERSION, NONCE_BYTES, TAG_BYTES, VAULT_ID_BYTES};
@@ -116,10 +116,12 @@ pub enum FileKind {
     Manifest,
 }
 
-/// What a protected file says about its content, encrypted with it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// What a protected file says about its content, encrypted with it; wiped when dropped, and shown by
+/// `Debug` without its title, folder or file name.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 #[serde(rename_all = "camelCase")]
 pub struct FileMetadata {
+    #[zeroize(skip)]
     pub kind: FileKind,
     pub title: String,
     /// The folder inside the protected section, with `/` between parts; empty at its top.
@@ -131,6 +133,59 @@ pub struct FileMetadata {
     pub file_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub media_type: Option<String>,
+}
+
+impl std::fmt::Debug for FileMetadata {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("FileMetadata")
+            .field("kind", &self.kind)
+            .field("created_ms", &self.created_ms)
+            .field("modified_ms", &self.modified_ms)
+            .field("content_length", &self.content_length)
+            .finish_non_exhaustive()
+    }
+}
+
+/// What a file must be to be opened in a place: the note its name says, and a kind that fits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ExpectedFile {
+    note_id: [u8; NOTE_ID_BYTES],
+    /// `None` takes any kind but the manifest.
+    kind: Option<FileKind>,
+}
+
+impl ExpectedFile {
+    pub const MANIFEST: Self = Self {
+        note_id: MANIFEST_NOTE_ID,
+        kind: Some(FileKind::Manifest),
+    };
+
+    /// A note, attachment or draft file named by this note id.
+    pub const fn note(note_id: [u8; NOTE_ID_BYTES]) -> Self {
+        Self {
+            note_id,
+            kind: None,
+        }
+    }
+
+    pub const fn note_of_kind(note_id: [u8; NOTE_ID_BYTES], kind: FileKind) -> Self {
+        Self {
+            note_id,
+            kind: Some(kind),
+        }
+    }
+
+    fn accepts(&self, header: &FileHeader, metadata: &FileMetadata) -> bool {
+        let is_manifest = metadata.kind == FileKind::Manifest;
+        let is_kind_expected = match self.kind {
+            Some(kind) => metadata.kind == kind,
+            None => !is_manifest,
+        };
+        header.note_id == self.note_id
+            && is_kind_expected
+            && is_manifest == (header.note_id == MANIFEST_NOTE_ID)
+    }
 }
 
 /// A protected file opened: its header, its metadata and its exact content bytes.
@@ -195,12 +250,9 @@ fn plain_stream(
     if content.len() > MAX_CONTENT_BYTES {
         return Err(ProtectedError::TooLarge);
     }
-    let metadata = FileMetadata {
-        content_length: u64::try_from(content.len()).map_err(|_| ProtectedError::TooLarge)?,
-        ..metadata.clone()
-    };
-    let metadata_json =
-        Zeroizing::new(serde_json::to_vec(&metadata).map_err(|_| ProtectedError::TooLarge)?);
+    let mut metadata = metadata.clone();
+    metadata.content_length = u64::try_from(content.len()).map_err(|_| ProtectedError::TooLarge)?;
+    let metadata_json = json_sized_once(&metadata)?;
     if metadata_json.len() > MAX_METADATA_BYTES {
         return Err(ProtectedError::TooLarge);
     }
@@ -216,6 +268,29 @@ fn plain_stream(
     Ok(plain)
 }
 
+/// JSON in a buffer made once at its final size, so no copy is left behind by a reallocation, and
+/// wiped when dropped.
+pub fn json_sized_once(value: &impl Serialize) -> Result<Zeroizing<Vec<u8>>, ProtectedError> {
+    let mut counter = ByteCounter(0);
+    serde_json::to_writer(&mut counter, value).map_err(|_| ProtectedError::TooLarge)?;
+    let mut bytes = Zeroizing::new(Vec::with_capacity(counter.0));
+    serde_json::to_writer(&mut *bytes, value).map_err(|_| ProtectedError::TooLarge)?;
+    Ok(bytes)
+}
+
+struct ByteCounter(usize);
+
+impl std::io::Write for ByteCounter {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0 += bytes.len();
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 fn chunk_associated_data(header: &[u8; HEADER_BYTES], index: usize, is_last: bool) -> Vec<u8> {
     let index = u64::try_from(index).unwrap_or(u64::MAX);
     header
@@ -228,7 +303,22 @@ fn chunk_associated_data(header: &[u8; HEADER_BYTES], index: usize, is_last: boo
 
 /// Opens a file of this vault with its data key. A changed, truncated, reordered or foreign file is
 /// refused as tampered; a file of another data key as the wrong key.
+/// Opens a file of this vault with its data key, as the file it is expected to be: a copy of another
+/// note's file put in its place is refused as tampered.
 pub fn open_file(
+    bytes: &[u8],
+    data_key: &DataKey,
+    vault_id: &[u8; VAULT_ID_BYTES],
+    expected: &ExpectedFile,
+) -> Result<OpenedFile, ProtectedError> {
+    let opened = open_unchecked(bytes, data_key, vault_id)?;
+    if !expected.accepts(&opened.header, &opened.metadata) {
+        return Err(ProtectedError::Tampered);
+    }
+    Ok(opened)
+}
+
+fn open_unchecked(
     bytes: &[u8],
     data_key: &DataKey,
     vault_id: &[u8; VAULT_ID_BYTES],
@@ -331,18 +421,20 @@ fn parse_plain_stream(plain: &[u8]) -> Result<(FileMetadata, Zeroizing<Vec<u8>>)
 }
 
 #[cfg(test)]
-pub mod tests {
+pub(crate) mod tests {
     use std::path::PathBuf;
 
     use super::*;
 
     pub const VAULT: [u8; VAULT_ID_BYTES] = [0x11; VAULT_ID_BYTES];
+    pub const NOTE: [u8; NOTE_ID_BYTES] = [0x22; NOTE_ID_BYTES];
+    pub const EXPECTED: ExpectedFile = ExpectedFile::note(NOTE);
 
     pub fn header(revision: u64, data_key: &DataKey) -> FileHeader {
         FileHeader {
             vault_id: VAULT,
             data_key_id: data_key.id,
-            note_id: [0x22; NOTE_ID_BYTES],
+            note_id: NOTE,
             revision,
         }
     }
@@ -371,7 +463,7 @@ pub mod tests {
     }
 
     fn opens(bytes: &[u8], data_key: &DataKey) -> bool {
-        open_file(bytes, data_key, &VAULT).is_ok()
+        open_file(bytes, data_key, &VAULT, &EXPECTED).is_ok()
     }
 
     /// The published sample: a fixed key, fixed nonces and a note with a byte order mark and CRLF.
@@ -421,18 +513,24 @@ pub mod tests {
             )
             .unwrap();
 
+        let expected_ciphertext = [
+            0xbd, 0x6d, 0x17, 0x9d, 0x3e, 0x83, 0xd4, 0x3b, 0x95, 0x76, 0x57, 0x94, 0x93, 0xc0,
+            0xe9, 0x39, 0x57, 0x2a, 0x17, 0x00, 0x25, 0x2b, 0xfa, 0xcc, 0xbe, 0xd2, 0x90, 0x2c,
+            0x21, 0x39, 0x6c, 0xbb, 0x73, 0x1c, 0x7f, 0x1b, 0x0b, 0x4a, 0xa6, 0x44, 0x0b, 0xf3,
+            0xa8, 0x2f, 0x4e, 0xda, 0x7e, 0x39, 0xae, 0x64, 0xc6, 0x70, 0x8c, 0x54, 0xc2, 0x16,
+            0xcb, 0x96, 0xb7, 0x2e, 0x12, 0x13, 0xb4, 0x52, 0x2f, 0x8c, 0x9b, 0xa4, 0x0d, 0xb5,
+            0xd9, 0x45, 0xb1, 0x1b, 0x69, 0xb9, 0x82, 0xc1, 0xbb, 0x9e, 0x3f, 0x3f, 0xac, 0x2b,
+            0xc3, 0x69, 0x48, 0x8f, 0x76, 0xb2, 0x38, 0x35, 0x65, 0xd3, 0xff, 0xf9, 0x21, 0xf9,
+            0x66, 0x4c, 0x97, 0x63, 0x7d, 0xa9, 0x76, 0x88, 0x12, 0xf6, 0x15, 0xc6, 0x8b, 0x13,
+            0xb5, 0x2e,
+        ];
+        let expected_tag = [
+            0xc0, 0x87, 0x59, 0x24, 0xc1, 0xc7, 0x98, 0x79, 0x47, 0xde, 0xaf, 0xd8, 0x78, 0x0a,
+            0xcf, 0x49,
+        ];
         assert_eq!(
-            sealed.get(..8),
-            Some(&[0xbd, 0x6d, 0x17, 0x9d, 0x3e, 0x83, 0xd4, 0x3b][..])
-        );
-        assert_eq!(
-            sealed.get(sealed.len() - TAG_BYTES..),
-            Some(
-                &[
-                    0xc0, 0x87, 0x59, 0x24, 0xc1, 0xc7, 0x98, 0x79, 0x47, 0xde, 0xaf, 0xd8, 0x78,
-                    0x0a, 0xcf, 0x49
-                ][..]
-            )
+            sealed,
+            [&expected_ciphertext[..], &expected_tag[..]].concat()
         );
     }
 
@@ -440,7 +538,7 @@ pub mod tests {
     fn the_published_sample_file_decrypts_and_is_written_the_same_way() {
         let published = std::fs::read(sample_path()).unwrap();
 
-        let opened = open_file(&published, &sample_key(), &VAULT).unwrap();
+        let opened = open_file(&published, &sample_key(), &VAULT, &EXPECTED).unwrap();
 
         assert_eq!(opened.content.as_slice(), sample_content());
         assert_eq!(opened.metadata.title, "Bank details");
@@ -462,7 +560,7 @@ pub mod tests {
         let content = b"\xEF\xBB\xBFline one\r\nline two\nPIN 4821\r\n";
 
         let sealed = seal(content, &key);
-        let opened = open_file(&sealed, &key, &VAULT).unwrap();
+        let opened = open_file(&sealed, &key, &VAULT, &EXPECTED).unwrap();
 
         assert_eq!(opened.content.as_slice(), content);
         assert_eq!(
@@ -549,17 +647,87 @@ pub mod tests {
         let sealed = seal(b"note", &key);
 
         assert!(matches!(
-            open_file(&sealed, &key, &[0x99; VAULT_ID_BYTES]),
+            open_file(&sealed, &key, &[0x99; VAULT_ID_BYTES], &EXPECTED),
             Err(ProtectedError::Tampered)
         ));
         assert!(matches!(
-            open_file(&sealed, &DataKey::generate(2).unwrap(), &VAULT),
+            open_file(&sealed, &DataKey::generate(2).unwrap(), &VAULT, &EXPECTED),
             Err(ProtectedError::WrongKey)
         ));
         assert!(matches!(
-            open_file(&sealed, &DataKey::with_bytes_for_tests(1, [0; 32]), &VAULT),
+            open_file(
+                &sealed,
+                &DataKey::with_bytes_for_tests(1, [0; 32]),
+                &VAULT,
+                &EXPECTED
+            ),
             Err(ProtectedError::Tampered)
         ));
+    }
+
+    #[test]
+    fn a_copy_of_another_notes_file_or_the_wrong_kind_is_refused() {
+        let key = DataKey::generate(1).unwrap();
+        let sealed = seal(b"note", &key);
+
+        for expected in [
+            ExpectedFile::note([0x33; NOTE_ID_BYTES]),
+            ExpectedFile::note_of_kind(NOTE, FileKind::Attachment),
+            ExpectedFile::MANIFEST,
+        ] {
+            assert!(matches!(
+                open_file(&sealed, &key, &VAULT, &expected),
+                Err(ProtectedError::Tampered)
+            ));
+        }
+        assert!(
+            open_file(
+                &sealed,
+                &key,
+                &VAULT,
+                &ExpectedFile::note_of_kind(NOTE, FileKind::Note)
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn a_chunk_spliced_from_another_note_or_revision_is_refused() {
+        let key = DataKey::generate(1).unwrap();
+        let content: Vec<u8> = (0..PLAIN_CHUNK_BYTES + 10)
+            .map(|index| (index % 7) as u8)
+            .collect();
+        let original = seal_file(&header(1, &key), &metadata("Note"), &content, &key).unwrap();
+        let other_note = FileHeader {
+            note_id: [0x44; NOTE_ID_BYTES],
+            ..header(1, &key)
+        };
+        let donors = [
+            seal_file(&other_note, &metadata("Note"), &content, &key).unwrap(),
+            seal_file(&header(2, &key), &metadata("Note"), &content, &key).unwrap(),
+        ];
+
+        for donor in donors {
+            let mut spliced = original.clone();
+            let first_chunk = HEADER_BYTES..HEADER_BYTES + SEALED_CHUNK_BYTES;
+            spliced[first_chunk.clone()].copy_from_slice(&donor[first_chunk]);
+            assert!(matches!(
+                open_file(&spliced, &key, &VAULT, &EXPECTED),
+                Err(ProtectedError::Tampered)
+            ));
+        }
+    }
+
+    #[test]
+    fn debug_output_leaves_titles_folders_and_file_names_out() {
+        let mut shown = metadata("Bank details");
+        shown.file_name = Some("statement.pdf".to_owned());
+
+        let debug = format!("{shown:?}");
+
+        for hidden in ["Bank details", "Finance", "statement.pdf"] {
+            assert!(!debug.contains(hidden), "{debug}");
+        }
     }
 
     #[test]
@@ -569,7 +737,7 @@ pub mod tests {
         sealed[4] = FORMAT_VERSION + 1;
 
         assert!(matches!(
-            open_file(&sealed, &key, &VAULT),
+            open_file(&sealed, &key, &VAULT, &EXPECTED),
             Err(ProtectedError::UnsupportedVersion)
         ));
     }
@@ -609,7 +777,7 @@ pub mod tests {
         )
         .unwrap();
         assert!(matches!(
-            open_file(&sealed, &key, &VAULT),
+            open_file(&sealed, &key, &VAULT, &EXPECTED),
             Err(ProtectedError::TooLarge)
         ));
     }
@@ -636,7 +804,7 @@ pub mod tests {
             )
             .unwrap();
             assert!(matches!(
-                open_file(&sealed, &key, &VAULT),
+                open_file(&sealed, &key, &VAULT, &EXPECTED),
                 Err(ProtectedError::Tampered)
             ));
         }

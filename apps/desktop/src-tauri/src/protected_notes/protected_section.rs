@@ -4,13 +4,14 @@ use std::path::{Path, PathBuf};
 use zeroize::Zeroizing;
 
 use super::encrypted_file::{
-    FileHeader, FileKind, FileMetadata, NOTE_ID_BYTES, open_file, seal_file,
+    ExpectedFile, FileHeader, FileKind, FileMetadata, NOTE_ID_BYTES, open_file, seal_file,
 };
 use super::hex_text::{bytes_of_hex, hex_of};
 use super::key_derivation::{KdfParameters, derive_password_key};
 use super::key_slots::{DataKey, SlotKind, wrap_data_key};
 use super::manifest::{MANIFEST_FILE_NAME, Manifest, ManifestEntry, NoteState};
 use super::random::{random_bytes, random_key};
+use super::section_records::SectionRecord;
 use super::vault_file::{SetUpRefusal, VAULT_FILE_NAME, Vault, set_up_refusal};
 use super::{KEY_BYTES, ProtectedError};
 use crate::documents::write_bytes_atomically;
@@ -38,7 +39,7 @@ pub struct UnlockedSection {
 }
 
 /// A note as the section's tree shows it; the title is shown only while the section is unlocked.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct NoteSummary {
     pub note_id: String,
     pub title: String,
@@ -46,6 +47,23 @@ pub struct NoteSummary {
     pub kind: FileKind,
     pub modified_ms: u64,
     pub state: NoteState,
+}
+
+impl std::fmt::Debug for NoteSummary {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("NoteSummary")
+            .field("note_id", &self.note_id)
+            .field("kind", &self.kind)
+            .field("state", &self.state)
+            .finish_non_exhaustive()
+    }
+}
+
+/// The note id a file's name gives, such as `<32 hex>.mdxp`; `None` for any other name.
+fn note_id_of_file_name(name: &str) -> Option<[u8; NOTE_ID_BYTES]> {
+    let stem = name.strip_suffix(&format!(".{NOTE_EXTENSION}"))?;
+    bytes_of_hex(stem).ok()
 }
 
 /// A protected note's exact bytes, and whether an older copy replaced the file the manifest names.
@@ -193,7 +211,7 @@ impl UnlockedSection {
             Err(_) => return Err(ProtectedError::Storage),
         };
         let headers: Vec<FileHeader> = notes.iter().map(|(header, _)| *header).collect();
-        let states = manifest.reconcile(&headers);
+        let states = manifest.reconcile(&headers)?;
         let mut section = Self {
             folder: folder.clone(),
             vault,
@@ -226,10 +244,24 @@ impl UnlockedSection {
         Ok(folder
             .note_file_names()?
             .iter()
-            .filter_map(|name| fs::read(folder.notes_folder().join(name)).ok())
-            .filter_map(|bytes| open_file(&bytes, data_key, &vault.vault_id).ok())
+            .filter_map(|name| {
+                let note_id = note_id_of_file_name(name)?;
+                let bytes = fs::read(folder.notes_folder().join(name)).ok()?;
+                open_file(
+                    &bytes,
+                    data_key,
+                    &vault.vault_id,
+                    &ExpectedFile::note(note_id),
+                )
+                .ok()
+            })
             .map(|opened| (opened.header, opened.metadata))
             .collect())
+    }
+
+    /// What this PC sees of the section now, to compare with what it saw before.
+    pub fn record(&self) -> Result<SectionRecord, ProtectedError> {
+        SectionRecord::of(&self.vault, self.manifest.revision)
     }
 
     pub fn vault_id(&self) -> [u8; 16] {
@@ -288,10 +320,8 @@ impl UnlockedSection {
                 std::io::ErrorKind::NotFound => ProtectedError::NoteNotFound,
                 _ => ProtectedError::Storage,
             })?;
-        let opened = open_file(&bytes, &self.data_key, &self.vault.vault_id)?;
-        if opened.header.note_id != entry.note_id {
-            return Err(ProtectedError::Tampered);
-        }
+        let expected = ExpectedFile::note_of_kind(entry.note_id, entry.kind);
+        let opened = open_file(&bytes, &self.data_key, &self.vault.vault_id, &expected)?;
         Ok(OpenedNote {
             is_older_copy: opened.header.revision < entry.revision,
             revision: opened.header.revision,
@@ -357,7 +387,8 @@ impl UnlockedSection {
     /// When the note was made, from its own file; the manifest keeps only its last change.
     fn created_ms_of(&self, note_id: &str) -> Option<u64> {
         let bytes = fs::read(self.folder.note_path(note_id)).ok()?;
-        let opened = open_file(&bytes, &self.data_key, &self.vault.vault_id).ok()?;
+        let expected = ExpectedFile::note(bytes_of_hex(note_id).ok()?);
+        let opened = open_file(&bytes, &self.data_key, &self.vault.vault_id, &expected).ok()?;
         Some(opened.metadata.created_ms)
     }
 

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use argon2::{Algorithm, Argon2, Params, Version};
+use argon2::{Algorithm, Argon2, Block, Params, Version};
 use serde::{Deserialize, Serialize};
 use unicode_normalization::UnicodeNormalization;
 use zeroize::Zeroizing;
@@ -98,14 +98,32 @@ pub fn derive_password_key(
         parameters.parallelism,
         Some(KEY_BYTES),
     )
-    .map_err(|_| ProtectedError::WeakKeyDerivation)?;
+    .map_err(|_| ProtectedError::KeyDerivationFailed)?;
     let mut normalized = Zeroizing::new(String::with_capacity(password.len() * NFC_GROWTH));
     normalized.extend(password.nfc());
+    let mut working_memory = Zeroizing::new(working_memory_of(&argon_parameters)?);
     let mut key = Zeroizing::new([0_u8; KEY_BYTES]);
     Argon2::new(ALGORITHM, VERSION, argon_parameters)
-        .hash_password_into(normalized.as_bytes(), salt, key.as_mut_slice())
-        .map_err(|_| ProtectedError::WeakKeyDerivation)?;
+        .hash_password_into_with_memory(
+            normalized.as_bytes(),
+            salt,
+            key.as_mut_slice(),
+            working_memory.as_mut_slice(),
+        )
+        .map_err(|_| ProtectedError::KeyDerivationFailed)?;
     Ok(key)
+}
+
+/// Argon2's working memory, asked for without aborting when the PC has too little, and wiped when
+/// dropped along with what the password filled it with.
+fn working_memory_of(parameters: &Params) -> Result<Vec<Block>, ProtectedError> {
+    let block_count = parameters.block_count();
+    let mut blocks = Vec::new();
+    blocks
+        .try_reserve_exact(block_count)
+        .map_err(|_| ProtectedError::NotEnoughMemory)?;
+    blocks.resize(block_count, Block::default());
+    Ok(blocks)
 }
 
 /// The strongest settings whose measured time stays within the budget, trying the default first and
@@ -256,7 +274,22 @@ mod tests {
         let chosen = calibrate(CALIBRATION_BUDGET, time_of);
 
         assert!(chosen.checked_for_writing().is_ok());
-        assert!(chosen == KdfParameters::FLOOR || time_of(chosen) <= CALIBRATION_BUDGET);
+        assert!(time_of(chosen) <= CALIBRATION_BUDGET, "{chosen:?}");
+    }
+
+    #[test]
+    fn invalid_settings_fail_as_such_and_not_as_a_wrong_password() {
+        for invalid in [
+            KdfParameters::new(64, 1, 0),
+            KdfParameters::new(32, 1, 8),
+            KdfParameters::new(64, 0, 1),
+        ] {
+            assert_eq!(
+                derive_password_key("correct horse", &SALT, invalid).map(|_| ()),
+                Err(ProtectedError::KeyDerivationFailed),
+                "{invalid:?}"
+            );
+        }
     }
 
     #[test]

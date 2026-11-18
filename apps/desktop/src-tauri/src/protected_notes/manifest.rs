@@ -1,11 +1,12 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use super::ProtectedError;
 use super::encrypted_file::{
-    FileHeader, FileKind, FileMetadata, MANIFEST_NOTE_ID, NOTE_ID_BYTES, open_file, seal_file,
+    ExpectedFile, FileHeader, FileKind, FileMetadata, MANIFEST_NOTE_ID, NOTE_ID_BYTES,
+    json_sized_once, open_file, seal_file,
 };
 use super::hex_text::{bytes_of_hex, hex_of};
 use super::key_slots::{DataKey, VAULT_ID_BYTES};
@@ -14,19 +15,32 @@ pub const MANIFEST_FILE_NAME: &str = "manifest.mdxp";
 /// More notes than this in one section is not a manifest MDX wrote.
 pub const MAX_MANIFEST_ENTRIES: usize = 100_000;
 
-/// One note as the manifest lists it, so unlocking decrypts one file to show the whole tree.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// One note as the manifest lists it, so unlocking decrypts one file to show the whole tree. Wiped
+/// when dropped, and shown by `Debug` without its title or folder.
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct ManifestEntry {
     pub note_id: [u8; NOTE_ID_BYTES],
     pub revision: u64,
     pub title: String,
     pub folder: String,
+    #[zeroize(skip)]
     pub kind: FileKind,
     pub modified_ms: u64,
 }
 
+impl std::fmt::Debug for ManifestEntry {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ManifestEntry")
+            .field("revision", &self.revision)
+            .field("kind", &self.kind)
+            .field("modified_ms", &self.modified_ms)
+            .finish_non_exhaustive()
+    }
+}
+
 /// The encrypted list of every note in the section, with the revision each was last saved at.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Zeroize, ZeroizeOnDrop)]
 pub struct Manifest {
     pub revision: u64,
     pub entries: Vec<ManifestEntry>,
@@ -53,11 +67,10 @@ impl Manifest {
         vault_id: &[u8; VAULT_ID_BYTES],
         data_key: &DataKey,
     ) -> Result<Vec<u8>, ProtectedError> {
-        let saved = SavedManifest {
-            notes: self.entries.iter().map(SavedEntry::of).collect(),
+        let saved = SavedManifestOut {
+            notes: self.entries.iter().map(SavedEntryOut::of).collect(),
         };
-        let content =
-            Zeroizing::new(serde_json::to_vec(&saved).map_err(|_| ProtectedError::TooLarge)?);
+        let content = json_sized_once(&saved)?;
         let header = FileHeader {
             vault_id: *vault_id,
             data_key_id: data_key.id,
@@ -83,11 +96,8 @@ impl Manifest {
         data_key: &DataKey,
         vault_id: &[u8; VAULT_ID_BYTES],
     ) -> Result<Self, ProtectedError> {
-        let opened = open_file(bytes, data_key, vault_id)?;
-        if opened.header.note_id != MANIFEST_NOTE_ID || opened.metadata.kind != FileKind::Manifest {
-            return Err(ProtectedError::Tampered);
-        }
-        let saved: SavedManifest =
+        let opened = open_file(bytes, data_key, vault_id, &ExpectedFile::MANIFEST)?;
+        let mut saved: SavedManifestIn =
             serde_json::from_slice(&opened.content).map_err(|_| ProtectedError::Tampered)?;
         if saved.notes.len() > MAX_MANIFEST_ENTRIES {
             return Err(ProtectedError::TooLarge);
@@ -96,8 +106,8 @@ impl Manifest {
             revision: opened.header.revision,
             entries: saved
                 .notes
-                .iter()
-                .map(SavedEntry::to_entry)
+                .iter_mut()
+                .map(SavedEntryIn::take_entry)
                 .collect::<Result<_, _>>()?,
         })
     }
@@ -125,21 +135,30 @@ impl Manifest {
         }
     }
 
-    /// Each listed note and each note file on disk, by note id, compared by revision.
+    /// Each listed note and each note file on disk, by note id, compared by revision. Two files or two
+    /// entries naming the same note can only come from tampering.
     pub fn reconcile(
         &self,
         files_on_disk: &[FileHeader],
-    ) -> BTreeMap<[u8; NOTE_ID_BYTES], NoteState> {
-        let on_disk: BTreeMap<[u8; NOTE_ID_BYTES], u64> = files_on_disk
+    ) -> Result<BTreeMap<[u8; NOTE_ID_BYTES], NoteState>, ProtectedError> {
+        let mut on_disk: BTreeMap<[u8; NOTE_ID_BYTES], u64> = BTreeMap::new();
+        for header in files_on_disk
             .iter()
             .filter(|header| header.note_id != MANIFEST_NOTE_ID)
-            .map(|header| (header.note_id, header.revision))
-            .collect();
+        {
+            if on_disk.insert(header.note_id, header.revision).is_some() {
+                return Err(ProtectedError::Tampered);
+            }
+        }
         let mut states: BTreeMap<[u8; NOTE_ID_BYTES], NoteState> = on_disk
             .keys()
             .map(|note_id| (*note_id, NoteState::Unlisted))
             .collect();
+        let mut listed = std::collections::BTreeSet::new();
         for entry in &self.entries {
+            if !listed.insert(entry.note_id) {
+                return Err(ProtectedError::Tampered);
+            }
             let state = match on_disk.get(&entry.note_id) {
                 None => NoteState::Missing,
                 Some(revision) if *revision < entry.revision => NoteState::OlderCopy,
@@ -148,45 +167,67 @@ impl Manifest {
             };
             states.insert(entry.note_id, state);
         }
-        states
+        Ok(states)
     }
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct SavedManifest {
-    notes: Vec<SavedEntry>,
+/// The manifest as written: borrowed, so no copy of a title is made to write it.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SavedManifestOut<'manifest> {
+    notes: Vec<SavedEntryOut<'manifest>>,
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct SavedEntry {
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SavedEntryOut<'manifest> {
     note_id: String,
     revision: u64,
-    title: String,
-    folder: String,
+    title: &'manifest str,
+    folder: &'manifest str,
     kind: FileKind,
     modified_ms: u64,
 }
 
-impl SavedEntry {
-    fn of(entry: &ManifestEntry) -> Self {
+impl<'manifest> SavedEntryOut<'manifest> {
+    fn of(entry: &'manifest ManifestEntry) -> Self {
         Self {
             note_id: hex_of(&entry.note_id),
             revision: entry.revision,
-            title: entry.title.clone(),
-            folder: entry.folder.clone(),
+            title: &entry.title,
+            folder: &entry.folder,
             kind: entry.kind,
             modified_ms: entry.modified_ms,
         }
     }
+}
 
-    fn to_entry(&self) -> Result<ManifestEntry, ProtectedError> {
+/// The manifest as read; its texts are moved into the entries, not copied, and wiped when dropped.
+#[derive(Deserialize, Zeroize, ZeroizeOnDrop)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SavedManifestIn {
+    notes: Vec<SavedEntryIn>,
+}
+
+#[derive(Deserialize, Zeroize, ZeroizeOnDrop)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SavedEntryIn {
+    note_id: String,
+    revision: u64,
+    title: String,
+    folder: String,
+    #[zeroize(skip)]
+    kind: FileKind,
+    modified_ms: u64,
+}
+
+impl SavedEntryIn {
+    fn take_entry(&mut self) -> Result<ManifestEntry, ProtectedError> {
         Ok(ManifestEntry {
             note_id: bytes_of_hex(&self.note_id)?,
             revision: self.revision,
-            title: self.title.clone(),
-            folder: self.folder.clone(),
+            title: std::mem::take(&mut self.title),
+            folder: std::mem::take(&mut self.folder),
             kind: self.kind,
             modified_ms: self.modified_ms,
         })
@@ -239,7 +280,7 @@ mod tests {
             entries: vec![entry(1, 2)],
         };
 
-        let states = manifest.reconcile(&[on_disk(1, 1)]);
+        let states = manifest.reconcile(&[on_disk(1, 1)]).unwrap();
 
         assert_eq!(states.get(&[1; NOTE_ID_BYTES]), Some(&NoteState::OlderCopy));
     }
@@ -251,7 +292,9 @@ mod tests {
             entries: vec![entry(1, 2), entry(2, 2)],
         };
 
-        let states = manifest.reconcile(&[on_disk(1, 2), on_disk(3, 1), on_disk(2, 5)]);
+        let states = manifest
+            .reconcile(&[on_disk(1, 2), on_disk(3, 1), on_disk(2, 5)])
+            .unwrap();
 
         assert_eq!(
             states.into_iter().collect::<Vec<_>>(),
@@ -265,8 +308,50 @@ mod tests {
             revision: 1,
             entries: vec![entry(4, 1)],
         }
-        .reconcile(&[]);
+        .reconcile(&[])
+        .unwrap();
         assert_eq!(gone.get(&[4; NOTE_ID_BYTES]), Some(&NoteState::Missing));
+    }
+
+    #[test]
+    fn duplicate_note_ids_on_disk_or_in_the_manifest_are_tampering() {
+        let manifest = Manifest {
+            revision: 3,
+            entries: vec![entry(1, 2)],
+        };
+        let doubled = Manifest {
+            revision: 3,
+            entries: vec![entry(1, 2), entry(1, 2)],
+        };
+
+        assert_eq!(
+            manifest.reconcile(&[on_disk(1, 2), on_disk(1, 2)]),
+            Err(ProtectedError::Tampered)
+        );
+        assert_eq!(
+            doubled.reconcile(&[on_disk(1, 2)]),
+            Err(ProtectedError::Tampered)
+        );
+    }
+
+    #[test]
+    fn debug_output_leaves_titles_and_folders_out() {
+        let mut listed = entry(1, 2);
+        listed.title = "Bank details".to_owned();
+        listed.folder = "Finance".to_owned();
+
+        let debug = format!(
+            "{:?}",
+            Manifest {
+                revision: 1,
+                entries: vec![listed]
+            }
+        );
+
+        assert!(
+            !debug.contains("Bank details") && !debug.contains("Finance"),
+            "{debug}"
+        );
     }
 
     #[test]

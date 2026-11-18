@@ -8,6 +8,7 @@ import {
   type ProtectedNotesLockedListener,
   type ProtectedNotesPort,
   type ProtectedStatus,
+  type UnlockResult,
 } from '@mdx/platform';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -39,19 +40,23 @@ export class TauriProtectedNotes implements ProtectedNotesPort {
     return call('protected_set_up', { location, password });
   }
 
-  unlock(location: string, password: string, shouldRemember: boolean): Promise<void> {
+  unlock(location: string, password: string, shouldRemember: boolean): Promise<UnlockResult> {
     return call('protected_unlock', { location, password, remember: shouldRemember });
   }
 
   unlockWithRecoveryKey(
     location: string,
     recovery: { readonly recoveryKey: string; readonly newPassword: string },
-  ): Promise<void> {
+  ): Promise<UnlockResult> {
     return call('protected_unlock_with_recovery', { location, recovery });
   }
 
-  unlockOnThisPc(location: string): Promise<void> {
+  unlockOnThisPc(location: string): Promise<UnlockResult> {
     return call('protected_unlock_on_this_pc', { location });
+  }
+
+  acceptFolder(location: string): Promise<void> {
+    return call('protected_accept_folder', { location });
   }
 
   forgetThisPc(location: string): Promise<void> {

@@ -7,6 +7,7 @@ import {
   type ProtectedNotesLockedListener,
   type ProtectedNotesPort,
   type ProtectedStatus,
+  type UnlockResult,
 } from '../ProtectedNotesPort';
 
 const MIN_PASSWORD_LENGTH = 10;
@@ -60,29 +61,36 @@ export class InMemoryProtectedNotes implements ProtectedNotesPort {
     return Promise.resolve({ recoveryKey });
   }
 
-  async unlock(location: string, password: string, shouldRemember: boolean): Promise<void> {
+  async unlock(location: string, password: string, shouldRemember: boolean): Promise<UnlockResult> {
     const section = await this.sectionOf(location);
     if (section.password !== password) return refused('wrongPassword');
     section.isUnlocked = true;
     if (shouldRemember) section.isRemembered = true;
+    return {};
   }
 
   async unlockWithRecoveryKey(
     location: string,
     { recoveryKey, newPassword }: { readonly recoveryKey: string; readonly newPassword: string },
-  ): Promise<void> {
+  ): Promise<UnlockResult> {
     if (codePointCount(newPassword) < MIN_PASSWORD_LENGTH) return refused('passwordTooShort');
     const section = await this.sectionOf(location);
     if (section.recoveryKey.toUpperCase() !== recoveryKey.trim().toUpperCase())
       return refused('wrongPassword');
     section.password = newPassword;
     section.isUnlocked = true;
+    return {};
   }
 
-  async unlockOnThisPc(location: string): Promise<void> {
+  async unlockOnThisPc(location: string): Promise<UnlockResult> {
     const section = await this.sectionOf(location);
     if (!section.isRemembered) return refused('notRemembered');
     section.isUnlocked = true;
+    return {};
+  }
+
+  async acceptFolder(location: string): Promise<void> {
+    await this.unlockedSectionOf(location);
   }
 
   async forgetThisPc(location: string): Promise<void> {
