@@ -187,6 +187,8 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::protected_notes::protected_new_recovery_key,
         commands::protected_notes::protected_move_in,
         commands::protected_notes::protected_move_out,
+        commands::protected_notes::attachments::protected_add_attachment,
+        commands::protected_notes::attachments::protected_open_attachment,
         commands::spec_projects::scan_spec_project,
         commands::spec_projects::read_spec_project_file,
         commands::spec_project_link::follow_spec_project_link,

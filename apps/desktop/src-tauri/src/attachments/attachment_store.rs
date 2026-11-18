@@ -31,7 +31,7 @@ pub fn save_attachment_bytes(
     let kind = ImageKind::of(bytes).ok_or(DocumentError::NotAnImage)?;
     let relative_folder = validated_relative_folder(attachment_folder)?;
     let folder = contained_folder(document_folder, &relative_folder)?;
-    let stem = stem_of(suggested_name)?;
+    let stem = attachment_stem(suggested_name)?;
     let file_name = place_bytes(&folder, &stem, kind.extension(), bytes)?;
     Ok(SavedAttachment {
         relative_path: relative_link_path(&relative_folder, &file_name),
@@ -69,7 +69,8 @@ fn contained_folder(
     }
 }
 
-fn stem_of(suggested_name: &str) -> Result<String, DocumentError> {
+/// The name a picture is saved under, before its extension: the suggested name's stem, or `image`.
+pub fn attachment_stem(suggested_name: &str) -> Result<String, DocumentError> {
     let name = validated_file_name(suggested_name.trim())?;
     let stem = Path::new(name)
         .file_stem()

@@ -1190,6 +1190,8 @@ pub async fn protected_save(
     run_blocking(move || state.save(&place, &note, now_ms())).await?
 }
 
+pub mod attachments;
+
 #[cfg(test)]
 mod tests {
     use super::*;

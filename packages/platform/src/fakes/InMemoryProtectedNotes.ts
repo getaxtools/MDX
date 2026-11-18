@@ -1,6 +1,7 @@
 import type { DocumentLocation } from '../DocumentLocation';
 import {
   ProtectedNotesError,
+  type AddedProtectedAttachment,
   type MoveInResult,
   type NewProtectedNote,
   type PasswordChange,
@@ -26,11 +27,19 @@ const RECOVERY_NUMBER_LENGTH = 4;
 const NOTE_ID = /^[0-9a-f]{32}$/;
 const MARKDOWN_EXTENSION = '.md';
 const MAX_NAME_ATTEMPTS = 20;
+const ATTACHMENT_FOLDER = 'Attachments';
+/** The picture kinds the fake tells from their first bytes, by the extension the section gives them. */
+const PICTURE_SIGNATURES: readonly (readonly [string, string])[] = [
+  ['png', '\x89PNG'],
+  ['jpg', '\xFF\xD8\xFF'],
+  ['gif', 'GIF8'],
+];
 
 interface StoredNote {
   readonly summary: ProtectedNoteSummary;
   readonly text: string;
   readonly revision: number;
+  readonly pictureBytes?: Uint8Array;
 }
 
 interface Section {
@@ -53,6 +62,8 @@ export class InMemoryProtectedNotes implements ProtectedNotesPort {
   private readonly lockRequestListeners = new Set<ProtectedNotesLockRequestListener>();
   /** The plain notes of every notes location, by path, which notes move in from and out to. */
   readonly plainNotes = new Map<string, string>();
+  /** Picture files the user dropped on the window, by path, as the native layer remembers them. */
+  readonly droppedPictures = new Map<string, Uint8Array>();
   private nextNote = 0;
   private recoveryKeyCount = 0;
   private clock = FIRST_TIME_MS;
@@ -240,6 +251,53 @@ export class InMemoryProtectedNotes implements ProtectedNotesPort {
     this.plainNotes.set(path, note.text);
     section.notes.delete(noteId);
     return { canonicalKey: path.toLowerCase(), displayPath: path, fileName: fileNameOf(path) };
+  }
+
+  async addPastedAttachment(
+    location: string,
+    picture: { readonly name: string; readonly bytes: Uint8Array },
+  ): Promise<AddedProtectedAttachment> {
+    const section = await this.unlockedSectionOf(location);
+    return this.addPicture(section, picture.name, picture.bytes);
+  }
+
+  async addDroppedAttachment(location: string, path: string): Promise<AddedProtectedAttachment> {
+    const bytes = this.droppedPictures.get(path);
+    if (bytes === undefined) return refused('accessDenied');
+    this.droppedPictures.delete(path);
+    const section = await this.unlockedSectionOf(location);
+    return this.addPicture(section, fileNameOf(path), bytes);
+  }
+
+  async openAttachment(location: string, noteId: string): Promise<Uint8Array> {
+    if (!NOTE_ID.test(noteId)) return refused('invalidRequest');
+    const section = await this.unlockedSectionOf(location);
+    const bytes = section.notes.get(noteId)?.pictureBytes;
+    return bytes ? Uint8Array.from(bytes) : refused('notFound');
+  }
+
+  private addPicture(section: Section, name: string, bytes: Uint8Array): Promise<AddedProtectedAttachment> {
+    const extension = PICTURE_SIGNATURES.find(
+      ([, signature]) => String.fromCharCode(...bytes.subarray(0, signature.length)) === signature,
+    )?.[0];
+    if (extension === undefined) return refused('invalidRequest');
+    const stem = name.replace(/\.[^.]*$/, '') || 'image';
+    const isTaken = (fileName: string) =>
+      [...section.notes.values()].some(
+        (note) =>
+          note.summary.kind === 'attachment' && note.summary.title.toLowerCase() === fileName.toLowerCase(),
+      );
+    let fileName = `${stem}.${extension}`;
+    for (let number = 2; isTaken(fileName); number += 1) fileName = `${stem}-${String(number)}.${extension}`;
+    const noteId = this.addNote(section, { title: fileName, folder: ATTACHMENT_FOLDER }, '');
+    const note = section.notes.get(noteId);
+    if (note)
+      section.notes.set(noteId, {
+        ...note,
+        summary: { ...note.summary, kind: 'attachment' },
+        pictureBytes: Uint8Array.from(bytes),
+      });
+    return Promise.resolve({ noteId, fileName });
   }
 
   private freePlainNotePath(folder: string, title: string): string | undefined {

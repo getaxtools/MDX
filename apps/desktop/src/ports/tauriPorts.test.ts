@@ -421,6 +421,8 @@ describe('TauriProtectedNotes', () => {
       protected_finish_reencryption: () => null,
       protected_new_recovery_key: () => ({ recoveryKey: 'QRST-UVWX' }),
       protected_move_in: () => ({ noteId: NOTE_ID, isPlainCopyKept: false }),
+      protected_add_attachment: () => ({ noteId: NOTE_ID, fileName: 'Chart.png' }),
+      protected_open_attachment: () => new Uint8Array([137, 80, 78, 71]).buffer,
       protected_move_out: () => ({
         canonicalKey: 'c:\\notes\\bank details.md',
         displayPath: 'C:\\Notes\\Bank details.md',
@@ -461,6 +463,9 @@ describe('TauriProtectedNotes', () => {
     await notes.newRecoveryKey(LOCATION, PASSWORD);
     await notes.moveIn(LOCATION, { notePath: PLAIN_NOTE, intoFolder: 'Finance', isConfirmed: true });
     await notes.moveOut(LOCATION, { noteId: NOTE_ID, intoFolder: LOCATION, isConfirmed: true });
+    await notes.addPastedAttachment(LOCATION, { name: 'Chart.png', bytes: new Uint8Array([137, 80]) });
+    await notes.addDroppedAttachment(LOCATION, 'C:\\Pictures\\scan.png');
+    expect(await notes.openAttachment(LOCATION, NOTE_ID)).toEqual(new Uint8Array([137, 80, 78, 71]));
     return revision;
   }
 
@@ -489,6 +494,9 @@ describe('TauriProtectedNotes', () => {
       'protected_new_recovery_key',
       'protected_move_in',
       'protected_move_out',
+      'protected_add_attachment',
+      'protected_add_attachment',
+      'protected_open_attachment',
     ]);
     const withPassword = calls
       .filter((call) => JSON.stringify(call.args).includes(PASSWORD))
@@ -514,6 +522,21 @@ describe('TauriProtectedNotes', () => {
       location: LOCATION,
       request: { noteId: NOTE_ID, intoFolder: LOCATION, confirmed: true },
     });
+    expect(
+      calls.filter((call) => call.command === 'protected_add_attachment').map((call) => call.args),
+    ).toEqual([
+      {
+        location: LOCATION,
+        request: { suggestedName: 'Chart.png', source: { kind: 'pastedBytes', bytes: [137, 80] } },
+      },
+      {
+        location: LOCATION,
+        request: {
+          suggestedName: 'scan.png',
+          source: { kind: 'droppedFile', path: 'C:\\Pictures\\scan.png' },
+        },
+      },
+    ]);
     expect(calls.find((call) => call.command === 'protected_change_password')?.args).toEqual({
       location: LOCATION,
       change: { currentPassword: PASSWORD, newPassword: NEW_PASSWORD, reencrypt: true },

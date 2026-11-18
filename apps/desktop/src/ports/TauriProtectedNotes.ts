@@ -1,6 +1,7 @@
 import {
   isProtectedNotesFailure,
   ProtectedNotesError,
+  type AddedProtectedAttachment,
   type DocumentLocation,
   type MoveInResult,
   type NewProtectedNote,
@@ -158,6 +159,30 @@ export class TauriProtectedNotes implements ProtectedNotesPort {
       location,
       request: { noteId, intoFolder, confirmed: isConfirmed },
     });
+  }
+
+  addPastedAttachment(
+    location: string,
+    picture: { readonly name: string; readonly bytes: Uint8Array },
+  ): Promise<AddedProtectedAttachment> {
+    return call('protected_add_attachment', {
+      location,
+      request: { suggestedName: picture.name, source: { kind: 'pastedBytes', bytes: [...picture.bytes] } },
+    });
+  }
+
+  addDroppedAttachment(location: string, path: string): Promise<AddedProtectedAttachment> {
+    return call('protected_add_attachment', {
+      location,
+      request: {
+        suggestedName: path.split(/[\\/]/).at(-1) ?? path,
+        source: { kind: 'droppedFile', path },
+      },
+    });
+  }
+
+  async openAttachment(location: string, noteId: string): Promise<Uint8Array> {
+    return new Uint8Array(await call<ArrayBuffer>('protected_open_attachment', { location, noteId }));
   }
 
   onLocked(listener: ProtectedNotesLockedListener): () => void {

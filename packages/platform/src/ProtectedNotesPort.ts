@@ -163,6 +163,12 @@ export interface ProtectedMoveOut {
   readonly isConfirmed: boolean;
 }
 
+/** A picture sealed in the section's `Attachments` folder, by its id and the file name it is listed by. */
+export interface AddedProtectedAttachment {
+  readonly noteId: string;
+  readonly fileName: string;
+}
+
 export type ProtectedNotesLockedListener = (locationKeys: readonly string[]) => void;
 
 /**
@@ -231,6 +237,21 @@ export interface ProtectedNotesPort {
    * the section; resolves to the plain note.
    */
   moveOut(location: string, move: ProtectedMoveOut): Promise<DocumentLocation>;
+  /**
+   * Seals pasted picture bytes as an attachment of the section, named after `name` with the
+   * extension the bytes show; nothing is written outside the section.
+   */
+  addPastedAttachment(
+    location: string,
+    picture: { readonly name: string; readonly bytes: Uint8Array },
+  ): Promise<AddedProtectedAttachment>;
+  /** Seals a picture the user dropped on this window as an attachment of the section. */
+  addDroppedAttachment(location: string, path: string): Promise<AddedProtectedAttachment>;
+  /**
+   * An attachment's bytes, to show from memory while the section is unlocked; the window lets go of
+   * them when it locks. A note's id is refused with `notFound`.
+   */
+  openAttachment(location: string, noteId: string): Promise<Uint8Array>;
   /**
    * Tells the listener which sections locked, in any window, by their notes locations' canonical keys,
    * so every window closes their notes; returns how to stop listening.

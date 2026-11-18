@@ -211,6 +211,34 @@ describe('InMemoryProtectedNotes', () => {
     expect(await notes.list(LOCATION)).toEqual([]);
   });
 
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
+
+  it('seals pasted and dropped pictures in the Attachments folder under free names', async () => {
+    const notes = await withPlainNote();
+    notes.droppedPictures.set('C:\\Pictures\\Chart.png', PNG);
+
+    const pasted = await notes.addPastedAttachment(LOCATION, { name: 'Chart.png', bytes: PNG });
+    const dropped = await notes.addDroppedAttachment(LOCATION, 'C:\\Pictures\\Chart.png');
+
+    expect([pasted.fileName, dropped.fileName]).toEqual(['Chart.png', 'Chart-2.png']);
+    expect(await notes.openAttachment(LOCATION, pasted.noteId)).toEqual(PNG);
+    expect((await notes.list(LOCATION)).map((note) => [note.kind, note.folder])).toEqual([
+      ['attachment', 'Attachments'],
+      ['attachment', 'Attachments'],
+    ]);
+  });
+
+  it('refuses what is not a picture, a drop it did not see and a note as a picture', async () => {
+    const notes = await withPlainNote();
+    const noteId = await notes.create(LOCATION, { title: 'Bank details', folder: '' });
+
+    expect(
+      await failureOf(notes.addPastedAttachment(LOCATION, { name: 'a.txt', bytes: new Uint8Array([65]) })),
+    ).toBe('invalidRequest');
+    expect(await failureOf(notes.addDroppedAttachment(LOCATION, 'C:\\elsewhere.png'))).toBe('accessDenied');
+    expect(await failureOf(notes.openAttachment(LOCATION, noteId))).toBe('notFound');
+  });
+
   it('refuses moves the user did not confirm and plain notes outside the location', async () => {
     const notes = await withPlainNote();
     const noteId = await notes.create(LOCATION, { title: 'Kept', folder: '' });

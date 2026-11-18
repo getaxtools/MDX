@@ -76,7 +76,7 @@ impl UnlockedSection {
 
     /// A note's title and exact bytes, to write as a plain note before the note is removed.
     pub fn take_out(&self, note_id: &str) -> Result<NoteTakenOut, ProtectedError> {
-        let title = self.entry(note_id)?.title.clone();
+        let title = self.note_entry(note_id)?.title.clone();
         let opened = self.open(note_id)?;
         if opened.is_older_copy {
             return Err(ProtectedError::Tampered);

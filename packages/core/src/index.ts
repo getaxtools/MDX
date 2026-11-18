@@ -421,3 +421,9 @@ export {
   withoutProtectedLocations,
 } from './protected-notes/protectedLocations';
 export type { ProtectedNoteSaver } from './protected-notes/OpenProtectedNotes';
+export {
+  PROTECTED_ATTACHMENT_FOLDER,
+  protectedAttachmentFor,
+  protectedAttachmentMediaType,
+  protectedAttachmentPath,
+} from './protected-notes/protectedAttachments';

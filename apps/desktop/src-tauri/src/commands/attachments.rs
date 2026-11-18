@@ -269,7 +269,7 @@ fn link_from(note_folder: &Path, base: &Path, saved: &str) -> Result<String, Doc
     Ok(format!("{}{saved}", "../".repeat(depth)))
 }
 
-fn source_bytes(
+pub(crate) fn source_bytes(
     source: AttachmentSource,
     dropped: &DroppedImages,
 ) -> Result<Vec<u8>, DocumentError> {

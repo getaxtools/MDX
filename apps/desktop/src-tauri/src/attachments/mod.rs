@@ -3,7 +3,7 @@ mod dropped_images;
 mod image_kind;
 mod picture_files;
 
-pub use attachment_store::{MAX_ATTACHMENT_BYTES, save_attachment_bytes};
+pub use attachment_store::{MAX_ATTACHMENT_BYTES, attachment_stem, save_attachment_bytes};
 pub use dropped_images::DroppedImages;
 pub use image_kind::ImageKind;
 pub use picture_files::{ChosenPictureOutcome, copy_chosen_pictures, read_picture_file};

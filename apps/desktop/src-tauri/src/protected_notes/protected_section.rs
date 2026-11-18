@@ -23,9 +23,11 @@ use super::{KEY_BYTES, ProtectedError};
 use crate::documents::write_bytes_atomically;
 use crate::secrets::{DeviceSecretStore, SecretName};
 
+mod attachments;
 mod key_changes;
 mod note_moves;
 
+pub use attachments::{ATTACHMENT_FOLDER, AddedAttachment, NewAttachment};
 pub use key_changes::{Reencryption, ReencryptionFinish};
 pub use note_moves::{NoteMovedIn, NoteTakenOut};
 
@@ -455,8 +457,16 @@ impl UnlockedSection {
         Ok(hex_of(&note_id))
     }
 
+    /// A note's exact bytes; an attachment's id is refused, as its bytes are a picture.
     pub fn open(&self, note_id: &str) -> Result<OpenedNote, ProtectedError> {
-        let entry = self.entry(note_id)?;
+        self.open_entry(note_id, self.note_entry(note_id)?)
+    }
+
+    fn open_entry(
+        &self,
+        note_id: &str,
+        entry: &ManifestEntry,
+    ) -> Result<OpenedNote, ProtectedError> {
         let bytes =
             fs::read(self.folder.note_path(note_id)).map_err(|error| match error.kind() {
                 std::io::ErrorKind::NotFound => ProtectedError::NoteNotFound,
@@ -486,7 +496,7 @@ impl UnlockedSection {
         bytes: &[u8],
         now_ms: u64,
     ) -> Result<u64, ProtectedError> {
-        let entry = self.entry(note_id)?.clone();
+        let entry = self.note_entry(note_id)?.clone();
         let revision = entry.revision + 1;
         let metadata = FileMetadata {
             kind: entry.kind,
@@ -585,6 +595,15 @@ impl UnlockedSection {
             Some(listed) => *listed = entry,
             None => self.manifest.entries.push(entry),
         }
+    }
+
+    /// A listed note that is not an attachment.
+    fn note_entry(&self, note_id: &str) -> Result<&ManifestEntry, ProtectedError> {
+        let entry = self.entry(note_id)?;
+        if entry.kind == FileKind::Attachment {
+            return Err(ProtectedError::NoteNotFound);
+        }
+        Ok(entry)
     }
 
     fn entry(&self, note_id: &str) -> Result<&ManifestEntry, ProtectedError> {

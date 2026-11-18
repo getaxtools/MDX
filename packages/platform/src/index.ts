@@ -177,6 +177,7 @@ export {
   isProtectedNotesFailure,
   PROTECTED_NOTES_FAILURES,
   ProtectedNotesError,
+  type AddedProtectedAttachment,
   type MoveInResult,
   type NewProtectedNote,
   type PasswordChange,
