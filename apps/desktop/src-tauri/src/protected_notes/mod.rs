@@ -9,6 +9,7 @@ mod key_slots;
 mod manifest;
 mod protected_error;
 mod random;
+mod untrusted_input;
 mod vault_file;
 
 pub use encrypted_file::{
@@ -24,6 +25,7 @@ pub use key_slots::{
 pub use manifest::{MANIFEST_FILE_NAME, MAX_MANIFEST_ENTRIES, Manifest, ManifestEntry, NoteState};
 pub use protected_error::ProtectedError;
 pub use random::{random_bytes, random_key};
+pub use untrusted_input::read_untrusted_input;
 pub use vault_file::{
     MAX_VAULT_FILE_BYTES, NewVault, SetUpRefusal, VAULT_FILE_NAME, Vault, set_up_refusal,
 };

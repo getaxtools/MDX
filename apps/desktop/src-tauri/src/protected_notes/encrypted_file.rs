@@ -241,10 +241,7 @@ pub fn open_file(
         return Err(ProtectedError::WrongKey);
     }
     let body = bytes.get(HEADER_BYTES..).unwrap_or_default();
-    let chunk_count = body.len().div_ceil(SEALED_CHUNK_BYTES);
-    if chunk_count == 0 || chunk_count > MAX_CHUNKS {
-        return Err(ProtectedError::Tampered);
-    }
+    checked_chunk_count(body.len())?;
     let plain = decrypt_chunks(body, &header.to_bytes(), data_key)?;
     let (metadata, content) = parse_plain_stream(&plain)?;
     Ok(OpenedFile {
@@ -252,6 +249,19 @@ pub fn open_file(
         metadata,
         content,
     })
+}
+
+/// How many chunks a body of this length holds; an empty body or one longer than the largest file is
+/// refused before anything is decrypted or allocated.
+fn checked_chunk_count(body_length: usize) -> Result<usize, ProtectedError> {
+    let chunk_count = body_length.div_ceil(SEALED_CHUNK_BYTES);
+    if chunk_count == 0 {
+        return Err(ProtectedError::Tampered);
+    }
+    if chunk_count > MAX_CHUNKS {
+        return Err(ProtectedError::TooLarge);
+    }
+    Ok(chunk_count)
 }
 
 /// Every chunk opened in order; all but the last must be full.
@@ -562,6 +572,74 @@ pub mod tests {
             open_file(&sealed, &key, &VAULT),
             Err(ProtectedError::UnsupportedVersion)
         ));
+    }
+
+    #[test]
+    fn refuses_a_chunk_count_beyond_the_largest_file_before_decrypting() {
+        assert_eq!(checked_chunk_count(0), Err(ProtectedError::Tampered));
+        assert_eq!(checked_chunk_count(1), Ok(1));
+        assert_eq!(
+            checked_chunk_count(MAX_CHUNKS * SEALED_CHUNK_BYTES),
+            Ok(MAX_CHUNKS)
+        );
+        assert_eq!(
+            checked_chunk_count(MAX_CHUNKS * SEALED_CHUNK_BYTES + 1),
+            Err(ProtectedError::TooLarge)
+        );
+    }
+
+    #[test]
+    fn refuses_to_write_or_read_metadata_over_64_kib() {
+        let key = DataKey::generate(1).unwrap();
+        let oversized = metadata(&"t".repeat(MAX_METADATA_BYTES));
+
+        assert!(matches!(
+            seal_file(&header(1, &key), &oversized, b"", &key),
+            Err(ProtectedError::TooLarge)
+        ));
+
+        let claimed_length = u32::try_from(MAX_METADATA_BYTES + 1).unwrap();
+        let mut plain = Zeroizing::new(claimed_length.to_be_bytes().to_vec());
+        plain.resize(PADDING_BLOCK_BYTES * 70, 0);
+        let sealed = seal_with_nonces(
+            &header(1, &key),
+            &plain,
+            &key,
+            &mut random_bytes::<NONCE_BYTES>,
+        )
+        .unwrap();
+        assert!(matches!(
+            open_file(&sealed, &key, &VAULT),
+            Err(ProtectedError::TooLarge)
+        ));
+    }
+
+    #[test]
+    fn refuses_authentic_files_whose_inner_lengths_do_not_add_up() {
+        let key = DataKey::generate(1).unwrap();
+        let mut long_claim = Zeroizing::new(2_u32.to_be_bytes().to_vec());
+        long_claim.extend_from_slice(b"{}");
+        long_claim.resize(PADDING_BLOCK_BYTES, 0);
+        let mut unpadded = plain_stream(&metadata("Note"), b"text").unwrap();
+        unpadded.truncate(PADDING_BLOCK_BYTES - 1);
+        let mut dirty_padding = plain_stream(&metadata("Note"), b"text").unwrap();
+        if let Some(last) = dirty_padding.last_mut() {
+            *last = 1;
+        }
+
+        for plain in [long_claim, unpadded, dirty_padding] {
+            let sealed = seal_with_nonces(
+                &header(1, &key),
+                &plain,
+                &key,
+                &mut random_bytes::<NONCE_BYTES>,
+            )
+            .unwrap();
+            assert!(matches!(
+                open_file(&sealed, &key, &VAULT),
+                Err(ProtectedError::Tampered)
+            ));
+        }
     }
 
     #[test]
