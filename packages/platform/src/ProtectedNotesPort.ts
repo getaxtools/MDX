@@ -18,6 +18,7 @@ export const PROTECTED_NOTES_FAILURES = [
   'notFound',
   'invalidRequest',
   'accessDenied',
+  'reencryptionPending',
 ] as const;
 
 export type ProtectedNotesFailure = (typeof PROTECTED_NOTES_FAILURES)[number];
@@ -38,6 +39,30 @@ export interface ProtectedStatus {
   readonly isUnlocked: boolean;
   /** The section has a slot for this PC; whether its key is still stored shows on unlock. */
   readonly canUnlockOnThisPc: boolean;
+  /** A re-encryption is not finished; once unlocked, `continueReencryption` carries it on. */
+  readonly isReencrypting: boolean;
+}
+
+export interface PasswordChange {
+  readonly currentPassword: string;
+  readonly newPassword: string;
+  /**
+   * Seals every note again with a new key, for when the old password may be known: the old
+   * password and recovery key then open nothing, and a new recovery key is given once.
+   */
+  readonly shouldReencrypt: boolean;
+}
+
+export interface PasswordChangeResult {
+  /** With a re-encryption, the new recovery key to show once. */
+  readonly recoveryKey?: string;
+}
+
+export interface ReencryptionProgress {
+  /** Files still to seal again; none once the re-encryption is over. */
+  readonly remaining: number;
+  /** Files that were damaged already and are left as they were. */
+  readonly damaged: number;
 }
 
 export type ProtectedNoteState = 'current' | 'olderCopy' | 'newerThanManifest' | 'unlisted' | 'missing';
@@ -112,6 +137,15 @@ export interface ProtectedNotesPort {
     recovery: { readonly recoveryKey: string; readonly newPassword: string },
   ): Promise<UnlockResult>;
   unlockOnThisPc(location: string): Promise<UnlockResult>;
+  /**
+   * Changes the password after the current one is confirmed; other PCs need the new one. With
+   * `shouldReencrypt`, call `continueReencryption` until nothing remains.
+   */
+  changePassword(location: string, change: PasswordChange): Promise<PasswordChangeResult>;
+  /** Seals the next few files again; resolves to how many remain. Resumes after a restart once unlocked. */
+  continueReencryption(location: string): Promise<ReencryptionProgress>;
+  /** A new recovery key in place of the old one, after the password is confirmed; resolves to it, to show once. */
+  newRecoveryKey(location: string, password: string): Promise<{ readonly recoveryKey: string }>;
   /** Keeps the folder as it is after a folder warning; this PC remembers it as seen. */
   acceptFolder(location: string): Promise<void>;
   forgetThisPc(location: string): Promise<void>;

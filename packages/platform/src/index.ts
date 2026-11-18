@@ -178,6 +178,8 @@ export {
   PROTECTED_NOTES_FAILURES,
   ProtectedNotesError,
   type NewProtectedNote,
+  type PasswordChange,
+  type PasswordChangeResult,
   type ProtectedNoteEdit,
   type ProtectedNotesFailure,
   type ProtectedNotesLockedListener,
@@ -188,6 +190,7 @@ export {
   type ProtectedNotesPort,
   type ProtectedFolderWarning,
   type ProtectedStatus,
+  type ReencryptionProgress,
   type UnlockResult,
 } from './ProtectedNotesPort';
 export { InMemoryProtectedNotes } from './fakes/InMemoryProtectedNotes';

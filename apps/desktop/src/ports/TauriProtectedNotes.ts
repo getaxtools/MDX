@@ -2,6 +2,9 @@ import {
   isProtectedNotesFailure,
   ProtectedNotesError,
   type NewProtectedNote,
+  type PasswordChange,
+  type PasswordChangeResult,
+  type ReencryptionProgress,
   type ProtectedNoteEdit,
   type ProtectedNoteSummary,
   type ProtectedNoteText,
@@ -56,6 +59,24 @@ export class TauriProtectedNotes implements ProtectedNotesPort {
     recovery: { readonly recoveryKey: string; readonly newPassword: string },
   ): Promise<UnlockResult> {
     return call('protected_unlock_with_recovery', { location, recovery });
+  }
+
+  changePassword(
+    location: string,
+    { currentPassword, newPassword, shouldReencrypt }: PasswordChange,
+  ): Promise<PasswordChangeResult> {
+    return call('protected_change_password', {
+      location,
+      change: { currentPassword, newPassword, reencrypt: shouldReencrypt },
+    });
+  }
+
+  continueReencryption(location: string): Promise<ReencryptionProgress> {
+    return call('protected_continue_reencryption', { location });
+  }
+
+  newRecoveryKey(location: string, password: string): Promise<{ readonly recoveryKey: string }> {
+    return call('protected_new_recovery_key', { location, password });
   }
 
   unlockOnThisPc(location: string): Promise<UnlockResult> {

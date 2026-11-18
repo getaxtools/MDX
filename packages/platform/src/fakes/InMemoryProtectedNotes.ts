@@ -1,6 +1,9 @@
 import {
   ProtectedNotesError,
   type NewProtectedNote,
+  type PasswordChange,
+  type PasswordChangeResult,
+  type ReencryptionProgress,
   type ProtectedNoteEdit,
   type ProtectedNoteSummary,
   type ProtectedNoteText,
@@ -29,8 +32,13 @@ interface Section {
   recoveryKey: string;
   isUnlocked: boolean;
   isRemembered: boolean;
+  /** Notes still to seal again with a new key. */
+  reencryptionRemaining: number;
   readonly notes: Map<string, StoredNote>;
 }
+
+/** Notes the fake seals again per call, as the native layer does a few at a time. */
+const REENCRYPTION_BATCH = 16;
 
 /** Protected sections in memory, behaving as the native ones do, for UI tests and component tests. */
 export class InMemoryProtectedNotes implements ProtectedNotesPort {
@@ -38,6 +46,7 @@ export class InMemoryProtectedNotes implements ProtectedNotesPort {
   private readonly lockListeners = new Set<ProtectedNotesLockedListener>();
   private readonly lockRequestListeners = new Set<ProtectedNotesLockRequestListener>();
   private nextNote = 0;
+  private recoveryKeyCount = 0;
   private clock = FIRST_TIME_MS;
 
   status(location: string): Promise<ProtectedStatus> {
@@ -46,18 +55,20 @@ export class InMemoryProtectedNotes implements ProtectedNotesPort {
       isSetUp: section !== undefined,
       isUnlocked: section?.isUnlocked === true,
       canUnlockOnThisPc: section?.isRemembered === true,
+      isReencrypting: (section?.reencryptionRemaining ?? 0) > 0,
     });
   }
 
   setUp(location: string, password: string): Promise<{ readonly recoveryKey: string }> {
     if (codePointCount(password) < MIN_PASSWORD_LENGTH) return refused('passwordTooShort');
     if (this.sections.has(location)) return refused('alreadySetUp');
-    const recoveryKey = `RCVR-${String(this.sections.size + 1).padStart(RECOVERY_NUMBER_LENGTH, '0')}-0000-0000-0000-0000-0000-0000-0000-0000-0000-0000-0000-00`;
+    const recoveryKey = this.newRecoveryKeyText();
     this.sections.set(location, {
       password,
       recoveryKey,
       isUnlocked: true,
       isRemembered: false,
+      reencryptionRemaining: 0,
       notes: new Map(),
     });
     return Promise.resolve({ recoveryKey });
@@ -82,6 +93,35 @@ export class InMemoryProtectedNotes implements ProtectedNotesPort {
     section.password = newPassword;
     section.isUnlocked = true;
     return {};
+  }
+
+  /** This PC stays remembered; the fake has no other PCs. */
+  async changePassword(
+    location: string,
+    { currentPassword, newPassword, shouldReencrypt }: PasswordChange,
+  ): Promise<PasswordChangeResult> {
+    if (codePointCount(newPassword) < MIN_PASSWORD_LENGTH) return refused('passwordTooShort');
+    const section = await this.unlockedSectionOf(location);
+    if (section.password !== currentPassword) return refused('wrongPassword');
+    if (section.reencryptionRemaining > 0) return refused('reencryptionPending');
+    section.password = newPassword;
+    if (!shouldReencrypt) return {};
+    section.recoveryKey = this.newRecoveryKeyText();
+    section.reencryptionRemaining = section.notes.size;
+    return { recoveryKey: section.recoveryKey };
+  }
+
+  async continueReencryption(location: string): Promise<ReencryptionProgress> {
+    const section = await this.unlockedSectionOf(location);
+    section.reencryptionRemaining = Math.max(section.reencryptionRemaining - REENCRYPTION_BATCH, 0);
+    return { remaining: section.reencryptionRemaining, damaged: 0 };
+  }
+
+  async newRecoveryKey(location: string, password: string): Promise<{ readonly recoveryKey: string }> {
+    const section = await this.unlockedSectionOf(location);
+    if (section.password !== password) return refused('wrongPassword');
+    section.recoveryKey = this.newRecoveryKeyText();
+    return { recoveryKey: section.recoveryKey };
   }
 
   async unlockOnThisPc(location: string): Promise<UnlockResult> {
@@ -205,6 +245,12 @@ export class InMemoryProtectedNotes implements ProtectedNotesPort {
   private async unlockedSectionOf(location: string): Promise<Section> {
     const section = await this.sectionOf(location);
     return section.isUnlocked ? section : refused('locked');
+  }
+
+  private newRecoveryKeyText(): string {
+    this.recoveryKeyCount += 1;
+    const number = String(this.recoveryKeyCount).padStart(RECOVERY_NUMBER_LENGTH, '0');
+    return `RCVR-${number}-0000-0000-0000-0000-0000-0000-0000-0000-0000-0000-0000-00`;
   }
 
   private tick(): number {

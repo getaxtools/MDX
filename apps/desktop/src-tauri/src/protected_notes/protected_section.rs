@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -7,8 +8,8 @@ use super::encrypted_file::{
     ExpectedFile, FileHeader, FileKind, FileMetadata, NOTE_ID_BYTES, open_file, seal_file,
 };
 use super::hex_text::{bytes_of_hex, hex_of};
-use super::key_derivation::{KdfParameters, derive_password_key};
-use super::key_slots::{DataKey, SlotKind, wrap_data_key};
+use super::key_derivation::KdfParameters;
+use super::key_slots::{DataKey, SlotKind, is_slot_for_key, unwrap_data_key, wrap_data_key};
 use super::manifest::{MANIFEST_FILE_NAME, Manifest, ManifestEntry, NoteState};
 use super::random::{random_bytes, random_key};
 use super::section_records::SectionRecord;
@@ -16,6 +17,10 @@ use super::vault_file::{SetUpRefusal, VAULT_FILE_NAME, Vault, set_up_refusal};
 use super::{KEY_BYTES, ProtectedError};
 use crate::documents::write_bytes_atomically;
 use crate::secrets::{DeviceSecretStore, SecretName};
+
+mod key_changes;
+
+pub use key_changes::Reencryption;
 
 const NOTES_FOLDER: &str = "notes";
 const NOTE_EXTENSION: &str = "mdxp";
@@ -34,8 +39,49 @@ pub struct UnlockedSection {
     folder: SectionFolder,
     vault: Vault,
     data_key: DataKey,
+    /// The data key a re-encryption is replacing, while some files are still sealed with it.
+    previous_key: Option<DataKey>,
+    /// Files a re-encryption found damaged in this session, so it does not try them again.
+    damaged_during_reencryption: HashSet<String>,
     manifest: Manifest,
     states: Vec<(String, NoteState)>,
+}
+
+/// The data key a file's header names: the current one, or the one a re-encryption is replacing.
+fn key_named_by<'key>(
+    bytes: &[u8],
+    data_key: &'key DataKey,
+    previous_key: Option<&'key DataKey>,
+) -> Result<&'key DataKey, ProtectedError> {
+    let header = FileHeader::parse(bytes)?;
+    if header.data_key_id == data_key.id {
+        return Ok(data_key);
+    }
+    previous_key
+        .filter(|previous| previous.id == header.data_key_id)
+        .ok_or(ProtectedError::WrongKey)
+}
+
+/// A file sealed with the previous key is one of the section's notes only at the revision the
+/// manifest lists for it: whoever knows that key could have put any other file there, and the
+/// manifest is sealed with the new key once a re-encryption starts.
+fn is_listed_at_its_revision(manifest: &Manifest, header: &FileHeader) -> bool {
+    manifest
+        .entries
+        .iter()
+        .any(|entry| entry.note_id == header.note_id && entry.revision == header.revision)
+}
+
+/// The data key a re-encryption replaces, from the vault's previous-key slot. A slot that does not
+/// open is left aside, so it cannot block the notes already re-encrypted.
+fn previous_key_of(vault: &Vault, data_key: &DataKey) -> Option<DataKey> {
+    let slot = vault
+        .slots
+        .iter()
+        .find(|slot| slot.kind == SlotKind::PreviousKey)?;
+    unwrap_data_key(slot, data_key.bytes(), &vault.vault_id)
+        .ok()
+        .filter(|previous| previous.id != data_key.id)
 }
 
 /// A note as the section's tree shows it; the title is shown only while the section is unlocked.
@@ -149,6 +195,8 @@ impl SectionFolder {
             folder: self.clone(),
             vault: created.vault,
             data_key: created.data_key,
+            previous_key: None,
+            damaged_during_reencryption: HashSet::new(),
             manifest,
             states: Vec::new(),
         };
@@ -202,20 +250,18 @@ impl UnlockedSection {
         vault: Vault,
         data_key: DataKey,
     ) -> Result<Self, ProtectedError> {
-        let notes = Self::read_note_files(folder, &vault, &data_key)?;
-        let manifest = match fs::read(folder.manifest_path()) {
-            Ok(bytes) => Manifest::open(&bytes, &data_key, &vault.vault_id)?,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                Manifest::rebuilt_from(&notes)
-            }
-            Err(_) => return Err(ProtectedError::Storage),
-        };
+        let previous_key = previous_key_of(&vault, &data_key);
+        let keys = (&data_key, previous_key.as_ref());
+        let mut notes = Self::read_note_files(folder, &vault, keys)?;
+        let manifest = Self::read_manifest(folder, &vault, keys, &mut notes)?;
         let headers: Vec<FileHeader> = notes.iter().map(|(header, _)| *header).collect();
         let states = manifest.reconcile(&headers)?;
         let mut section = Self {
             folder: folder.clone(),
             vault,
             data_key,
+            previous_key,
+            damaged_during_reencryption: HashSet::new(),
             manifest,
             states: Vec::new(),
         };
@@ -234,12 +280,38 @@ impl UnlockedSection {
         Ok(section)
     }
 
-    /// The header and metadata of every note file that opens with the data key; a damaged file is
-    /// left out here and refused when it is opened.
+    /// The manifest, or one made again from the note files when it is lost. Files sealed with the
+    /// previous key are kept only at the revision the manifest lists, and never make up a lost one.
+    fn read_manifest(
+        folder: &SectionFolder,
+        vault: &Vault,
+        (data_key, previous_key): (&DataKey, Option<&DataKey>),
+        notes: &mut Vec<(FileHeader, FileMetadata)>,
+    ) -> Result<Manifest, ProtectedError> {
+        let is_current = |header: &FileHeader| header.data_key_id == data_key.id;
+        let manifest = match fs::read(folder.manifest_path()) {
+            Ok(bytes) => {
+                let key = key_named_by(&bytes, data_key, previous_key)?;
+                Manifest::open(&bytes, key, &vault.vault_id)?
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                notes.retain(|(header, _)| is_current(header));
+                Manifest::rebuilt_from(notes)
+            }
+            Err(_) => return Err(ProtectedError::Storage),
+        };
+        notes.retain(|(header, _)| {
+            is_current(header) || is_listed_at_its_revision(&manifest, header)
+        });
+        Ok(manifest)
+    }
+
+    /// The header and metadata of every note file that opens with the data key its header names; a
+    /// damaged file is left out here and refused when it is opened.
     fn read_note_files(
         folder: &SectionFolder,
         vault: &Vault,
-        data_key: &DataKey,
+        (data_key, previous_key): (&DataKey, Option<&DataKey>),
     ) -> Result<Vec<(FileHeader, FileMetadata)>, ProtectedError> {
         Ok(folder
             .note_file_names()?
@@ -247,13 +319,8 @@ impl UnlockedSection {
             .filter_map(|name| {
                 let note_id = note_id_of_file_name(name)?;
                 let bytes = fs::read(folder.notes_folder().join(name)).ok()?;
-                open_file(
-                    &bytes,
-                    data_key,
-                    &vault.vault_id,
-                    &ExpectedFile::note(note_id),
-                )
-                .ok()
+                let key = key_named_by(&bytes, data_key, previous_key).ok()?;
+                open_file(&bytes, key, &vault.vault_id, &ExpectedFile::note(note_id)).ok()
             })
             .map(|opened| (opened.header, opened.metadata))
             .collect())
@@ -321,7 +388,15 @@ impl UnlockedSection {
                 _ => ProtectedError::Storage,
             })?;
         let expected = ExpectedFile::note_of_kind(entry.note_id, entry.kind);
-        let opened = open_file(&bytes, &self.data_key, &self.vault.vault_id, &expected)?;
+        let opened = open_file(
+            &bytes,
+            self.key_for(&bytes)?,
+            &self.vault.vault_id,
+            &expected,
+        )?;
+        if !self.is_accepted(&opened.header) {
+            return Err(ProtectedError::Tampered);
+        }
         Ok(OpenedNote {
             is_older_copy: opened.header.revision < entry.revision,
             revision: opened.header.revision,
@@ -388,8 +463,23 @@ impl UnlockedSection {
     fn created_ms_of(&self, note_id: &str) -> Option<u64> {
         let bytes = fs::read(self.folder.note_path(note_id)).ok()?;
         let expected = ExpectedFile::note(bytes_of_hex(note_id).ok()?);
-        let opened = open_file(&bytes, &self.data_key, &self.vault.vault_id, &expected).ok()?;
+        let key = self.key_for(&bytes).ok()?;
+        let opened = open_file(&bytes, key, &self.vault.vault_id, &expected).ok()?;
+        if !self.is_accepted(&opened.header) {
+            return None;
+        }
         Some(opened.metadata.created_ms)
+    }
+
+    /// Whether an opened file is one of the section's notes: sealed with the current key, or with
+    /// the previous key at the revision the manifest lists.
+    fn is_accepted(&self, header: &FileHeader) -> bool {
+        header.data_key_id == self.data_key.id || is_listed_at_its_revision(&self.manifest, header)
+    }
+
+    /// The key a file of this section is sealed with, by its header.
+    fn key_for(&self, bytes: &[u8]) -> Result<&DataKey, ProtectedError> {
+        key_named_by(bytes, &self.data_key, self.previous_key.as_ref())
     }
 
     fn list_entry(&mut self, header: &FileHeader, metadata: &FileMetadata) {
@@ -422,35 +512,13 @@ impl UnlockedSection {
             .ok_or(ProtectedError::NoteNotFound)
     }
 
-    /// Replaces every password slot with one for the new password, with a new salt; other slots stay.
-    pub fn replace_password(
-        &mut self,
-        password: &str,
-        parameters: KdfParameters,
-    ) -> Result<(), ProtectedError> {
-        let parameters = parameters.checked_for_writing()?;
-        let salt = random_bytes()?;
-        let key = derive_password_key(password, &salt, parameters)?;
-        let slot = wrap_data_key(
-            &self.data_key,
-            &key,
-            &self.vault.vault_id,
-            SlotKind::Password { parameters, salt },
-        )?;
-        let mut vault = self.vault.clone();
-        vault
-            .slots
-            .retain(|slot| !matches!(slot.kind, SlotKind::Password { .. }));
-        vault.slots.push(slot);
-        self.write_vault(vault)
-    }
-
     /// Remembers the section on this PC: a new device key in the store, and a device slot for it. A
-    /// key already remembered is replaced.
+    /// key this PC remembered before is replaced with its slot; other PCs' slots stay.
     pub fn remember_on_this_pc(
         &mut self,
         store: &dyn DeviceSecretStore,
     ) -> Result<(), ProtectedError> {
+        let earlier_key = stored_device_key(store, &self.vault.vault_id);
         let device_key = random_key()?;
         let slot = wrap_data_key(
             &self.data_key,
@@ -463,7 +531,9 @@ impl UnlockedSection {
             .save(&name, device_key.as_slice())
             .map_err(|_| ProtectedError::SecretStoreUnavailable)?;
         let mut vault = self.vault.clone();
-        vault.slots.retain(|slot| slot.kind != SlotKind::Device);
+        vault
+            .slots
+            .retain(|kept| !is_device_slot_of(kept, earlier_key.as_deref()));
         vault.slots.push(slot);
         if let Err(error) = self.write_vault(vault) {
             let _ = store.delete(&name);
@@ -472,10 +542,14 @@ impl UnlockedSection {
         Ok(())
     }
 
-    /// Forgets this PC: the device slot goes from the vault and the device key from the store.
+    /// Forgets this PC: its device slot goes from the vault and its device key from the store; other
+    /// PCs stay remembered.
     pub fn forget_this_pc(&mut self, store: &dyn DeviceSecretStore) -> Result<(), ProtectedError> {
+        let this_pc_key = stored_device_key(store, &self.vault.vault_id);
         let mut vault = self.vault.clone();
-        vault.slots.retain(|slot| slot.kind != SlotKind::Device);
+        vault
+            .slots
+            .retain(|kept| !is_device_slot_of(kept, this_pc_key.as_deref()));
         self.write_vault(vault)?;
         store
             .delete(&SecretName::for_vault(&self.vault.vault_id))
@@ -497,6 +571,21 @@ impl UnlockedSection {
     }
 }
 
+/// The device key this PC keeps for a vault; none when it keeps none or the store cannot be read.
+pub fn stored_device_key(
+    store: &dyn DeviceSecretStore,
+    vault_id: &[u8; 16],
+) -> Option<Zeroizing<[u8; KEY_BYTES]>> {
+    let secret = store.load(&SecretName::for_vault(vault_id)).ok()??;
+    let key: [u8; KEY_BYTES] = secret.as_slice().try_into().ok()?;
+    Some(Zeroizing::new(key))
+}
+
+/// Whether a slot is the device slot made for this key.
+fn is_device_slot_of(slot: &super::KeySlot, device_key: Option<&[u8; KEY_BYTES]>) -> bool {
+    slot.kind == SlotKind::Device && device_key.is_some_and(|key| is_slot_for_key(slot, key))
+}
+
 /// Opens a section with this PC's remembered key.
 pub fn unlock_on_this_pc(
     folder: &SectionFolder,
@@ -515,6 +604,16 @@ pub fn unlock_on_this_pc(
     );
     let data_key = vault.unlock_with_key(SlotKind::Device, &key)?;
     UnlockedSection::opened(folder, vault, data_key)
+}
+
+/// Whether the folder's vault has a re-encryption that is not finished, without any key.
+pub fn has_unfinished_reencryption(folder: &SectionFolder) -> bool {
+    folder.read_vault().is_ok_and(|vault| {
+        vault
+            .slots
+            .iter()
+            .any(|slot| slot.kind == SlotKind::PreviousKey)
+    })
 }
 
 /// Whether the folder holds a vault that this PC remembers, without reading any secret.
@@ -611,8 +710,9 @@ mod tests {
         let mut recovered =
             UnlockedSection::unlock_with_key(&folder, SlotKind::Recovery, &recovery).unwrap();
         recovered
-            .replace_password("a brand new passphrase", QUICK)
+            .add_password_slot("a brand new passphrase", QUICK)
             .unwrap();
+        recovered.finish_password_change(None).unwrap();
 
         assert!(UnlockedSection::unlock_with_password(&folder, "a brand new passphrase").is_ok());
         assert!(matches!(

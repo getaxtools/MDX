@@ -379,11 +379,17 @@ describe('TauriAttachments', () => {
 describe('TauriProtectedNotes', () => {
   const LOCATION = 'C:\\Notes';
   const PASSWORD = 'correct horse battery';
+  const NEW_PASSWORD = 'staple tuna lighthouse';
   const NOTE_ID = 'a'.repeat(32);
 
   function mockProtectedCommands() {
     return mockCommands({
-      protected_status: () => ({ isSetUp: true, isUnlocked: false, canUnlockOnThisPc: true }),
+      protected_status: () => ({
+        isSetUp: true,
+        isUnlocked: false,
+        canUnlockOnThisPc: true,
+        isReencrypting: false,
+      }),
       protected_set_up: () => ({ recoveryKey: 'ABCD-EFGH' }),
       protected_unlock: () => ({ folderWarning: 'olderNotes' }),
       protected_unlock_with_recovery: () => ({}),
@@ -404,6 +410,9 @@ describe('TauriProtectedNotes', () => {
         isOlderCopy: false,
       }),
       protected_save: () => 3,
+      protected_change_password: () => ({ recoveryKey: 'IJKL-MNOP' }),
+      protected_continue_reencryption: () => ({ remaining: 0, damaged: 0 }),
+      protected_new_recovery_key: () => ({ recoveryKey: 'QRST-UVWX' }),
     });
   }
 
@@ -420,7 +429,20 @@ describe('TauriProtectedNotes', () => {
     await notes.list(LOCATION);
     await notes.create(LOCATION, { title: 'Bank details', folder: '' });
     await notes.open(LOCATION, NOTE_ID);
-    return notes.save(LOCATION, { noteId: NOTE_ID, text: 'PIN', encoding: 'UTF-8', hasByteOrderMark: false });
+    const revision = await notes.save(LOCATION, {
+      noteId: NOTE_ID,
+      text: 'PIN',
+      encoding: 'UTF-8',
+      hasByteOrderMark: false,
+    });
+    await notes.changePassword(LOCATION, {
+      currentPassword: PASSWORD,
+      newPassword: NEW_PASSWORD,
+      shouldReencrypt: true,
+    });
+    await notes.continueReencryption(LOCATION);
+    await notes.newRecoveryKey(LOCATION, PASSWORD);
+    return revision;
   }
 
   it('sends each operation to its command and the password only where the user typed it', async () => {
@@ -442,12 +464,25 @@ describe('TauriProtectedNotes', () => {
       'protected_create',
       'protected_open',
       'protected_save',
+      'protected_change_password',
+      'protected_continue_reencryption',
+      'protected_new_recovery_key',
     ]);
     const withPassword = calls
       .filter((call) => JSON.stringify(call.args).includes(PASSWORD))
       .map((call) => call.command);
-    expect(withPassword).toEqual(['protected_set_up', 'protected_unlock', 'protected_unlock_with_recovery']);
+    expect(withPassword).toEqual([
+      'protected_set_up',
+      'protected_unlock',
+      'protected_unlock_with_recovery',
+      'protected_change_password',
+      'protected_new_recovery_key',
+    ]);
     expect(calls[2]?.args).toEqual({ location: LOCATION, password: PASSWORD, remember: true });
+    expect(calls.find((call) => call.command === 'protected_change_password')?.args).toEqual({
+      location: LOCATION,
+      change: { currentPassword: PASSWORD, newPassword: NEW_PASSWORD, reencrypt: true },
+    });
   });
 
   it('receives no key material: what the commands answer holds only the fields of the port', async () => {
@@ -457,7 +492,12 @@ describe('TauriProtectedNotes', () => {
     const status = await notes.status(LOCATION);
     const opened = await notes.open(LOCATION, NOTE_ID);
 
-    expect(Object.keys(status).sort()).toEqual(['canUnlockOnThisPc', 'isSetUp', 'isUnlocked']);
+    expect(Object.keys(status).sort()).toEqual([
+      'canUnlockOnThisPc',
+      'isReencrypting',
+      'isSetUp',
+      'isUnlocked',
+    ]);
     expect(Object.keys(opened).sort()).toEqual([
       'encoding',
       'hasByteOrderMark',

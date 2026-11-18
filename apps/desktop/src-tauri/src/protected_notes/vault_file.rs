@@ -137,7 +137,7 @@ impl Vault {
             .iter()
             .map(SavedSlot::to_slot)
             .collect::<Result<_, _>>()?;
-        if !is_affordable(&slots) {
+        if !is_affordable(&slots) || !has_at_most_one_previous_key(&slots) {
             return Err(ProtectedError::Tampered);
         }
         Ok(Self {
@@ -145,6 +145,15 @@ impl Vault {
             slots,
         })
     }
+}
+
+/// One re-encryption at a time: a vault holds at most one previous data key.
+fn has_at_most_one_previous_key(slots: &[KeySlot]) -> bool {
+    slots
+        .iter()
+        .filter(|slot| slot.kind == SlotKind::PreviousKey)
+        .count()
+        <= 1
 }
 
 /// At most two password slots, and no more key derivation work across them than unlocking should take.
@@ -189,6 +198,7 @@ enum SavedSlotKind {
     Password,
     Recovery,
     Device,
+    PreviousKey,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -218,6 +228,7 @@ impl SavedSlot {
             ),
             SlotKind::Recovery => (SavedSlotKind::Recovery, None),
             SlotKind::Device => (SavedSlotKind::Device, None),
+            SlotKind::PreviousKey => (SavedSlotKind::PreviousKey, None),
         };
         Self {
             kind,
@@ -235,6 +246,7 @@ impl SavedSlot {
             (SavedSlotKind::Password, Some(kdf)) => kdf.to_kind()?,
             (SavedSlotKind::Recovery, None) => SlotKind::Recovery,
             (SavedSlotKind::Device, None) => SlotKind::Device,
+            (SavedSlotKind::PreviousKey, None) => SlotKind::PreviousKey,
             _ => return Err(ProtectedError::Tampered),
         };
         let wrapped_key = bytes_of_hex_text(&self.wrapped_key, KEY_BYTES + TAG_BYTES)?;

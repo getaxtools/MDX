@@ -46,7 +46,9 @@ impl DataKey {
     }
 }
 
-/// How a slot is opened: a key from a password, the recovery key or this PC's remembered key.
+/// How a slot is opened: a key from a password, the recovery key or this PC's remembered key. A
+/// previous-key slot holds the data key a re-encryption replaces, wrapped by the new data key, so
+/// notes not yet re-encrypted still open until the re-encryption ends and the slot is removed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SlotKind {
     Password {
@@ -55,6 +57,7 @@ pub enum SlotKind {
     },
     Recovery,
     Device,
+    PreviousKey,
 }
 
 impl SlotKind {
@@ -63,6 +66,7 @@ impl SlotKind {
             Self::Password { .. } => 1,
             Self::Recovery => 2,
             Self::Device => 3,
+            Self::PreviousKey => 4,
         }
     }
 }
@@ -165,6 +169,12 @@ fn commitment_of(slot_key: &[u8; KEY_BYTES]) -> [u8; COMMITMENT_BYTES] {
     hash.update(COMMITMENT_CONTEXT);
     hash.update(slot_key);
     hash.finalize().into()
+}
+
+/// Whether a slot was made for this key, from its commitment alone, without unwrapping anything; as
+/// to tell which device slot is this PC's.
+pub fn is_slot_for_key(slot: &KeySlot, slot_key: &[u8; KEY_BYTES]) -> bool {
+    is_same_in_constant_time(&commitment_of(slot_key), &slot.commitment)
 }
 
 /// Compares every byte whatever the first difference, so the time taken says nothing about where.

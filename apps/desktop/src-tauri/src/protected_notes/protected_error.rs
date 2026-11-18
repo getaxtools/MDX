@@ -34,6 +34,8 @@ pub enum ProtectedError {
     SecretStoreUnavailable,
     #[error("a protected file could not be read or written")]
     Storage,
+    #[error("a re-encryption of the protected notes is not finished yet")]
+    ReencryptionPending,
 }
 
 impl From<std::io::Error> for ProtectedError {
