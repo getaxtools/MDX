@@ -6,9 +6,10 @@ use std::fs;
 use std::io::Read;
 use std::path::Path;
 
+use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
-use super::UnlockedSection;
+use super::{UnlockedSection, has_previous_key_slot, note_id_of_file_name};
 use crate::documents::write_bytes_atomically;
 use crate::protected_notes::encrypted_file::{
     ExpectedFile, FileHeader, HEADER_BYTES, open_file, seal_file,
@@ -16,8 +17,10 @@ use crate::protected_notes::encrypted_file::{
 use crate::protected_notes::hex_text::hex_of;
 use crate::protected_notes::key_derivation::{KdfParameters, derive_password_key};
 use crate::protected_notes::key_slots::{
-    DataKey, SlotKind, is_same_in_constant_time, is_slot_for_key, wrap_data_key,
+    DataKey, KeySlot, SlotKind, is_same_in_constant_time, is_slot_for_key,
+    previous_key_wrapping_key, wrap_data_key,
 };
+use crate::protected_notes::manifest::PreviousKeyFile;
 use crate::protected_notes::random::{random_bytes, random_key};
 use crate::protected_notes::vault_file::Vault;
 use crate::protected_notes::{KEY_BYTES, ProtectedError};
@@ -25,10 +28,31 @@ use crate::protected_notes::{KEY_BYTES, ProtectedError};
 /// How far a re-encryption has got.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Reencryption {
-    /// Files still sealed with the key being replaced; none once the re-encryption is over.
+    /// Files still to seal again; none once every recorded file is done.
     pub remaining: usize,
-    /// Files that no longer open with that key, left as they were: they were unreadable already.
+    /// Recorded files that no longer open with the previous key, left as they were: they were
+    /// unreadable already.
     pub damaged: usize,
+    /// Files sealed with the previous key that the re-encryption did not record, or that changed since
+    /// it started, such as an older copy a sync tool put back. While there are any, the previous key
+    /// is kept, so the user can decide; `finish_reencryption` ends it without them.
+    pub held_back: usize,
+}
+
+/// What unlocks the section after a re-encryption: a new password with its measured settings, a new
+/// recovery key, and this PC's device key when it remembers the section.
+pub struct NewUnlocks<'unlocks> {
+    pub password: &'unlocks str,
+    pub parameters: KdfParameters,
+    pub recovery_key: &'unlocks [u8; KEY_BYTES],
+    pub this_pc_key: Option<&'unlocks [u8; KEY_BYTES]>,
+}
+
+/// The previous-key files on disk, as a re-encryption step finds them.
+struct PreviousKeyScan {
+    /// Recorded notes still to seal again, by note id.
+    pending: Vec<String>,
+    held_back: usize,
 }
 
 fn is_password(kind: SlotKind) -> bool {
@@ -54,14 +78,27 @@ impl UnlockedSection {
             .count()
     }
 
-    /// A password slot for this section's data key, with a new salt and the settings given, which are
-    /// measured anew for every change and never taken from the slot being replaced.
+    /// Whether the section was unlocked with the password of its newest password slot, the only
+    /// unlock after which a password change that stopped halfway is finished: the user then knows
+    /// the new password, and an old or made-up slot added after it can never push it out.
+    pub fn was_opened_with_newest_password(&self) -> bool {
+        let newest = self
+            .vault
+            .slots
+            .iter()
+            .rev()
+            .find(|slot| is_password(slot.kind));
+        newest.is_some_and(|slot| self.opened_with_password_slot == Some(slot.slot_id))
+    }
+
+    /// A password slot for a data key, with a new salt and the settings given, which are measured
+    /// anew for every change and never taken from the slot being replaced.
     fn new_password_slot(
         &self,
         password: &str,
         parameters: KdfParameters,
         data_key: &DataKey,
-    ) -> Result<crate::protected_notes::KeySlot, ProtectedError> {
+    ) -> Result<KeySlot, ProtectedError> {
         let parameters = parameters.checked_for_writing()?;
         let salt = random_bytes()?;
         let key = derive_password_key(password, &salt, parameters)?;
@@ -94,16 +131,18 @@ impl UnlockedSection {
             .filter(|(index, slot)| !is_password(slot.kind) || Some(*index) == newest_password)
             .map(|(_, slot)| slot.clone())
             .collect();
+        let slot_id = slot.slot_id;
         slots.push(slot);
         self.write_vault(Vault {
             vault_id: self.vault.vault_id,
             slots,
-        })
+        })?;
+        self.opened_with_password_slot = Some(slot_id);
+        Ok(())
     }
 
-    /// Second step of a password change, also run on unlock after a change that stopped halfway: every
-    /// password slot but the newest is removed, and every device slot but this PC's, so other PCs need
-    /// the new password. Returns whether the vault changed.
+    /// Second step of a password change: every password slot but the newest is removed, and every
+    /// device slot but this PC's, so other PCs need the new password. Returns whether the vault changed.
     pub fn finish_password_change(
         &mut self,
         this_pc_key: Option<&[u8; KEY_BYTES]>,
@@ -160,16 +199,50 @@ impl UnlockedSection {
     }
 
     pub fn is_reencrypting(&self) -> bool {
-        self.vault
-            .slots
-            .iter()
-            .any(|slot| slot.kind == SlotKind::PreviousKey)
+        has_previous_key_slot(&self.vault)
     }
 
-    /// Starts a re-encryption with a new data key and a new password. One vault write replaces every
-    /// slot: the new password's, a new recovery key's, this PC's device slot when it is remembered,
-    /// and the previous key wrapped by the new one. The old password, the old recovery key and other
-    /// PCs no longer open the section from then on. Returns the new recovery key to show once.
+    /// The slots after a re-encryption starts: the new password's, the new recovery key's, this PC's
+    /// device slot when the vault has one for its key, and the previous data key, wrapped with a key
+    /// derived from the new one.
+    fn slots_for_new_key(
+        &self,
+        new_key: &DataKey,
+        unlocks: &NewUnlocks<'_>,
+    ) -> Result<Vec<KeySlot>, ProtectedError> {
+        let vault_id = self.vault.vault_id;
+        let mut slots = vec![
+            self.new_password_slot(unlocks.password, unlocks.parameters, new_key)?,
+            wrap_data_key(new_key, unlocks.recovery_key, &vault_id, SlotKind::Recovery)?,
+        ];
+        let remembered_key = unlocks.this_pc_key.filter(|key| {
+            self.vault
+                .slots
+                .iter()
+                .any(|slot| slot.kind == SlotKind::Device && is_slot_for_key(slot, key))
+        });
+        if let Some(device_key) = remembered_key {
+            slots.push(wrap_data_key(
+                new_key,
+                device_key,
+                &vault_id,
+                SlotKind::Device,
+            )?);
+        }
+        slots.push(wrap_data_key(
+            &self.data_key,
+            &previous_key_wrapping_key(new_key),
+            &vault_id,
+            SlotKind::PreviousKey,
+        )?);
+        Ok(slots)
+    }
+
+    /// Starts a re-encryption with a new data key. First the manifest, sealed with the new key and
+    /// recording the hash of every note file to seal again, is staged; then one vault write replaces
+    /// every slot, so the old password, the old recovery key and other PCs no longer open the section;
+    /// then the staged manifest takes the manifest's place. A failure before the vault write changes
+    /// nothing. Returns the new recovery key to show once.
     pub fn start_reencryption(
         &mut self,
         password: &str,
@@ -186,79 +259,115 @@ impl UnlockedSection {
             .ok_or(ProtectedError::TooLarge)?;
         let new_key = DataKey::generate(next_id)?;
         let recovery_key = random_key()?;
+        let unlocks = NewUnlocks {
+            password,
+            parameters,
+            recovery_key: &recovery_key,
+            this_pc_key,
+        };
+        let slots = self.slots_for_new_key(&new_key, &unlocks)?;
+        let mut manifest = self.manifest.clone();
+        manifest.revision += 1;
+        manifest.previous_key_files = Some(self.files_to_reencrypt()?);
+        let staged_path = self.folder.staged_manifest_path();
+        write_bytes_atomically(
+            &staged_path,
+            &manifest.seal(&self.vault.vault_id, &new_key)?,
+        )
+        .map_err(|_| ProtectedError::Storage)?;
         let vault_id = self.vault.vault_id;
-        let mut slots = vec![
-            self.new_password_slot(password, parameters, &new_key)?,
-            wrap_data_key(&new_key, &recovery_key, &vault_id, SlotKind::Recovery)?,
-        ];
-        if let Some(device_key) = self.remembered_device_key(this_pc_key) {
-            slots.push(wrap_data_key(
-                &new_key,
-                device_key,
-                &vault_id,
-                SlotKind::Device,
-            )?);
+        if let Err(failure) = self.write_vault(Vault { vault_id, slots }) {
+            let _ = fs::remove_file(&staged_path);
+            return Err(failure);
         }
-        slots.push(wrap_data_key(
-            &self.data_key,
-            new_key.bytes(),
-            &vault_id,
-            SlotKind::PreviousKey,
-        )?);
-        self.write_vault(Vault { vault_id, slots })?;
-        let previous_key = std::mem::replace(&mut self.data_key, new_key);
-        self.previous_key = Some(previous_key);
+        self.previous_key = Some(std::mem::replace(&mut self.data_key, new_key));
+        self.manifest = manifest;
         self.damaged_during_reencryption.clear();
-        // From here the manifest, sealed with the new key, says which files sealed with the previous
-        // key are notes. Should this write fail, the next step writes it before anything else; the
-        // new recovery key is returned either way, as the vault already holds it.
-        let _ = self.write_manifest();
+        // Should the rename fail, the next unlock puts the staged manifest in place.
+        let _ = fs::rename(&staged_path, self.folder.manifest_path());
         Ok(recovery_key)
     }
 
-    /// This PC's device key, when the vault has a device slot for it.
-    fn remembered_device_key<'key>(
-        &self,
-        this_pc_key: Option<&'key [u8; KEY_BYTES]>,
-    ) -> Option<&'key [u8; KEY_BYTES]> {
-        this_pc_key.filter(|key| {
-            self.vault
-                .slots
-                .iter()
-                .any(|slot| slot.kind == SlotKind::Device && is_slot_for_key(slot, key))
-        })
+    /// The note files the manifest lists at their listed revision, sealed with the current key, with
+    /// the hash of their bytes. A file that is not, such as an older copy, is not recorded and will
+    /// hold the previous key back for the user to decide.
+    fn files_to_reencrypt(&self) -> Result<Vec<PreviousKeyFile>, ProtectedError> {
+        let mut files = Vec::new();
+        for entry in &self.manifest.entries {
+            let bytes = match fs::read(self.folder.note_path(&hex_of(&entry.note_id))) {
+                Ok(bytes) => bytes,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(_) => return Err(ProtectedError::Storage),
+            };
+            let is_listed_file = FileHeader::parse(&bytes).is_ok_and(|header| {
+                header.data_key_id == self.data_key.id
+                    && header.note_id == entry.note_id
+                    && header.revision == entry.revision
+            });
+            if is_listed_file {
+                files.push(PreviousKeyFile {
+                    note_id: entry.note_id,
+                    sha256: Sha256::digest(&bytes).into(),
+                });
+            }
+        }
+        Ok(files)
     }
 
-    /// Re-encrypts up to `batch` of the notes the manifest lists that are still sealed with the
-    /// previous key. Once none is left, the previous-key slot is removed and the re-encryption is
-    /// over. Each file is replaced atomically and named by its own header, so a stop anywhere resumes
-    /// where it was. Only the manifest says which files are notes, so files put in the folder by
-    /// anyone else are never sealed again or waited for. A note that no longer opens with the previous
-    /// key, or is not the revision the manifest lists, is left as it was; one that cannot be read is
-    /// an error, so the key is not dropped while a note is only out of reach.
+    /// Seals up to `batch` of the recorded files again with the current key. Once none is left and
+    /// no other file sealed with the previous key is there, the previous-key slot is removed and the
+    /// re-encryption is over. Each file is replaced atomically, so a stop anywhere resumes where it
+    /// was. The re-encryption cannot go on without a manifest that records its files, nor without a
+    /// previous-key slot that opens: both are refused as damage and the slot is kept. A file that
+    /// cannot be read is an error, so the key is not dropped while a note is only out of reach.
     pub fn continue_reencryption(&mut self, batch: usize) -> Result<Reencryption, ProtectedError> {
-        let Some(previous_id) = self.previous_key.as_ref().map(|key| key.id) else {
-            self.end_reencryption()?;
+        if !self.is_reencrypting() {
             return Ok(Reencryption {
                 remaining: 0,
                 damaged: 0,
+                held_back: 0,
             });
-        };
+        }
+        let previous_id = self
+            .previous_key
+            .as_ref()
+            .map(|key| key.id)
+            .ok_or(ProtectedError::Tampered)?;
+        if self.manifest.previous_key_files.is_none() {
+            return Err(ProtectedError::Tampered);
+        }
         if self.sealed_key_id(&self.folder.manifest_path())? != Some(self.data_key.id) {
             self.write_manifest()?;
         }
-        let pending = self.notes_sealed_with(previous_id)?;
-        for note_id in pending.iter().take(batch) {
+        let scan = self.scan_previous_key_files(previous_id)?;
+        for note_id in scan.pending.iter().take(batch) {
             self.reseal(note_id)?;
         }
-        let remaining = pending.len().saturating_sub(batch);
-        if remaining == 0 {
+        let remaining = scan.pending.len().saturating_sub(batch);
+        if remaining == 0 && scan.held_back == 0 {
             self.end_reencryption()?;
         }
         Ok(Reencryption {
             remaining,
             damaged: self.damaged_during_reencryption.len(),
+            held_back: scan.held_back,
         })
+    }
+
+    /// Ends a re-encryption whose recorded files are all done, leaving the held-back files sealed
+    /// with the previous key, which then no longer open; or one whose previous-key slot or record is
+    /// damaged. Only on the user's say, after the password is confirmed.
+    pub fn finish_reencryption(&mut self) -> Result<(), ProtectedError> {
+        if let Some(previous_id) = self.previous_key.as_ref().map(|key| key.id)
+            && self.manifest.previous_key_files.is_some()
+            && !self
+                .scan_previous_key_files(previous_id)?
+                .pending
+                .is_empty()
+        {
+            return Err(ProtectedError::ReencryptionPending);
+        }
+        self.end_reencryption()
     }
 
     fn write_manifest(&self) -> Result<(), ProtectedError> {
@@ -267,7 +376,7 @@ impl UnlockedSection {
             .map_err(|_| ProtectedError::Storage)
     }
 
-    /// The previous-key slot goes, and the previous key with it.
+    /// The previous-key slot goes, and the previous key with it; then the manifest drops its record.
     fn end_reencryption(&mut self) -> Result<(), ProtectedError> {
         if self.is_reencrypting() {
             let slots = self
@@ -283,6 +392,9 @@ impl UnlockedSection {
             })?;
         }
         self.previous_key = None;
+        self.manifest.previous_key_files = None;
+        // A record left in a manifest after the slot is gone is never read; the next save drops it.
+        let _ = self.write_manifest();
         Ok(())
     }
 
@@ -302,50 +414,49 @@ impl UnlockedSection {
             .map(|header| header.data_key_id))
     }
 
-    /// The notes the manifest lists whose file is still sealed with this key, except those found
-    /// damaged in this session. Something other than a file in a note's place counts as damaged.
-    fn notes_sealed_with(&mut self, key_id: u32) -> Result<Vec<String>, ProtectedError> {
-        let mut pending = Vec::new();
-        let note_ids: Vec<String> = self
-            .manifest
-            .entries
-            .iter()
-            .map(|entry| hex_of(&entry.note_id))
-            .collect();
-        for note_id in note_ids {
-            if self.damaged_during_reencryption.contains(&note_id) {
+    /// Every file of the notes folder sealed with the previous key: a recorded file still as it was
+    /// is pending, any other holds the key back. Something other than a file is no note and is skipped.
+    fn scan_previous_key_files(&self, previous_id: u32) -> Result<PreviousKeyScan, ProtectedError> {
+        let mut scan = PreviousKeyScan {
+            pending: Vec::new(),
+            held_back: 0,
+        };
+        for name in self.folder.note_file_names()? {
+            let path = self.folder.notes_folder().join(&name);
+            if path.is_dir() || self.sealed_key_id(&path)? != Some(previous_id) {
                 continue;
             }
-            let path = self.folder.note_path(&note_id);
-            if path.exists() && !path.is_file() {
-                self.damaged_during_reencryption.insert(note_id);
-            } else if self.sealed_key_id(&path)? == Some(key_id) {
-                pending.push(note_id);
+            let bytes = fs::read(&path).map_err(|_| ProtectedError::Storage)?;
+            let recorded = note_id_of_file_name(&name).filter(|note_id| {
+                super::is_recorded_previous_key_file(&self.manifest, note_id, &bytes)
+            });
+            match recorded {
+                Some(note_id) if self.damaged_during_reencryption.contains(&hex_of(&note_id)) => {}
+                Some(note_id) => scan.pending.push(hex_of(&note_id)),
+                None => scan.held_back += 1,
             }
         }
-        pending.sort();
-        Ok(pending)
+        scan.pending.sort();
+        Ok(scan)
     }
 
-    /// One note sealed again with the current key: same note id, revision, metadata and bytes. Only
-    /// the revision the manifest lists is sealed again, so a file put in its place with the previous
-    /// key by someone who knows it is not carried over.
+    /// One recorded file sealed again with the current key: same note id, revision, metadata and
+    /// bytes. A recorded file that does not open was damaged before the re-encryption and stays so.
     fn reseal(&mut self, note_id: &str) -> Result<(), ProtectedError> {
         let path = self.folder.note_path(note_id);
         let bytes = fs::read(&path).map_err(|_| ProtectedError::Storage)?;
-        let entry = self.entry(note_id)?;
-        let (listed_id, listed_revision) = (entry.note_id, entry.revision);
-        let Some(previous_key) = &self.previous_key else {
+        let (Some(previous_key), Ok(id)) = (&self.previous_key, super::bytes_of_hex(note_id))
+        else {
             return Ok(());
         };
         let opened = match open_file(
             &bytes,
             previous_key,
             &self.vault.vault_id,
-            &ExpectedFile::note(listed_id),
+            &ExpectedFile::note(id),
         ) {
-            Ok(opened) if opened.header.revision == listed_revision => opened,
-            Ok(_) | Err(ProtectedError::Tampered | ProtectedError::WrongKey) => {
+            Ok(opened) => opened,
+            Err(ProtectedError::Tampered | ProtectedError::WrongKey) => {
                 self.damaged_during_reencryption.insert(note_id.to_owned());
                 return Ok(());
             }

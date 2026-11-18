@@ -4,7 +4,7 @@ use ctutils::CtEq;
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
-use super::random::{random_bytes, random_key};
+use super::random::random_bytes;
 use super::{KEY_BYTES, KdfParameters, PASSWORD_SALT_BYTES, ProtectedError};
 
 /// Version 1 of the protected section's formats, bound into every slot and file.
@@ -16,19 +16,20 @@ pub const TAG_BYTES: usize = 16;
 pub const COMMITMENT_BYTES: usize = 32;
 const SLOT_CONTEXT: &[u8] = b"mdx-protected-v1-slot";
 const COMMITMENT_CONTEXT: &[u8] = b"mdx-protected-v1-commit";
+const PREVIOUS_KEY_CONTEXT: &[u8] = b"mdx-protected-v1-previous-key";
 
 /// The random key every protected file is encrypted with, with the id that names it in their headers.
+/// Its bytes stay in one place on the heap, so moving the key copies no key bytes.
 pub struct DataKey {
     pub id: u32,
-    key: Zeroizing<[u8; KEY_BYTES]>,
+    key: Box<Zeroizing<[u8; KEY_BYTES]>>,
 }
 
 impl DataKey {
     pub fn generate(id: u32) -> Result<Self, ProtectedError> {
-        Ok(Self {
-            id,
-            key: random_key()?,
-        })
+        let mut key = Box::new(Zeroizing::new([0_u8; KEY_BYTES]));
+        getrandom::fill(key.as_mut_slice()).map_err(|_| ProtectedError::RandomUnavailable)?;
+        Ok(Self { id, key })
     }
 
     /// A key with known bytes, for test vectors.
@@ -36,7 +37,7 @@ impl DataKey {
     pub fn with_bytes_for_tests(id: u32, bytes: [u8; KEY_BYTES]) -> Self {
         Self {
             id,
-            key: Zeroizing::new(bytes),
+            key: Box::new(Zeroizing::new(bytes)),
         }
     }
 
@@ -136,7 +137,7 @@ pub fn unwrap_data_key(
             )
             .map_err(|_| ProtectedError::WrongKey)?,
     );
-    let mut key = Zeroizing::new([0_u8; KEY_BYTES]);
+    let mut key = Box::new(Zeroizing::new([0_u8; KEY_BYTES]));
     if unwrapped.len() != KEY_BYTES {
         return Err(ProtectedError::Tampered);
     }
@@ -171,6 +172,17 @@ fn commitment_of(slot_key: &[u8; KEY_BYTES]) -> [u8; COMMITMENT_BYTES] {
     hash.finalize().into()
 }
 
+/// The key a previous-key slot is wrapped with, derived from the new data key with its own context,
+/// so the data key itself encrypts nothing but files.
+pub fn previous_key_wrapping_key(data_key: &DataKey) -> Zeroizing<[u8; KEY_BYTES]> {
+    let mut hash = Sha256::new();
+    hash.update(PREVIOUS_KEY_CONTEXT);
+    hash.update(data_key.bytes());
+    let mut key = Zeroizing::new([0_u8; KEY_BYTES]);
+    key.copy_from_slice(&hash.finalize());
+    key
+}
+
 /// Whether a slot was made for this key, from its commitment alone, without unwrapping anything; as
 /// to tell which device slot is this PC's.
 pub fn is_slot_for_key(slot: &KeySlot, slot_key: &[u8; KEY_BYTES]) -> bool {
@@ -185,6 +197,7 @@ pub fn is_same_in_constant_time(first: &[u8], second: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protected_notes::random_key;
 
     const VAULT: [u8; VAULT_ID_BYTES] = [1; VAULT_ID_BYTES];
     const PASSWORD_KIND: SlotKind = SlotKind::Password {

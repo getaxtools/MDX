@@ -107,7 +107,9 @@ function describeProtectedNotesContract(create: () => ProtectedNotesPort) {
     expect(first.remaining).toBeGreaterThan(0);
     expect(isReencryptingWhileLocked).toBe(true);
     expect(plainChangeMeanwhile).toBe('reencryptionPending');
-    expect(progress).toEqual({ remaining: 0, damaged: 0 });
+    expect(progress).toEqual({ remaining: 0, damaged: 0, heldBack: 0 });
+    expect(await failureOf(notes.finishReencryption(LOCATION, 'not the password'))).toBe('wrongPassword');
+    await notes.finishReencryption(LOCATION, NEW_PASSWORD);
     expect((await notes.status(LOCATION)).isReencrypting).toBe(false);
   });
 

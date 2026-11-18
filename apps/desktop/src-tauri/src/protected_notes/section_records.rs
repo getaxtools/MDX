@@ -28,12 +28,15 @@ pub struct SectionRecord {
 
 impl SectionRecord {
     pub fn of(vault: &Vault, manifest_revision: u64) -> Result<Self, ProtectedError> {
+        // A previous-key slot is hashed too: a vault put back with or without one is a changed vault.
         let password_slots = Vault {
             vault_id: vault.vault_id,
             slots: vault
                 .slots
                 .iter()
-                .filter(|slot| matches!(slot.kind, SlotKind::Password { .. }))
+                .filter(|slot| {
+                    matches!(slot.kind, SlotKind::Password { .. } | SlotKind::PreviousKey)
+                })
                 .cloned()
                 .collect(),
         };

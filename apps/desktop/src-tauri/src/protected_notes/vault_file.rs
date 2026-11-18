@@ -69,6 +69,15 @@ impl Vault {
     /// The data key from the password; every password slot is tried, and a wrong password says only so.
     /// Any other failure, such as too little memory, is passed on as itself.
     pub fn unlock_with_password(&self, password: &str) -> Result<DataKey, ProtectedError> {
+        self.unlock_with_password_naming_slot(password)
+            .map(|(data_key, _)| data_key)
+    }
+
+    /// The data key from the password, and the id of the password slot that opened.
+    pub fn unlock_with_password_naming_slot(
+        &self,
+        password: &str,
+    ) -> Result<(DataKey, [u8; SLOT_ID_BYTES]), ProtectedError> {
         let mut first_failure = None;
         for slot in &self.slots {
             let SlotKind::Password { parameters, salt } = slot.kind else {
@@ -77,7 +86,7 @@ impl Vault {
             let opened = derive_password_key(password, &salt, parameters)
                 .and_then(|key| unwrap_data_key(slot, &key, &self.vault_id));
             match opened {
-                Ok(data_key) => return Ok(data_key),
+                Ok(data_key) => return Ok((data_key, slot.slot_id)),
                 Err(ProtectedError::WrongKey) => {}
                 Err(failure) => {
                     first_failure.get_or_insert(failure);

@@ -51,6 +51,9 @@ pub struct ProtectedNotes {
     records: SectionRecords,
     /// Sections unlocked with a folder warning the user has not accepted yet; their records wait.
     awaiting_acceptance: Mutex<HashSet<String>>,
+    /// The new password given with a recovery key while a folder warning waited, written once the
+    /// folder is accepted and dropped when the section locks.
+    pending_recovery_passwords: Mutex<HashMap<String, (Zeroizing<String>, KdfParameters)>>,
 }
 
 impl ProtectedNotes {
@@ -60,7 +63,16 @@ impl ProtectedNotes {
             secrets,
             records: SectionRecords::new(records_file),
             awaiting_acceptance: Mutex::new(HashSet::new()),
+            pending_recovery_passwords: Mutex::new(HashMap::new()),
         }
+    }
+
+    fn pending_recovery_passwords(
+        &self,
+    ) -> MutexGuard<'_, HashMap<String, (Zeroizing<String>, KdfParameters)>> {
+        self.pending_recovery_passwords
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
     }
 
     fn awaiting(&self) -> MutexGuard<'_, HashSet<String>> {
@@ -70,7 +82,8 @@ impl ProtectedNotes {
     }
 
     /// Keeps an unlocked section, and says when its folder is older than this PC last saw. A
-    /// password change that stopped halfway is finished once the folder is accepted.
+    /// password change that stopped halfway is finished only when no warning waits and the section
+    /// was unlocked with the newest password.
     fn keep_unlocked(
         &self,
         place: &SectionPlace,
@@ -113,7 +126,7 @@ impl ProtectedNotes {
 
     fn finish_stopped_password_change(&self, place: &SectionPlace) -> Answer<()> {
         self.with_section(place, |section| {
-            if section.password_slot_count() > 1 {
+            if section.password_slot_count() > 1 && section.was_opened_with_newest_password() {
                 let this_pc_key = self.this_pc_key(&section.vault_id());
                 section.finish_password_change(this_pc_key.as_deref())?;
             }
@@ -128,7 +141,14 @@ impl ProtectedNotes {
             return Err(ProtectedCommandError::InvalidRequest);
         }
         self.with_section(place, |_| Ok(()))?;
-        self.finish_stopped_password_change(place)
+        let pending = self
+            .pending_recovery_passwords()
+            .remove(&place.location_key);
+        if let Some((new_password, parameters)) = pending {
+            self.replace_password(place, &new_password, parameters)?;
+            self.note_this_pc_device_slot(place)?;
+        }
+        Ok(())
     }
 
     fn sections(&self) -> MutexGuard<'_, HashMap<String, UnlockedSection>> {
@@ -143,6 +163,7 @@ impl ProtectedNotes {
     /// Locks every section, as on sleep, session lock or quit; returns the locations that were open.
     pub fn lock_all(&self) -> Vec<String> {
         self.awaiting().clear();
+        self.pending_recovery_passwords().clear();
         self.sections()
             .drain()
             .map(|(location, _)| location)
@@ -295,7 +316,7 @@ pub struct PasswordChangeAnswer {
     /// With a re-encryption, the new recovery key, shown once; the old one no longer opens the
     /// section.
     #[serde(skip_serializing_if = "Option::is_none")]
-    recovery_key: Option<String>,
+    recovery_key: Option<Zeroizing<String>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -305,6 +326,9 @@ pub struct ReencryptionProgress {
     remaining: usize,
     /// Files that were damaged already and are left as they were.
     damaged: usize,
+    /// Files sealed with the old key that were not recorded when it started or changed since, such
+    /// as an older copy; the old key is kept for them until the user finishes the re-encryption.
+    held_back: usize,
 }
 
 /// An unlocked section, and a warning when its folder is older than this PC last saw it.
@@ -318,8 +342,8 @@ pub struct UnlockAnswer {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetUpAnswer {
-    /// Shown once, then never again.
-    recovery_key: String,
+    /// Shown once, then never again; should the user not have kept it, a new one replaces it.
+    recovery_key: Zeroizing<String>,
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize)]
@@ -485,7 +509,7 @@ impl ProtectedNotes {
         let (section, recovery_key) = place.folder.set_up(password, parameters)?;
         self.keep_unlocked(place, section)?;
         Ok(SetUpAnswer {
-            recovery_key: recovery_key_text(&recovery_key).to_string(),
+            recovery_key: recovery_key_text(&recovery_key),
         })
     }
 
@@ -515,7 +539,16 @@ impl ProtectedNotes {
         let key = recovery_key_from_text(&recovery.recovery_key)?;
         let section = UnlockedSection::unlock_with_key(&place.folder, SlotKind::Recovery, &key)?;
         let answer = self.keep_unlocked(place, section)?;
+        if answer.folder_warning.is_some() {
+            // Like any other change, the new password waits until the folder is accepted.
+            self.pending_recovery_passwords().insert(
+                place.location_key.clone(),
+                (recovery.new_password.clone(), parameters),
+            );
+            return Ok(answer);
+        }
         self.replace_password(place, &recovery.new_password, parameters)?;
+        self.note_this_pc_device_slot(place)?;
         Ok(answer)
     }
 
@@ -530,6 +563,10 @@ impl ProtectedNotes {
         self.with_section(place, |section| {
             Ok(section.add_password_slot(new_password, parameters)?)
         })?;
+        self.finish_password_change(place)
+    }
+
+    fn finish_password_change(&self, place: &SectionPlace) -> Answer<()> {
         self.with_section(place, |section| {
             let this_pc_key = self.this_pc_key(&section.vault_id());
             section.finish_password_change(this_pc_key.as_deref())?;
@@ -576,26 +613,48 @@ impl ProtectedNotes {
                 })?;
             self.note_this_pc_device_slot(place)?;
             return Ok(PasswordChangeAnswer {
-                recovery_key: Some(recovery_key_text(&recovery_key).to_string()),
+                recovery_key: Some(recovery_key_text(&recovery_key)),
             });
         }
+        // The check and the first step run under one lock of the section.
         self.with_current_password(place, &change.current_password, |section| {
             if section.is_reencrypting() {
                 return Err(ProtectedCommandError::ReencryptionPending);
             }
-            Ok(())
+            Ok(section.add_password_slot(&change.new_password, parameters)?)
         })?;
-        self.replace_password(place, &change.new_password, parameters)?;
+        self.finish_password_change(place)?;
         self.note_this_pc_device_slot(place)?;
         Ok(PasswordChangeAnswer { recovery_key: None })
     }
 
+    /// Refused while a folder warning waits: an older folder could end the re-encryption early.
     fn continue_reencryption(&self, place: &SectionPlace) -> Answer<ReencryptionProgress> {
+        if self.awaiting().contains(&place.location_key) {
+            return Err(ProtectedCommandError::InvalidRequest);
+        }
         self.with_section(place, |section| {
-            let Reencryption { remaining, damaged } =
-                section.continue_reencryption(REENCRYPTION_BATCH)?;
-            Ok(ReencryptionProgress { remaining, damaged })
+            let Reencryption {
+                remaining,
+                damaged,
+                held_back,
+            } = section.continue_reencryption(REENCRYPTION_BATCH)?;
+            Ok(ReencryptionProgress {
+                remaining,
+                damaged,
+                held_back,
+            })
         })
+    }
+
+    /// Ends a re-encryption that holds files back, at the user's word and with the password: those
+    /// files stay sealed with the previous key and no longer open.
+    fn finish_reencryption(&self, place: &SectionPlace, password: &str) -> Answer<()> {
+        self.with_current_password(
+            place,
+            password,
+            |section| Ok(section.finish_reencryption()?),
+        )
     }
 
     fn new_recovery_key(&self, place: &SectionPlace, password: &str) -> Answer<SetUpAnswer> {
@@ -603,7 +662,7 @@ impl ProtectedNotes {
             Ok(section.replace_recovery_key()?)
         })?;
         Ok(SetUpAnswer {
-            recovery_key: recovery_key_text(&recovery_key).to_string(),
+            recovery_key: recovery_key_text(&recovery_key),
         })
     }
 
@@ -622,6 +681,8 @@ impl ProtectedNotes {
     /// Returns whether the section was unlocked.
     fn lock(&self, place: &SectionPlace) -> bool {
         self.awaiting().remove(&place.location_key);
+        self.pending_recovery_passwords()
+            .remove(&place.location_key);
         self.sections().remove(&place.location_key).is_some()
     }
 
@@ -802,6 +863,19 @@ pub async fn protected_continue_reencryption(
     let place = section_place(&window, &location)?;
     let state = state_of(&window);
     run_blocking(move || state.continue_reencryption(&place)).await?
+}
+
+/// Ends a re-encryption that holds files back, after the password is confirmed; they no longer open.
+#[tauri::command]
+pub async fn protected_finish_reencryption(
+    location: String,
+    password: Zeroizing<String>,
+    window: WebviewWindow,
+) -> Answer<()> {
+    let password = password_of(password)?;
+    let place = section_place(&window, &location)?;
+    let state = state_of(&window);
+    run_blocking(move || state.finish_reencryption(&place, &password)).await?
 }
 
 /// A new recovery key in place of the old one, after the password is confirmed; shown once.
@@ -1046,7 +1120,7 @@ mod tests {
         let recovery_key = notes.set_up(&place, PASSWORD, QUICK).unwrap().recovery_key;
         let older_vault = std::fs::read(section_file(&folder, "vault.json")).unwrap();
         let recovery = RecoveryUnlock {
-            recovery_key: Zeroizing::new(recovery_key),
+            recovery_key,
             new_password: Zeroizing::new("a new long passphrase".to_owned()),
         };
         notes

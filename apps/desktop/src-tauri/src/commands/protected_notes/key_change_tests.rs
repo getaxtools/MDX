@@ -54,7 +54,7 @@ fn section_with_notes(
     SectionPlace,
     ProtectedNotes,
     Vec<String>,
-    String,
+    Zeroizing<String>,
 ) {
     let notes_folder = tempfile::tempdir().unwrap();
     let place = section_place_of(notes_folder.path());
@@ -359,4 +359,122 @@ fn can_unlock_on_this_pc_tells_this_pcs_own_slot_with_two_pcs_remembered() {
     assert!(can_unlock(&first_pc));
     let _ = first_pc.lock(&place);
     assert!(first_pc.unlock_on_this_pc(&place).is_ok());
+}
+
+/// The second PC saw the section; the first then changes its vault, so the second gets a warning.
+fn second_pc_with_a_folder_warning_to_come(folder: &Path, place: &SectionPlace) -> ProtectedNotes {
+    let second_pc = pc(folder, "second");
+    second_pc.unlock(place, OLD_PASSWORD, false).unwrap();
+    let _ = second_pc.lock(place);
+    second_pc
+}
+
+#[test]
+fn a_re_encryption_does_not_go_on_while_a_folder_warning_waits() {
+    let (folder, place, first_pc, _notes, _recovery) = section_with_notes(2);
+    let second_pc = second_pc_with_a_folder_warning_to_come(folder.path(), &place);
+    first_pc
+        .change_password(&place, &change(OLD_PASSWORD, NEW_PASSWORD, true), QUICK)
+        .unwrap();
+    let _ = first_pc.lock(&place);
+
+    let warned = second_pc.unlock(&place, NEW_PASSWORD, false).unwrap();
+    let refused = second_pc.continue_reencryption(&place);
+    second_pc.accept_folder(&place).unwrap();
+    let progress = second_pc.continue_reencryption(&place).unwrap();
+
+    assert_eq!(warned.folder_warning, Some(FolderWarning::ChangedVault));
+    assert_eq!(refused.err(), Some(ProtectedCommandError::InvalidRequest));
+    assert_eq!(progress.remaining, 0);
+}
+
+#[test]
+fn accepting_the_folder_never_finishes_a_password_change_that_stopped_halfway() {
+    let (folder, place, first_pc, _notes, _recovery) = section_with_notes(1);
+    let second_pc = second_pc_with_a_folder_warning_to_come(folder.path(), &place);
+    first_pc
+        .with_section(&place, |section| {
+            Ok(section.add_password_slot(NEW_PASSWORD, QUICK)?)
+        })
+        .unwrap();
+    let _ = first_pc.lock(&place);
+
+    second_pc.unlock(&place, NEW_PASSWORD, false).unwrap();
+    second_pc.accept_folder(&place).unwrap();
+    let slots_after_accepting = second_pc
+        .with_section(&place, |section| Ok(section.password_slot_count()))
+        .unwrap();
+
+    assert_eq!(slots_after_accepting, 2);
+}
+
+#[test]
+fn a_new_password_given_with_the_recovery_key_waits_until_the_folder_is_accepted() {
+    let (folder, place, first_pc, _notes, recovery_key) = section_with_notes(1);
+    let second_pc = second_pc_with_a_folder_warning_to_come(folder.path(), &place);
+    first_pc
+        .change_password(&place, &change(OLD_PASSWORD, NEW_PASSWORD, false), QUICK)
+        .unwrap();
+    let recovered_password = "a third password here";
+
+    let warned = second_pc
+        .unlock_with_recovery(&place, &recovery(&recovery_key, recovered_password), QUICK)
+        .unwrap();
+    let vault_while_warned = SectionFolder::read_vault(&place.folder).unwrap();
+    second_pc.accept_folder(&place).unwrap();
+    let vault_after_accepting = SectionFolder::read_vault(&place.folder).unwrap();
+
+    assert_eq!(warned.folder_warning, Some(FolderWarning::ChangedVault));
+    assert!(
+        vault_while_warned
+            .unlock_with_password(NEW_PASSWORD)
+            .is_ok()
+    );
+    assert!(
+        vault_while_warned
+            .unlock_with_password(recovered_password)
+            .is_err()
+    );
+    assert!(
+        vault_after_accepting
+            .unlock_with_password(recovered_password)
+            .is_ok()
+    );
+    assert!(
+        vault_after_accepting
+            .unlock_with_password(NEW_PASSWORD)
+            .is_err()
+    );
+}
+
+#[test]
+fn finishing_a_re_encryption_that_holds_files_back_needs_the_password() {
+    let (folder, place, first_pc, _notes, _recovery) = section_with_notes(1);
+    let notes_folder = folder
+        .path()
+        .join(NOTES_APP_FOLDER)
+        .join(SECTION_FOLDER_NAME)
+        .join("notes");
+    let note_file = std::fs::read_dir(&notes_folder)
+        .unwrap()
+        .filter_map(Result::ok)
+        .next()
+        .unwrap()
+        .path();
+    let old_key_header = std::fs::read(note_file).unwrap()[..64].to_vec();
+    first_pc
+        .change_password(&place, &change(OLD_PASSWORD, NEW_PASSWORD, true), QUICK)
+        .unwrap();
+    std::fs::write(notes_folder.join("zz01.mdxp"), old_key_header).unwrap();
+
+    let progress = first_pc.continue_reencryption(&place).unwrap();
+    let refused = first_pc.finish_reencryption(&place, "not the password");
+    let is_still_reencrypting = first_pc.status(&place).is_reencrypting;
+    let finished = first_pc.finish_reencryption(&place, NEW_PASSWORD);
+
+    assert_eq!((progress.remaining, progress.held_back), (0, 1));
+    assert_eq!(refused.err(), Some(ProtectedCommandError::WrongPassword));
+    assert!(is_still_reencrypting);
+    assert!(finished.is_ok());
+    assert!(!first_pc.status(&place).is_reencrypting);
 }

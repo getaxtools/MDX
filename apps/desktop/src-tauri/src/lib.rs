@@ -183,6 +183,7 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::protected_notes::protected_save,
         commands::protected_notes::protected_change_password,
         commands::protected_notes::protected_continue_reencryption,
+        commands::protected_notes::protected_finish_reencryption,
         commands::protected_notes::protected_new_recovery_key,
         commands::spec_projects::scan_spec_project,
         commands::spec_projects::read_spec_project_file,

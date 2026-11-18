@@ -114,7 +114,14 @@ export class InMemoryProtectedNotes implements ProtectedNotesPort {
   async continueReencryption(location: string): Promise<ReencryptionProgress> {
     const section = await this.unlockedSectionOf(location);
     section.reencryptionRemaining = Math.max(section.reencryptionRemaining - REENCRYPTION_BATCH, 0);
-    return { remaining: section.reencryptionRemaining, damaged: 0 };
+    return { remaining: section.reencryptionRemaining, damaged: 0, heldBack: 0 };
+  }
+
+  /** The fake holds no files back, so finishing ends any re-encryption once the password matches. */
+  async finishReencryption(location: string, password: string): Promise<void> {
+    const section = await this.unlockedSectionOf(location);
+    if (section.password !== password) return refused('wrongPassword');
+    section.reencryptionRemaining = 0;
   }
 
   async newRecoveryKey(location: string, password: string): Promise<{ readonly recoveryKey: string }> {

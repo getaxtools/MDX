@@ -2,6 +2,8 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use sha2::{Digest, Sha256};
+
 use zeroize::Zeroizing;
 
 use super::encrypted_file::{
@@ -9,7 +11,10 @@ use super::encrypted_file::{
 };
 use super::hex_text::{bytes_of_hex, hex_of};
 use super::key_derivation::KdfParameters;
-use super::key_slots::{DataKey, SlotKind, is_slot_for_key, unwrap_data_key, wrap_data_key};
+use super::key_slots::{
+    DataKey, SLOT_ID_BYTES, SlotKind, is_same_in_constant_time, is_slot_for_key,
+    previous_key_wrapping_key, unwrap_data_key, wrap_data_key,
+};
 use super::manifest::{MANIFEST_FILE_NAME, Manifest, ManifestEntry, NoteState};
 use super::random::{random_bytes, random_key};
 use super::section_records::SectionRecord;
@@ -23,6 +28,7 @@ mod key_changes;
 pub use key_changes::Reencryption;
 
 const NOTES_FOLDER: &str = "notes";
+const STAGED_MANIFEST_FILE_NAME: &str = "manifest.mdxp.staged";
 const NOTE_EXTENSION: &str = "mdxp";
 /// A section holds at most this many note files; more is not a section MDX wrote.
 const MAX_NOTE_FILES: usize = 100_000;
@@ -45,6 +51,8 @@ pub struct UnlockedSection {
     damaged_during_reencryption: HashSet<String>,
     manifest: Manifest,
     states: Vec<(String, NoteState)>,
+    /// The password slot the typed password opened, when the section was unlocked with one.
+    opened_with_password_slot: Option<[u8; SLOT_ID_BYTES]>,
 }
 
 /// The data key a file's header names: the current one, or the one a re-encryption is replacing.
@@ -62,26 +70,40 @@ fn key_named_by<'key>(
         .ok_or(ProtectedError::WrongKey)
 }
 
-/// A file sealed with the previous key is one of the section's notes only at the revision the
-/// manifest lists for it: whoever knows that key could have put any other file there, and the
-/// manifest is sealed with the new key once a re-encryption starts.
-fn is_listed_at_its_revision(manifest: &Manifest, header: &FileHeader) -> bool {
-    manifest
-        .entries
+/// A file sealed with the previous key is one of the section's notes only when it is, byte for byte,
+/// a file the re-encryption recorded when it started. Its id and revision are not secret, so whoever
+/// knows that key could forge any other; the record is in the manifest, sealed with the new key.
+fn is_recorded_previous_key_file(
+    manifest: &Manifest,
+    note_id: &[u8; NOTE_ID_BYTES],
+    bytes: &[u8],
+) -> bool {
+    let Some(files) = &manifest.previous_key_files else {
+        return false;
+    };
+    let hash: [u8; 32] = Sha256::digest(bytes).into();
+    files
         .iter()
-        .any(|entry| entry.note_id == header.note_id && entry.revision == header.revision)
+        .any(|file| file.note_id == *note_id && is_same_in_constant_time(&file.sha256, &hash))
 }
 
-/// The data key a re-encryption replaces, from the vault's previous-key slot. A slot that does not
-/// open is left aside, so it cannot block the notes already re-encrypted.
+/// The data key a re-encryption replaces, from the vault's previous-key slot; none when the vault has
+/// no such slot or it does not open, in which case the re-encryption cannot go on or end.
 fn previous_key_of(vault: &Vault, data_key: &DataKey) -> Option<DataKey> {
     let slot = vault
         .slots
         .iter()
         .find(|slot| slot.kind == SlotKind::PreviousKey)?;
-    unwrap_data_key(slot, data_key.bytes(), &vault.vault_id)
+    unwrap_data_key(slot, &previous_key_wrapping_key(data_key), &vault.vault_id)
         .ok()
         .filter(|previous| previous.id != data_key.id)
+}
+
+fn has_previous_key_slot(vault: &Vault) -> bool {
+    vault
+        .slots
+        .iter()
+        .any(|slot| slot.kind == SlotKind::PreviousKey)
 }
 
 /// A note as the section's tree shows it; the title is shown only while the section is unlocked.
@@ -130,6 +152,12 @@ impl SectionFolder {
 
     fn manifest_path(&self) -> PathBuf {
         self.folder.join(MANIFEST_FILE_NAME)
+    }
+
+    /// Where a re-encryption writes the manifest sealed with the new key before it changes the
+    /// vault, so the vault never names a key no manifest is sealed with.
+    fn staged_manifest_path(&self) -> PathBuf {
+        self.folder.join(STAGED_MANIFEST_FILE_NAME)
     }
 
     fn notes_folder(&self) -> PathBuf {
@@ -183,6 +211,7 @@ impl SectionFolder {
         let manifest = Manifest {
             revision: 1,
             entries: Vec::new(),
+            previous_key_files: None,
         };
         write_bytes_atomically(
             &self.manifest_path(),
@@ -199,6 +228,7 @@ impl SectionFolder {
             damaged_during_reencryption: HashSet::new(),
             manifest,
             states: Vec::new(),
+            opened_with_password_slot: None,
         };
         Ok((section, created.recovery_key))
     }
@@ -228,8 +258,10 @@ impl UnlockedSection {
         password: &str,
     ) -> Result<Self, ProtectedError> {
         let vault = folder.read_vault()?;
-        let data_key = vault.unlock_with_password(password)?;
-        Self::opened(folder, vault, data_key)
+        let (data_key, slot_id) = vault.unlock_with_password_naming_slot(password)?;
+        let mut section = Self::opened(folder, vault, data_key)?;
+        section.opened_with_password_slot = Some(slot_id);
+        Ok(section)
     }
 
     pub fn unlock_with_key(
@@ -251,9 +283,16 @@ impl UnlockedSection {
         data_key: DataKey,
     ) -> Result<Self, ProtectedError> {
         let previous_key = previous_key_of(&vault, &data_key);
+        let read = Self::read_manifest(folder, &vault, &data_key)?;
         let keys = (&data_key, previous_key.as_ref());
-        let mut notes = Self::read_note_files(folder, &vault, keys)?;
-        let manifest = Self::read_manifest(folder, &vault, keys, &mut notes)?;
+        let mut notes = Self::read_note_files(folder, &vault, keys, read.as_ref())?;
+        let manifest = match read {
+            Some(manifest) => manifest,
+            None => {
+                notes.retain(|(header, _)| header.data_key_id == data_key.id);
+                Manifest::rebuilt_from(&notes)
+            }
+        };
         let headers: Vec<FileHeader> = notes.iter().map(|(header, _)| *header).collect();
         let states = manifest.reconcile(&headers)?;
         let mut section = Self {
@@ -264,6 +303,7 @@ impl UnlockedSection {
             damaged_during_reencryption: HashSet::new(),
             manifest,
             states: Vec::new(),
+            opened_with_password_slot: None,
         };
         for (note_id, state) in &states {
             if matches!(state, NoteState::Unlisted | NoteState::NewerThanManifest)
@@ -280,38 +320,59 @@ impl UnlockedSection {
         Ok(section)
     }
 
-    /// The manifest, or one made again from the note files when it is lost. Files sealed with the
-    /// previous key are kept only at the revision the manifest lists, and never make up a lost one.
+    /// The manifest, when it is there and sealed with the current key. During a re-encryption a
+    /// manifest sealed with any other key is refused, and the manifest staged before the vault
+    /// changed takes its place; with neither, the section shows a manifest made again from the files
+    /// sealed with the current key, which cannot end the re-encryption.
     fn read_manifest(
         folder: &SectionFolder,
         vault: &Vault,
-        (data_key, previous_key): (&DataKey, Option<&DataKey>),
-        notes: &mut Vec<(FileHeader, FileMetadata)>,
-    ) -> Result<Manifest, ProtectedError> {
-        let is_current = |header: &FileHeader| header.data_key_id == data_key.id;
-        let manifest = match fs::read(folder.manifest_path()) {
+        data_key: &DataKey,
+    ) -> Result<Option<Manifest>, ProtectedError> {
+        match fs::read(folder.manifest_path()) {
             Ok(bytes) => {
-                let key = key_named_by(&bytes, data_key, previous_key)?;
-                Manifest::open(&bytes, key, &vault.vault_id)?
+                if FileHeader::parse(&bytes)?.data_key_id == data_key.id {
+                    return Manifest::open(&bytes, data_key, &vault.vault_id).map(Some);
+                }
+                if !has_previous_key_slot(vault) {
+                    return Err(ProtectedError::WrongKey);
+                }
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                notes.retain(|(header, _)| is_current(header));
-                Manifest::rebuilt_from(notes)
-            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return Err(ProtectedError::Storage),
+        }
+        if !has_previous_key_slot(vault) {
+            return Ok(None);
+        }
+        Self::promoted_staged_manifest(folder, vault, data_key)
+    }
+
+    /// The manifest a re-encryption staged with the new key, put in place of the manifest.
+    fn promoted_staged_manifest(
+        folder: &SectionFolder,
+        vault: &Vault,
+        data_key: &DataKey,
+    ) -> Result<Option<Manifest>, ProtectedError> {
+        let bytes = match fs::read(folder.staged_manifest_path()) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(_) => return Err(ProtectedError::Storage),
         };
-        notes.retain(|(header, _)| {
-            is_current(header) || is_listed_at_its_revision(&manifest, header)
-        });
-        Ok(manifest)
+        let Ok(manifest) = Manifest::open(&bytes, data_key, &vault.vault_id) else {
+            return Ok(None);
+        };
+        let _ = fs::rename(folder.staged_manifest_path(), folder.manifest_path());
+        Ok(Some(manifest))
     }
 
     /// The header and metadata of every note file that opens with the data key its header names; a
-    /// damaged file is left out here and refused when it is opened.
+    /// damaged file is left out here and refused when it is opened. A file sealed with the previous
+    /// key is read only when the manifest recorded it at the start of the re-encryption.
     fn read_note_files(
         folder: &SectionFolder,
         vault: &Vault,
         (data_key, previous_key): (&DataKey, Option<&DataKey>),
+        manifest: Option<&Manifest>,
     ) -> Result<Vec<(FileHeader, FileMetadata)>, ProtectedError> {
         Ok(folder
             .note_file_names()?
@@ -320,6 +381,13 @@ impl UnlockedSection {
                 let note_id = note_id_of_file_name(name)?;
                 let bytes = fs::read(folder.notes_folder().join(name)).ok()?;
                 let key = key_named_by(&bytes, data_key, previous_key).ok()?;
+                let is_accepted = key.id == data_key.id
+                    || manifest.is_some_and(|listed| {
+                        is_recorded_previous_key_file(listed, &note_id, &bytes)
+                    });
+                if !is_accepted {
+                    return None;
+                }
                 open_file(&bytes, key, &vault.vault_id, &ExpectedFile::note(note_id)).ok()
             })
             .map(|opened| (opened.header, opened.metadata))
@@ -394,7 +462,7 @@ impl UnlockedSection {
             &self.vault.vault_id,
             &expected,
         )?;
-        if !self.is_accepted(&opened.header) {
+        if !self.is_accepted(&opened.header, &bytes) {
             return Err(ProtectedError::Tampered);
         }
         Ok(OpenedNote {
@@ -465,16 +533,17 @@ impl UnlockedSection {
         let expected = ExpectedFile::note(bytes_of_hex(note_id).ok()?);
         let key = self.key_for(&bytes).ok()?;
         let opened = open_file(&bytes, key, &self.vault.vault_id, &expected).ok()?;
-        if !self.is_accepted(&opened.header) {
+        if !self.is_accepted(&opened.header, &bytes) {
             return None;
         }
         Some(opened.metadata.created_ms)
     }
 
-    /// Whether an opened file is one of the section's notes: sealed with the current key, or with
-    /// the previous key at the revision the manifest lists.
-    fn is_accepted(&self, header: &FileHeader) -> bool {
-        header.data_key_id == self.data_key.id || is_listed_at_its_revision(&self.manifest, header)
+    /// Whether an opened file is one of the section's notes: sealed with the current key, or a file
+    /// sealed with the previous key that the re-encryption recorded when it started.
+    fn is_accepted(&self, header: &FileHeader, bytes: &[u8]) -> bool {
+        header.data_key_id == self.data_key.id
+            || is_recorded_previous_key_file(&self.manifest, &header.note_id, bytes)
     }
 
     /// The key a file of this section is sealed with, by its header.
@@ -563,13 +632,6 @@ impl UnlockedSection {
             .iter()
             .find(|slot| is_device_slot_of(slot, Some(device_key)))
             .map(|slot| slot.slot_id)
-    }
-
-    pub fn is_remembered(&self) -> bool {
-        self.vault
-            .slots
-            .iter()
-            .any(|slot| slot.kind == SlotKind::Device)
     }
 
     fn write_vault(&mut self, vault: Vault) -> Result<(), ProtectedError> {

@@ -72,6 +72,7 @@ mod tests {
                 kind: crate::protected_notes::FileKind::Note,
                 modified_ms: 1,
             }],
+            previous_key_files: None,
         }
         .seal(&VAULT, &key)
         .unwrap();

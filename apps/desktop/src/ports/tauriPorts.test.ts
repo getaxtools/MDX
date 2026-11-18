@@ -411,7 +411,8 @@ describe('TauriProtectedNotes', () => {
       }),
       protected_save: () => 3,
       protected_change_password: () => ({ recoveryKey: 'IJKL-MNOP' }),
-      protected_continue_reencryption: () => ({ remaining: 0, damaged: 0 }),
+      protected_continue_reencryption: () => ({ remaining: 0, damaged: 0, heldBack: 0 }),
+      protected_finish_reencryption: () => null,
       protected_new_recovery_key: () => ({ recoveryKey: 'QRST-UVWX' }),
     });
   }
@@ -441,6 +442,7 @@ describe('TauriProtectedNotes', () => {
       shouldReencrypt: true,
     });
     await notes.continueReencryption(LOCATION);
+    await notes.finishReencryption(LOCATION, NEW_PASSWORD);
     await notes.newRecoveryKey(LOCATION, PASSWORD);
     return revision;
   }
@@ -466,6 +468,7 @@ describe('TauriProtectedNotes', () => {
       'protected_save',
       'protected_change_password',
       'protected_continue_reencryption',
+      'protected_finish_reencryption',
       'protected_new_recovery_key',
     ]);
     const withPassword = calls

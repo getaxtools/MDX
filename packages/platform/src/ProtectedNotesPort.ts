@@ -54,7 +54,10 @@ export interface PasswordChange {
 }
 
 export interface PasswordChangeResult {
-  /** With a re-encryption, the new recovery key to show once. */
+  /**
+   * With a re-encryption, the new recovery key to show once. The user confirms they kept it; if
+   * not, `newRecoveryKey` replaces it, as the old one no longer opens anything.
+   */
   readonly recoveryKey?: string;
 }
 
@@ -63,6 +66,12 @@ export interface ReencryptionProgress {
   readonly remaining: number;
   /** Files that were damaged already and are left as they were. */
   readonly damaged: number;
+  /**
+   * Files sealed with the old key that were not there when the re-encryption started or changed
+   * since, such as an older copy a sync tool put back. The old key is kept for them until the user
+   * decides with `finishReencryption`, after which they no longer open.
+   */
+  readonly heldBack: number;
 }
 
 export type ProtectedNoteState = 'current' | 'olderCopy' | 'newerThanManifest' | 'unlisted' | 'missing';
@@ -144,6 +153,8 @@ export interface ProtectedNotesPort {
   changePassword(location: string, change: PasswordChange): Promise<PasswordChangeResult>;
   /** Seals the next few files again; resolves to how many remain. Resumes after a restart once unlocked. */
   continueReencryption(location: string): Promise<ReencryptionProgress>;
+  /** Ends a re-encryption that holds files back, after the password is confirmed; those files no longer open. */
+  finishReencryption(location: string, password: string): Promise<void>;
   /** A new recovery key in place of the old one, after the password is confirmed; resolves to it, to show once. */
   newRecoveryKey(location: string, password: string): Promise<{ readonly recoveryKey: string }>;
   /** Keeps the folder as it is after a folder warning; this PC remembers it as seen. */

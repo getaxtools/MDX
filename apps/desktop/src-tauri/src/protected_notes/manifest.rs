@@ -39,11 +39,24 @@ impl std::fmt::Debug for ManifestEntry {
     }
 }
 
+/// A file a re-encryption has to seal again, as it was when the re-encryption started: the hash of
+/// its sealed bytes.
+#[derive(Debug, Clone, PartialEq, Eq, Zeroize)]
+pub struct PreviousKeyFile {
+    pub note_id: [u8; NOTE_ID_BYTES],
+    pub sha256: [u8; 32],
+}
+
 /// The encrypted list of every note in the section, with the revision each was last saved at.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Zeroize, ZeroizeOnDrop)]
 pub struct Manifest {
     pub revision: u64,
     pub entries: Vec<ManifestEntry>,
+    /// While a re-encryption runs: the files sealed with the previous key when it started. The
+    /// manifest is sealed with the new key, so only a file byte for byte as it was then is carried
+    /// over; whoever knows the old key cannot add or change one. `None` outside a re-encryption,
+    /// and in a manifest made again from the note files, which cannot end one.
+    pub previous_key_files: Option<Vec<PreviousKeyFile>>,
 }
 
 /// How a note file on disk compares with the manifest.
@@ -69,6 +82,15 @@ impl Manifest {
     ) -> Result<Vec<u8>, ProtectedError> {
         let saved = SavedManifestOut {
             notes: self.entries.iter().map(SavedEntryOut::of).collect(),
+            previous_key_files: self.previous_key_files.as_ref().map(|files| {
+                files
+                    .iter()
+                    .map(|file| SavedPreviousKeyFile {
+                        note_id: hex_of(&file.note_id),
+                        sha256: hex_of(&file.sha256),
+                    })
+                    .collect()
+            }),
         };
         let content = json_sized_once(&saved)?;
         let header = FileHeader {
@@ -99,9 +121,24 @@ impl Manifest {
         let opened = open_file(bytes, data_key, vault_id, &ExpectedFile::MANIFEST)?;
         let mut saved: SavedManifestIn =
             serde_json::from_slice(&opened.content).map_err(|_| ProtectedError::Tampered)?;
-        if saved.notes.len() > MAX_MANIFEST_ENTRIES {
+        let previous_count = saved.previous_key_files.as_ref().map_or(0, Vec::len);
+        if saved.notes.len() > MAX_MANIFEST_ENTRIES || previous_count > MAX_MANIFEST_ENTRIES {
             return Err(ProtectedError::TooLarge);
         }
+        let previous_key_files = match &saved.previous_key_files {
+            Some(files) => Some(
+                files
+                    .iter()
+                    .map(|file| {
+                        Ok(PreviousKeyFile {
+                            note_id: bytes_of_hex(&file.note_id)?,
+                            sha256: bytes_of_hex(&file.sha256)?,
+                        })
+                    })
+                    .collect::<Result<_, ProtectedError>>()?,
+            ),
+            None => None,
+        };
         Ok(Self {
             revision: opened.header.revision,
             entries: saved
@@ -109,6 +146,7 @@ impl Manifest {
                 .iter_mut()
                 .map(SavedEntryIn::take_entry)
                 .collect::<Result<_, _>>()?,
+            previous_key_files,
         })
     }
 
@@ -132,6 +170,7 @@ impl Manifest {
         Self {
             revision: 1,
             entries,
+            previous_key_files: None,
         }
     }
 
@@ -176,6 +215,15 @@ impl Manifest {
 #[serde(rename_all = "camelCase")]
 struct SavedManifestOut<'manifest> {
     notes: Vec<SavedEntryOut<'manifest>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    previous_key_files: Option<Vec<SavedPreviousKeyFile>>,
+}
+
+#[derive(Serialize, Deserialize, Zeroize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SavedPreviousKeyFile {
+    note_id: String,
+    sha256: String,
 }
 
 #[derive(Serialize)]
@@ -207,6 +255,8 @@ impl<'manifest> SavedEntryOut<'manifest> {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SavedManifestIn {
     notes: Vec<SavedEntryIn>,
+    #[serde(default)]
+    previous_key_files: Option<Vec<SavedPreviousKeyFile>>,
 }
 
 #[derive(Deserialize, Zeroize, ZeroizeOnDrop)]
@@ -265,6 +315,7 @@ mod tests {
         let manifest = Manifest {
             revision: 4,
             entries: vec![entry(1, 2), entry(2, 7)],
+            previous_key_files: None,
         };
 
         let sealed = manifest.seal(&VAULT, &key).unwrap();
@@ -278,6 +329,7 @@ mod tests {
         let manifest = Manifest {
             revision: 3,
             entries: vec![entry(1, 2)],
+            previous_key_files: None,
         };
 
         let states = manifest.reconcile(&[on_disk(1, 1)]).unwrap();
@@ -290,6 +342,7 @@ mod tests {
         let manifest = Manifest {
             revision: 3,
             entries: vec![entry(1, 2), entry(2, 2)],
+            previous_key_files: None,
         };
 
         let states = manifest
@@ -307,6 +360,7 @@ mod tests {
         let gone = Manifest {
             revision: 1,
             entries: vec![entry(4, 1)],
+            previous_key_files: None,
         }
         .reconcile(&[])
         .unwrap();
@@ -318,10 +372,12 @@ mod tests {
         let manifest = Manifest {
             revision: 3,
             entries: vec![entry(1, 2)],
+            previous_key_files: None,
         };
         let doubled = Manifest {
             revision: 3,
             entries: vec![entry(1, 2), entry(1, 2)],
+            previous_key_files: None,
         };
 
         assert_eq!(
@@ -344,7 +400,8 @@ mod tests {
             "{:?}",
             Manifest {
                 revision: 1,
-                entries: vec![listed]
+                entries: vec![listed],
+                previous_key_files: None,
             }
         );
 
