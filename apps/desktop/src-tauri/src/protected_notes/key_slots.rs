@@ -30,6 +30,15 @@ impl DataKey {
         })
     }
 
+    /// A key with known bytes, for test vectors.
+    #[cfg(test)]
+    pub fn with_bytes_for_tests(id: u32, bytes: [u8; KEY_BYTES]) -> Self {
+        Self {
+            id,
+            key: Zeroizing::new(bytes),
+        }
+    }
+
     /// The key bytes, for the file cipher only.
     pub fn bytes(&self) -> &[u8; KEY_BYTES] {
         &self.key

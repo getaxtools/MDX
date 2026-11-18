@@ -7,3 +7,4 @@
 tests/fixtures/byte-exact/** -text
 tests/fixtures/encodings/** -text
 tests/fixtures/unicode/** -text
+tests/fixtures/protected-notes/** binary
