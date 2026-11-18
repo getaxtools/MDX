@@ -13,9 +13,8 @@ mod notes_location;
 mod notes_transfer;
 mod open_requests;
 mod platform;
-/// Public until the protected section's commands use it, so its parts are checked as finished code.
+/// Public so a fuzz target outside the app can feed its parsers.
 pub mod protected_notes;
-/// Public until the protected section's commands use it, like `protected_notes`.
 pub mod secrets;
 mod spec_projects;
 #[cfg(dev)]
@@ -167,6 +166,18 @@ fn with_commands(builder: Builder<Wry>) -> Builder<Wry> {
         commands::notes_index::note_suggestions,
         commands::notes_index::note_headings,
         commands::notes_index::plan_note_link_updates,
+        commands::protected_notes::protected_status,
+        commands::protected_notes::protected_set_up,
+        commands::protected_notes::protected_unlock,
+        commands::protected_notes::protected_unlock_with_recovery,
+        commands::protected_notes::protected_unlock_on_this_pc,
+        commands::protected_notes::protected_forget_this_pc,
+        commands::protected_notes::protected_lock,
+        commands::protected_notes::protected_lock_all,
+        commands::protected_notes::protected_list,
+        commands::protected_notes::protected_create,
+        commands::protected_notes::protected_open,
+        commands::protected_notes::protected_save,
         commands::spec_projects::scan_spec_project,
         commands::spec_projects::read_spec_project_file,
         commands::spec_project_link::follow_spec_project_link,

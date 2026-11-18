@@ -59,3 +59,30 @@ mod tests {
         );
     }
 }
+
+/// A store that cannot be used, for systems without one: nothing is remembered there.
+#[derive(Debug, Default)]
+pub struct UnavailableSecrets;
+
+impl DeviceSecretStore for UnavailableSecrets {
+    fn save(&self, _name: &SecretName, _secret: &[u8]) -> Result<(), SecretStoreError> {
+        Err(SecretStoreError::Unavailable)
+    }
+
+    fn load(&self, _name: &SecretName) -> Result<Option<Zeroizing<Vec<u8>>>, SecretStoreError> {
+        Err(SecretStoreError::Unavailable)
+    }
+
+    fn delete(&self, _name: &SecretName) -> Result<(), SecretStoreError> {
+        Err(SecretStoreError::Unavailable)
+    }
+}
+
+/// The store this PC uses: Credential Manager on Windows, none elsewhere yet.
+pub fn device_secret_store() -> Box<dyn DeviceSecretStore> {
+    #[cfg(windows)]
+    if let Ok(store) = CredentialManagerSecrets::new() {
+        return Box::new(store);
+    }
+    Box::new(UnavailableSecrets)
+}

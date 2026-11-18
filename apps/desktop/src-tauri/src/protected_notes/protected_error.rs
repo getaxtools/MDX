@@ -16,4 +16,24 @@ pub enum ProtectedError {
     TooLarge,
     #[error("the random number generator of the system failed")]
     RandomUnavailable,
+    #[error("the notes folder has no protected section")]
+    NotSetUp,
+    #[error("the notes folder has a protected section already")]
+    AlreadySetUp,
+    #[error("protected files are there without their vault file")]
+    VaultFileMissing,
+    #[error("the protected note was not found")]
+    NoteNotFound,
+    #[error("this PC does not remember the protected section")]
+    NotRemembered,
+    #[error("the secret store of this PC could not be used")]
+    SecretStoreUnavailable,
+    #[error("a protected file could not be read or written")]
+    Storage,
+}
+
+impl From<std::io::Error> for ProtectedError {
+    fn from(_: std::io::Error) -> Self {
+        Self::Storage
+    }
 }

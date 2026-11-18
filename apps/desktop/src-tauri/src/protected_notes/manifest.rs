@@ -33,7 +33,8 @@ pub struct Manifest {
 }
 
 /// How a note file on disk compares with the manifest.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum NoteState {
     Current,
     /// The file's revision is below the manifest's: an older copy replaced the note.

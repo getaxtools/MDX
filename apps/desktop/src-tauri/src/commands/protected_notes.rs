@@ -1,0 +1,768 @@
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::{Duration, Instant};
+
+use serde::{Deserialize, Serialize};
+use tauri::{Manager, WebviewWindow};
+use zeroize::Zeroizing;
+
+use crate::app_windows::OpenWindows;
+use crate::commands::documents::run_blocking;
+use crate::commands::notes::allowed_root;
+use crate::commands::notes_location::now_ms;
+use crate::documents::{
+    DocumentAccessList, DocumentError, LineEnding, canonical_key_of, decode_document_bytes,
+    detect_line_ending, encode_document_text, encoding_for_label, locate_document,
+};
+use crate::notes_location::{NOTES_APP_FOLDER, read_marker};
+use crate::protected_notes::{
+    FileKind, KdfParameters, NoteState, ProtectedError, SectionFolder, SlotKind, UnlockedSection,
+    calibrate, derive_password_key, has_device_slot, recovery_key_from_text, recovery_key_text,
+    unlock_on_this_pc,
+};
+use crate::secrets::DeviceSecretStore;
+use crate::storage::WorkspaceDatabase;
+
+/// The protected section's folder inside the notes location's app folder, which plain-note features
+/// never list, index or watch.
+const SECTION_FOLDER_NAME: &str = "protected";
+const NOTES_KIND_ID: &str = "notes";
+const MIN_PASSWORD_CHARACTERS: usize = 10;
+const MAX_PASSWORD_BYTES: usize = 1_024;
+const MAX_RECOVERY_KEY_BYTES: usize = 256;
+const NOTE_ID_HEX_CHARACTERS: usize = 32;
+const MAX_TITLE_CHARACTERS: usize = 255;
+const MAX_FOLDER_BYTES: usize = 4_096;
+const MAX_NOTE_TEXT_BYTES: usize = 64 * 1_024 * 1_024;
+/// Set-up and a new password stay within this time on this PC.
+const UNLOCK_BUDGET: Duration = Duration::from_millis(1_500);
+
+/// The unlocked sections, by their notes location, and the store that remembers them on this PC.
+/// Locking a section drops it, which wipes its keys.
+pub struct ProtectedNotes {
+    sections: Mutex<HashMap<String, UnlockedSection>>,
+    secrets: Box<dyn DeviceSecretStore>,
+}
+
+impl ProtectedNotes {
+    pub fn new(secrets: Box<dyn DeviceSecretStore>) -> Self {
+        Self {
+            sections: Mutex::new(HashMap::new()),
+            secrets,
+        }
+    }
+
+    fn sections(&self) -> MutexGuard<'_, HashMap<String, UnlockedSection>> {
+        self.sections.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Locks every section, as on sleep, session lock or quit; returns the locations that were open.
+    pub fn lock_all(&self) -> Vec<String> {
+        self.sections()
+            .drain()
+            .map(|(location, _)| location)
+            .collect()
+    }
+}
+
+/// Why a protected section command failed, as a code only: never a key, a title or any note text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, thiserror::Error)]
+#[serde(tag = "code", rename_all = "camelCase")]
+pub enum ProtectedCommandError {
+    #[error("wrong password or key")]
+    WrongPassword,
+    #[error("damaged or changed outside MDX")]
+    Tampered,
+    #[error("vault file missing")]
+    VaultMissing,
+    #[error("locked")]
+    Locked,
+    #[error("not set up")]
+    NotSetUp,
+    #[error("set up already")]
+    AlreadySetUp,
+    #[error("not remembered on this PC")]
+    NotRemembered,
+    #[error("password too short")]
+    PasswordTooShort,
+    #[error("written by a newer version")]
+    UnsupportedVersion,
+    #[error("too large")]
+    TooLarge,
+    #[error("unavailable")]
+    Unavailable,
+    #[error("not found")]
+    NotFound,
+    #[error("invalid request")]
+    InvalidRequest,
+    #[error("access denied")]
+    AccessDenied,
+}
+
+impl From<ProtectedError> for ProtectedCommandError {
+    fn from(error: ProtectedError) -> Self {
+        match error {
+            ProtectedError::WrongKey => Self::WrongPassword,
+            ProtectedError::Tampered => Self::Tampered,
+            ProtectedError::UnsupportedVersion => Self::UnsupportedVersion,
+            ProtectedError::TooLarge
+            | ProtectedError::ExcessiveKeyDerivation
+            | ProtectedError::WeakKeyDerivation => Self::TooLarge,
+            ProtectedError::NotSetUp => Self::NotSetUp,
+            ProtectedError::AlreadySetUp => Self::AlreadySetUp,
+            ProtectedError::VaultFileMissing => Self::VaultMissing,
+            ProtectedError::NoteNotFound => Self::NotFound,
+            ProtectedError::NotRemembered => Self::NotRemembered,
+            ProtectedError::RandomUnavailable
+            | ProtectedError::SecretStoreUnavailable
+            | ProtectedError::Storage => Self::Unavailable,
+        }
+    }
+}
+
+impl From<DocumentError> for ProtectedCommandError {
+    fn from(error: DocumentError) -> Self {
+        match error {
+            DocumentError::NotFound => Self::NotFound,
+            DocumentError::AccessDenied => Self::AccessDenied,
+            DocumentError::TooLarge => Self::TooLarge,
+            _ => Self::InvalidRequest,
+        }
+    }
+}
+
+type Answer<T> = Result<T, ProtectedCommandError>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtectedStatus {
+    is_set_up: bool,
+    is_unlocked: bool,
+    /// The vault has a slot for this PC; whether its key is still stored is known only on unlock.
+    can_unlock_on_this_pc: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetUpAnswer {
+    /// Shown once, then never again.
+    recovery_key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtectedNoteSummary {
+    note_id: String,
+    title: String,
+    folder: String,
+    kind: FileKind,
+    modified_ms: u64,
+    state: NoteState,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtectedNoteText {
+    text: String,
+    encoding: &'static str,
+    has_byte_order_mark: bool,
+    has_decoding_errors: bool,
+    line_ending: LineEnding,
+    revision: u64,
+    /// An older copy replaced this note's file, as a sync tool restoring an old version would.
+    is_older_copy: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProtectedNoteEdit {
+    note_id: String,
+    text: String,
+    encoding: String,
+    has_byte_order_mark: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NewProtectedNote {
+    title: String,
+    folder: String,
+}
+
+/// A protected section command's place: the notes location's key and its section folder.
+struct SectionPlace {
+    location_key: String,
+    folder: SectionFolder,
+}
+
+/// The section of a granted notes location shown by this window's Notes workspace; any other window
+/// or folder is refused.
+fn section_place(window: &WebviewWindow, location: &str) -> Answer<SectionPlace> {
+    let access = window.state::<Arc<DocumentAccessList>>();
+    let root = allowed_root(location, &access)?;
+    if read_marker(root.folder())?.is_none() || !is_shown_notes_location(window, root.folder()) {
+        return Err(ProtectedCommandError::AccessDenied);
+    }
+    Ok(section_place_of(root.folder()))
+}
+
+fn section_place_of(notes_folder: &Path) -> SectionPlace {
+    SectionPlace {
+        location_key: canonical_key_of(&notes_folder.to_string_lossy()),
+        folder: SectionFolder::new(
+            notes_folder
+                .join(NOTES_APP_FOLDER)
+                .join(SECTION_FOLDER_NAME),
+        ),
+    }
+}
+
+/// The window reports a Notes workspace whose location is this folder.
+fn is_shown_notes_location(window: &WebviewWindow, notes_folder: &Path) -> bool {
+    let Some(workspace_id) = window
+        .state::<Arc<OpenWindows>>()
+        .workspace_of(window.label())
+    else {
+        return false;
+    };
+    let Ok(registry) = window.state::<WorkspaceDatabase>().load_registry() else {
+        return false;
+    };
+    registry
+        .iter()
+        .find(|record| record.id.as_str() == workspace_id)
+        .filter(|record| record.kind_id.as_str() == NOTES_KIND_ID)
+        .and_then(|record| notes_folder_of(record.kind_data.as_deref()?))
+        .and_then(|folder| locate_document(&folder).ok())
+        .is_some_and(|folder| folder.path() == notes_folder)
+}
+
+fn notes_folder_of(kind_data: &str) -> Option<PathBuf> {
+    let data: serde_json::Value = serde_json::from_str(kind_data).ok()?;
+    data.get("location")?
+        .get("path")?
+        .as_str()
+        .map(PathBuf::from)
+}
+
+fn state_of(window: &WebviewWindow) -> Arc<ProtectedNotes> {
+    Arc::clone(&window.state::<Arc<ProtectedNotes>>())
+}
+
+/// A password, read straight into memory that is wiped when dropped, refused when too long.
+fn password_of(password: Zeroizing<String>) -> Answer<Zeroizing<String>> {
+    if password.len() > MAX_PASSWORD_BYTES {
+        return Err(ProtectedCommandError::InvalidRequest);
+    }
+    Ok(password)
+}
+
+fn new_password_of(password: Zeroizing<String>) -> Answer<Zeroizing<String>> {
+    let password = password_of(password)?;
+    if password.chars().count() < MIN_PASSWORD_CHARACTERS {
+        return Err(ProtectedCommandError::PasswordTooShort);
+    }
+    Ok(password)
+}
+
+fn validated_note_id(note_id: &str) -> Answer<&str> {
+    let is_note_id = note_id.len() == NOTE_ID_HEX_CHARACTERS
+        && note_id
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
+    if is_note_id {
+        Ok(note_id)
+    } else {
+        Err(ProtectedCommandError::InvalidRequest)
+    }
+}
+
+/// The settings that unlock within the budget on this PC, measured once.
+fn calibrated_parameters() -> KdfParameters {
+    calibrate(UNLOCK_BUDGET, |parameters| {
+        let started = Instant::now();
+        let _ = derive_password_key("calibration", &[0; 32], parameters);
+        started.elapsed()
+    })
+}
+
+impl ProtectedNotes {
+    fn status(&self, place: &SectionPlace) -> ProtectedStatus {
+        ProtectedStatus {
+            is_set_up: place.folder.is_set_up(),
+            is_unlocked: self.sections().contains_key(&place.location_key),
+            can_unlock_on_this_pc: has_device_slot(&place.folder),
+        }
+    }
+
+    fn set_up(
+        &self,
+        place: &SectionPlace,
+        password: &str,
+        parameters: KdfParameters,
+    ) -> Answer<SetUpAnswer> {
+        let (section, recovery_key) = place.folder.set_up(password, parameters)?;
+        self.sections().insert(place.location_key.clone(), section);
+        Ok(SetUpAnswer {
+            recovery_key: recovery_key_text(&recovery_key).to_string(),
+        })
+    }
+
+    fn unlock(&self, place: &SectionPlace, password: &str, should_remember: bool) -> Answer<()> {
+        let mut section = UnlockedSection::unlock_with_password(&place.folder, password)?;
+        if should_remember {
+            section.remember_on_this_pc(self.secrets.as_ref())?;
+        }
+        self.sections().insert(place.location_key.clone(), section);
+        Ok(())
+    }
+
+    fn unlock_with_recovery(
+        &self,
+        place: &SectionPlace,
+        recovery: &RecoveryUnlock,
+        parameters: KdfParameters,
+    ) -> Answer<()> {
+        let key = recovery_key_from_text(&recovery.recovery_key)?;
+        let mut section =
+            UnlockedSection::unlock_with_key(&place.folder, SlotKind::Recovery, &key)?;
+        section.replace_password(&recovery.new_password, parameters)?;
+        self.sections().insert(place.location_key.clone(), section);
+        Ok(())
+    }
+
+    fn unlock_on_this_pc(&self, place: &SectionPlace) -> Answer<()> {
+        let section = unlock_on_this_pc(&place.folder, self.secrets.as_ref())?;
+        self.sections().insert(place.location_key.clone(), section);
+        Ok(())
+    }
+
+    fn forget_this_pc(&self, place: &SectionPlace) -> Answer<()> {
+        let mut sections = self.sections();
+        let section = sections
+            .get_mut(&place.location_key)
+            .ok_or(ProtectedCommandError::Locked)?;
+        Ok(section.forget_this_pc(self.secrets.as_ref())?)
+    }
+
+    fn lock(&self, place: &SectionPlace) {
+        self.sections().remove(&place.location_key);
+    }
+
+    fn with_section<T>(
+        &self,
+        place: &SectionPlace,
+        work: impl FnOnce(&mut UnlockedSection) -> Answer<T>,
+    ) -> Answer<T> {
+        let mut sections = self.sections();
+        let section = sections
+            .get_mut(&place.location_key)
+            .ok_or(ProtectedCommandError::Locked)?;
+        work(section)
+    }
+
+    fn list(&self, place: &SectionPlace) -> Answer<Vec<ProtectedNoteSummary>> {
+        self.with_section(place, |section| {
+            Ok(section
+                .notes()
+                .into_iter()
+                .map(|note| ProtectedNoteSummary {
+                    note_id: note.note_id,
+                    title: note.title,
+                    folder: note.folder,
+                    kind: note.kind,
+                    modified_ms: note.modified_ms,
+                    state: note.state,
+                })
+                .collect())
+        })
+    }
+
+    fn create(&self, place: &SectionPlace, note: &NewProtectedNote, now_ms: u64) -> Answer<String> {
+        let is_valid = !note.title.trim().is_empty()
+            && note.title.chars().count() <= MAX_TITLE_CHARACTERS
+            && note.folder.len() <= MAX_FOLDER_BYTES;
+        if !is_valid {
+            return Err(ProtectedCommandError::InvalidRequest);
+        }
+        self.with_section(place, |section| {
+            Ok(section.create(&note.title, &note.folder, now_ms)?)
+        })
+    }
+
+    fn open(&self, place: &SectionPlace, note_id: &str) -> Answer<ProtectedNoteText> {
+        let note_id = validated_note_id(note_id)?;
+        self.with_section(place, |section| {
+            let opened = section.open(note_id)?;
+            let decoded = decode_document_bytes(&opened.bytes);
+            let mut text = Zeroizing::new(decoded.text);
+            Ok(ProtectedNoteText {
+                line_ending: detect_line_ending(&text),
+                text: std::mem::take(&mut *text),
+                encoding: decoded.encoding,
+                has_byte_order_mark: decoded.has_byte_order_mark,
+                has_decoding_errors: decoded.has_decoding_errors,
+                revision: opened.revision,
+                is_older_copy: opened.is_older_copy,
+            })
+        })
+    }
+
+    fn save(&self, place: &SectionPlace, edit: &ProtectedNoteEdit, now_ms: u64) -> Answer<u64> {
+        let note_id = validated_note_id(&edit.note_id)?;
+        if edit.text.len() > MAX_NOTE_TEXT_BYTES {
+            return Err(ProtectedCommandError::TooLarge);
+        }
+        let encoding =
+            encoding_for_label(&edit.encoding).ok_or(ProtectedCommandError::InvalidRequest)?;
+        let bytes = Zeroizing::new(encode_document_text(
+            &edit.text,
+            encoding,
+            edit.has_byte_order_mark,
+        )?);
+        self.with_section(place, |section| Ok(section.save(note_id, &bytes, now_ms)?))
+    }
+}
+
+/// Whether this notes location has a protected section, and whether it is unlocked.
+#[tauri::command]
+pub async fn protected_status(location: String, window: WebviewWindow) -> Answer<ProtectedStatus> {
+    let place = section_place(&window, &location)?;
+    let state = state_of(&window);
+    run_blocking(move || state.status(&place))
+        .await
+        .map_err(ProtectedCommandError::from)
+}
+
+/// Sets up a protected section with a password of at least 10 characters; returns the recovery key to
+/// show once. The section is unlocked afterwards.
+#[tauri::command]
+pub async fn protected_set_up(
+    location: String,
+    password: Zeroizing<String>,
+    window: WebviewWindow,
+) -> Answer<SetUpAnswer> {
+    let password = new_password_of(password)?;
+    let place = section_place(&window, &location)?;
+    let state = state_of(&window);
+    run_blocking(move || state.set_up(&place, &password, calibrated_parameters())).await?
+}
+
+/// Unlocks with the password; with `remember`, this PC opens the section without it from then on.
+#[tauri::command]
+pub async fn protected_unlock(
+    location: String,
+    password: Zeroizing<String>,
+    remember: bool,
+    window: WebviewWindow,
+) -> Answer<()> {
+    let password = password_of(password)?;
+    let place = section_place(&window, &location)?;
+    let state = state_of(&window);
+    run_blocking(move || state.unlock(&place, &password, remember)).await?
+}
+
+/// The recovery key, typed by the user, and the new password it requires.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RecoveryUnlock {
+    recovery_key: Zeroizing<String>,
+    new_password: Zeroizing<String>,
+}
+
+/// Unlocks with the recovery key and replaces the password, so the old one no longer opens the section.
+#[tauri::command]
+pub async fn protected_unlock_with_recovery(
+    location: String,
+    recovery: RecoveryUnlock,
+    window: WebviewWindow,
+) -> Answer<()> {
+    let recovery = RecoveryUnlock {
+        new_password: new_password_of(recovery.new_password)?,
+        recovery_key: recovery.recovery_key,
+    };
+    if recovery.recovery_key.len() > MAX_RECOVERY_KEY_BYTES {
+        return Err(ProtectedCommandError::InvalidRequest);
+    }
+    let place = section_place(&window, &location)?;
+    let state = state_of(&window);
+    run_blocking(move || state.unlock_with_recovery(&place, &recovery, calibrated_parameters()))
+        .await?
+}
+
+/// Locks every section, as on sleep, a Windows session lock or quit.
+#[tauri::command]
+pub async fn protected_lock_all(window: WebviewWindow) -> Answer<()> {
+    state_of(&window).lock_all();
+    Ok(())
+}
+
+/// Unlocks with the key this PC remembers.
+#[tauri::command]
+pub async fn protected_unlock_on_this_pc(location: String, window: WebviewWindow) -> Answer<()> {
+    let place = section_place(&window, &location)?;
+    let state = state_of(&window);
+    run_blocking(move || state.unlock_on_this_pc(&place)).await?
+}
+
+/// Forgets this PC: the password or the recovery key is needed again.
+#[tauri::command]
+pub async fn protected_forget_this_pc(location: String, window: WebviewWindow) -> Answer<()> {
+    let place = section_place(&window, &location)?;
+    let state = state_of(&window);
+    run_blocking(move || state.forget_this_pc(&place)).await?
+}
+
+/// Locks the section, which wipes its keys.
+#[tauri::command]
+pub async fn protected_lock(location: String, window: WebviewWindow) -> Answer<()> {
+    let place = section_place(&window, &location)?;
+    state_of(&window).lock(&place);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn protected_list(
+    location: String,
+    window: WebviewWindow,
+) -> Answer<Vec<ProtectedNoteSummary>> {
+    let place = section_place(&window, &location)?;
+    let state = state_of(&window);
+    run_blocking(move || state.list(&place)).await?
+}
+
+#[tauri::command]
+pub async fn protected_create(
+    location: String,
+    note: NewProtectedNote,
+    window: WebviewWindow,
+) -> Answer<String> {
+    let place = section_place(&window, &location)?;
+    let state = state_of(&window);
+    run_blocking(move || state.create(&place, &note, now_ms())).await?
+}
+
+#[tauri::command]
+pub async fn protected_open(
+    location: String,
+    note_id: String,
+    window: WebviewWindow,
+) -> Answer<ProtectedNoteText> {
+    let place = section_place(&window, &location)?;
+    let state = state_of(&window);
+    run_blocking(move || state.open(&place, &note_id)).await?
+}
+
+/// Saves a note's text in its own encoding, encrypted; returns its new revision.
+#[tauri::command]
+pub async fn protected_save(
+    location: String,
+    note: ProtectedNoteEdit,
+    window: WebviewWindow,
+) -> Answer<u64> {
+    let place = section_place(&window, &location)?;
+    let state = state_of(&window);
+    run_blocking(move || state.save(&place, &note, now_ms())).await?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::secrets::InMemoryDeviceSecrets;
+
+    const PASSWORD: &str = "correct horse battery";
+    const QUICK: KdfParameters = KdfParameters::FLOOR;
+
+    fn start() -> (tempfile::TempDir, ProtectedNotes, SectionPlace) {
+        let notes_folder = tempfile::tempdir().unwrap();
+        let place = section_place_of(notes_folder.path());
+        (
+            notes_folder,
+            ProtectedNotes::new(Box::new(InMemoryDeviceSecrets::default())),
+            place,
+        )
+    }
+
+    fn edit(note_id: &str, text: &str) -> ProtectedNoteEdit {
+        ProtectedNoteEdit {
+            note_id: note_id.to_owned(),
+            text: text.to_owned(),
+            encoding: "utf-8".to_owned(),
+            has_byte_order_mark: true,
+        }
+    }
+
+    fn new_note(title: &str) -> NewProtectedNote {
+        NewProtectedNote {
+            title: title.to_owned(),
+            folder: String::new(),
+        }
+    }
+
+    #[test]
+    fn set_up_unlocks_and_a_saved_note_opens_with_its_exact_text() {
+        let (_folder, notes, place) = start();
+
+        let answer = notes.set_up(&place, PASSWORD, QUICK).unwrap();
+        let note_id = notes.create(&place, &new_note("Bank details"), 1).unwrap();
+        notes
+            .save(&place, &edit(&note_id, "PIN 4821\r\n"), 2)
+            .unwrap();
+        let opened = notes.open(&place, &note_id).unwrap();
+
+        assert_eq!(answer.recovery_key.split('-').count(), 14);
+        assert!(notes.status(&place).is_unlocked);
+        assert_eq!(opened.text, "PIN 4821\r\n");
+        assert!(opened.has_byte_order_mark);
+        assert_eq!(notes.list(&place).unwrap()[0].title, "Bank details");
+    }
+
+    #[test]
+    fn lock_wipes_the_keys_and_the_password_opens_again_but_a_wrong_one_does_not() {
+        let (_folder, notes, place) = start();
+        notes.set_up(&place, PASSWORD, QUICK).unwrap();
+        let note_id = notes.create(&place, &new_note("Note"), 1).unwrap();
+
+        notes.lock(&place);
+
+        assert_eq!(
+            notes.open(&place, &note_id).map(|_| ()),
+            Err(ProtectedCommandError::Locked)
+        );
+        assert_eq!(
+            notes.unlock(&place, "wrong password", false),
+            Err(ProtectedCommandError::WrongPassword)
+        );
+        assert!(!notes.status(&place).is_unlocked);
+        notes.unlock(&place, PASSWORD, false).unwrap();
+        assert!(notes.open(&place, &note_id).is_ok());
+    }
+
+    #[test]
+    fn the_recovery_key_unlocks_with_a_new_password() {
+        let (_folder, notes, place) = start();
+        let recovery_key = notes.set_up(&place, PASSWORD, QUICK).unwrap().recovery_key;
+        notes.lock(&place);
+
+        let recovery = RecoveryUnlock {
+            recovery_key: Zeroizing::new(recovery_key.to_lowercase()),
+            new_password: Zeroizing::new("another long passphrase".to_owned()),
+        };
+        notes
+            .unlock_with_recovery(&place, &recovery, QUICK)
+            .unwrap();
+        notes.lock(&place);
+
+        assert_eq!(
+            notes.unlock(&place, PASSWORD, false),
+            Err(ProtectedCommandError::WrongPassword)
+        );
+        assert_eq!(
+            notes.unlock(&place, "another long passphrase", false),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn remembering_this_pc_unlocks_without_a_password_until_forgotten() {
+        let (_folder, notes, place) = start();
+        notes.set_up(&place, PASSWORD, QUICK).unwrap();
+        notes.lock(&place);
+        assert_eq!(
+            notes.unlock_on_this_pc(&place),
+            Err(ProtectedCommandError::NotRemembered)
+        );
+
+        notes.unlock(&place, PASSWORD, true).unwrap();
+        notes.lock(&place);
+        assert!(notes.status(&place).can_unlock_on_this_pc);
+        notes.unlock_on_this_pc(&place).unwrap();
+        notes.forget_this_pc(&place).unwrap();
+        notes.lock(&place);
+
+        assert!(!notes.status(&place).can_unlock_on_this_pc);
+        assert_eq!(
+            notes.unlock_on_this_pc(&place),
+            Err(ProtectedCommandError::NotRemembered)
+        );
+    }
+
+    #[test]
+    fn invalid_ids_short_and_oversized_passwords_and_bad_notes_are_refused() {
+        let (_folder, notes, place) = start();
+        notes.set_up(&place, PASSWORD, QUICK).unwrap();
+
+        for note_id in ["", "../vault", &"A".repeat(32), &"0".repeat(33)] {
+            assert_eq!(
+                notes.open(&place, note_id).map(|_| ()),
+                Err(ProtectedCommandError::InvalidRequest)
+            );
+        }
+        assert_eq!(
+            notes.open(&place, &"0".repeat(32)).map(|_| ()),
+            Err(ProtectedCommandError::NotFound)
+        );
+        assert_eq!(
+            password_of(Zeroizing::new("x".repeat(MAX_PASSWORD_BYTES + 1))).map(|_| ()),
+            Err(ProtectedCommandError::InvalidRequest)
+        );
+        assert_eq!(
+            new_password_of(Zeroizing::new("short pass".chars().take(9).collect())).map(|_| ()),
+            Err(ProtectedCommandError::PasswordTooShort)
+        );
+        assert!(new_password_of(Zeroizing::new("ten chars!".to_owned())).is_ok());
+        assert_eq!(
+            notes.create(&place, &new_note("  "), 1),
+            Err(ProtectedCommandError::InvalidRequest)
+        );
+        assert_eq!(
+            notes.set_up(&place, PASSWORD, QUICK).map(|_| ()),
+            Err(ProtectedCommandError::AlreadySetUp)
+        );
+    }
+
+    #[test]
+    fn no_error_carries_text_titles_or_keys() {
+        for error in [
+            ProtectedCommandError::WrongPassword,
+            ProtectedCommandError::Tampered,
+            ProtectedCommandError::NotFound,
+            ProtectedCommandError::Unavailable,
+        ] {
+            let json = serde_json::to_value(error).unwrap();
+            assert_eq!(
+                json.as_object().map(serde_json::Map::len),
+                Some(1),
+                "{json}"
+            );
+        }
+        let (folder, notes, place) = start();
+        notes.set_up(&place, PASSWORD, QUICK).unwrap();
+        let note_id = notes.create(&place, &new_note("Bank details"), 1).unwrap();
+        let note_file = folder
+            .path()
+            .join(".mdx-notes/protected/notes")
+            .join(format!("{note_id}.mdxp"));
+        let mut bytes = std::fs::read(&note_file).unwrap();
+        let last = bytes.len() - 1;
+        bytes[last] ^= 1;
+        std::fs::write(&note_file, bytes).unwrap();
+
+        let error = notes.open(&place, &note_id).map(|_| ()).unwrap_err();
+
+        assert_eq!(
+            serde_json::to_string(&error).unwrap(),
+            r#"{"code":"tampered"}"#
+        );
+    }
+
+    #[test]
+    fn locking_every_section_names_the_locations_that_were_open() {
+        let (_folder, notes, place) = start();
+        notes.set_up(&place, PASSWORD, QUICK).unwrap();
+
+        assert_eq!(notes.lock_all(), std::slice::from_ref(&place.location_key));
+        assert!(!notes.status(&place).is_unlocked);
+    }
+}

@@ -41,7 +41,7 @@ argon2 = { version = "=0.6.0", default-features = false, features = ["alloc", "z
 chacha20poly1305 = { version = "=0.11.0", default-features = false, features = ["alloc", "zeroize"] }
 # The operating system's random generator, already in the tree; every key, salt and nonce comes from it.
 getrandom = "=0.4.3"
-zeroize = { version = "=1.9.1", features = ["derive"] }
+zeroize = { version = "=1.9.1", features = ["derive", "serde"] }
 
 [target.'cfg(windows)'.dependencies]
 # The Windows calls that need unsafe code (Recycle Bin, volume names, registry), kept out of this crate.
