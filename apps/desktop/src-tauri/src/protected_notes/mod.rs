@@ -3,10 +3,13 @@
 //! its random generator; keys never leave this module unwrapped and are wiped when dropped.
 
 mod encrypted_file;
+mod hex_text;
 mod key_derivation;
 mod key_slots;
+mod manifest;
 mod protected_error;
 mod random;
+mod vault_file;
 
 pub use encrypted_file::{
     FileHeader, FileKind, FileMetadata, HEADER_BYTES, MANIFEST_NOTE_ID, MAX_CHUNKS,
@@ -18,8 +21,12 @@ pub use key_slots::{
     COMMITMENT_BYTES, DataKey, FORMAT_VERSION, KeySlot, NONCE_BYTES, SLOT_ID_BYTES, SlotKind,
     TAG_BYTES, VAULT_ID_BYTES, is_same_in_constant_time, unwrap_data_key, wrap_data_key,
 };
+pub use manifest::{MANIFEST_FILE_NAME, MAX_MANIFEST_ENTRIES, Manifest, ManifestEntry, NoteState};
 pub use protected_error::ProtectedError;
 pub use random::{random_bytes, random_key};
+pub use vault_file::{
+    MAX_VAULT_FILE_BYTES, NewVault, SetUpRefusal, VAULT_FILE_NAME, Vault, set_up_refusal,
+};
 
 /// Every key in the protected section is 256 bits.
 pub const KEY_BYTES: usize = 32;
