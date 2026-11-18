@@ -1,5 +1,5 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
-import { InMemoryDocumentFiles } from '@mdx/platform';
+import { InMemoryDocumentFiles, ProtectedNotesError } from '@mdx/platform';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TauriAppMenu } from './TauriAppMenu';
 import { TauriAppState } from './TauriAppState';
@@ -11,6 +11,7 @@ import { TauriDocumentWatcher } from './TauriDocumentWatcher';
 import { TauriFavouritesFile } from './TauriFavouritesFile';
 import { TauriFolderWatcher } from './TauriFolderWatcher';
 import { TauriFolders } from './TauriFolders';
+import { TauriProtectedNotes } from './TauriProtectedNotes';
 
 type CommandArguments = Record<string, unknown>;
 
@@ -371,5 +372,113 @@ describe('TauriAttachments', () => {
     expect(calls).toEqual([
       { command: 'add_picture_files', args: { request: { ...target, filterName: 'Pictures' } } },
     ]);
+  });
+});
+
+describe('TauriProtectedNotes', () => {
+  const LOCATION = 'C:\\Notes';
+  const PASSWORD = 'correct horse battery';
+  const NOTE_ID = 'a'.repeat(32);
+
+  function mockProtectedCommands() {
+    return mockCommands({
+      protected_status: () => ({ isSetUp: true, isUnlocked: false, canUnlockOnThisPc: true }),
+      protected_set_up: () => ({ recoveryKey: 'ABCD-EFGH' }),
+      protected_unlock: () => null,
+      protected_unlock_with_recovery: () => null,
+      protected_unlock_on_this_pc: () => null,
+      protected_forget_this_pc: () => null,
+      protected_lock: () => null,
+      protected_lock_all: () => null,
+      protected_list: () => [],
+      protected_create: () => NOTE_ID,
+      protected_open: () => ({
+        text: 'PIN',
+        encoding: 'UTF-8',
+        hasByteOrderMark: false,
+        hasDecodingErrors: false,
+        lineEnding: 'lf',
+        revision: 2,
+        isOlderCopy: false,
+      }),
+      protected_save: () => 3,
+    });
+  }
+
+  async function runEveryOperation(notes: TauriProtectedNotes) {
+    await notes.status(LOCATION);
+    await notes.setUp(LOCATION, PASSWORD);
+    await notes.unlock(LOCATION, PASSWORD, true);
+    await notes.unlockWithRecoveryKey(LOCATION, { recoveryKey: 'ABCD-EFGH', newPassword: PASSWORD });
+    await notes.unlockOnThisPc(LOCATION);
+    await notes.forgetThisPc(LOCATION);
+    await notes.lock(LOCATION);
+    await notes.lockAll();
+    await notes.list(LOCATION);
+    await notes.create(LOCATION, { title: 'Bank details', folder: '' });
+    await notes.open(LOCATION, NOTE_ID);
+    return notes.save(LOCATION, { noteId: NOTE_ID, text: 'PIN', encoding: 'UTF-8', hasByteOrderMark: false });
+  }
+
+  it('sends each operation to its command and the password only where the user typed it', async () => {
+    const calls = mockProtectedCommands();
+
+    expect(await runEveryOperation(new TauriProtectedNotes())).toBe(3);
+
+    expect(calls.map((call) => call.command)).toEqual([
+      'protected_status',
+      'protected_set_up',
+      'protected_unlock',
+      'protected_unlock_with_recovery',
+      'protected_unlock_on_this_pc',
+      'protected_forget_this_pc',
+      'protected_lock',
+      'protected_lock_all',
+      'protected_list',
+      'protected_create',
+      'protected_open',
+      'protected_save',
+    ]);
+    const withPassword = calls
+      .filter((call) => JSON.stringify(call.args).includes(PASSWORD))
+      .map((call) => call.command);
+    expect(withPassword).toEqual(['protected_set_up', 'protected_unlock', 'protected_unlock_with_recovery']);
+    expect(calls[2]?.args).toEqual({ location: LOCATION, password: PASSWORD, remember: true });
+  });
+
+  it('receives no key material: what the commands answer holds only the fields of the port', async () => {
+    mockProtectedCommands();
+    const notes = new TauriProtectedNotes();
+
+    const status = await notes.status(LOCATION);
+    const opened = await notes.open(LOCATION, NOTE_ID);
+
+    expect(Object.keys(status).sort()).toEqual(['canUnlockOnThisPc', 'isSetUp', 'isUnlocked']);
+    expect(Object.keys(opened).sort()).toEqual([
+      'encoding',
+      'hasByteOrderMark',
+      'hasDecodingErrors',
+      'isOlderCopy',
+      'lineEnding',
+      'revision',
+      'text',
+    ]);
+  });
+
+  it('turns a refusal into a code and nothing more', async () => {
+    mockCommands({
+      protected_unlock: () => {
+        throw Object.assign(new Error('backend error'), { code: 'wrongPassword' });
+      },
+      protected_open: () => {
+        throw new Error('something unexpected');
+      },
+    });
+    const notes = new TauriProtectedNotes();
+
+    await expect(notes.unlock(LOCATION, PASSWORD, false)).rejects.toEqual(
+      new ProtectedNotesError('wrongPassword'),
+    );
+    await expect(notes.open(LOCATION, NOTE_ID)).rejects.toEqual(new ProtectedNotesError('unavailable'));
   });
 });

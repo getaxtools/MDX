@@ -172,3 +172,17 @@ export type {
   ReportedSyntax,
   UnsupportedSyntaxKind,
 } from './NoteTransferPort';
+export {
+  isProtectedNotesFailure,
+  PROTECTED_NOTES_FAILURES,
+  ProtectedNotesError,
+  type NewProtectedNote,
+  type ProtectedNoteEdit,
+  type ProtectedNotesFailure,
+  type ProtectedNoteState,
+  type ProtectedNoteSummary,
+  type ProtectedNoteText,
+  type ProtectedNotesPort,
+  type ProtectedStatus,
+} from './ProtectedNotesPort';
+export { InMemoryProtectedNotes } from './fakes/InMemoryProtectedNotes';

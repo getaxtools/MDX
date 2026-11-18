@@ -1,0 +1,80 @@
+import {
+  isProtectedNotesFailure,
+  ProtectedNotesError,
+  type NewProtectedNote,
+  type ProtectedNoteEdit,
+  type ProtectedNoteSummary,
+  type ProtectedNoteText,
+  type ProtectedNotesPort,
+  type ProtectedStatus,
+} from '@mdx/platform';
+import { invoke } from '@tauri-apps/api/core';
+
+/** A code from the native layer, or `unavailable` for anything else; never more than the code. */
+function protectedNotesErrorOf(error: unknown): ProtectedNotesError {
+  const code: unknown =
+    typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
+  return new ProtectedNotesError(isProtectedNotesFailure(code) ? code : 'unavailable');
+}
+
+async function call<Result>(command: string, args: Record<string, unknown>): Promise<Result> {
+  try {
+    return await invoke<Result>(command, args);
+  } catch (error) {
+    throw protectedNotesErrorOf(error);
+  }
+}
+
+/** The protected section through its native commands; passwords go one way, keys never come back. */
+export class TauriProtectedNotes implements ProtectedNotesPort {
+  status(location: string): Promise<ProtectedStatus> {
+    return call('protected_status', { location });
+  }
+
+  setUp(location: string, password: string): Promise<{ readonly recoveryKey: string }> {
+    return call('protected_set_up', { location, password });
+  }
+
+  unlock(location: string, password: string, shouldRemember: boolean): Promise<void> {
+    return call('protected_unlock', { location, password, remember: shouldRemember });
+  }
+
+  unlockWithRecoveryKey(
+    location: string,
+    recovery: { readonly recoveryKey: string; readonly newPassword: string },
+  ): Promise<void> {
+    return call('protected_unlock_with_recovery', { location, recovery });
+  }
+
+  unlockOnThisPc(location: string): Promise<void> {
+    return call('protected_unlock_on_this_pc', { location });
+  }
+
+  forgetThisPc(location: string): Promise<void> {
+    return call('protected_forget_this_pc', { location });
+  }
+
+  lock(location: string): Promise<void> {
+    return call('protected_lock', { location });
+  }
+
+  lockAll(): Promise<void> {
+    return call('protected_lock_all', {});
+  }
+
+  list(location: string): Promise<ProtectedNoteSummary[]> {
+    return call('protected_list', { location });
+  }
+
+  create(location: string, note: NewProtectedNote): Promise<string> {
+    return call('protected_create', { location, note });
+  }
+
+  open(location: string, noteId: string): Promise<ProtectedNoteText> {
+    return call('protected_open', { location, noteId });
+  }
+
+  save(location: string, edit: ProtectedNoteEdit): Promise<number> {
+    return call('protected_save', { location, note: edit });
+  }
+}
