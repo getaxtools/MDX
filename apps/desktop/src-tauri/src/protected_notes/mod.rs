@@ -3,10 +3,15 @@
 //! its random generator; keys never leave this module unwrapped and are wiped when dropped.
 
 mod key_derivation;
+mod key_slots;
 mod protected_error;
 mod random;
 
 pub use key_derivation::{KdfParameters, PASSWORD_SALT_BYTES, calibrate, derive_password_key};
+pub use key_slots::{
+    COMMITMENT_BYTES, DataKey, FORMAT_VERSION, KeySlot, NONCE_BYTES, SLOT_ID_BYTES, SlotKind,
+    TAG_BYTES, VAULT_ID_BYTES, is_same_in_constant_time, unwrap_data_key, wrap_data_key,
+};
 pub use protected_error::ProtectedError;
 pub use random::{random_bytes, random_key};
 
