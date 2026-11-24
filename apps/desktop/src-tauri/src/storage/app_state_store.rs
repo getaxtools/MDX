@@ -72,19 +72,23 @@ impl AppStateStore {
         self.write_atomically(STATE_FILE_NAME, state_json)
     }
 
-    /// Clear All Data also forgets the copies kept of state this version could not use.
+    /// Clear All Data also forgets the copies kept of state this version could not use, and a backup
+    /// that cannot be removed does not keep the others.
     pub fn remove_backups(&self) -> Result<(), AppStateError> {
+        let mut first_failure = None;
         for file_name in [
             CORRUPT_BACKUP_FILE_NAME,
             NEWER_VERSION_BACKUP_FILE_NAME,
             BEFORE_WORKSPACES_BACKUP_FILE_NAME,
         ] {
             match fs::remove_file(self.folder.join(file_name)) {
-                Err(error) if error.kind() != io::ErrorKind::NotFound => return Err(error.into()),
+                Err(error) if error.kind() != io::ErrorKind::NotFound => {
+                    first_failure.get_or_insert(error);
+                }
                 _ => {}
             }
         }
-        Ok(())
+        first_failure.map_or(Ok(()), |error| Err(error.into()))
     }
 
     /// A one-time copy of the state as it was before workspaces, kept until Clear All Data.
@@ -290,6 +294,25 @@ mod tests {
 
         assert!(!folder.path().join(NEWER_VERSION_BACKUP_FILE_NAME).exists());
         assert!(!folder.path().join(CORRUPT_BACKUP_FILE_NAME).exists());
+    }
+
+    #[test]
+    fn the_other_backups_are_removed_when_one_cannot_be_removed() {
+        let folder = tempfile::tempdir().unwrap();
+        fs::create_dir(folder.path().join(CORRUPT_BACKUP_FILE_NAME)).unwrap();
+        fs::write(folder.path().join(NEWER_VERSION_BACKUP_FILE_NAME), "{}").unwrap();
+        fs::write(folder.path().join(BEFORE_WORKSPACES_BACKUP_FILE_NAME), "{}").unwrap();
+
+        let result = AppStateStore::new(folder.path()).remove_backups();
+
+        assert!(matches!(result, Err(AppStateError::Storage(_))));
+        assert!(!folder.path().join(NEWER_VERSION_BACKUP_FILE_NAME).exists());
+        assert!(
+            !folder
+                .path()
+                .join(BEFORE_WORKSPACES_BACKUP_FILE_NAME)
+                .exists()
+        );
     }
 
     #[test]
