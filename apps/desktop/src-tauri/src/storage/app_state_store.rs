@@ -72,8 +72,8 @@ impl AppStateStore {
         self.write_atomically(STATE_FILE_NAME, state_json)
     }
 
-    /// Clear All Data also forgets the copies kept of state this version could not use, and a backup
-    /// that cannot be removed does not keep the others.
+    /// Clear All Data also forgets the copies kept of state this version could not use, including one
+    /// a crash left half written, and a backup that cannot be removed does not keep the others.
     pub fn remove_backups(&self) -> Result<(), AppStateError> {
         let mut first_failure = None;
         for file_name in [
@@ -81,11 +81,16 @@ impl AppStateStore {
             NEWER_VERSION_BACKUP_FILE_NAME,
             BEFORE_WORKSPACES_BACKUP_FILE_NAME,
         ] {
-            match fs::remove_file(self.folder.join(file_name)) {
-                Err(error) if error.kind() != io::ErrorKind::NotFound => {
-                    first_failure.get_or_insert(error);
+            for path in [
+                self.folder.join(file_name),
+                self.folder.join(format!("{file_name}{PENDING_SUFFIX}")),
+            ] {
+                match fs::remove_file(path) {
+                    Err(error) if error.kind() != io::ErrorKind::NotFound => {
+                        first_failure.get_or_insert(error);
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
         }
         first_failure.map_or(Ok(()), |error| Err(error.into()))
@@ -284,7 +289,7 @@ mod tests {
     }
 
     #[test]
-    fn removes_both_backups_and_tolerates_missing_ones() {
+    fn removes_the_backups_and_tolerates_missing_ones() {
         let folder = tempfile::tempdir().unwrap();
         let store = AppStateStore::new(folder.path());
         fs::write(folder.path().join(NEWER_VERSION_BACKUP_FILE_NAME), "{}").unwrap();
@@ -294,6 +299,26 @@ mod tests {
 
         assert!(!folder.path().join(NEWER_VERSION_BACKUP_FILE_NAME).exists());
         assert!(!folder.path().join(CORRUPT_BACKUP_FILE_NAME).exists());
+    }
+
+    #[test]
+    fn removes_backups_left_half_written_by_a_crash() {
+        let folder = tempfile::tempdir().unwrap();
+        let half_written: Vec<_> = [
+            CORRUPT_BACKUP_FILE_NAME,
+            NEWER_VERSION_BACKUP_FILE_NAME,
+            BEFORE_WORKSPACES_BACKUP_FILE_NAME,
+        ]
+        .iter()
+        .map(|file_name| folder.path().join(format!("{file_name}{PENDING_SUFFIX}")))
+        .collect();
+        for path in &half_written {
+            fs::write(path, r#"{"schemaVersion":1,"favou"#).unwrap();
+        }
+
+        AppStateStore::new(folder.path()).remove_backups().unwrap();
+
+        assert!(half_written.iter().all(|path| !path.exists()));
     }
 
     #[test]
