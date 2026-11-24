@@ -273,8 +273,14 @@
     focusDocument();
   }
 
+  /** While editing, the first tab stop may be the preview splitter, and an editor still loading takes focus once ready. */
   function focusDocument() {
-    focusRegionOf(globalThis.document.querySelector('.reading-area'));
+    const readingArea = globalThis.document.querySelector('.reading-area');
+    if (readingArea?.querySelector('.editing-layout')) {
+      shownEditor?.focus();
+      return;
+    }
+    focusRegionOf(readingArea);
   }
 
   /** Kept here rather than in the tree, so the arc lists the tree as it was while the side bar is hidden. */

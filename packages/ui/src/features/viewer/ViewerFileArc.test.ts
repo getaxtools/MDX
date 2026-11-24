@@ -279,6 +279,26 @@ describe('the file arc in the viewer', () => {
     await user.keyboard('{Escape}{/Control}');
   });
 
+  it('going back to a file being edited beside its preview puts focus in the editor', async () => {
+    const { user } = await renderViewer();
+    await user.click(screen.getByRole('button', { name: 'Side by Side' }));
+    await screen.findByRole('textbox', { name: 'Source of getting-started.md' }, LAZY_LOAD_WAIT);
+    await openArcOnNextFile(user);
+    await user.keyboard('{/Control}');
+    await screen.findByRole('article', { name: 'install.md' });
+
+    await user.keyboard('{Control>}{ArrowUp}');
+    await screen.findByRole('listbox', { name: 'Switch file' }, LAZY_LOAD_WAIT);
+    await user.keyboard('{/Control}');
+
+    const source = await screen.findByRole(
+      'textbox',
+      { name: 'Source of getting-started.md' },
+      LAZY_LOAD_WAIT,
+    );
+    await vi.waitFor(() => expect(source.contains(globalThis.document.activeElement)).toBe(true));
+  });
+
   it('marks the entries already open in a tab', async () => {
     const { user } = await renderViewer({ openPaths: [README, GETTING_STARTED] });
 

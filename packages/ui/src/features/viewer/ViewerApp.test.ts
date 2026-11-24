@@ -170,6 +170,17 @@ describe('ViewerApp', () => {
       await vi.waitFor(() => expect(document.activeElement).toBe(article.closest('main')));
     });
 
+    it('hiding the side bar from the keyboard while editing puts focus in the editor', async () => {
+      await renderViewer([GUIDE]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Side by Side' }));
+      const source = await screen.findByRole('textbox', { name: 'Source of Guide.md' }, LAZY_LOAD_WAIT);
+      screen.getByRole('button', { name: 'Hide side bar' }).focus();
+
+      await userEvent.keyboard('{Enter}');
+
+      await vi.waitFor(() => expect(source.contains(document.activeElement)).toBe(true));
+    });
+
     it('the activity bar button is pressed only while the side bar is shown', async () => {
       await renderViewer([GUIDE]);
       const explorerButton = await screen.findByRole('button', { name: 'Explorer' });
