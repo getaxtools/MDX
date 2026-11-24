@@ -31,6 +31,8 @@ const MIN_TEXT_CONTRAST = 4.5;
 const MIN_NON_TEXT_CONTRAST = 3;
 /** A long animation frame or long task is one of 50 ms or more, by the browsers' own definition. */
 const LONG_FRAME_MS = 50;
+/** Frames with little work of the page's own have taken up to 180 ms on a busy machine; far more means the wheel is slow to draw. */
+const OPENING_FRAME_CEILING_MS = 300;
 const SETTLE_MS = 600;
 const OPEN_MOTION_BUDGET_MS = 200;
 const MICROSECONDS_PER_MILLISECOND = 1000;
@@ -39,6 +41,36 @@ const findings: string[] = [];
 
 function record(line: string): void {
   findings.push(line);
+}
+
+interface TraceEvent {
+  name?: string;
+  dur?: number;
+  ph?: string;
+  pid?: number;
+  tid?: number;
+  args?: { name?: string };
+}
+
+interface PageLongFrame {
+  type: string;
+  durationMs: number;
+  /** A lower bound: the frame lists only scripts of 5 ms or more, and no work that runs no script. */
+  ownWorkMs: number;
+}
+
+/** Only the page's main thread counts, because GPU and browser process tasks include time blocked on the system. */
+function pageMainThreadTasks(traceEvents: readonly TraceEvent[]): TraceEvent[] {
+  const pageMainThreads = new Set(
+    traceEvents
+      .filter(
+        (event) => event.ph === 'M' && event.name === 'thread_name' && event.args?.name === 'CrRendererMain',
+      )
+      .map((event) => `${String(event.pid)}:${String(event.tid)}`),
+  );
+  return traceEvents.filter(
+    (event) => event.name === 'RunTask' && pageMainThreads.has(`${String(event.pid)}:${String(event.tid)}`),
+  );
 }
 
 /** A plain PNG of one colour, so the wheel can be seen over a known page. */
@@ -235,17 +267,34 @@ describe('control wheel passes', () => {
         'toplevel,devtools.timeline,disabled-by-default-devtools.timeline,disabled-by-default-devtools.timeline.frame',
       transferMode: 'ReportEvents',
     });
-    const traceEvents: { name?: string; dur?: number; ph?: string }[] = [];
+    const traceEvents: TraceEvent[] = [];
     const stopCollecting = devTools.on('Tracing.dataCollected', (params) => {
       traceEvents.push(...(params as { value: typeof traceEvents }).value);
     });
     await app.browser.execute(() => {
-      const seen: { type: string; duration: number }[] = [];
+      const seen: PageLongFrame[] = [];
       (globalThis as { wheelLongFrames?: typeof seen }).wheelLongFrames = seen;
       for (const type of ['long-animation-frame', 'longtask']) {
         try {
           new PerformanceObserver((list) => {
-            for (const entry of list.getEntries()) seen.push({ type, duration: entry.duration });
+            for (const entry of list.getEntries()) {
+              const frame = entry as PerformanceEntry & {
+                renderStart?: number;
+                scripts?: { startTime: number; duration: number }[];
+              };
+              const frameEnd = entry.startTime + entry.duration;
+              const renderStart =
+                frame.renderStart !== undefined && frame.renderStart > 0 ? frame.renderStart : frameEnd;
+              const scriptMs = (frame.scripts ?? [])
+                .filter((script) => script.startTime < renderStart)
+                .reduce((total, script) => total + script.duration, 0);
+              const renderMs = frameEnd - renderStart;
+              seen.push({
+                type,
+                durationMs: entry.duration,
+                ownWorkMs: type === 'longtask' ? entry.duration : scriptMs + renderMs,
+              });
+            }
           }).observe({ type, buffered: false });
         } catch {
           // This WebView2 does not report that entry type.
@@ -256,7 +305,13 @@ describe('control wheel passes', () => {
     await controlWheel.openControlWheel();
     await app.browser.pause(SETTLE_MS);
     const pageLongFrames = await app.browser.execute(
-      () => (globalThis as { wheelLongFrames?: { type: string; duration: number }[] }).wheelLongFrames ?? [],
+      () => (globalThis as { wheelLongFrames?: PageLongFrame[] }).wheelLongFrames ?? [],
+    );
+    const pageSlowFrames = pageLongFrames.filter((frame) => frame.ownWorkMs >= LONG_FRAME_MS);
+    const longestFrameMs = Math.max(0, ...pageLongFrames.map((frame) => frame.durationMs));
+    const longestTimeOutsideOwnWorkMs = Math.max(
+      0,
+      ...pageLongFrames.map((frame) => frame.durationMs - frame.ownWorkMs),
     );
     const traceEnded = new Promise<void>((resolve) =>
       devTools.on('Tracing.tracingComplete', () => resolve()),
@@ -265,22 +320,22 @@ describe('control wheel passes', () => {
     await traceEnded;
     stopCollecting();
     writeFileSync(join(PASS_FOLDER, 'wheel-open-trace.json'), JSON.stringify({ traceEvents }));
-    const longTasks = traceEvents.filter(
-      (event) => event.name === 'RunTask' && (event.dur ?? 0) >= LONG_FRAME_MS * MICROSECONDS_PER_MILLISECOND,
+    const pageTasks = pageMainThreadTasks(traceEvents);
+    const longTasks = pageTasks.filter(
+      (event) => (event.dur ?? 0) >= LONG_FRAME_MS * MICROSECONDS_PER_MILLISECOND,
     );
     const longestTaskMs = Math.max(
       0,
-      ...traceEvents
-        .filter((event) => event.name === 'RunTask')
-        .map((event) => (event.dur ?? 0) / MICROSECONDS_PER_MILLISECOND),
+      ...pageTasks.map((event) => (event.dur ?? 0) / MICROSECONDS_PER_MILLISECOND),
     );
-    const taskCount = traceEvents.filter((event) => event.name === 'RunTask').length;
+    const taskCount = pageTasks.length;
     record(
-      `opening: ${String(pageLongFrames.length)} long frames seen by the page; trace has ${String(taskCount)} tasks, of them ${String(longTasks.length)} tasks of ${String(LONG_FRAME_MS)} ms or more, the longest ${longestTaskMs.toFixed(1)} ms`,
+      `opening: ${String(pageLongFrames.length)} long frames seen by the page, ${String(pageSlowFrames.length)} of them from its own work, the longest ${longestFrameMs.toFixed(1)} ms with ${longestTimeOutsideOwnWorkMs.toFixed(1)} ms outside its own work; trace has ${String(taskCount)} tasks, of them ${String(longTasks.length)} tasks of ${String(LONG_FRAME_MS)} ms or more, the longest ${longestTaskMs.toFixed(1)} ms`,
     );
 
     expect(taskCount).toBeGreaterThan(0);
-    expect(pageLongFrames).toEqual([]);
+    expect(pageSlowFrames).toEqual([]);
+    expect(longestFrameMs).toBeLessThan(OPENING_FRAME_CEILING_MS);
     expect(longTasks).toEqual([]);
   });
 
