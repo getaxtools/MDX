@@ -201,8 +201,11 @@ export class ViewerSession {
 
   /** Removes stored workspaces, values and backup copies; the next save writes the current state again. */
   async clearStoredData(): Promise<void> {
-    await this.storage.clearAll();
-    this.replaceState(this.state);
+    try {
+      await this.storage.clearAll();
+    } finally {
+      this.replaceState(this.state);
+    }
   }
 
   /** The workspace registry, or undefined while the earlier state file stands in for the store. */

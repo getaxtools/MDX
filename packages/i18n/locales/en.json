@@ -215,6 +215,7 @@
   "privacy.clearAllData.confirm": "Clear All Data",
   "privacy.clearAllData.cancel": "Cancel",
   "privacy.clearAllData.done": "All MDX data on this PC was cleared.",
+  "privacy.clearAllData.failed": "Some MDX data on this PC could not be cleared. Try Clear All Data again.",
   "privacy.clearAllData.unsavedChanges": "Save or close the documents with unsaved changes before clearing all data.",
   "settings.theme.description": "Light, dark, sepia, Solarized, Nord or high-contrast colours, or the same as Windows.",
   "settings.typography.description": "The style of the text in documents: GitHub, a serif Book style, or Academic with numbered sections.",

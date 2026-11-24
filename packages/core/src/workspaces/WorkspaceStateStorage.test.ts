@@ -235,6 +235,62 @@ describe('WorkspaceStateStorage', () => {
     expect((await workspaceStore.loadRegistry()).map((workspace) => workspace.id)).toEqual(['default']);
   });
 
+  it('a Clear All Data that deleted the workspaces and then failed leaves the default workspace to save into', async () => {
+    const { storage, workspaceStore } = createStorage();
+    const restored = await storage.restore();
+    await storage.save(withFavourite(restored, 'C:\\a.md'));
+    workspaceStore.nextClearFailure = 'afterDeleting';
+
+    await expect(storage.clearAll()).rejects.toThrow('log could not be emptied');
+    await storage.save(withFavourite(restoreAppState(undefined), 'C:\\b.md'));
+
+    expect(shownWorkspaceIds(storage)).toEqual(['default']);
+    expect((await workspaceStore.loadRegistry()).map((workspace) => workspace.id)).toEqual(['default']);
+  });
+
+  it('a Clear All Data that failed before deleting still lists the workspaces the store holds', async () => {
+    const { storage, workspaceStore } = createStorage();
+    const restored = await storage.restore();
+    await saveReadingWorkspace(workspaceStore);
+    await storage.reloadRegistry();
+    await storage.switchTo('reading', restored);
+    workspaceStore.nextClearFailure = 'beforeDeleting';
+
+    await expect(storage.clearAll()).rejects.toThrow('rolled back');
+
+    expect(shownWorkspaceIds(storage)).toEqual(['default', 'reading']);
+    expect(storage.shownWorkspace()?.id).toBe('default');
+  });
+
+  it('a Clear All Data that failed and whose store cannot be read back lists only the default workspace', async () => {
+    const { storage, workspaceStore } = createStorage();
+    const restored = await storage.restore();
+    await saveReadingWorkspace(workspaceStore);
+    await storage.reloadRegistry();
+    await storage.switchTo('reading', restored);
+    workspaceStore.nextClearFailure = 'afterDeleting';
+    workspaceStore.loadRegistry = () => Promise.reject(new Error('database is locked'));
+
+    await expect(storage.clearAll()).rejects.toThrow('log could not be emptied');
+
+    expect(shownWorkspaceIds(storage)).toEqual(['default']);
+    expect(storage.shownWorkspace()?.id).toBe('default');
+  });
+
+  it('a Clear All Data whose store cannot be read back after clearing lists only the default workspace', async () => {
+    const { storage, workspaceStore } = createStorage();
+    const restored = await storage.restore();
+    await saveReadingWorkspace(workspaceStore);
+    await storage.reloadRegistry();
+    await storage.switchTo('reading', restored);
+    workspaceStore.loadRegistry = () => Promise.reject(new Error('database is locked'));
+
+    await expect(storage.clearAll()).rejects.toThrow('database is locked');
+
+    expect(shownWorkspaceIds(storage)).toEqual(['default']);
+    expect(storage.shownWorkspace()?.id).toBe('default');
+  });
+
   it('Clear All Data still removes the backups when the store cannot be cleared', async () => {
     const { storage, workspaceStore, appState } = createStorage(undefined, new LockedBackupsAppState());
     await storage.restore();
@@ -251,6 +307,25 @@ describe('WorkspaceStateStorage', () => {
     expect(backupRemovalAttempts).toBe(1);
   });
 });
+
+function shownWorkspaceIds(storage: WorkspaceStateStorage): string[] {
+  return storage
+    .workspaces()
+    .workspaces()
+    .map((workspace) => workspace.id);
+}
+
+function saveReadingWorkspace(workspaceStore: InMemoryWorkspaceStore): Promise<void> {
+  return workspaceStore.saveWorkspace({
+    id: 'reading',
+    kindId: 'markdownViewer',
+    name: 'Reading',
+    icon: null,
+    colour: null,
+    position: 1,
+    lastShownAtMs: null,
+  });
+}
 
 class LockedBackupsAppState extends InMemoryAppState {
   override removeBackups(): Promise<void> {

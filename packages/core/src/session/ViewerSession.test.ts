@@ -145,6 +145,18 @@ describe('ViewerSession', () => {
     expect(appState.backupRemovalCount).toBe(1);
   });
 
+  it('tells subscribers about the state a failed clear of stored data left', async () => {
+    const appState = new InMemoryAppState();
+    appState.removeBackups = () => Promise.reject(new Error('backup is locked'));
+    const { session } = createSession(appState);
+    const notifications: ViewerState[] = [];
+    session.subscribe((state) => notifications.push(state));
+
+    await expect(session.clearStoredData()).rejects.toThrow('backup is locked');
+
+    expect(notifications).toHaveLength(1);
+  });
+
   it('loads nothing when no tab is open', async () => {
     const { session } = createSession();
 

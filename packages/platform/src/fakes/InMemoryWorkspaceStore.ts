@@ -22,6 +22,11 @@ export class InMemoryWorkspaceStore implements WorkspaceStorePort {
   readonly grantedWorkspaceIds: string[] = [];
   /** Set to make the next import fail, as a failed transaction in the desktop app would. */
   failsNextImport = false;
+  /**
+   * Set to make the next clear fail: before deleting, as a rolled-back transaction would, or after,
+   * as a desktop clear that could not empty its log would.
+   */
+  nextClearFailure: 'beforeDeleting' | 'afterDeleting' | undefined;
 
   async importLegacyState({
     workspace,
@@ -43,8 +48,12 @@ export class InMemoryWorkspaceStore implements WorkspaceStorePort {
   }
 
   clearAll(): Promise<void> {
+    const failure = this.nextClearFailure;
+    this.nextClearFailure = undefined;
+    if (failure === 'beforeDeleting') return Promise.reject(new Error('The clear was rolled back'));
     this.rows.clear();
     this.appValues.clear();
+    if (failure === 'afterDeleting') return Promise.reject(new Error('The log could not be emptied'));
     return Promise.resolve();
   }
 

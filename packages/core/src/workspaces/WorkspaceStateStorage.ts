@@ -81,11 +81,26 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
   }
 
   private async clearWorkspaceStore(): Promise<void> {
+    const failures: unknown[] = [];
+    await this.options.workspaceStore.clearAll().catch((clearError: unknown) => failures.push(clearError));
+    await this.showDefaultWorkspaceOfStore().catch((readBackError: unknown) => {
+      failures.push(readBackError);
+      this.registry = WorkspaceRegistry.fromStored([this.defaultWorkspace()]);
+      this.shownWorkspaceId = DEFAULT_WORKSPACE_ID;
+    });
+    if (failures.length > 0) throw failures[0];
+  }
+
+  /** A clear can fail after its rows are gone, so the registry is read back rather than assumed. */
+  private async showDefaultWorkspaceOfStore(): Promise<void> {
     const { workspaceStore } = this.options;
-    await workspaceStore.clearAll();
-    const defaultWorkspace = this.defaultWorkspace();
-    await workspaceStore.saveWorkspace(defaultWorkspace);
-    this.registry = WorkspaceRegistry.fromStored([defaultWorkspace]);
+    let stored = await workspaceStore.loadRegistry();
+    if (!stored.some((workspace) => workspace.id === DEFAULT_WORKSPACE_ID)) {
+      const defaultWorkspace = this.defaultWorkspace();
+      await workspaceStore.saveWorkspace(defaultWorkspace);
+      stored = [...stored, defaultWorkspace];
+    }
+    this.registry = WorkspaceRegistry.fromStored(stored);
     this.shownWorkspaceId = DEFAULT_WORKSPACE_ID;
   }
 

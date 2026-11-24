@@ -1876,13 +1876,31 @@ export class ViewerController {
     this.dependencies.session.clearAllData();
     this.navigation.forgetHistory();
     this.navigation.recordActiveDocument();
-    await this.dependencies.session.clearStoredData();
-    await this.notesIndexActions?.clearAll();
-    await this.dependencies.notesMoves?.clearMoves();
-    this.notesMoveActions?.forgetMoves();
-    await this.saveNow();
+    const hasClearedEverything = await this.clearEveryStoredPart();
+    this.showNotice(hasClearedEverything ? 'privacy.clearAllData.done' : 'privacy.clearAllData.failed');
     await this.showNotesIndex();
-    this.showNotice('privacy.clearAllData.done');
+  }
+
+  /** Every part is cleared even when an earlier one fails, so one failure leaves as little behind as it can. */
+  private async clearEveryStoredPart(): Promise<boolean> {
+    const parts: readonly (() => Promise<unknown>)[] = [
+      () => this.dependencies.session.clearStoredData(),
+      async () => this.notesIndexActions?.clearAll(),
+      async () => {
+        await this.dependencies.notesMoves?.clearMoves();
+        this.notesMoveActions?.forgetMoves();
+      },
+      () => this.saveNow(),
+    ];
+    let hasClearedEveryPart = true;
+    for (const clearPart of parts) {
+      try {
+        await clearPart();
+      } catch {
+        hasClearedEveryPart = false;
+      }
+    }
+    return hasClearedEveryPart;
   }
 
   /**

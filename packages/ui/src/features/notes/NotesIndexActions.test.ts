@@ -26,11 +26,12 @@ const OPTIONS = { isCaseSensitive: false, isWholeWord: false };
 async function startInJournal(documents: Readonly<Record<string, string>> = {}) {
   const notesIndex = new InMemoryNotesIndex();
   const noteFiles = new InMemoryNoteFiles({ notes: Object.keys(documents), texts: documents });
+  const workspaceStore = new InMemoryWorkspaceStore();
   let nextId = 0;
   const session = new ViewerSession({
     documentFiles: new InMemoryDocumentFiles(documents),
     appState: new InMemoryAppState(),
-    workspaceStore: new InMemoryWorkspaceStore(),
+    workspaceStore,
     kindRegistry: ALL_KINDS_BUILT,
     now: () => 1_000,
     createId: () => `workspace-${String((nextId += 1))}`,
@@ -66,7 +67,7 @@ async function startInJournal(documents: Readonly<Record<string, string>> = {}) 
     if (!latest) throw new Error('no snapshot published');
     return latest;
   };
-  return { controller, notesIndex, noteFiles, snapshot, locationId, defaultWorkspaceId };
+  return { controller, notesIndex, noteFiles, snapshot, locationId, defaultWorkspaceId, workspaceStore };
 }
 
 describe('the notes index', () => {
@@ -270,5 +271,32 @@ describe('the notes index', () => {
 
     expect(notesIndex.wasCleared).toBe(true);
     expect(noteFiles.notePaths()).toEqual(['E:\\Journal\\Plan.md']);
+  });
+
+  it('a Clear All Data that fails part-way still removes the notes index and says the clear failed', async () => {
+    const { controller, notesIndex, snapshot, workspaceStore } = await startInJournal();
+    workspaceStore.nextClearFailure = 'afterDeleting';
+
+    await controller.execute({ kind: 'clearAllData' });
+
+    expect(notesIndex.wasCleared).toBe(true);
+    expect(snapshot().notice).toBe(createTranslator().translate('privacy.clearAllData.failed'));
+    expect(
+      snapshot()
+        .workspaces?.registry.workspaces()
+        .map((workspace) => workspace.id),
+    ).toEqual(['default']);
+    expect(snapshot().workspaces?.shownWorkspaceId).toBe('default');
+    expect((await workspaceStore.loadRegistry()).map((workspace) => workspace.id)).toEqual(['default']);
+  });
+
+  it('a Clear All Data whose notes index cannot be removed still clears the workspaces and says it failed', async () => {
+    const { controller, notesIndex, snapshot, workspaceStore } = await startInJournal();
+    notesIndex.clearAll = () => Promise.reject(new Error('index is locked'));
+
+    await controller.execute({ kind: 'clearAllData' });
+
+    expect(snapshot().notice).toBe(createTranslator().translate('privacy.clearAllData.failed'));
+    expect((await workspaceStore.loadRegistry()).map((workspace) => workspace.id)).toEqual(['default']);
   });
 });
