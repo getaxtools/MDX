@@ -152,8 +152,20 @@ impl WorkspaceDatabase {
         self.with_connection(|connection| legacy_import::import_legacy_state(connection, import))
     }
 
+    /// Deleted rows stay readable in free pages and in the log, so the file is rebuilt and the log emptied.
     pub fn clear_all(&self) -> Result<(), DatabaseError> {
-        self.with_connection(legacy_import::clear_all)
+        self.with_connection(|connection| {
+            legacy_import::clear_all(connection)?;
+            connection.execute_batch("VACUUM")?;
+            let is_log_still_in_use: bool =
+                connection.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| row.get(0))?;
+            if is_log_still_in_use {
+                return Err(DatabaseError::Storage(
+                    "the write-ahead log could not be emptied".to_owned(),
+                ));
+            }
+            Ok(())
+        })
     }
 
     /// Needs no connection, so it also works when this version cannot open the database.
@@ -311,6 +323,61 @@ mod tests {
             .map(|metadata| metadata.len())
             .unwrap_or(0);
         assert_eq!(log_bytes, 0);
+    }
+
+    fn file_contains(path: &Path, text: &str) -> bool {
+        let bytes = fs::read(path).unwrap_or_default();
+        bytes
+            .windows(text.len())
+            .any(|window| window == text.as_bytes())
+    }
+
+    fn save_named_workspace(database: &WorkspaceDatabase, name: &str) {
+        let record = WorkspaceRecord::try_from(WorkspaceRecordInput {
+            name: Some(name.to_owned()),
+            ..workspace_input(name)
+        })
+        .unwrap();
+        database.save_workspace(&record).unwrap();
+    }
+
+    #[test]
+    fn clear_all_leaves_no_readable_trace_of_the_cleared_rows() {
+        const NAME_IN_FILE: &str = "cleared-name-in-the-file";
+        const NAME_IN_LOG: &str = "cleared-name-in-the-log";
+        let folder = tempfile::tempdir().unwrap();
+        let file_path = folder.path().join(DATABASE_FILE_NAME);
+        let log_path = folder.path().join(format!("{DATABASE_FILE_NAME}-wal"));
+        let first_session = WorkspaceDatabase::new(folder.path());
+        save_named_workspace(&first_session, NAME_IN_FILE);
+        first_session.close().unwrap();
+        let database = WorkspaceDatabase::new(folder.path());
+        save_named_workspace(&database, NAME_IN_LOG);
+        assert!(file_contains(&file_path, NAME_IN_FILE));
+        assert!(file_contains(&log_path, NAME_IN_LOG));
+
+        database.clear_all().unwrap();
+
+        for name in [NAME_IN_FILE, NAME_IN_LOG] {
+            assert!(!file_contains(&file_path, name), "{name} is in the file");
+            assert!(!file_contains(&log_path, name), "{name} is in the log");
+        }
+        assert!(database.load_registry().unwrap().is_empty());
+    }
+
+    #[test]
+    fn clear_all_reports_a_log_another_program_keeps_in_use() {
+        let folder = tempfile::tempdir().unwrap();
+        let database = WorkspaceDatabase::new(folder.path());
+        save_named_workspace(&database, "kept-in-use");
+        let other_program = Connection::open(folder.path().join(DATABASE_FILE_NAME)).unwrap();
+        other_program
+            .execute_batch("BEGIN; SELECT count(*) FROM workspaces;")
+            .unwrap();
+
+        let result = database.clear_all();
+
+        assert!(matches!(result, Err(DatabaseError::Storage(_))));
     }
 
     /// Workspaces that each have four 25-entry lists and a window session, closed as on exit.
