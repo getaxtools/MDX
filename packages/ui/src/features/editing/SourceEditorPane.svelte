@@ -167,6 +167,13 @@
     blockMenuRequest = undefined;
     editor?.focus();
   }
+
+  function hasFocusMovedElsewhere(focusedBeforeLoading: Element | null): boolean {
+    const focused = globalThis.document.activeElement;
+    const isFocusOnNothing = focused === null || focused === globalThis.document.body;
+    return !isFocusOnNothing && focused !== focusedBeforeLoading;
+  }
+
   const editorSnippets: EditorSnippet[] = $derived(
     snippets.map((snippet) => ({
       id: snippet.id,
@@ -220,6 +227,7 @@
     if (!parent) return;
     let isClosed = false;
     let created: SourceEditor | undefined;
+    const focusedBeforeLoading = globalThis.document.activeElement;
     void import('@mdx/editor').then(({ createSourceEditor }) => {
       if (isClosed) return;
       created = createSourceEditor(editorOptions(parent));
@@ -230,7 +238,7 @@
         startingEditor.scrollToRatio(untrack(() => scrollRatio));
         onReady(startingEditor);
       });
-      created.focus();
+      if (!hasFocusMovedElsewhere(focusedBeforeLoading)) created.focus();
     });
     return () => {
       isClosed = true;

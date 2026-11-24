@@ -138,6 +138,44 @@ describe('SourceEditorPane', () => {
     expect(textBox.textContent).toContain('# Guide');
   });
 
+  it('takes focus once loaded', async () => {
+    renderPane();
+
+    const textBox = await screen.findByRole('textbox', { name: 'Source of Guide.md' });
+
+    expect(textBox.contains(document.activeElement)).toBe(true);
+  });
+
+  it('takes focus from the row that opened the document', async () => {
+    const treeRow = document.createElement('button');
+    document.body.append(treeRow);
+    try {
+      treeRow.focus();
+      renderPane();
+
+      const textBox = await screen.findByRole('textbox', { name: 'Source of Guide.md' });
+
+      expect(textBox.contains(document.activeElement)).toBe(true);
+    } finally {
+      treeRow.remove();
+    }
+  });
+
+  it('leaves focus in a field the user moved to while the editor loaded', async () => {
+    const renameField = document.createElement('input');
+    document.body.append(renameField);
+    try {
+      renderPane();
+
+      renameField.focus();
+      await screen.findByRole('textbox', { name: 'Source of Guide.md' });
+
+      expect(document.activeElement).toBe(renameField);
+    } finally {
+      renameField.remove();
+    }
+  });
+
   it('an editor closed before its first frame does not report itself ready', async () => {
     const heldFrames: FrameRequestCallback[] = [];
     vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((frame) => heldFrames.push(frame));
