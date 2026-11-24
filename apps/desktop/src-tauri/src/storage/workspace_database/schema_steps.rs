@@ -81,7 +81,17 @@ pub fn upgrade_schema(connection: &mut Connection, steps: &[&str]) -> Result<(),
 
 #[cfg(test)]
 mod tests {
+    use sha2::{Digest, Sha256};
+
     use super::*;
+
+    /// SHA-256 of each step already in use. Data folders hold databases at these steps, so a changed
+    /// step would leave them with a schema no step describes.
+    const SHIPPED_STEP_HASHES: &[&str] = &[
+        "0b62ba6aef99e92938e3e2491a195eab82f66ea8e3cc16187a16a6714db3dfcc",
+        "32ef3097a2e746f52bd2225f75b75f1fdf3a8fc67c917ffa520c493055494c41",
+        "68812ee47b93a512d2e81013f332bfcac24114d74553f0f9e9bddf6c11269b4c",
+    ];
 
     const FIRST_STEP: &str = "CREATE TABLE first (id INTEGER PRIMARY KEY);";
     const SECOND_STEP: &str = "CREATE TABLE second (id INTEGER PRIMARY KEY);";
@@ -97,6 +107,24 @@ mod tests {
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap()
+    }
+
+    #[test]
+    fn shipped_schema_steps_never_change() {
+        let step_hashes: Vec<String> = SCHEMA_STEPS
+            .iter()
+            .map(|step| format!("{:x}", Sha256::digest(step.as_bytes())))
+            .collect();
+
+        assert!(
+            SCHEMA_STEPS.len() >= SHIPPED_STEP_HASHES.len(),
+            "a step in use was removed"
+        );
+        assert_eq!(
+            step_hashes[..SHIPPED_STEP_HASHES.len()],
+            *SHIPPED_STEP_HASHES,
+            "add a new step instead of editing one in use"
+        );
     }
 
     #[test]
