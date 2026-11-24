@@ -92,8 +92,8 @@ describe('links follow a renamed note', () => {
     await preview.$('button=Update Links').click();
 
     await waitForNoteText('Inbox.md', '# Inbox\n\nSee [[Plan]] today.\n');
-    expect(noteText('Ideas.md')).toBe('# Ideas\r\n\r\nAlso [[Plan|the draft]].\r\n');
-    expect(noteText('Projects/Review.md')).toBe('\u{FEFF}Read [[Plan#Goals]] first.\n');
+    await waitForNoteText('Ideas.md', '# Ideas\r\n\r\nAlso [[Plan|the draft]].\r\n');
+    await waitForNoteText('Projects/Review.md', '\u{FEFF}Read [[Plan#Goals]] first.\n');
     await mainWindow.waitForTabs(['Plan.md']);
     await mainWindow.clickNoticeAction('notes.linkUpdates.undo');
 
