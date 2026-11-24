@@ -5,7 +5,7 @@ use tauri::State;
 
 use crate::documents::DocumentAccessList;
 use crate::open_requests::grant_saved_paths;
-use crate::storage::{AppStateError, AppStateStore};
+use crate::storage::{AppStateError, AppStateStore, WorkspaceDatabase};
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
 #[serde(tag = "code", rename_all = "camelCase")]
@@ -53,8 +53,22 @@ pub fn grant_app_state_access(
 #[tauri::command]
 pub fn remove_app_state_backups(
     store: State<'_, AppStateStore>,
+    database: State<'_, WorkspaceDatabase>,
 ) -> Result<(), AppStateCommandError> {
-    Ok(store.remove_backups()?)
+    remove_backups_and_upgrade_copies(&store, &database)
+}
+
+/// Clear All Data reaches this even when the workspace database cannot open, so the copies kept
+/// before its upgrades are removed here, whether or not every backup could be removed.
+fn remove_backups_and_upgrade_copies(
+    store: &AppStateStore,
+    database: &WorkspaceDatabase,
+) -> Result<(), AppStateCommandError> {
+    let backups_removed = store.remove_backups().map_err(AppStateCommandError::from);
+    let copies_removed = database
+        .remove_upgrade_copies()
+        .map_err(|_| AppStateCommandError::StorageUnavailable);
+    backups_removed.and(copies_removed)
 }
 
 #[cfg(test)]
@@ -81,5 +95,21 @@ mod tests {
             AppStateCommandError::from(error),
             AppStateCommandError::StorageUnavailable
         );
+    }
+
+    #[test]
+    fn upgrade_copies_are_removed_when_a_backup_cannot_be_removed() {
+        let folder = tempfile::tempdir().unwrap();
+        let copy_path = folder.path().join("mdx.before-0.1.0-schema-1.db");
+        std::fs::write(&copy_path, "copy").unwrap();
+        std::fs::create_dir(folder.path().join("app-state.corrupt.json")).unwrap();
+
+        let result = remove_backups_and_upgrade_copies(
+            &AppStateStore::new(folder.path()),
+            &WorkspaceDatabase::new(folder.path()),
+        );
+
+        assert_eq!(result, Err(AppStateCommandError::StorageUnavailable));
+        assert!(!copy_path.exists());
     }
 }

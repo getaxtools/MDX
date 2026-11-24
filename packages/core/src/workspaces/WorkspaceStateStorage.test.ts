@@ -215,4 +215,45 @@ describe('WorkspaceStateStorage', () => {
     expect(reopened.favourites.favourites()).toEqual([]);
     expect(appState.backupRemovalCount).toBe(1);
   });
+
+  it('Clear All Data still clears the store when a backup cannot be removed', async () => {
+    const lockedBackups = new LockedBackupsAppState();
+    const { storage, workspaceStore } = createStorage(undefined, lockedBackups);
+    await storage.restore();
+    await workspaceStore.saveWorkspace({
+      id: 'reading',
+      kindId: 'markdownViewer',
+      name: 'Reading',
+      icon: null,
+      colour: null,
+      position: 1,
+      lastShownAtMs: null,
+    });
+
+    await expect(storage.clearAll()).rejects.toThrow('backup is locked');
+
+    expect((await workspaceStore.loadRegistry()).map((workspace) => workspace.id)).toEqual(['default']);
+  });
+
+  it('Clear All Data still removes the backups when the store cannot be cleared', async () => {
+    const { storage, workspaceStore, appState } = createStorage(undefined, new LockedBackupsAppState());
+    await storage.restore();
+    workspaceStore.clearAll = () => Promise.reject(new Error('database is locked'));
+    const removeBackups = appState.removeBackups.bind(appState);
+    let backupRemovalAttempts = 0;
+    appState.removeBackups = () => {
+      backupRemovalAttempts += 1;
+      return removeBackups();
+    };
+
+    await expect(storage.clearAll()).rejects.toThrow('database is locked');
+
+    expect(backupRemovalAttempts).toBe(1);
+  });
 });
+
+class LockedBackupsAppState extends InMemoryAppState {
+  override removeBackups(): Promise<void> {
+    return Promise.reject(new Error('backup is locked'));
+  }
+}

@@ -1,6 +1,7 @@
 mod legacy_import;
 mod schema_steps;
 mod stored_values;
+mod upgrade_copy;
 mod workspace_tables;
 
 use std::collections::BTreeMap;
@@ -11,7 +12,7 @@ use std::sync::{Mutex, PoisonError};
 use rusqlite::{Connection, ErrorCode};
 
 pub use legacy_import::{LegacyStateImport, LegacyStateImportInput};
-use schema_steps::{SCHEMA_STEPS, refuse_newer_schema, upgrade_schema};
+use schema_steps::{SCHEMA_STEPS, refuse_newer_schema, schema_version, upgrade_schema};
 pub use stored_values::{
     AppValueKey, JsonText, ListName, WindowId, WorkspaceId, WorkspaceRecord, WorkspaceRecordInput,
 };
@@ -155,6 +156,14 @@ impl WorkspaceDatabase {
         self.with_connection(legacy_import::clear_all)
     }
 
+    /// Needs no connection, so it also works when this version cannot open the database.
+    pub fn remove_upgrade_copies(&self) -> Result<(), DatabaseError> {
+        match self.file_path.parent() {
+            Some(folder) => upgrade_copy::remove_all_copies(folder),
+            None => Ok(()),
+        }
+    }
+
     /// Folds the write-ahead log into the database file, so a roaming profile copies one complete file.
     pub fn close(&self) -> Result<(), DatabaseError> {
         let Some(connection) = self.lock_connection().take() else {
@@ -198,6 +207,15 @@ fn open_database(file_path: &Path) -> Result<Connection, DatabaseError> {
     refuse_newer_schema(&connection, SCHEMA_STEPS)?;
     connection
         .pragma_update_and_check(None, "journal_mode", "WAL", |row| row.get::<_, String>(0))?;
+    let version = schema_version(&connection)?;
+    if version > 0 && version < SCHEMA_STEPS.len() {
+        upgrade_copy::copy_before_upgrade(
+            &connection,
+            file_path,
+            env!("CARGO_PKG_VERSION"),
+            version,
+        )?;
+    }
     upgrade_schema(&mut connection, SCHEMA_STEPS)?;
     Ok(connection)
 }
