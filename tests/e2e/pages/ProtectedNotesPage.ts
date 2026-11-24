@@ -136,6 +136,9 @@ export class ProtectedNotesPage {
     await field.setValue(title);
     await this.mainWindow.pressKeyOn(field, 'Enter');
     await this.mainWindow.waitForActiveTab(title);
+    await this.browser.waitUntil(async () => (await this.mainWindow.editorState()).hasFocus, {
+      timeoutMsg: `The new note "${title}" never took the keyboard focus`,
+    });
   }
 
   async noteTitles(): Promise<string[]> {
