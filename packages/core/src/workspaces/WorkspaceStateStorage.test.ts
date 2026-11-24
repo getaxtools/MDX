@@ -291,6 +291,59 @@ describe('WorkspaceStateStorage', () => {
     expect(storage.shownWorkspace()?.id).toBe('default');
   });
 
+  it('Clear All Data on the earlier state file still clears the store when it can be opened', async () => {
+    const workspaceStore = new RecordingWorkspaceStore();
+    workspaceStore.failsNextImport = true;
+    const { storage } = createStorage(workspaceStore);
+    await storage.restore();
+    await saveReadingWorkspace(workspaceStore);
+
+    await storage.clearAll();
+
+    expect(await workspaceStore.loadRegistry()).toEqual([]);
+    expect(storage.hasWorkspaces()).toBe(false);
+  });
+
+  it('after Clear All Data on the earlier state file the next start has one empty default workspace', async () => {
+    const workspaceStore = new RecordingWorkspaceStore();
+    workspaceStore.failsNextImport = true;
+    const appState = new InMemoryAppState(earlierStateWithFavourite('C:\\a.md'));
+    const { storage } = createStorage(workspaceStore, appState);
+    await storage.restore();
+    await saveReadingWorkspace(workspaceStore);
+
+    await storage.clearAll();
+    await storage.save(restoreAppState(undefined));
+    const reopened = await createStorage(workspaceStore, appState).storage.restore();
+
+    expect((await workspaceStore.loadRegistry()).map((workspace) => workspace.id)).toEqual(['default']);
+    expect(reopened.favourites.favourites()).toEqual([]);
+  });
+
+  it('Clear All Data on the earlier state file fails when a backup cannot be removed', async () => {
+    const workspaceStore = new RecordingWorkspaceStore();
+    workspaceStore.failsNextImport = true;
+    const { storage } = createStorage(workspaceStore, new LockedBackupsAppState());
+    await storage.restore();
+    await saveReadingWorkspace(workspaceStore);
+
+    await expect(storage.clearAll()).rejects.toThrow('backup is locked');
+
+    expect(await workspaceStore.loadRegistry()).toEqual([]);
+  });
+
+  it('Clear All Data on the earlier state file fails when the store cannot be cleared', async () => {
+    const workspaceStore = new RecordingWorkspaceStore();
+    workspaceStore.loadRegistry = () => Promise.reject(new Error('written by a newer version'));
+    workspaceStore.clearAll = () => Promise.reject(new Error('written by a newer version'));
+    const { storage, appState } = createStorage(workspaceStore);
+    await storage.restore();
+
+    await expect(storage.clearAll()).rejects.toThrow('newer version');
+
+    expect(appState.backupRemovalCount).toBe(1);
+  });
+
   it('Clear All Data still removes the backups when the store cannot be cleared', async () => {
     const { storage, workspaceStore, appState } = createStorage(undefined, new LockedBackupsAppState());
     await storage.restore();

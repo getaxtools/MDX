@@ -69,10 +69,11 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
   }
 
   async clearAll(): Promise<void> {
-    const { appState } = this.options;
+    const { appState, workspaceStore } = this.options;
     this.savedJson.clear();
     try {
-      if (!this.isOnEarlierState) await this.clearWorkspaceStore();
+      if (this.isOnEarlierState) await workspaceStore.clearAll();
+      else await this.clearWorkspaceStore();
     } catch (storeError) {
       await appState.removeBackups().catch(() => undefined);
       throw storeError;
