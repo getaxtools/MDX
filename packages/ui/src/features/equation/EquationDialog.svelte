@@ -508,6 +508,10 @@
     background: var(--color-accent-hover);
   }
 
+  button.primary:active:not(:disabled) {
+    background: var(--color-accent-pressed);
+  }
+
   button:focus-visible {
     outline: 2px solid var(--color-focus);
   }

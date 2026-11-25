@@ -55,8 +55,9 @@ body {
   --color-text: #1f2329;
   --color-text-secondary: #5b616e;
   --color-text-tertiary: #868c99;
-  --color-accent: #3b5bdb;
-  --color-accent-hover: #2f4bc2;
+  --color-accent: #2545db;
+  --color-accent-hover: #243dcc;
+  --color-accent-pressed: #2436be;
   --color-accent-text: #ffffff;
   --color-focus: #3b5bdb;
   --color-overlay: rgb(15 17 22 / 40%);
@@ -98,6 +99,7 @@ body {
     --color-text-tertiary: #767c89;
     --color-accent: #8ea2f2;
     --color-accent-hover: #a7b7f6;
+    --color-accent-pressed: #bccbf6;
     --color-accent-text: #11131a;
     --color-focus: #8ea2f2;
     --color-overlay: rgb(0 0 0 / 60%);
@@ -141,6 +143,7 @@ body {
   --color-text-tertiary: #767c89;
   --color-accent: #8ea2f2;
   --color-accent-hover: #a7b7f6;
+  --color-accent-pressed: #bccbf6;
   --color-accent-text: #11131a;
   --color-focus: #8ea2f2;
   --color-overlay: rgb(0 0 0 / 60%);
@@ -176,8 +179,9 @@ body {
   --color-text: #3d2f1f;
   --color-text-secondary: #66553f;
   --color-text-tertiary: #8c7a62;
-  --color-accent: #9a4f1f;
-  --color-accent-hover: #7f3f16;
+  --color-accent: #88461f;
+  --color-accent-hover: #7c401e;
+  --color-accent-pressed: #703a1b;
   --color-focus: #9a4f1f;
   --color-notice-background: #f5e4bd;
   --color-notice-border: #d4a85a;
@@ -199,8 +203,9 @@ body {
   --color-text: #073642;
   --color-text-secondary: #4f646b;
   --color-text-tertiary: #839496;
-  --color-accent: #1a66a8;
-  --color-accent-hover: #15578f;
+  --color-accent: #1a5b92;
+  --color-accent-hover: #1a5382;
+  --color-accent-pressed: #1a4c74;
   --color-focus: #268bd2;
   --color-code-background: #f5eedb;
   --color-wheel-surface: #e6dfca;
@@ -218,8 +223,9 @@ body {
   --color-text: #c3cccc;
   --color-text-secondary: #93a1a1;
   --color-text-tertiary: #657b83;
-  --color-accent: #4aa3e8;
-  --color-accent-hover: #6db5ec;
+  --color-accent: #76b9e8;
+  --color-accent-hover: #8cc4e8;
+  --color-accent-pressed: #a0cee8;
   --color-accent-text: #002b36;
   --color-focus: #4aa3e8;
   --color-code-background: #073642;
@@ -238,8 +244,9 @@ body {
   --color-text: #eceff4;
   --color-text-secondary: #c2cad8;
   --color-text-tertiary: #7b88a1;
-  --color-accent: #88c0d0;
-  --color-accent-hover: #a3d0dc;
+  --color-accent: #9ccada;
+  --color-accent-hover: #b2d5e5;
+  --color-accent-pressed: #c6dfef;
   --color-accent-text: #2e3440;
   --color-focus: #88c0d0;
   --color-code-background: #343a47;
@@ -260,6 +267,7 @@ body {
   --color-text-tertiary: #b3b3b3;
   --color-accent: #7cc4ff;
   --color-accent-hover: #a8d8ff;
+  --color-accent-pressed: #c6e4ff;
   --color-accent-text: #000000;
   --color-focus: #ffd60a;
   --color-overlay: rgb(0 0 0 / 75%);
