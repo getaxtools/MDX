@@ -19,10 +19,15 @@ export class WindowsClipboard {
 
   /** Remembers the clipboard's text, or that it held none. */
   static save(): WindowsClipboard {
+    return new WindowsClipboard(WindowsClipboard.readText());
+  }
+
+  /** The clipboard's text now, or null when it holds none. */
+  static readText(): string | null {
     const json = runPowerShell(
       '[Console]::OutputEncoding = [Text.Encoding]::UTF8; ConvertTo-Json -InputObject (Get-Clipboard -Raw)',
     );
-    return new WindowsClipboard(JSON.parse(json) as string | null);
+    return JSON.parse(json) as string | null;
   }
 
   /** Puts plain text on the clipboard as another program would; the text is passed outside the script. */
