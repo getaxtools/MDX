@@ -30,13 +30,16 @@ function addCopyButton(code: HTMLElement, { translator, writeClipboard }: CodeBl
   button.textContent = translator.translate('document.copyCode');
   button.setAttribute('aria-label', translator.translate('document.copyCodeLabel'));
   button.addEventListener('click', () => {
-    void writeClipboard(code.textContent).then(() => showCopied(button, translator));
+    void writeClipboard(code.textContent).then(
+      () => showCopyFeedback(button, translator.translate('document.codeCopied'), translator),
+      () => showCopyFeedback(button, translator.translate('document.codeNotCopied'), translator),
+    );
   });
   pre.append(button);
 }
 
-function showCopied(button: HTMLButtonElement, translator: Translator): void {
-  button.textContent = translator.translate('document.codeCopied');
+function showCopyFeedback(button: HTMLButtonElement, feedback: string, translator: Translator): void {
+  button.textContent = feedback;
   setTimeout(() => (button.textContent = translator.translate('document.copyCode')), COPY_FEEDBACK_MS);
 }
 

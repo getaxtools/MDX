@@ -131,6 +131,7 @@
   "document.copyCode": "Copy",
   "document.copyCodeLabel": "Copy code",
   "document.codeCopied": "Copied",
+  "document.codeNotCopied": "Couldn't copy",
   "toolbar.open": "Open",
   "toolbar.label": "Document actions",
   "sidebar.label": "Explorer",

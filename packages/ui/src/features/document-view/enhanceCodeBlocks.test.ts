@@ -85,6 +85,20 @@ describe('enhanceCodeBlocks', () => {
     expect(button?.textContent).toBe('Copy');
   });
 
+  it('says so when the code could not be copied', async () => {
+    vi.useFakeTimers();
+    const writeClipboard = () => Promise.reject(new Error('Document is not focused.'));
+    const article = articleWith('<pre><code>npm install\n</code></pre>');
+    await enhanceCodeBlocks(article, options({ writeClipboard }));
+    const button = article.querySelector('button');
+
+    button?.click();
+    await vi.waitFor(() => expect(button?.textContent).toBe("Couldn't copy"));
+    vi.advanceTimersByTime(COPY_FEEDBACK_MS);
+
+    expect(button?.textContent).toBe('Copy');
+  });
+
   it('adds only one copy button when run again on the same blocks', async () => {
     const article = articleWith('<pre><code>a</code></pre>');
 
