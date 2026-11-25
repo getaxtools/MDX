@@ -2,12 +2,14 @@ import type { FormulaEditRequest } from '@mdx/editor';
 import { createTranslator } from '@mdx/i18n';
 import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import EquationEditorHost from './EquationEditorHost.svelte';
 
-/** The dialog loads in a chunk of its own on first use, which on a busy machine takes a while. */
+/** Rendering the dialog in a busy parallel run can still take a while. */
 const LAZY_LOAD_WAIT = { timeout: 15_000 };
 const LAZY_LOAD_TEST_TIMEOUT_MS = 20_000;
+/** Loading the chunk once up front leaves the test to wait only for the dialog, not the module load. */
+const CHUNK_LOAD_TIMEOUT_MS = 60_000;
 
 function newFormulaRequest(): FormulaEditRequest {
   return {
@@ -20,6 +22,10 @@ function newFormulaRequest(): FormulaEditRequest {
 }
 
 describe('EquationEditorHost', () => {
+  beforeAll(async () => {
+    await import('./EquationDialog.svelte');
+  }, CHUNK_LOAD_TIMEOUT_MS);
+
   it(
     'Inline or Display is remembered',
     async () => {

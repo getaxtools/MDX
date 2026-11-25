@@ -20,6 +20,9 @@ const BROWSER_BUILDS = {
   },
 };
 const CONVERTER_INLINED = { server: { deps: { inline: ['mathml-to-latex'] } } };
+// Under coverage every test file runs in parallel, and a test that builds a large document or starts
+// the editor or code highlighter in jsdom can take longer than the default five seconds.
+const JSDOM_TEST_TIMEOUT_MS = 20_000;
 
 export default defineConfig({
   test: {
@@ -33,6 +36,7 @@ export default defineConfig({
           name: 'renderer',
           include: ['packages/renderer/src/**/*.test.ts', 'tests/security/**/*.test.ts'],
           environment: 'jsdom',
+          testTimeout: JSDOM_TEST_TIMEOUT_MS,
         },
       },
       {
@@ -41,6 +45,7 @@ export default defineConfig({
           name: 'editor',
           include: ['packages/editor/src/**/*.test.ts'],
           environment: 'jsdom',
+          testTimeout: JSDOM_TEST_TIMEOUT_MS,
           ...CONVERTER_INLINED,
         },
       },
@@ -51,6 +56,7 @@ export default defineConfig({
           name: 'freeze-compat',
           include: ['tests/freeze-compat/**/*.test.ts'],
           environment: 'jsdom',
+          testTimeout: JSDOM_TEST_TIMEOUT_MS,
           // Runs before each test file's imports; every file runs in a worker of its own.
           setupFiles: ['tests/freeze-compat/freezePrototype.ts'],
         },
@@ -64,9 +70,7 @@ export default defineConfig({
           include: ['packages/ui/src/**/*.test.ts', 'apps/desktop/src/**/*.test.ts'],
           environment: 'jsdom',
           setupFiles: ['tests/ui-setup/testingLibraryWaits.ts'],
-          // Whole-viewer tests load the editor and lazy components; under coverage on a busy
-          // machine one can take longer than the default five seconds.
-          testTimeout: 20_000,
+          testTimeout: JSDOM_TEST_TIMEOUT_MS,
         },
       },
     ],

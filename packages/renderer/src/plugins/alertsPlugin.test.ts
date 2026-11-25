@@ -1,11 +1,22 @@
-import MarkdownIt from 'markdown-it';
+import MarkdownIt, { type Token } from 'markdown-it';
 import { describe, expect, it } from 'vitest';
 import { alertsPlugin, calloutLookOf } from './alertsPlugin';
 
 const markdown = new MarkdownIt().use(alertsPlugin);
-const MANY_CALLOUTS = 20_000;
-/** Far above what editing the tokens in one pass takes, far below what inserting once per callout took. */
-const MANY_CALLOUTS_BUDGET_MS = 5_000;
+const MANY_CALLOUTS = 40_000;
+/**
+ * How many times longer the callouts may take than as many plain quotes. Editing the tokens in one
+ * pass stays under 2, inserting once per callout took more than 8. A ratio holds on a busy machine, a
+ * time does not.
+ */
+const MAX_SLOWDOWN_OVER_PLAIN_QUOTES = 5;
+const LARGE_DOCUMENT_TIMEOUT_MS = 120_000;
+
+function timedParse(source: string): { tokens: Token[]; ms: number } {
+  const startedAt = performance.now();
+  const tokens = markdown.parse(source, {});
+  return { tokens, ms: performance.now() - startedAt };
+}
 
 describe('alertsPlugin', () => {
   it.each(['note', 'tip', 'important', 'warning', 'caution'])('turns a [!%s] quote into an alert', (kind) => {
@@ -95,18 +106,28 @@ describe('alertsPlugin', () => {
     expect(calloutLookOf('mystery')).toBeUndefined();
   });
 
-  it('turns thousands of quotes into callouts quickly', () => {
-    const callouts = Array.from(
-      { length: MANY_CALLOUTS },
-      (_, index) => `> [!NOTE]\n> Callout ${String(index)}.`,
-    );
-    const startedAt = performance.now();
+  it(
+    'turns thousands of quotes into callouts quickly',
+    () => {
+      const plainQuotes = Array.from(
+        { length: MANY_CALLOUTS },
+        (_, index) => `> Quote ${String(index)}.\n> Text.`,
+      ).join('\n\n');
+      const callouts = Array.from(
+        { length: MANY_CALLOUTS },
+        (_, index) => `> [!NOTE]\n> Callout ${String(index)}.`,
+      ).join('\n\n');
+      timedParse(plainQuotes);
 
-    const tokens = markdown.parse(callouts.join('\n\n'), {});
+      const plainQuotesParse = timedParse(plainQuotes);
+      const calloutsParse = timedParse(callouts);
 
-    expect(performance.now() - startedAt).toBeLessThan(MANY_CALLOUTS_BUDGET_MS);
-    expect(tokens.filter((token) => token.attrGet('class') === 'markdown-alert-title')).toHaveLength(
-      MANY_CALLOUTS,
-    );
-  });
+      expect(calloutsParse.ms / plainQuotesParse.ms).toBeLessThan(MAX_SLOWDOWN_OVER_PLAIN_QUOTES);
+      const titles = calloutsParse.tokens.filter(
+        (token) => token.attrGet('class') === 'markdown-alert-title',
+      );
+      expect(titles).toHaveLength(MANY_CALLOUTS);
+    },
+    LARGE_DOCUMENT_TIMEOUT_MS,
+  );
 });

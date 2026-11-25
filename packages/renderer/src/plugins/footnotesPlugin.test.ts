@@ -1,19 +1,30 @@
 import fc from 'fast-check';
-import MarkdownIt, { type MarkdownIt as MarkdownParser } from 'markdown-it';
+import MarkdownIt, { type MarkdownIt as MarkdownParser, type Token } from 'markdown-it';
 import footnotes from 'markdown-it-footnote';
 import { describe, expect, it } from 'vitest';
 import { footnotesPlugin } from './footnotesPlugin';
 
 const PROPERTY_TEST_TIMEOUT_MS = 30_000;
-const MANY_FOOTNOTES = 20_000;
-/** Far above what appending in place takes, far below what copying the token list each time took. */
-const MANY_FOOTNOTES_BUDGET_MS = 5_000;
+const LARGE_DOCUMENT_TIMEOUT_MS = 120_000;
+const MANY_FOOTNOTES = 10_000;
+/**
+ * How many times longer the footnotes may take than the same text without them. Appending in place
+ * stays near 2, copying the token list each time took more than 20. A ratio holds on a busy machine, a
+ * time does not.
+ */
+const MAX_SLOWDOWN_OVER_PLAIN_TEXT = 10;
 
 const withPluginRule = new MarkdownIt().use(footnotes);
 const withOwnRule = new MarkdownIt().use(footnotesPlugin);
 
 function tokensOf(markdown: MarkdownParser, source: string): string {
   return JSON.stringify(markdown.parse(source, {}));
+}
+
+function timedParse(source: string): { tokens: Token[]; ms: number } {
+  const startedAt = performance.now();
+  const tokens = withOwnRule.parse(source, {});
+  return { tokens, ms: performance.now() - startedAt };
 }
 
 const blockOf = fc.constantFrom(
@@ -44,17 +55,25 @@ describe('footnotesPlugin', () => {
     PROPERTY_TEST_TIMEOUT_MS,
   );
 
-  it('moves thousands of footnotes to the end quickly', () => {
-    const notes = Array.from(
-      { length: MANY_FOOTNOTES },
-      (_, index) => `Claim ${String(index)}.[^${String(index)}]`,
-    );
-    const definitions = notes.map((_, index) => `[^${String(index)}]: Note ${String(index)}.`);
-    const startedAt = performance.now();
+  it(
+    'moves thousands of footnotes to the end quickly',
+    () => {
+      const claims = Array.from({ length: MANY_FOOTNOTES }, (_, index) => `Claim ${String(index)}.`);
+      const notes = claims.map((_, index) => `Note ${String(index)}.`);
+      const plainText = [...claims, ...notes].join('\n\n');
+      const withFootnotes = [
+        ...claims.map((claim, index) => `${claim}[^${String(index)}]`),
+        ...notes.map((note, index) => `[^${String(index)}]: ${note}`),
+      ].join('\n\n');
+      timedParse(plainText);
 
-    const tokens = withOwnRule.parse([...notes, ...definitions].join('\n\n'), {});
+      const plainTextParse = timedParse(plainText);
+      const footnotesParse = timedParse(withFootnotes);
 
-    expect(performance.now() - startedAt).toBeLessThan(MANY_FOOTNOTES_BUDGET_MS);
-    expect(tokens.filter((token) => token.type === 'footnote_open')).toHaveLength(MANY_FOOTNOTES);
-  });
+      expect(footnotesParse.ms / plainTextParse.ms).toBeLessThan(MAX_SLOWDOWN_OVER_PLAIN_TEXT);
+      const footnoteOpens = footnotesParse.tokens.filter((token) => token.type === 'footnote_open');
+      expect(footnoteOpens).toHaveLength(MANY_FOOTNOTES);
+    },
+    LARGE_DOCUMENT_TIMEOUT_MS,
+  );
 });

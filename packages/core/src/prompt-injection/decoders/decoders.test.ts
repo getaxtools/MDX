@@ -4,6 +4,8 @@ import { decodeCharacterReferences, findCharacterReferences } from './decodeChar
 import { decodeTagCharacters } from './decodeTagCharacters';
 import { decodeVariationSelectorBytes, describeBytes } from './decodeVariationSelectorPayload';
 
+const PROPERTY_TEST_TIMEOUT_MS = 30_000;
+
 const printableAscii = fc.string({
   unit: fc.integer({ min: 0x20, max: 0x7e }).map((code) => String.fromCharCode(code)),
 });
@@ -49,18 +51,22 @@ describe('decodeVariationSelectorBytes', () => {
 });
 
 describe('decodeCharacterReferences', () => {
-  it('returns any text that was written as numeric character references', () => {
-    fc.assert(
-      fc.property(fc.string({ unit: 'binary' }), fc.boolean(), (text, isHexadecimal) => {
-        const encoded = Array.from(text, (character) => {
-          const codePoint = character.codePointAt(0) ?? 0;
-          return isHexadecimal ? `&#x${codePoint.toString(16)};` : `&#${String(codePoint)};`;
-        }).join('');
+  it(
+    'returns any text that was written as numeric character references',
+    () => {
+      fc.assert(
+        fc.property(fc.string({ unit: 'binary' }), fc.boolean(), (text, isHexadecimal) => {
+          const encoded = Array.from(text, (character) => {
+            const codePoint = character.codePointAt(0) ?? 0;
+            return isHexadecimal ? `&#x${codePoint.toString(16)};` : `&#${String(codePoint)};`;
+          }).join('');
 
-        expect(decodeCharacterReferences(encoded)).toBe(text);
-      }),
-    );
-  });
+          expect(decodeCharacterReferences(encoded)).toBe(text);
+        }),
+      );
+    },
+    PROPERTY_TEST_TIMEOUT_MS,
+  );
 
   it('decodes named references for invisible characters and leaves unknown names alone', () => {
     expect(decodeCharacterReferences('a&zwj;b&ZeroWidthSpace;c&copy;')).toBe('a\u200Db\u200Bc&copy;');

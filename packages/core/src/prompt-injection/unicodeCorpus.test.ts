@@ -13,6 +13,7 @@ const CORPUS_FOLDER = join(REPOSITORY_ROOT, 'tests', 'fixtures', 'prompt-injecti
 const LOCALES_FOLDER = join(REPOSITORY_ROOT, 'packages', 'i18n', 'locales');
 const RANGE_START = '⟦';
 const RANGE_END = '⟧';
+const ALL_CATALOGS_TIMEOUT_MS = 60_000;
 
 type SampleContext = 'prose' | 'code' | 'math' | 'linkText' | 'address';
 
@@ -160,22 +161,29 @@ describe('Unicode corpus scorecard', () => {
     expect(characterRuleIds.filter((ruleId) => !sampledRuleIds.has(ruleId))).toEqual([]);
   });
 
-  it('reports no character finding at Medium or above in any of the 16 locale catalogs', () => {
-    const falseAlarms = readdirSync(LOCALES_FOLDER).flatMap((file) => {
-      const catalog = JSON.parse(readFileSync(join(LOCALES_FOLDER, file), 'utf8')) as Record<string, string>;
-      return Object.entries(catalog).flatMap(([key, message]) =>
-        alarmsAtMediumOrAbove(
-          `${file} ${key}`,
-          runInjectionCheck({ text: message, origin: 'local', trigger: 'manual' }).findings.filter(
-            (finding) => finding.ruleId.startsWith('char-'),
+  it(
+    'reports no character finding at Medium or above in any of the 16 locale catalogs',
+    () => {
+      const falseAlarms = readdirSync(LOCALES_FOLDER).flatMap((file) => {
+        const catalog = JSON.parse(readFileSync(join(LOCALES_FOLDER, file), 'utf8')) as Record<
+          string,
+          string
+        >;
+        return Object.entries(catalog).flatMap(([key, message]) =>
+          alarmsAtMediumOrAbove(
+            `${file} ${key}`,
+            runInjectionCheck({ text: message, origin: 'local', trigger: 'manual' }).findings.filter(
+              (finding) => finding.ruleId.startsWith('char-'),
+            ),
           ),
-        ),
-      );
-    });
+        );
+      });
 
-    expect(readdirSync(LOCALES_FOLDER)).toHaveLength(16);
-    expect(falseAlarms).toEqual([]);
-  });
+      expect(readdirSync(LOCALES_FOLDER)).toHaveLength(16);
+      expect(falseAlarms).toEqual([]);
+    },
+    ALL_CATALOGS_TIMEOUT_MS,
+  );
 
   it('keeps no raw hidden character in the corpus files', () => {
     const hiddenCharacters = hiddenCharactersOf(Ruleset.bundled());
