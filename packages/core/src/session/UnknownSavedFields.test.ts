@@ -9,6 +9,11 @@ const FIELDS_OF_NEWER_VERSION = {
   hasSeenTour: false,
 };
 
+const VIEW_SETTINGS_OF_NEWER_VERSION = {
+  focusDimming: { isOn: true, strengthPercent: 40 },
+  minimapSide: 'left',
+};
+
 class AppStateFailing extends InMemoryAppState {
   saveAttemptCount = 0;
 
@@ -49,6 +54,46 @@ describe('UnknownSavedFields', () => {
     await unknownFields.saveWith(appState, persistedEmptyState());
 
     expect(JSON.parse(JSON.stringify(await appState.load()))).toEqual(saved);
+  });
+
+  it('writes back the view settings a newer version added unchanged', async () => {
+    const persisted = persistedEmptyState();
+    const saved = { ...persisted, view: { ...persisted.view, ...VIEW_SETTINGS_OF_NEWER_VERSION } };
+    const unknownFields = rememberedFrom(saved);
+    const appState = new InMemoryAppState();
+
+    await unknownFields.saveWith(appState, persistedEmptyState());
+
+    expect(JSON.parse(JSON.stringify(await appState.load()))).toEqual(saved);
+  });
+
+  it('writes its own value for every view setting it knows', async () => {
+    const persisted = persistedEmptyState();
+    const unknownFields = rememberedFrom({
+      ...persisted,
+      view: { ...persisted.view, theme: 'dark', minimapSide: 'left' },
+    });
+
+    const written = await unknownFields.saveWith(new InMemoryAppState(), persisted);
+
+    expect(written.view).toEqual({ ...persisted.view, minimapSide: 'left' });
+  });
+
+  it('a save refused with the view settings a newer version added saves the state without them from then on', async () => {
+    const persisted = persistedEmptyState();
+    const unknownFields = rememberedFrom({
+      ...persisted,
+      view: { ...persisted.view, ...VIEW_SETTINGS_OF_NEWER_VERSION },
+    });
+    const appState = new AppStateFailing(undefined, (state) =>
+      'minimapSide' in (state.view as object) ? new AppStateRefusedError() : undefined,
+    );
+
+    await unknownFields.saveWith(appState, persisted);
+    await unknownFields.saveWith(appState, persisted);
+
+    expect(await appState.load()).toEqual(persisted);
+    expect(appState.saveAttemptCount).toBe(3);
   });
 
   it('keeps writing the fields it knows from its own state', async () => {
@@ -124,11 +169,16 @@ describe('UnknownSavedFields', () => {
   });
 
   it('forgets the fields', async () => {
-    const unknownFields = rememberedFrom({ ...persistedEmptyState(), boardLayout: {} });
+    const persisted = persistedEmptyState();
+    const unknownFields = rememberedFrom({
+      ...persisted,
+      boardLayout: {},
+      view: { ...persisted.view, minimapSide: 'left' },
+    });
 
     unknownFields.forget();
-    const written = await unknownFields.saveWith(new InMemoryAppState(), persistedEmptyState());
+    const written = await unknownFields.saveWith(new InMemoryAppState(), persisted);
 
-    expect(written).not.toHaveProperty('boardLayout');
+    expect(written).toEqual(persisted);
   });
 });

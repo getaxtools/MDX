@@ -4,6 +4,15 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** The fields of a saved object that this version does not know, kept so a save can write them back. */
+export function unknownFieldsOf(
+  saved: unknown,
+  knownFields: ReadonlySet<string>,
+): Readonly<Record<string, unknown>> {
+  if (!isRecord(saved)) return {};
+  return Object.fromEntries(Object.entries(saved).filter(([field]) => !knownFields.has(field)));
+}
+
 /** The entries of a saved array that parse; anything else is dropped rather than failing the whole read. */
 export function validEntries<Entry>(
   saved: unknown,

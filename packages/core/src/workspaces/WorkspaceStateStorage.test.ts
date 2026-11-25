@@ -199,6 +199,25 @@ describe('WorkspaceStateStorage', () => {
     );
   });
 
+  it('the copy keeps the view settings a newer version saved in the earlier state', async () => {
+    const earlier = earlierStateWithFavourite('C:\\a.md') as { view: object };
+    const earlierState = { ...earlier, view: { ...earlier.view, minimapSide: 'left' } };
+    const first = createStorage(undefined, new InMemoryAppState(earlierState));
+    const migrated = await first.storage.restore();
+    await first.storage.save(withFavourite(migrated, 'C:\\b.md'));
+    const second = createStorage(first.workspaceStore, first.appState);
+    const restored = await second.storage.restore();
+
+    await second.storage.save(withFavourite(restored, 'C:\\c.md'));
+
+    const copy = await second.appState.load();
+    expect(copy).toMatchObject({ view: { minimapSide: 'left' } });
+    expect(restored.hasEarlierVersionChanges).toBe(false);
+    expect((await second.workspaceStore.loadAppValues()).earlierVersionCopyHash).toBe(
+      hashOf(JSON.stringify(copy)),
+    );
+  });
+
   it('the earlier state file keeps the fields a newer version saved when the store cannot be used', async () => {
     const boardLayout = { columns: ['Ideas', 'Done'], isCompact: true };
     const earlierState = { ...(earlierStateWithFavourite('C:\\a.md') as object), boardLayout };
@@ -237,6 +256,42 @@ describe('WorkspaceStateStorage', () => {
     await storage.save(withFavourite(restoreAppState(undefined), 'C:\\b.md'));
 
     expect(await appState.load()).not.toHaveProperty('boardLayout');
+  });
+
+  it('a changed view setting keeps the view settings a newer version saved', async () => {
+    const first = createStorage();
+    await first.storage.restore();
+    const { viewSettings } = await first.workspaceStore.loadAppValues();
+    await first.workspaceStore.saveAppValue('viewSettings', {
+      ...(viewSettings as object),
+      minimapSide: 'left',
+    });
+    const second = createStorage(first.workspaceStore, first.appState);
+    const restored = await second.storage.restore();
+
+    await second.storage.save({ ...restored, viewSettings: { ...restored.viewSettings, theme: 'dark' } });
+
+    expect((await second.workspaceStore.loadAppValues()).viewSettings).toMatchObject({
+      theme: 'dark',
+      minimapSide: 'left',
+    });
+  });
+
+  it('Clear All Data forgets the view settings a newer version saved', async () => {
+    const first = createStorage();
+    await first.storage.restore();
+    const { viewSettings } = await first.workspaceStore.loadAppValues();
+    await first.workspaceStore.saveAppValue('viewSettings', {
+      ...(viewSettings as object),
+      minimapSide: 'left',
+    });
+    const second = createStorage(first.workspaceStore, first.appState);
+    const restored = await second.storage.restore();
+
+    await second.storage.clearAll();
+    await second.storage.save({ ...restored, viewSettings: { ...restored.viewSettings, theme: 'dark' } });
+
+    expect((await second.workspaceStore.loadAppValues()).viewSettings).not.toHaveProperty('minimapSide');
   });
 
   it('a changed copy replaces the Default workspace lists and leaves its tabs alone', async () => {

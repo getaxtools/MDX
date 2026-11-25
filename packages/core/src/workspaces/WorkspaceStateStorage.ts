@@ -11,7 +11,9 @@ import {
   type PersistedAppState,
   type ViewerState,
 } from '../session/persistedAppState';
+import { unknownFieldsOf } from '../session/savedValues';
 import { UnknownSavedFields } from '../session/UnknownSavedFields';
+import { VIEW_SETTING_FIELDS } from '../view/ViewSettings';
 import {
   DEFAULT_WORKSPACE_KIND_ID,
   isBuiltKind,
@@ -23,6 +25,7 @@ import {
   DEFAULT_WORKSPACE_ID,
   storedViewerStateOf,
   viewerStateFrom,
+  type AppValueKey,
   type SavedViewerParts,
   type StoredViewerState,
 } from './storedViewerState';
@@ -51,6 +54,8 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
   private isOnEarlierState = false;
   /** Kept in the state file earlier versions read, which is the only place a newer version left them. */
   private readonly earlierStateUnknownFields = new UnknownSavedFields();
+  /** View settings a newer version saved in the store, written back with every save of the settings. */
+  private unknownViewSettings: Readonly<Record<string, unknown>> = {};
 
   constructor(private readonly options: WorkspaceStateStorageOptions) {}
 
@@ -80,6 +85,7 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
     const { appState, workspaceStore } = this.options;
     this.savedJson.clear();
     this.earlierStateUnknownFields.forget();
+    this.unknownViewSettings = {};
     try {
       if (this.isOnEarlierState) await workspaceStore.clearAll();
       else await this.clearWorkspaceStore();
@@ -235,6 +241,7 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
       workspaceStore.grantAccess(this.shownWorkspaceId, windowId),
     ]);
     this.earlierStateUnknownFields.rememberFrom(earlierState);
+    this.unknownViewSettings = unknownFieldsOf(appValues.viewSettings, VIEW_SETTING_FIELDS);
     const stored = {
       lists: contents?.lists ?? {},
       windowSession: contents?.windowSession ?? null,
@@ -308,7 +315,7 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
     }
     for (const key of APP_VALUE_KEYS) {
       if (!this.hasChanged(`app.${key}`, appValues[key])) continue;
-      await workspaceStore.saveAppValue(key, appValues[key]);
+      await workspaceStore.saveAppValue(key, this.withUnknownViewSettings(key, appValues[key]));
       hasChanges = true;
     }
     return hasChanges;
@@ -326,6 +333,11 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
   private async writeEarlierVersionState(state: ViewerState): Promise<PersistedAppState> {
     const { appState, appVersion } = this.options;
     return this.earlierStateUnknownFields.saveWith(appState, toPersistedAppState(state, appVersion));
+  }
+
+  private withUnknownViewSettings(key: AppValueKey, value: unknown): unknown {
+    if (key !== 'viewSettings' || Object.keys(this.unknownViewSettings).length === 0) return value;
+    return { ...this.unknownViewSettings, ...(value as object) };
   }
 
   private hasChanged(part: string, value: unknown): boolean {

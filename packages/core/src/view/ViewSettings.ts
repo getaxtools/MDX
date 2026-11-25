@@ -154,6 +154,8 @@ export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
   ctrlWheelAction: 'moveBetweenFiles',
 };
 
+export const VIEW_SETTING_FIELDS: ReadonlySet<string> = new Set(Object.keys(DEFAULT_VIEW_SETTINGS));
+
 export function zoomIn(settings: ViewSettings): ViewSettings {
   const next = ZOOM_LEVELS_PERCENT.find((level) => level > settings.zoomPercent);
   return next === undefined ? settings : { ...settings, zoomPercent: next };

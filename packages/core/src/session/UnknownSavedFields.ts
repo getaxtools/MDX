@@ -1,6 +1,7 @@
 import { AppStateRefusedError, type AppStatePort } from '@mdx/platform';
 import { APP_STATE_SCHEMA_VERSION, type PersistedAppState } from './persistedAppState';
-import { isRecord } from './savedValues';
+import { VIEW_SETTING_FIELDS } from '../view/ViewSettings';
+import { isRecord, unknownFieldsOf } from './savedValues';
 
 const KNOWN_SAVED_FIELDS: ReadonlySet<string> = new Set(
   Object.keys({
@@ -22,21 +23,23 @@ const KNOWN_SAVED_FIELDS: ReadonlySet<string> = new Set(
 );
 
 /**
- * The top-level fields a newer version added to the saved state, written back with every save so
- * going back to that version loses nothing.
+ * The top-level fields and view settings a newer version added to the saved state, written back with
+ * every save so going back to that version loses nothing.
  */
 export class UnknownSavedFields {
   private fields: Readonly<Record<string, unknown>> = {};
+  private unknownViewSettings: Readonly<Record<string, unknown>> = {};
 
   /** Remembers the fields of readable saved state that this version does not know. */
   rememberFrom(saved: unknown): void {
     const isReadable = isRecord(saved) && saved.schemaVersion === APP_STATE_SCHEMA_VERSION;
-    const entries = isReadable ? Object.entries(saved) : [];
-    this.fields = Object.fromEntries(entries.filter(([field]) => !KNOWN_SAVED_FIELDS.has(field)));
+    this.fields = isReadable ? unknownFieldsOf(saved, KNOWN_SAVED_FIELDS) : {};
+    this.unknownViewSettings = isReadable ? unknownFieldsOf(saved.view, VIEW_SETTING_FIELDS) : {};
   }
 
   forget(): void {
     this.fields = {};
+    this.unknownViewSettings = {};
   }
 
   /**
@@ -44,11 +47,15 @@ export class UnknownSavedFields {
    * is refused, it is saved without them and they are forgotten, so they never block a save.
    */
   async saveWith(appState: AppStatePort, persisted: PersistedAppState): Promise<PersistedAppState> {
-    if (Object.keys(this.fields).length === 0) {
+    if (Object.keys(this.fields).length === 0 && Object.keys(this.unknownViewSettings).length === 0) {
       await appState.save(persisted);
       return persisted;
     }
-    const withFields = { ...this.fields, ...persisted };
+    const withFields = {
+      ...this.fields,
+      ...persisted,
+      view: { ...this.unknownViewSettings, ...persisted.view },
+    };
     try {
       await appState.save(withFields);
       return withFields;
