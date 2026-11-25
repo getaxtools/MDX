@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "tabs": {
+    "tabs": [
+      {
+        "location": {
+          "canonicalKey": "c:\\users\\tester\\documents\\guides\\getting-started.md",
+          "displayPath": "C:\\Users\\tester\\Documents\\Guides\\getting-started.md",
+          "fileName": "getting-started.md"
+        },
+        "isPinned": true,
+        "scrollRatio": 0
+      },
+      {
+        "location": {
+          "canonicalKey": "c:\\users\\tester\\documents\\projects\\plan.md",
+          "displayPath": "C:\\Users\\tester\\Documents\\Projects\\plan.md",
+          "fileName": "plan.md"
+        },
+        "isPinned": false,
+        "scrollRatio": 0.25
+      },
+      {
+        "location": {
+          "canonicalKey": "c:\\users\\tester\\documents\\projects\\release.md",
+          "displayPath": "C:\\Users\\tester\\Documents\\Projects\\release.md",
+          "fileName": "release.md"
+        },
+        "isPinned": false,
+        "scrollRatio": 0.5
+      }
+    ],
+    "activeKey": "c:\\users\\tester\\documents\\projects\\plan.md"
+  },
+  "recentFiles": [
+    {
+      "location": {
+        "canonicalKey": "c:\\users\\tester\\documents\\guides\\getting-started.md",
+        "displayPath": "C:\\Users\\tester\\Documents\\Guides\\getting-started.md",
+        "fileName": "getting-started.md"
+      },
+      "isPinned": true,
+      "lastOpenedAtMs": 1762800000000
+    },
+    {
+      "location": {
+        "canonicalKey": "c:\\users\\tester\\documents\\projects\\plan.md",
+        "displayPath": "C:\\Users\\tester\\Documents\\Projects\\plan.md",
+        "fileName": "plan.md"
+      },
+      "isPinned": false,
+      "lastOpenedAtMs": 1762900000000
+    }
+  ],
+  "favourites": [
+    {
+      "location": {
+        "canonicalKey": "c:\\users\\tester\\documents\\guides\\getting-started.md",
+        "displayPath": "C:\\Users\\tester\\Documents\\Guides\\getting-started.md",
+        "fileName": "getting-started.md"
+      },
+      "kind": "file",
+      "label": "Start here",
+      "groupId": "group-1"
+    },
+    {
+      "location": {
+        "canonicalKey": "c:\\users\\tester\\documents\\projects",
+        "displayPath": "C:\\Users\\tester\\Documents\\Projects",
+        "fileName": "Projects"
+      },
+      "kind": "folder",
+      "groupId": "group-2"
+    },
+    {
+      "location": {
+        "canonicalKey": "c:\\users\\tester\\documents\\projects\\release.md",
+        "displayPath": "C:\\Users\\tester\\Documents\\Projects\\release.md",
+        "fileName": "release.md"
+      },
+      "kind": "file"
+    }
+  ],
+  "favouriteGroups": [
+    {
+      "id": "group-1",
+      "name": "Reading"
+    },
+    {
+      "id": "group-2",
+      "name": "Work"
+    }
+  ],
+  "explorerFolders": [
+    {
+      "canonicalKey": "c:\\users\\tester\\documents\\guides",
+      "displayPath": "C:\\Users\\tester\\Documents\\Guides",
+      "fileName": "Guides"
+    },
+    {
+      "canonicalKey": "c:\\users\\tester\\documents\\projects",
+      "displayPath": "C:\\Users\\tester\\Documents\\Projects",
+      "fileName": "Projects"
+    }
+  ],
+  "view": {
+    "theme": "dark",
+    "zoomPercent": 110,
+    "readingWidth": "wide",
+    "typography": "book",
+    "language": "pt-BR",
+    "isSidebarVisible": false,
+    "sidebarView": "outline",
+    "isStatusBarVisible": false,
+    "isBreadcrumbsVisible": false,
+    "collapsedExplorerSections": [
+      "recentFiles"
+    ],
+    "explorerSectionHeights": {
+      "favourites": 180
+    },
+    "panelWidths": {
+      "explorer": 320
+    },
+    "isPreviewBesideEditor": true,
+    "editorSharePercent": 60
+  }
+}
