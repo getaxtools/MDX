@@ -5,7 +5,13 @@ import {
   type WorkspaceListName,
   type WorkspaceStorePort,
 } from '@mdx/platform';
-import { restoreAppState, toPersistedAppState, type ViewerState } from '../session/persistedAppState';
+import {
+  restoreAppState,
+  toPersistedAppState,
+  type PersistedAppState,
+  type ViewerState,
+} from '../session/persistedAppState';
+import { UnknownSavedFields } from '../session/UnknownSavedFields';
 import {
   DEFAULT_WORKSPACE_KIND_ID,
   isBuiltKind,
@@ -43,6 +49,8 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
   private shownWorkspaceId: string = DEFAULT_WORKSPACE_ID;
   /** Set when the store cannot be used; the earlier state file is then read and written as before. */
   private isOnEarlierState = false;
+  /** Kept in the state file earlier versions read, which is the only place a newer version left them. */
+  private readonly earlierStateUnknownFields = new UnknownSavedFields();
 
   constructor(private readonly options: WorkspaceStateStorageOptions) {}
 
@@ -60,7 +68,7 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
 
   async save(state: ViewerState): Promise<void> {
     if (this.isOnEarlierState) {
-      await this.options.appState.save(toPersistedAppState(state, this.options.appVersion));
+      await this.writeEarlierVersionState(state);
       return;
     }
     const hasChanges = await this.saveChangedParts(storedViewerStateOf(state));
@@ -71,6 +79,7 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
   async clearAll(): Promise<void> {
     const { appState, workspaceStore } = this.options;
     this.savedJson.clear();
+    this.earlierStateUnknownFields.forget();
     try {
       if (this.isOnEarlierState) await workspaceStore.clearAll();
       else await this.clearWorkspaceStore();
@@ -198,6 +207,7 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
   private async migrate(): Promise<RestoredViewerState> {
     const { workspaceStore, appState, kindRegistry, windowId, now } = this.options;
     const earlierState = await appState.load();
+    this.earlierStateUnknownFields.rememberFrom(earlierState);
     const migration = migrateLegacyAppState(earlierState, { kindRegistry, nowMs: now() });
     try {
       await workspaceStore.importLegacyState({ ...migration, windowId });
@@ -224,6 +234,7 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
       appState.load(),
       workspaceStore.grantAccess(this.shownWorkspaceId, windowId),
     ]);
+    this.earlierStateUnknownFields.rememberFrom(earlierState);
     const stored = {
       lists: contents?.lists ?? {},
       windowSession: contents?.windowSession ?? null,
@@ -277,6 +288,7 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
 
   private async startOnEarlierState(earlierState: unknown): Promise<RestoredViewerState> {
     this.isOnEarlierState = true;
+    this.earlierStateUnknownFields.rememberFrom(earlierState);
     await this.options.appState.grantSavedAccess();
     return { ...restoreAppState(earlierState, this.options.kindRegistry), hasEarlierVersionChanges: false };
   }
@@ -304,12 +316,16 @@ export class WorkspaceStateStorage implements ViewerStateStorage {
 
   /** Earlier versions read only the single state file, so it keeps the Default workspace until 2.0. */
   private async writeEarlierVersionCopy(state: ViewerState): Promise<void> {
-    const copy = toPersistedAppState(state, this.options.appVersion);
-    await this.options.appState.save(copy);
+    const copy = await this.writeEarlierVersionState(state);
     await this.options.workspaceStore.saveAppValue(
       EARLIER_VERSION_COPY_HASH_KEY,
       hashOf(JSON.stringify(copy)),
     );
+  }
+
+  private async writeEarlierVersionState(state: ViewerState): Promise<PersistedAppState> {
+    const { appState, appVersion } = this.options;
+    return this.earlierStateUnknownFields.saveWith(appState, toPersistedAppState(state, appVersion));
   }
 
   private hasChanged(part: string, value: unknown): boolean {

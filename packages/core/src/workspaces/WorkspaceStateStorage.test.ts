@@ -1,4 +1,5 @@
 import {
+  AppStateRefusedError,
   InMemoryAppState,
   InMemoryDocumentFiles,
   InMemoryWorkspaceStore,
@@ -8,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { FavouritesList } from '../favourites/FavouritesList';
 import { restoreAppState, toPersistedAppState, type ViewerState } from '../session/persistedAppState';
 import { WORKSPACE_KINDS } from '../workspace-kinds/workspaceKinds';
-import { WorkspaceStateStorage } from './WorkspaceStateStorage';
+import { hashOf, WorkspaceStateStorage } from './WorkspaceStateStorage';
 
 const location = (path: string) => InMemoryDocumentFiles.locationOf(path);
 
@@ -28,6 +29,20 @@ class RecordingWorkspaceStore extends InMemoryWorkspaceStore {
   override saveAppValue(key: string, value: unknown): Promise<void> {
     this.writes.push(`app:${key}`);
     return super.saveAppValue(key, value);
+  }
+}
+
+class AppStateRefusingField extends InMemoryAppState {
+  constructor(
+    storedState: unknown,
+    private readonly refusedField: string,
+  ) {
+    super(storedState);
+  }
+
+  override save(state: unknown): Promise<void> {
+    if (this.refusedField in (state as object)) return Promise.reject(new AppStateRefusedError());
+    return super.save(state);
   }
 }
 
@@ -163,6 +178,65 @@ describe('WorkspaceStateStorage', () => {
     expect(
       readByEarlierVersion.favourites.favourites().map((favourite) => favourite.location.fileName),
     ).toEqual(['a.md']);
+  });
+
+  it('the copy keeps the fields a newer version saved in the earlier state', async () => {
+    const boardLayout = { columns: ['Ideas', 'Done'], isCompact: true };
+    const earlierState = { ...(earlierStateWithFavourite('C:\\a.md') as object), boardLayout };
+    const first = createStorage(undefined, new InMemoryAppState(earlierState));
+    const migrated = await first.storage.restore();
+    await first.storage.save(withFavourite(migrated, 'C:\\b.md'));
+    const second = createStorage(first.workspaceStore, first.appState);
+    const restored = await second.storage.restore();
+
+    await second.storage.save(withFavourite(restored, 'C:\\c.md'));
+
+    const copy = await second.appState.load();
+    expect(copy).toMatchObject({ boardLayout });
+    expect(restored.hasEarlierVersionChanges).toBe(false);
+    expect((await second.workspaceStore.loadAppValues()).earlierVersionCopyHash).toBe(
+      hashOf(JSON.stringify(copy)),
+    );
+  });
+
+  it('the earlier state file keeps the fields a newer version saved when the store cannot be used', async () => {
+    const boardLayout = { columns: ['Ideas', 'Done'], isCompact: true };
+    const earlierState = { ...(earlierStateWithFavourite('C:\\a.md') as object), boardLayout };
+    const workspaceStore = new RecordingWorkspaceStore();
+    workspaceStore.loadRegistry = () => Promise.reject(new Error('database is locked'));
+    const { storage, appState } = createStorage(workspaceStore, new InMemoryAppState(earlierState));
+    const restored = await storage.restore();
+
+    await storage.save(withFavourite(restored, 'C:\\b.md'));
+
+    expect(await appState.load()).toMatchObject({ boardLayout });
+    expect(workspaceStore.writes).toEqual([]);
+  });
+
+  it('a copy refused with the fields a newer version saved is written without them', async () => {
+    const earlierState = { ...(earlierStateWithFavourite('C:\\a.md') as object), boardLayout: {} };
+    const appState = new AppStateRefusingField(earlierState, 'boardLayout');
+    const first = createStorage(undefined, appState);
+    const migrated = await first.storage.restore();
+    await first.storage.save(withFavourite(migrated, 'C:\\b.md'));
+    const second = createStorage(first.workspaceStore, appState);
+
+    const restored = await second.storage.restore();
+
+    expect(await appState.load()).not.toHaveProperty('boardLayout');
+    expect(restored.hasEarlierVersionChanges).toBe(false);
+    expect(restored.favourites.isFavourite(location('C:\\b.md').canonicalKey)).toBe(true);
+  });
+
+  it('Clear All Data forgets the fields a newer version saved in the earlier state', async () => {
+    const earlierState = { ...(earlierStateWithFavourite('C:\\a.md') as object), boardLayout: {} };
+    const { storage, appState } = createStorage(undefined, new InMemoryAppState(earlierState));
+    await storage.restore();
+
+    await storage.clearAll();
+    await storage.save(withFavourite(restoreAppState(undefined), 'C:\\b.md'));
+
+    expect(await appState.load()).not.toHaveProperty('boardLayout');
   });
 
   it('a changed copy replaces the Default workspace lists and leaves its tabs alone', async () => {

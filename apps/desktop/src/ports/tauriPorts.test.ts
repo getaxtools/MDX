@@ -1,5 +1,5 @@
 import { clearMocks, mockIPC, mockWindows } from '@tauri-apps/api/mocks';
-import { InMemoryDocumentFiles, ProtectedNotesError } from '@mdx/platform';
+import { AppStateRefusedError, InMemoryDocumentFiles, ProtectedNotesError } from '@mdx/platform';
 import { emit } from '@tauri-apps/api/event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TauriAppMenu } from './TauriAppMenu';
@@ -176,6 +176,39 @@ describe('TauriAppState', () => {
     await new TauriAppState().save({ schemaVersion: 1 });
 
     expect(calls).toEqual([{ command: 'save_app_state', args: { stateJson: '{"schemaVersion":1}' } }]);
+  });
+
+  it('reports state the backend refuses to store as refused', async () => {
+    mockCommands({
+      save_app_state: () => {
+        throw Object.assign(new Error('backend error'), { code: 'invalidState' });
+      },
+    });
+
+    await expect(new TauriAppState().save({ schemaVersion: 1 })).rejects.toBeInstanceOf(AppStateRefusedError);
+  });
+
+  it('refuses state too deeply nested to write as JSON text without calling the backend', async () => {
+    const calls = mockCommands({ save_app_state: () => null });
+    let deepField: unknown[] = [];
+    for (let level = 0; level < 200_000; level += 1) deepField = [deepField];
+
+    await expect(new TauriAppState().save({ schemaVersion: 1, deepField })).rejects.toBeInstanceOf(
+      AppStateRefusedError,
+    );
+
+    expect(calls).toEqual([]);
+  });
+
+  it('passes a storage failure through unchanged', async () => {
+    const storageFailure = Object.assign(new Error('backend error'), { code: 'storageUnavailable' });
+    mockCommands({
+      save_app_state: () => {
+        throw storageFailure;
+      },
+    });
+
+    await expect(new TauriAppState().save({ schemaVersion: 1 })).rejects.toBe(storageFailure);
   });
 
   it('removes the kept backups through the remove_app_state_backups command', async () => {

@@ -102,6 +102,33 @@ describe('ViewerSession', () => {
     expect(session.openedDocument(guide.location.canonicalKey)).toBeUndefined();
   });
 
+  it('keeps the fields a newer version saved after a restart and a save', async () => {
+    const boardLayout = { columns: ['Ideas', 'Done'], isCompact: true };
+    const { session, appState } = createSession(new InMemoryAppState({ schemaVersion: 1, boardLayout }));
+    await session.restore();
+    await session.openDocument(GUIDE_PATH);
+    await session.save();
+    const restarted = createSession(appState);
+
+    await restarted.session.restore();
+    await restarted.session.save();
+
+    expect(await appState.load()).toMatchObject({ boardLayout });
+  });
+
+  it('forgets the fields a newer version saved when all data is cleared', async () => {
+    const { session, appState } = createSession(
+      new InMemoryAppState({ schemaVersion: 1, boardLayout: { columns: ['Ideas'] } }),
+    );
+    await session.restore();
+
+    session.clearAllData();
+    await session.clearStoredData();
+    await session.save();
+
+    expect(await appState.load()).not.toHaveProperty('boardLayout');
+  });
+
   it('reports a reset when the saved state is corrupt', async () => {
     const { session } = createSession(new InMemoryAppState('corrupt'));
 
