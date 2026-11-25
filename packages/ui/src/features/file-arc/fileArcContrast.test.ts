@@ -1,69 +1,32 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileArcLayout, THEME_COLOR_SCHEMES, type ThemePreference } from '@mdx/core';
+import { fileArcLayout } from '@mdx/core';
 import { describe, expect, it } from 'vitest';
+import { BLACK, contrastRatio, laidOver, rgbOf, WHITE, type Rgb } from '../../tokens/contrastRatio';
+import { APP_THEMES, ThemeTokenSheet, type AppTheme } from '../../tokens/ThemeTokenSheet';
 import { KIND_COLOUR_TOKENS } from '../control-wheel/kindPresentation';
 
-type AppTheme = Exclude<ThemePreference, 'system'>;
-type Rgb = readonly [number, number, number];
-
-const BLACK: Rgb = [0, 0, 0];
-const WHITE: Rgb = [255, 255, 255];
 const MIN_TEXT_CONTRAST = 4.5;
 const MIN_GRAPHIC_CONTRAST = 3;
 /** The app theme whose surfaces are always drawn opaque. */
 const OPAQUE_SURFACE_THEME: AppTheme = 'highContrast';
-const APP_THEMES = Object.keys(THEME_COLOR_SCHEMES) as AppTheme[];
-const TOKENS_CSS = readFileSync(join(import.meta.dirname, '..', '..', 'tokens', 'tokens.css'), 'utf8')
-  .replaceAll(/\/\*[\s\S]*?\*\//g, '')
-  .replaceAll(/@media[^{]*\{[\s\S]*?\}\s*\}/g, '');
+const TOKENS = ThemeTokenSheet.parse(
+  readFileSync(join(import.meta.dirname, '..', '..', 'tokens', 'tokens.css'), 'utf8'),
+);
 const ARC_SOURCE = readFileSync(join(import.meta.dirname, 'FileArc.svelte'), 'utf8');
 
-/** The custom properties a theme ends up with: the light base, the dark base for dark themes, then its own. */
-function tokensOf(theme: AppTheme): Map<string, string> {
-  const selectors = [':root'];
-  if (THEME_COLOR_SCHEMES[theme] === 'dark') selectors.push(":root[data-color-scheme='dark']");
-  selectors.push(`:root[data-theme='${theme}']`);
-  const tokens = new Map<string, string>();
-  for (const [, prelude = '', body = ''] of TOKENS_CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-    if (!prelude.split(',').some((part) => selectors.includes(part.trim()))) continue;
-    for (const [, name = '', value = ''] of body.matchAll(/(--[\w-]+):\s*([^;]+);/g))
-      tokens.set(name, value.trim());
-  }
-  return tokens;
-}
-
-function rgbOf(value: string | undefined): Rgb {
-  const digits = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(value ?? '');
-  if (!digits) throw new Error(`not a hex colour: ${String(value)}`);
-  return [1, 2, 3].map((group) => Number.parseInt(digits[group] ?? '', 16)) as unknown as Rgb;
-}
-
-function laidOver(colour: Rgb, opacity: number, backdrop: Rgb): Rgb {
-  return colour.map(
-    (channel, index) => channel * opacity + (backdrop[index] ?? 0) * (1 - opacity),
-  ) as unknown as Rgb;
-}
-
-function contrastRatio(first: Rgb, second: Rgb): number {
-  const luminance = (rgb: Rgb) => {
-    const [red = 0, green = 0, blue = 0] = rgb.map((channel) => {
-      const value = channel / 255;
-      return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-    });
-    return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
-  };
-  const [lighter = 0, darker = 0] = [luminance(first), luminance(second)].sort((a, b) => b - a);
-  return (lighter + 0.05) / (darker + 0.05);
+function colourOf(theme: AppTheme, token: string): Rgb {
+  return rgbOf(TOKENS.tokenOf(theme, token));
 }
 
 /** The dial as it looks over pure black and pure white content. */
 function dialsOf(theme: AppTheme): Rgb[] {
-  const tokens = tokensOf(theme);
   const opacity =
-    theme === OPAQUE_SURFACE_THEME ? 1 : Number.parseFloat(tokens.get('--wheel-surface-opacity') ?? '') / 100;
+    theme === OPAQUE_SURFACE_THEME
+      ? 1
+      : Number.parseFloat(TOKENS.tokenOf(theme, '--wheel-surface-opacity')) / 100;
   return [BLACK, WHITE].map((backdrop) =>
-    laidOver(rgbOf(tokens.get('--color-wheel-surface')), opacity, backdrop),
+    laidOver(colourOf(theme, '--color-wheel-surface'), opacity, backdrop),
   );
 }
 
@@ -75,7 +38,7 @@ describe('file arc contrast', () => {
   });
 
   it('names stay readable over a white page in the dark theme', () => {
-    const text = rgbOf(tokensOf('dark').get('--color-text'));
+    const text = colourOf('dark', '--color-text');
 
     for (const dial of dialsOf('dark'))
       expect(contrastRatio(text, dial)).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
@@ -83,7 +46,7 @@ describe('file arc contrast', () => {
 
   it('keeps names, details and the hint at 4.5:1 over black and white content in every app theme', () => {
     for (const theme of APP_THEMES) {
-      const text = rgbOf(tokensOf(theme).get('--color-text'));
+      const text = colourOf(theme, '--color-text');
       for (const dial of dialsOf(theme))
         expect(contrastRatio(text, dial), theme).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
     }
@@ -100,7 +63,7 @@ describe('file arc contrast', () => {
     const faintest = Math.min(...names.map((name) => name.opacity));
 
     for (const theme of APP_THEMES) {
-      const text = rgbOf(tokensOf(theme).get('--color-text'));
+      const text = colourOf(theme, '--color-text');
       for (const dial of dialsOf(theme))
         expect(contrastRatio(laidOver(text, faintest, dial), dial), theme).toBeGreaterThanOrEqual(
           MIN_TEXT_CONTRAST,
@@ -110,10 +73,9 @@ describe('file arc contrast', () => {
 
   it('keeps the kind colour of the outline and icon at 3:1 on the card in every app theme', () => {
     for (const theme of APP_THEMES) {
-      const tokens = tokensOf(theme);
-      const card = rgbOf(tokens.get('--color-wheel-tile'));
+      const card = colourOf(theme, '--color-wheel-tile');
       for (const kindToken of Object.values(KIND_COLOUR_TOKENS)) {
-        const kind = rgbOf(tokens.get(kindToken));
+        const kind = colourOf(theme, kindToken);
         expect(contrastRatio(kind, card), `${kindToken} in ${theme}`).toBeGreaterThanOrEqual(
           MIN_GRAPHIC_CONTRAST,
         );
