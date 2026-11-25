@@ -5,6 +5,7 @@ import { ControlWheelPage } from '../../pages/ControlWheelPage';
 import { MainWindowPage } from '../../pages/MainWindowPage';
 import { DesktopApp } from '../../support/DesktopApp';
 import { findAccessibilityViolations } from '../../support/findAccessibilityViolations';
+import { NotesFolderSnapshot } from '../../support/NotesFolderSnapshot';
 import { TestWorkspace } from '../../support/TestWorkspace';
 
 /** How soon a change saved by another program must show while the workspace is open. */
@@ -15,6 +16,7 @@ describe('backlinks and tags', () => {
   let workspace: TestWorkspace;
   let app: DesktopApp;
   let mainWindow: MainWindowPage;
+  let notesSnapshot: NotesFolderSnapshot;
   let notesFolder: string;
 
   beforeEach(async () => {
@@ -24,6 +26,7 @@ describe('backlinks and tags', () => {
     writeFileSync(join(notesFolder, 'Plan.md'), '# Plan\n\nThe plan. #work\n');
     writeFileSync(join(notesFolder, 'Inbox.md'), '# Inbox\n\nNothing linked yet.\n');
     writeFileSync(join(notesFolder, 'Work', 'Budget.md'), '# Budget\n\nCosts. #work #money\n');
+    notesSnapshot = NotesFolderSnapshot.take(notesFolder);
     app = await DesktopApp.launch({ workspace });
     mainWindow = new MainWindowPage(app.browser);
     await mainWindow.emptyStateText();
@@ -33,7 +36,13 @@ describe('backlinks and tags', () => {
 
   afterEach(async () => {
     await app.quit();
-    workspace.remove();
+    let changedNotes: string[];
+    try {
+      changedNotes = notesSnapshot.changedNotes();
+    } finally {
+      workspace.remove();
+    }
+    expect(changedNotes).toEqual([]);
   });
 
   async function turnOnNotes(): Promise<void> {
@@ -67,6 +76,8 @@ describe('backlinks and tags', () => {
     });
 
     writeFileSync(join(notesFolder, 'Inbox.md'), '# Inbox\n\nRead the [[Plan]] today.\n');
+    expect(notesSnapshot.changedNotes()).toEqual(['Inbox.md']);
+    notesSnapshot = NotesFolderSnapshot.take(notesFolder);
 
     await app.browser.waitUntil(async () => (await heading.getText()) === 'Linked from 1 note', {
       timeout: OUTSIDE_CHANGE_BUDGET_MS,

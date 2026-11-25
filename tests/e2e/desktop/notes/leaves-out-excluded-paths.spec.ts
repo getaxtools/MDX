@@ -5,6 +5,7 @@ import { ControlWheelPage } from '../../pages/ControlWheelPage';
 import { MainWindowPage } from '../../pages/MainWindowPage';
 import { DesktopApp } from '../../support/DesktopApp';
 import { findAccessibilityViolations } from '../../support/findAccessibilityViolations';
+import { NotesFolderSnapshot } from '../../support/NotesFolderSnapshot';
 import { TestWorkspace } from '../../support/TestWorkspace';
 
 const SEARCH_WAIT_MS = 10_000;
@@ -13,6 +14,7 @@ describe('excluded paths in a Notes workspace', () => {
   let workspace: TestWorkspace;
   let app: DesktopApp;
   let mainWindow: MainWindowPage;
+  let notesSnapshot: NotesFolderSnapshot;
 
   beforeEach(async () => {
     workspace = TestWorkspace.create();
@@ -20,6 +22,7 @@ describe('excluded paths in a Notes workspace', () => {
     mkdirSync(join(notesFolder, 'Private'), { recursive: true });
     writeFileSync(join(notesFolder, 'Plan.md'), '# Plan\n\nThe weekly meeting.\n');
     writeFileSync(join(notesFolder, 'Private', 'Review.md'), '# Review\n\nThe meeting about salary.\n');
+    notesSnapshot = NotesFolderSnapshot.take(notesFolder);
     app = await DesktopApp.launch({ workspace });
     mainWindow = new MainWindowPage(app.browser);
     await mainWindow.emptyStateText();
@@ -29,7 +32,13 @@ describe('excluded paths in a Notes workspace', () => {
 
   afterEach(async () => {
     await app.quit();
-    workspace.remove();
+    let changedNotes: string[];
+    try {
+      changedNotes = notesSnapshot.changedNotes();
+    } finally {
+      workspace.remove();
+    }
+    expect(changedNotes).toEqual([]);
   });
 
   async function turnOnNotes(): Promise<void> {

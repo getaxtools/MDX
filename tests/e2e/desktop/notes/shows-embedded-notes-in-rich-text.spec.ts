@@ -5,6 +5,7 @@ import { ControlWheelPage } from '../../pages/ControlWheelPage';
 import { MainWindowPage } from '../../pages/MainWindowPage';
 import { DesktopApp } from '../../support/DesktopApp';
 import { findAccessibilityViolations } from '../../support/findAccessibilityViolations';
+import { NotesFolderSnapshot } from '../../support/NotesFolderSnapshot';
 import { TestWorkspace } from '../../support/TestWorkspace';
 
 const INBOX_TEXT = '# Inbox\n\n![[Plan]]\n\n![[Missing]]\n\nThe end';
@@ -13,6 +14,7 @@ describe('embedded notes in Rich text', () => {
   let workspace: TestWorkspace;
   let app: DesktopApp;
   let mainWindow: MainWindowPage;
+  let notesSnapshot: NotesFolderSnapshot;
   let notesFolder: string;
 
   beforeEach(async () => {
@@ -21,6 +23,7 @@ describe('embedded notes in Rich text', () => {
     mkdirSync(notesFolder, { recursive: true });
     writeFileSync(join(notesFolder, 'Inbox.md'), INBOX_TEXT);
     writeFileSync(join(notesFolder, 'Plan.md'), '# Plan\n\nBook the venue.\n');
+    notesSnapshot = NotesFolderSnapshot.take(notesFolder);
     app = await DesktopApp.launch({ workspace });
     mainWindow = new MainWindowPage(app.browser);
     await mainWindow.emptyStateText();
@@ -32,7 +35,13 @@ describe('embedded notes in Rich text', () => {
 
   afterEach(async () => {
     await app.quit();
-    workspace.remove();
+    let changedNotes: string[];
+    try {
+      changedNotes = notesSnapshot.changedNotes();
+    } finally {
+      workspace.remove();
+    }
+    expect(changedNotes).toEqual([]);
   });
 
   async function turnOnNotes(): Promise<void> {

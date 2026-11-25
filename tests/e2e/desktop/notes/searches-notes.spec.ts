@@ -5,6 +5,7 @@ import { ControlWheelPage } from '../../pages/ControlWheelPage';
 import { MainWindowPage } from '../../pages/MainWindowPage';
 import { DesktopApp } from '../../support/DesktopApp';
 import { findAccessibilityViolations } from '../../support/findAccessibilityViolations';
+import { NotesFolderSnapshot } from '../../support/NotesFolderSnapshot';
 import { TestWorkspace } from '../../support/TestWorkspace';
 
 const SEARCH_WAIT_MS = 10_000;
@@ -16,6 +17,7 @@ describe('searching notes', () => {
   let workspace: TestWorkspace;
   let app: DesktopApp;
   let mainWindow: MainWindowPage;
+  let notesSnapshot: NotesFolderSnapshot;
 
   beforeEach(async () => {
     workspace = TestWorkspace.create();
@@ -27,6 +29,7 @@ describe('searching notes', () => {
       '# Paris\n\nCoffee at the Café de Flore. #travel\n',
     );
     writeFileSync(join(notesFolder, 'Work', 'Budget.md'), '# Budget\n\nThe cafe costs too much. #work\n');
+    notesSnapshot = NotesFolderSnapshot.take(notesFolder);
     app = await DesktopApp.launch({ workspace });
     mainWindow = new MainWindowPage(app.browser);
     await mainWindow.emptyStateText();
@@ -37,7 +40,13 @@ describe('searching notes', () => {
 
   afterEach(async () => {
     await app.quit();
-    workspace.remove();
+    let changedNotes: string[];
+    try {
+      changedNotes = notesSnapshot.changedNotes();
+    } finally {
+      workspace.remove();
+    }
+    expect(changedNotes).toEqual([]);
   });
 
   async function turnOnNotes(): Promise<void> {
@@ -95,6 +104,8 @@ describe('searching notes', () => {
     await searchUntilFound('cafe', ['Budget.md', 'Paris.md']);
 
     writeFileSync(join(notesFolder, 'Work', 'Later.md'), '# Later\n\nA quokka visited the office.\n');
+    expect(notesSnapshot.changedNotes()).toEqual(['Work/Later.md']);
+    notesSnapshot = NotesFolderSnapshot.take(notesFolder);
 
     await searchUntilFound('quokka', ['Later.md'], { timeoutMs: OUTSIDE_CHANGE_BUDGET_MS });
   });

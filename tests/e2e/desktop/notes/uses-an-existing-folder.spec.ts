@@ -5,6 +5,7 @@ import { ControlWheelPage } from '../../pages/ControlWheelPage';
 import { MainWindowPage } from '../../pages/MainWindowPage';
 import { DesktopApp } from '../../support/DesktopApp';
 import { findAccessibilityViolations } from '../../support/findAccessibilityViolations';
+import { NotesFolderSnapshot } from '../../support/NotesFolderSnapshot';
 import { TestWorkspace } from '../../support/TestWorkspace';
 
 const OTHER_APP_SETTINGS = '{"theme":"dark"}';
@@ -14,6 +15,7 @@ describe('using an existing notes folder', () => {
   let app: DesktopApp;
   let mainWindow: MainWindowPage;
   let notesFolder: string;
+  let notesSnapshot: NotesFolderSnapshot;
 
   beforeEach(async () => {
     workspace = TestWorkspace.create();
@@ -22,6 +24,7 @@ describe('using an existing notes folder', () => {
     writeFileSync(join(notesFolder, 'Plan.md'), '# Plan\r\n\r\nSee [[Ideas]] first.\r\n');
     writeFileSync(join(notesFolder, 'Ideas.md'), '# Ideas\n\nShip it.\n');
     writeFileSync(join(notesFolder, '.other-app', 'settings.json'), OTHER_APP_SETTINGS);
+    notesSnapshot = NotesFolderSnapshot.take(notesFolder);
     app = await DesktopApp.launch({ workspace });
     mainWindow = new MainWindowPage(app.browser);
     await mainWindow.emptyStateText();
@@ -30,7 +33,13 @@ describe('using an existing notes folder', () => {
 
   afterEach(async () => {
     await app.quit();
-    workspace.remove();
+    let changedNotes: string[];
+    try {
+      changedNotes = notesSnapshot.changedNotes();
+    } finally {
+      workspace.remove();
+    }
+    expect(changedNotes).toEqual([]);
   });
 
   async function turnOnNotes(): Promise<void> {

@@ -5,6 +5,7 @@ import { ControlWheelPage } from '../../pages/ControlWheelPage';
 import { MainWindowPage } from '../../pages/MainWindowPage';
 import { DesktopApp } from '../../support/DesktopApp';
 import { findAccessibilityViolations } from '../../support/findAccessibilityViolations';
+import { NotesFolderSnapshot } from '../../support/NotesFolderSnapshot';
 import { TestWorkspace } from '../../support/TestWorkspace';
 
 const INDEX_WAIT_MS = 10_000;
@@ -13,6 +14,7 @@ describe('Clear All Data in a Notes workspace', () => {
   let workspace: TestWorkspace;
   let app: DesktopApp;
   let mainWindow: MainWindowPage;
+  let notesSnapshot: NotesFolderSnapshot;
   let notesFolder: string;
   let indexFolder: string;
 
@@ -22,6 +24,7 @@ describe('Clear All Data in a Notes workspace', () => {
     indexFolder = join(workspace.profileFolder, 'notes-index');
     mkdirSync(notesFolder, { recursive: true });
     writeFileSync(join(notesFolder, 'Plan.md'), '# Plan\n\nBook the venue.\n');
+    notesSnapshot = NotesFolderSnapshot.take(notesFolder);
     app = await DesktopApp.launch({ workspace });
     mainWindow = new MainWindowPage(app.browser);
     await mainWindow.emptyStateText();
@@ -29,7 +32,13 @@ describe('Clear All Data in a Notes workspace', () => {
 
   afterEach(async () => {
     await app.quit();
-    workspace.remove();
+    let changedNotes: string[];
+    try {
+      changedNotes = notesSnapshot.changedNotes();
+    } finally {
+      workspace.remove();
+    }
+    expect(changedNotes).toEqual([]);
   });
 
   async function turnOnNotes(): Promise<void> {
