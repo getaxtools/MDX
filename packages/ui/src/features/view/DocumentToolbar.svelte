@@ -108,7 +108,7 @@
     height: 28px;
     padding: 0 var(--space-1);
     border: 0;
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-medium);
     background: none;
     color: var(--color-text-secondary);
     font: inherit;

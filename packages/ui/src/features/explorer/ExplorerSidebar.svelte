@@ -290,7 +290,7 @@
     box-sizing: border-box;
     padding: 0 var(--space-2);
     border: 0;
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-xsmall);
     background: none;
     color: var(--color-text);
     font: inherit;

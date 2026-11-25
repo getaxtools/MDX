@@ -48,7 +48,7 @@ const calloutRules = {
     minHeight: '24px',
     padding: '0 2px',
     border: '0',
-    borderRadius: 'var(--radius-small)',
+    borderRadius: 'var(--radius-xsmall)',
     background: 'transparent',
     color: 'inherit',
     font: 'inherit',

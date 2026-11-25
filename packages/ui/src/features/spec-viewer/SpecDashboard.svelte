@@ -157,7 +157,7 @@
     margin-inline-start: var(--space-2);
     padding: 0 0.4em;
     border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-xsmall);
     font-size: var(--text-size-small);
     font-weight: 400;
   }

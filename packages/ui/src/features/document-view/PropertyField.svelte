@@ -55,7 +55,7 @@
     box-sizing: border-box;
     padding: var(--space-1) var(--space-2);
     border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-medium);
     background: var(--color-background);
     color: var(--color-text);
     font: inherit;

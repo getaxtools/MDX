@@ -225,7 +225,7 @@
     margin-inline-end: var(--space-1);
     padding: var(--space-1);
     border: 0;
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-xsmall);
     background: none;
     color: var(--color-text-secondary);
   }

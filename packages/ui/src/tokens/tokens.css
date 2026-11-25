@@ -35,10 +35,11 @@ body {
   --space-8: 32px;
 
   --radius-xsmall: 4px;
-  --radius-small: 6px;
   --radius-medium: 8px;
   --radius-large: 12px;
   --radius-xlarge: 16px;
+  --radius-xxlarge: 24px;
+  --radius-full: 9999px;
 
   --motion-fast: 120ms;
   --motion-medium: 200ms;

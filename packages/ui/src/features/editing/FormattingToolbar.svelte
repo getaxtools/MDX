@@ -279,7 +279,7 @@
     height: 2rem;
     padding: 0;
     border: 1px solid transparent;
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-medium);
     background: none;
     color: var(--color-text);
   }

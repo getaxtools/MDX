@@ -291,7 +291,7 @@ const blockHandleTheme = EditorView.theme({
     height: `${String(HANDLE_SIZE_PX)}px`,
     padding: '0',
     border: '0',
-    borderRadius: 'var(--radius-small)',
+    borderRadius: 'var(--radius-xsmall)',
     background: 'transparent',
     color: 'var(--color-text-tertiary)',
     cursor: 'grab',

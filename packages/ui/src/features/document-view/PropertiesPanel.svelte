@@ -145,7 +145,7 @@
     margin-block-start: var(--space-2);
     padding: var(--space-1) var(--space-3);
     border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-medium);
     background: var(--color-surface);
     color: var(--color-text);
     font: inherit;

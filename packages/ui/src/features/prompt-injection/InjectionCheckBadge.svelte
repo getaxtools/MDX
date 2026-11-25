@@ -50,7 +50,7 @@
     align-items: center;
     padding: 0 var(--space-1);
     border: 0;
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-xsmall);
     background: none;
     color: inherit;
     font: inherit;

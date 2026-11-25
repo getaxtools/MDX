@@ -91,7 +91,7 @@
     align-items: center;
     padding: var(--space-1);
     border: 0;
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-xsmall);
     background: none;
     color: var(--color-text);
     font: inherit;
@@ -122,7 +122,7 @@
   .excerpt {
     display: block;
     padding: var(--space-1) var(--space-2);
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-medium);
     background: var(--color-code-background);
     font-family: var(--font-mono);
     font-size: var(--text-size-small);
@@ -155,7 +155,7 @@
     padding: 0 var(--space-2);
     min-height: 24px;
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-medium);
     background: var(--color-surface);
     color: var(--color-text);
     font: inherit;

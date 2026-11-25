@@ -68,7 +68,7 @@
     margin-block-end: var(--space-2);
     padding: var(--space-1) var(--space-2);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-medium);
     background: var(--color-background);
     color: var(--color-text);
     font: inherit;
@@ -104,7 +104,7 @@
     max-height: 16rem;
     overflow: auto;
     padding: var(--space-2);
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-medium);
     background: var(--color-code-background);
     font-size: var(--text-size-small);
     white-space: pre-wrap;

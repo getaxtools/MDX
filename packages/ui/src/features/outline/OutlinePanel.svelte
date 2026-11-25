@@ -96,7 +96,7 @@
     margin-inline-end: 0.4em;
     padding: 0 0.3em;
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-xsmall);
     color: var(--color-text-secondary);
     font-size: 0.8em;
   }
@@ -127,7 +127,7 @@
     min-height: 28px;
     padding: 0 var(--space-2);
     border: 0;
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-xsmall);
     background: none;
     color: var(--color-text);
     font: inherit;
