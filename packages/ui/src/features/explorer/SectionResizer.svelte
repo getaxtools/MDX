@@ -83,10 +83,16 @@
     height: 1px;
     background: var(--color-border);
     content: '';
-    transition:
-      background-color var(--motion-fast) ease-out,
-      top var(--motion-fast) ease-out,
-      height var(--motion-fast) ease-out;
+    transition: background-color var(--motion-fast) ease-out;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .section-resizer::before {
+      transition:
+        background-color var(--motion-fast) ease-out,
+        top var(--motion-fast) ease-out,
+        height var(--motion-fast) ease-out;
+    }
   }
 
   .section-resizer:is(:hover, :focus-visible, .dragging)::before {

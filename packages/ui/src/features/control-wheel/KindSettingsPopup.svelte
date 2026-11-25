@@ -188,7 +188,12 @@
     height: 0.75rem;
     border-radius: 50%;
     background: var(--color-text-secondary);
-    transition: inset-inline-start var(--motion-fast) ease-out;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .track::after {
+      transition: inset-inline-start var(--motion-fast) ease-out;
+    }
   }
 
   button[aria-checked='true'] .track {

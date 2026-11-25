@@ -56,7 +56,7 @@
   }
 
   .dialog {
-    animation: rise-in var(--motion-fast) var(--easing-standard);
+    animation: fade-in var(--motion-fast) var(--easing-standard);
     max-width: 30rem;
     padding: var(--space-5);
     border: 1px solid var(--color-border);
@@ -119,6 +119,18 @@
   button:focus-visible {
     outline: 2px solid var(--color-focus);
     outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .dialog {
+      animation: rise-in var(--motion-fast) var(--easing-standard);
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
   }
 
   @keyframes rise-in {
