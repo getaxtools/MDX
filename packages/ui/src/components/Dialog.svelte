@@ -91,7 +91,7 @@
 
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
-      if (!canClose) return;
+      if (!canClose || event.defaultPrevented || event.isComposing) return;
       event.stopPropagation();
       onClose();
       return;

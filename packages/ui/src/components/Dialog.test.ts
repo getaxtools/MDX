@@ -150,6 +150,27 @@ describe('Dialog frame', () => {
     expect(document.activeElement).toBe(opener);
   });
 
+  it('esc and close: esc that a control inside already handled leaves the dialog open', async () => {
+    const { onClose } = renderFrame();
+    const name = screen.getByRole('textbox', { name: 'Name' });
+    name.addEventListener('keydown', (event) => event.preventDefault());
+
+    await fireEvent.keyDown(name, { key: 'Escape' });
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('esc and close: esc that ends an input method composition leaves the dialog open', async () => {
+    const { onClose } = renderFrame();
+
+    await fireEvent.keyDown(screen.getByRole('textbox', { name: 'Name' }), {
+      key: 'Escape',
+      isComposing: true,
+    });
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('focus stays inside: ctrl+tab on the last control is left to the app', async () => {
     renderFrame();
     const rename = screen.getByRole('button', { name: 'Rename' });
