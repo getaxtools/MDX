@@ -6,8 +6,13 @@ import WordGoalDialog from './WordGoalDialog.svelte';
 
 function renderDialog(currentGoal?: number) {
   const onCommand = vi.fn();
-  render(WordGoalDialog, { currentGoal, translator: createTranslator(), onCommand, onClose: vi.fn() });
-  return { onCommand, input: screen.getByRole('textbox', { name: 'Words to write in this document' }) };
+  const onClose = vi.fn();
+  render(WordGoalDialog, { currentGoal, translator: createTranslator(), onCommand, onClose });
+  return {
+    onCommand,
+    onClose,
+    input: screen.getByRole('textbox', { name: 'Words to write in this document' }),
+  };
 }
 
 describe('WordGoalDialog', () => {
@@ -35,6 +40,50 @@ describe('WordGoalDialog', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Clear Word Goal' }));
 
     expect((input as HTMLInputElement).value).toBe('800');
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'clearWordGoal' });
+  });
+
+  it('opens in the shared frame with the goal focused, cancel and set goal in the footer', () => {
+    const { input } = renderDialog(800);
+    const close = screen.getByRole('button', { name: 'Close' });
+
+    expect(document.activeElement).toBe(input);
+    expect(close.closest('header')).not.toBeNull();
+    expect(close.title).toBe('Close (Esc)');
+    expect(screen.getAllByRole('button').map((button) => button.textContent.trim())).toEqual([
+      '',
+      'Clear Word Goal',
+      'Cancel',
+      'Set Goal',
+    ]);
+  });
+
+  it('set goal sets the typed goal', async () => {
+    const { onCommand, input } = renderDialog();
+
+    await userEvent.type(input, '250');
+    await userEvent.click(screen.getByRole('button', { name: 'Set Goal' }));
+
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'setWordGoal', goal: 250 });
+  });
+
+  it('cancel closes without setting a goal', async () => {
+    const { onCommand, onClose, input } = renderDialog();
+
+    await userEvent.type(input, '250');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(onCommand).not.toHaveBeenCalled();
+  });
+
+  it('enter on clear word goal clears the goal instead of setting it', async () => {
+    const { onCommand } = renderDialog(800);
+
+    screen.getByRole('button', { name: 'Clear Word Goal' }).focus();
+    await userEvent.keyboard('{Enter}');
+
+    expect(onCommand).toHaveBeenCalledOnce();
     expect(onCommand).toHaveBeenCalledWith({ kind: 'clearWordGoal' });
   });
 });
