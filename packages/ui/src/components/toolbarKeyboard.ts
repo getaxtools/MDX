@@ -16,7 +16,7 @@ export function toolbarFocusAfter(
   return key === 'End' ? count - 1 : undefined;
 }
 
-/** How many groups fit from the left, keeping room for More formatting when some do not. */
+/** How many groups fit from the left, keeping room for the More button when some do not. */
 export function groupsThatFit(
   groupWidths: readonly number[],
   availableWidth: number,

@@ -4,7 +4,7 @@
   import type { Translator } from '@mdx/i18n';
   import ContextMenu from '../../components/ContextMenu.svelte';
   import type { ContextMenuItem, ContextMenuRequest } from '../../components/ContextMenuItem';
-  import { groupsThatFit, toolbarFocusAfter } from './toolbarKeyboard';
+  import { groupsThatFit, toolbarFocusAfter } from '../../components/toolbarKeyboard';
   import { TOOLBOX_ICONS } from './toolboxIcons';
   import {
     TOOLBOX_GROUPS,

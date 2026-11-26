@@ -15,7 +15,7 @@ describe('toolbar keyboard and overflow', () => {
     expect(toolbarFocusAfter('a', leftToRight)).toBeUndefined();
   });
 
-  it('a narrow window moves groups from the right into More formatting', () => {
+  it('a narrow window moves groups from the right into the More button', () => {
     expect(groupsThatFit([40, 100, 60, 120, 30], 400, 30)).toBe(5);
     expect(groupsThatFit([40, 100, 60, 120, 30], 300, 30)).toBe(3);
     expect(groupsThatFit([40, 100], 50, 30)).toBe(0);
