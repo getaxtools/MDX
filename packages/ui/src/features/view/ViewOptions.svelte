@@ -86,10 +86,10 @@
 
   button,
   select {
-    height: 28px;
+    height: var(--island-button-size);
     padding: 0 var(--space-2);
     border: 0;
-    border-radius: var(--radius-medium);
+    border-radius: var(--island-button-radius);
     background: none;
     color: var(--color-text-secondary);
     font: inherit;

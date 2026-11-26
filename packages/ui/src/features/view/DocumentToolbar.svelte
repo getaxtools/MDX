@@ -30,62 +30,66 @@
 </script>
 
 <div class="toolbar" role="toolbar" aria-label={translator.translate('toolbar.label')}>
-  <button
-    aria-label={openLabel}
-    title={tooltipWithShortcut(openLabel, shortcutLabelFor(openCommand, translator))}
-    onclick={() => onCommand(openCommand)}
-  >
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M3.5 18V6.5A1.5 1.5 0 0 1 5 5h4l2 2h6.5A1.5 1.5 0 0 1 19 8.5V10" />
-      <path d="M3.5 18l2.6-6.9A1.5 1.5 0 0 1 7.5 10h13l-2.8 7.4a1 1 0 0 1-.9.6z" />
-    </svg>
-  </button>
-  <button
-    class="favourite"
-    aria-label={favouriteLabel}
-    aria-pressed={isFavourite}
-    title={tooltipWithShortcut(favouriteLabel, shortcutLabelFor(favouriteCommand, translator))}
-    disabled={!canBeFavourite}
-    onclick={() => onCommand(favouriteCommand)}
-  >
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 4l2.4 5 5.4.7-4 3.8 1 5.4-4.8-2.6-4.8 2.6 1-5.4-4-3.8 5.4-.7z" />
-    </svg>
-  </button>
-  <span class="separator" aria-hidden="true"></span>
-  <button
-    class="labelled"
-    aria-label={editingLabel}
-    aria-pressed={isEditing}
-    title={tooltipWithShortcut(editingLabel, shortcutLabelFor(editingCommand, translator))}
-    disabled={!hasDocument}
-    onclick={() => onCommand(editingCommand)}
-  >
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      {#if isEditing}
-        <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
-        <circle cx="12" cy="12" r="2.75" />
-      {:else}
-        <path d="M4.5 19.5h3.8L19 8.8 15.2 5 4.5 15.7z" />
-        <path d="M13.2 7l3.8 3.8" />
-      {/if}
-    </svg>
-    <span aria-hidden="true">{editingLabel}</span>
-  </button>
-  <button
-    aria-label={previewBesideLabel}
-    aria-pressed={viewSettings.isPreviewBesideEditor}
-    title={tooltipWithShortcut(previewBesideLabel, shortcutLabelFor(previewBesideCommand, translator))}
-    disabled={!hasDocument}
-    onclick={() => onCommand(previewBesideCommand)}
-  >
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <rect x="3.5" y="5" width="17" height="14" rx="2" />
-      <path d="M12 5v14" />
-    </svg>
-  </button>
-  <span class="separator" aria-hidden="true"></span>
-  <ViewOptions settings={viewSettings} {translator} {onCommand} />
+  <div class="island">
+    <button
+      aria-label={openLabel}
+      title={tooltipWithShortcut(openLabel, shortcutLabelFor(openCommand, translator))}
+      onclick={() => onCommand(openCommand)}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3.5 18V6.5A1.5 1.5 0 0 1 5 5h4l2 2h6.5A1.5 1.5 0 0 1 19 8.5V10" />
+        <path d="M3.5 18l2.6-6.9A1.5 1.5 0 0 1 7.5 10h13l-2.8 7.4a1 1 0 0 1-.9.6z" />
+      </svg>
+    </button>
+    <button
+      class="favourite"
+      aria-label={favouriteLabel}
+      aria-pressed={isFavourite}
+      title={tooltipWithShortcut(favouriteLabel, shortcutLabelFor(favouriteCommand, translator))}
+      disabled={!canBeFavourite}
+      onclick={() => onCommand(favouriteCommand)}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 4l2.4 5 5.4.7-4 3.8 1 5.4-4.8-2.6-4.8 2.6 1-5.4-4-3.8 5.4-.7z" />
+      </svg>
+    </button>
+  </div>
+  <div class="island">
+    <button
+      class="labelled"
+      aria-label={editingLabel}
+      aria-pressed={isEditing}
+      title={tooltipWithShortcut(editingLabel, shortcutLabelFor(editingCommand, translator))}
+      disabled={!hasDocument}
+      onclick={() => onCommand(editingCommand)}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        {#if isEditing}
+          <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+          <circle cx="12" cy="12" r="2.75" />
+        {:else}
+          <path d="M4.5 19.5h3.8L19 8.8 15.2 5 4.5 15.7z" />
+          <path d="M13.2 7l3.8 3.8" />
+        {/if}
+      </svg>
+      <span aria-hidden="true">{editingLabel}</span>
+    </button>
+    <button
+      aria-label={previewBesideLabel}
+      aria-pressed={viewSettings.isPreviewBesideEditor}
+      title={tooltipWithShortcut(previewBesideLabel, shortcutLabelFor(previewBesideCommand, translator))}
+      disabled={!hasDocument}
+      onclick={() => onCommand(previewBesideCommand)}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3.5" y="5" width="17" height="14" rx="2" />
+        <path d="M12 5v14" />
+      </svg>
+    </button>
+  </div>
+  <div class="island">
+    <ViewOptions settings={viewSettings} {translator} {onCommand} />
+  </div>
 </div>
 
 <style>
@@ -93,10 +97,20 @@
     display: flex;
     flex: 0 1 auto;
     flex-wrap: wrap;
-    gap: 2px;
+    gap: var(--space-2);
     align-items: center;
     justify-content: flex-end;
     min-width: 0;
+  }
+
+  .island {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+    padding: var(--island-padding);
+    border: 1px solid var(--color-border);
+    border-radius: var(--island-radius);
+    background: var(--color-surface-raised);
   }
 
   button {
@@ -104,17 +118,18 @@
     gap: var(--space-1);
     align-items: center;
     justify-content: center;
-    min-width: 28px;
-    height: 28px;
+    min-width: var(--island-button-size);
+    height: var(--island-button-size);
     padding: 0 var(--space-1);
-    border: 0;
-    border-radius: var(--radius-medium);
+    border: 1px solid transparent;
+    border-radius: var(--island-button-radius);
     background: none;
     color: var(--color-text-secondary);
     font: inherit;
     font-size: var(--text-size-body);
     transition:
       background-color var(--motion-fast) ease-out,
+      border-color var(--motion-fast) ease-out,
       color var(--motion-fast) ease-out;
   }
 
@@ -128,6 +143,7 @@
   }
 
   button[aria-pressed='true'] {
+    border-color: var(--color-accent);
     background: var(--color-surface-selected);
     color: var(--color-accent);
   }
@@ -142,18 +158,12 @@
   }
 
   .favourite[aria-pressed='true'] {
+    border-color: transparent;
     background: none;
   }
 
   .favourite[aria-pressed='true'] svg {
     fill: currentcolor;
-  }
-
-  .separator {
-    width: 1px;
-    height: 16px;
-    margin: 0 var(--space-1);
-    background: var(--color-border);
   }
 
   svg {
@@ -165,5 +175,30 @@
     stroke-linecap: round;
     stroke-linejoin: round;
     stroke-width: 1.6;
+  }
+
+  @media (forced-colors: active) {
+    button[aria-pressed='true'],
+    button[aria-pressed='true']:hover:not(:disabled) {
+      forced-color-adjust: none;
+      border-color: Highlight;
+      background: Highlight;
+      color: HighlightText;
+    }
+
+    button[aria-pressed='true']:focus-visible {
+      outline-color: HighlightText;
+    }
+
+    button[aria-pressed='true']:disabled {
+      border-color: GrayText;
+      background: Canvas;
+      color: GrayText;
+    }
+
+    .favourite[aria-pressed='true']:not(:disabled) {
+      border-color: Highlight;
+      background: Highlight;
+    }
   }
 </style>

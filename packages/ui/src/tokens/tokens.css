@@ -41,6 +41,11 @@ body {
   --radius-xxlarge: 24px;
   --radius-full: 9999px;
 
+  --island-radius: var(--radius-large);
+  --island-padding: var(--space-1);
+  --island-button-size: 32px;
+  --island-button-radius: calc(var(--island-radius) - var(--island-padding));
+
   --motion-fast: 120ms;
   --motion-medium: 200ms;
   --motion-slow: 320ms;
