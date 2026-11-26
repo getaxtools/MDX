@@ -19,9 +19,9 @@
     /** False while the dialog must be finished, not closed: it then has no close button and ignores Escape. */
     canClose?: boolean;
     /** Giving a Cancel label turns on the shared frame: header Close, quiet Cancel, one primary. */
-    cancelLabel?: string;
+    cancelLabel?: string | undefined;
     purpose?: string;
-    primary?: PrimaryAction;
+    primary?: PrimaryAction | undefined;
     closeTooltip?: string;
     /** For a warning, so a stray Enter cannot take the step. */
     shouldStartOnCancel?: boolean;
