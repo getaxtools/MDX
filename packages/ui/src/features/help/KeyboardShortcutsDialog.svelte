@@ -22,9 +22,6 @@
   }: Props = $props();
 
   let query = $state('');
-  let searchInput: HTMLInputElement | undefined = $state();
-
-  $effect(() => searchInput?.focus());
 
   const shownShortcuts = $derived(
     matchingShortcuts(query, translator, keyboardShortcutsWith(shortcuts, ctrlWheelAction)),
@@ -35,10 +32,11 @@
 <Dialog
   title={translator.translate('menu.help.keyboardShortcuts')}
   closeLabel={translator.translate('about.close')}
+  closeTooltip={translator.translate('dialog.close.tooltip')}
+  isInformational
   {onClose}
 >
   <input
-    bind:this={searchInput}
     bind:value={query}
     class="search"
     type="search"

@@ -28,6 +28,7 @@ function isFocusInsideFrame(): boolean {
 
 const DIALOGS: readonly DialogOpening[] = [
   { name: 'About MDX', open: async (mainWindow) => runCommand(mainWindow, '>about', 'About MDX') },
+  { name: 'Keyboard Shortcuts', open: async (mainWindow) => mainWindow.pressShortcut('F1') },
 ];
 
 describe('Dialogs share one frame', () => {
