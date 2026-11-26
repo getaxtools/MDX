@@ -9,6 +9,9 @@ import { CLOSE_FALLBACK_MS } from './dialogClosing';
 
 const NAME_FIELD = createRawSnippet(() => ({ render: () => '<label>Name <input /></label>' }));
 const NOTES_FIELD = createRawSnippet(() => ({ render: () => '<label>Notes <textarea></textarea></label>' }));
+const RESTORE_BUTTONS = createRawSnippet(() => ({
+  render: () => '<ul><li><button>Restore Plan</button></li><li><button>Restore Ideas</button></li></ul>',
+}));
 const MESSAGE_ONLY = createRawSnippet(() => ({
   render: () => '<p>The workspace has no open documents.</p>',
 }));
@@ -342,6 +345,40 @@ describe('Dialog frame', () => {
     await rerender({ shouldStartOnCancel: true });
 
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel' }));
+  });
+
+  it('when a focused button in the content goes away, focus moves to the header close and esc still closes', async () => {
+    const { onClose } = renderFrame({
+      children: RESTORE_BUTTONS,
+      cancelLabel: undefined,
+      primary: undefined,
+      isInformational: true,
+    });
+    const restorePlan = screen.getByRole('button', { name: 'Restore Plan' });
+    restorePlan.focus();
+
+    restorePlan.closest('li')?.remove();
+    await nextTask();
+    await userEvent.keyboard('{Escape}');
+
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Close' }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('a button in the content that goes away while another control has focus leaves focus there', async () => {
+    renderFrame({
+      children: RESTORE_BUTTONS,
+      cancelLabel: undefined,
+      primary: undefined,
+      isInformational: true,
+    });
+    const restoreIdeas = screen.getByRole('button', { name: 'Restore Ideas' });
+    restoreIdeas.focus();
+
+    screen.getByRole('button', { name: 'Restore Plan' }).closest('li')?.remove();
+    await nextTask();
+
+    expect(document.activeElement).toBe(restoreIdeas);
   });
 
   it('contrast theme backdrop: forced colours draw a solid system backdrop with no blur and a visible border', () => {

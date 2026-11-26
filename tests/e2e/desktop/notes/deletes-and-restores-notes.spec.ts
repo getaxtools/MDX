@@ -84,7 +84,8 @@ describe('the Notes trash', () => {
     expect(await trash.$$('button').map(async (button) => button.getAttribute('aria-label'))).toEqual([
       'Close',
     ]);
-    await trash.$('button[aria-label="Close"]').click();
+    expect(await app.browser.execute(() => document.activeElement?.getAttribute('aria-label'))).toBe('Close');
+    await mainWindow.pressShortcut('Escape');
     await trash.waitForExist({ reverse: true });
   });
 });

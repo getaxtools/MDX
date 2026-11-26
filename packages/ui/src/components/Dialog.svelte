@@ -63,7 +63,6 @@
   let isClosing = $state(false);
   let isMounted = false;
   let wasWarning: boolean | undefined;
-  const isPrimaryShown = $derived(primary !== undefined);
 
   $effect(() => {
     if (!isSharedFrame) closeButton?.focus();
@@ -75,15 +74,16 @@
     wasWarning = isWarning;
   });
 
-  $effect(() => {
-    if (!isPrimaryShown && isMounted) refocusIfLost();
-  });
-
   onMount(() => {
     isMounted = true;
-    if (isSharedFrame) focusInitialControl();
+    const removalWatcher = new MutationObserver(refocusIfLost);
+    if (isSharedFrame && dialogElement) {
+      focusInitialControl();
+      removalWatcher.observe(dialogElement, { childList: true, subtree: true });
+    }
     return () => {
       isMounted = false;
+      removalWatcher.disconnect();
       if (isSharedFrame) returnFocusToOpener();
     };
   });
@@ -126,7 +126,7 @@
     (initial ?? headerCloseButton ?? dialogElement)?.focus();
   }
 
-  // A focused button that is removed leaves focus on the page, where Escape no longer reaches the dialog.
+  // A focused control that is removed leaves focus on the page, where Escape no longer reaches the dialog.
   function refocusIfLost() {
     const active = globalThis.document.activeElement;
     if (active && active !== globalThis.document.body) return;
