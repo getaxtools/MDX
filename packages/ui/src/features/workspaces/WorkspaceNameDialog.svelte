@@ -15,6 +15,7 @@
   import Dialog from '../../components/Dialog.svelte';
   import { kindNameOf } from '../control-wheel/kindPresentation';
   import KindIcon from '../control-wheel/KindIcon.svelte';
+  import NewWorkspacePreview from './NewWorkspacePreview.svelte';
   import NotesLocationStep from './NotesLocationStep.svelte';
   import type { NotesSetup } from './WorkspaceActions';
   import { nameProblemMessage, type WorkspaceDetails } from './workspaceCommands';
@@ -114,6 +115,9 @@
   {onClose}
 >
   <div class="fields">
+    {#if hasAppearanceChoices}
+      <NewWorkspacePreview {name} {kindId} {icon} {colour} {translator} />
+    {/if}
     <label for="workspace-name">{translator.translate('workspaces.dialog.name')}</label>
     <input
       bind:this={input}

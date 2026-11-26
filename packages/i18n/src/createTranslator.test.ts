@@ -36,6 +36,7 @@ const SAMPLE_VALUES = {
   matches: 3,
   documents: 2,
   kind: 'Notes',
+  keeps: 'a notes folder, favourites and tabs',
   turnedOffKind: 'Spec viewer',
   keys: 'Ctrl+S',
   words: 120,

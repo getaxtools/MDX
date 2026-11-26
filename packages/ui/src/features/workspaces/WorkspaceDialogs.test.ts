@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { WorkspaceDialog } from './WorkspaceActions';
 import WorkspaceDialogs from './WorkspaceDialogs.svelte';
+import { WORKSPACE_ICON_PATHS } from './workspacePresentation';
 
 const ALL_KINDS_BUILT = workspaceKindsFor({ allowsPlannedKindPreview: true });
 
@@ -191,6 +192,45 @@ describe('workspace dialogs', () => {
     ]);
   });
 
+  it('the tile follows icon, colour and name', async () => {
+    renderDialog('newWorkspace');
+    const preview = screen.getByRole('group', { name: 'Preview' });
+    const tile = preview.querySelector<HTMLElement>('.tile');
+
+    await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Handbook');
+    await userEvent.click(screen.getByRole('radio', { name: 'Book' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Blue' }));
+
+    expect(within(preview).getByText('Handbook')).toBeTruthy();
+    expect(tile?.style.background).toBe('rgb(59, 111, 216)');
+    expect([...(tile?.querySelectorAll('path') ?? [])].map((path) => path.getAttribute('d'))).toEqual(
+      WORKSPACE_ICON_PATHS.book,
+    );
+  });
+
+  it('the summary follows the chosen kind', async () => {
+    renderDialog('newWorkspace', ['markdownViewer', 'notes']);
+    const preview = screen.getByRole('group', { name: 'Preview' });
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Kind' }), 'notes');
+
+    expect(within(preview).getByText('Notes - a notes folder, favourites and tabs')).toBeTruthy();
+  });
+
+  it('changes do not move focus or announce', async () => {
+    renderDialog('newWorkspace');
+    const preview = screen.getByRole('group', { name: 'Preview' });
+    const teal = screen.getByRole('radio', { name: 'Teal' });
+
+    await userEvent.click(teal);
+    expect(document.activeElement).toBe(teal);
+    await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Reading');
+
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Name' }));
+    expect(preview.closest('[aria-live]')).toBeNull();
+    expect(preview.querySelector('[aria-live], [role="status"], [role="alert"]')).toBeNull();
+  });
+
   it('offers the folder step only for a Markdown viewer workspace', async () => {
     renderDialog('newWorkspace', ['markdownViewer', 'notes']);
     const folderStep = () =>
@@ -203,9 +243,10 @@ describe('workspace dialogs', () => {
     expect(folderStep()).toBeNull();
   });
 
-  it('rename offers no icon, colour or folder step', () => {
+  it('rename offers no preview, icon, colour or folder step', () => {
     renderDialog('renameWorkspace');
 
+    expect(screen.queryByRole('group', { name: 'Preview' })).toBeNull();
     expect(screen.queryByRole('group', { name: 'Colour' })).toBeNull();
     expect(screen.queryByRole('checkbox')).toBeNull();
   });
