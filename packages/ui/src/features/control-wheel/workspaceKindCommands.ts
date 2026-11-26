@@ -1,4 +1,4 @@
-import type { WorkspaceKindsState } from '@mdx/core';
+import type { WorkspaceKindId, WorkspaceKindsState } from '@mdx/core';
 import type { MessageKey, Translator } from '@mdx/i18n';
 import { kindNameOf } from './kindPresentation';
 
@@ -31,16 +31,14 @@ export function applyWorkspaceKindCommand(
   return disableKind(state, command.kindId, translator);
 }
 
+export function kindShownNoticeOf(kindId: WorkspaceKindId, translator: Translator): WorkspaceKindNotice {
+  return { key: 'workspaceKinds.notice.shown', values: { kind: kindNameOf(kindId, translator) } };
+}
+
 function switchKind(state: WorkspaceKindsState, kindId: string, translator: Translator): WorkspaceKindChange {
   const switched = state.switchKind(kindId);
   if (switched === state) return { state };
-  return {
-    state: switched,
-    notice: {
-      key: 'workspaceKinds.notice.shown',
-      values: { kind: kindNameOf(switched.activeKindId(), translator) },
-    },
-  };
+  return { state: switched, notice: kindShownNoticeOf(switched.activeKindId(), translator) };
 }
 
 function disableKind(

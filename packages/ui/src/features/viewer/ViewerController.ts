@@ -70,7 +70,11 @@ import {
   type NotesMovePort,
 } from '@mdx/platform';
 import type { MarkdownRenderer, OutlineEntry, RenderOptions, ResourceUrlResolver } from '@mdx/renderer';
-import { applyWorkspaceKindCommand, type WorkspaceKindCommand } from '../control-wheel/workspaceKindCommands';
+import {
+  applyWorkspaceKindCommand,
+  kindShownNoticeOf,
+  type WorkspaceKindCommand,
+} from '../control-wheel/workspaceKindCommands';
 import type { DocumentLink } from '../document-view/DocumentLink';
 import {
   PropertyEditing,
@@ -1843,6 +1847,9 @@ export class ViewerController {
         : undefined;
     if (kindWorkspace && kindWorkspace.id !== session.shownWorkspace()?.id) {
       await this.workspaceActions.run({ kind: 'switchWorkspace', workspaceId: kindWorkspace.id });
+      if (session.shownWorkspace()?.id !== kindWorkspace.id) return;
+      const notice = kindShownNoticeOf(session.currentState().workspaceKinds.activeKindId(), translator);
+      this.showNotice(notice.key, notice.values);
       return;
     }
     const current = session.currentState().workspaceKinds;

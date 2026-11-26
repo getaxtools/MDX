@@ -49,6 +49,25 @@ async function startViewer(startupPaths: readonly string[] = [GUIDE]) {
   return { controller, session, snapshot, tabNames };
 }
 
+/** Shows Default, with a notes workspace Journal shown last of its kind. */
+async function startViewerWithJournal() {
+  const viewer = await startViewer();
+  viewer.session.updateWorkspaceKinds(() =>
+    WorkspaceKindsState.fromSaved(
+      { enabledKindIds: ['markdownViewer', 'notes'], activeKindId: 'markdownViewer' },
+      ALL_KINDS_BUILT,
+    ),
+  );
+  await viewer.controller.execute({
+    kind: 'createWorkspace',
+    name: 'Journal',
+    kindId: 'notes',
+    notesLocationPath: 'C:\\Users\\Ana\\Documents\\MDX Notes',
+  });
+  await viewer.controller.execute({ kind: 'switchWorkspaceKind', kindId: 'markdownViewer' });
+  return viewer;
+}
+
 describe('workspace actions', () => {
   it('creates a workspace from the palette, switches to it and back', async () => {
     const { controller, snapshot, tabNames } = await startViewer();
@@ -150,6 +169,28 @@ describe('workspace actions', () => {
 
     expect(snapshot().workspaces?.shownWorkspaceId).toBe('workspace-1');
     expect(snapshot().viewer.workspaceKinds.activeKindId()).toBe('notes');
+  });
+
+  it('choosing a kind that opens its last workspace announces the kind', async () => {
+    const { controller, snapshot } = await startViewerWithJournal();
+
+    await controller.execute({ kind: 'switchWorkspaceKind', kindId: 'notes' });
+
+    expect(snapshot().workspaces?.shownWorkspaceId).toBe('workspace-1');
+    expect(snapshot().notice).toBe('Showing Notes.');
+  });
+
+  it('choosing a kind and cancelling at the unsaved edits announces nothing', async () => {
+    const { controller, snapshot } = await startViewerWithJournal();
+    await controller.execute({ kind: 'toggleEditing' });
+    controller.updateEditedText(snapshot().activeDocument?.canonicalKey ?? '', '# Changed');
+
+    const switching = controller.execute({ kind: 'switchWorkspaceKind', kindId: 'notes' });
+    await controller.answerUnsavedChanges('cancel');
+    await switching;
+
+    expect(snapshot().workspaces?.shownWorkspaceId).toBe('default');
+    expect(snapshot().notice).not.toBe('Showing Notes.');
   });
 
   it('lists New, Rename, Delete and the other workspaces in the palette', async () => {
