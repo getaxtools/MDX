@@ -1,7 +1,12 @@
 import { createTranslator } from '@mdx/i18n';
 import type { CodeHighlighter } from '@mdx/renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { COPY_FEEDBACK_MS, enhanceCodeBlocks, type CodeBlockOptions } from './enhanceCodeBlocks';
+import {
+  COPY_FEEDBACK_MS,
+  enhanceCodeBlocks,
+  HIGHLIGHT_BATCH_MS,
+  type CodeBlockOptions,
+} from './enhanceCodeBlocks';
 
 const KEYWORD = {
   text: 'const',
@@ -97,6 +102,62 @@ describe('enhanceCodeBlocks', () => {
     vi.advanceTimersByTime(COPY_FEEDBACK_MS);
 
     expect(button?.textContent).toBe('Copy');
+  });
+
+  it('puts highlighted code in place in batches, so a long document is laid out once per batch', async () => {
+    vi.useFakeTimers({ toFake: ['performance'] });
+    const article = articleWith('<pre><code class="language-ts">a</code></pre>'.repeat(6));
+    const highlightedWhenAsked: number[] = [];
+    const highlighter: CodeHighlighter = {
+      highlight: () => {
+        highlightedWhenAsked.push(article.querySelectorAll('code.highlighted').length);
+        vi.advanceTimersByTime(HIGHLIGHT_BATCH_MS / 2);
+        return Promise.resolve([[KEYWORD, PLAIN]]);
+      },
+    };
+
+    await enhanceCodeBlocks(article, options({ highlighter }));
+
+    expect(highlightedWhenAsked).toEqual([0, 0, 0, 3, 3, 3]);
+    expect(article.querySelectorAll('code.highlighted')).toHaveLength(6);
+  });
+
+  it('keeps batches full when laying out the last batch takes longer than a batch', async () => {
+    vi.useFakeTimers({ toFake: ['performance'] });
+    const article = articleWith('<pre><code class="language-ts">a</code></pre>'.repeat(12));
+    const highlightedWhenAsked: number[] = [];
+    const highlighter: CodeHighlighter = {
+      highlight: () => {
+        const highlighted = article.querySelectorAll('code.highlighted').length;
+        const wasJustLaidOut = highlighted !== (highlightedWhenAsked.at(-1) ?? 0);
+        highlightedWhenAsked.push(highlighted);
+        vi.advanceTimersByTime(wasJustLaidOut ? HIGHLIGHT_BATCH_MS * 4 : HIGHLIGHT_BATCH_MS / 5);
+        return Promise.resolve([[KEYWORD, PLAIN]]);
+      },
+    };
+
+    await enhanceCodeBlocks(article, options({ highlighter }));
+
+    expect(highlightedWhenAsked).toEqual([0, 0, 0, 0, 0, 0, 6, 6, 6, 6, 6, 6]);
+  });
+
+  it('leaves a batch out when another document was shown before it was put in place', async () => {
+    vi.useFakeTimers({ toFake: ['performance'] });
+    const article = articleWith('<pre><code class="language-ts">a</code></pre>'.repeat(4));
+    let isShown = true;
+    let asked = 0;
+    const highlighter: CodeHighlighter = {
+      highlight: () => {
+        asked += 1;
+        if (asked === 4) isShown = false;
+        vi.advanceTimersByTime(HIGHLIGHT_BATCH_MS / 2);
+        return Promise.resolve([[KEYWORD, PLAIN]]);
+      },
+    };
+
+    await enhanceCodeBlocks(article, options({ highlighter, isStillShown: () => isShown }));
+
+    expect(article.querySelectorAll('code.highlighted')).toHaveLength(3);
   });
 
   it('adds only one copy button when run again on the same blocks', async () => {
