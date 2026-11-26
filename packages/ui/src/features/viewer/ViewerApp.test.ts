@@ -532,7 +532,8 @@ describe('ViewerApp', () => {
     await screen.findByRole('article', { name: 'Guide.md' });
 
     await userEvent.keyboard('{Control>}={/Control}');
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Theme' }), 'Dark');
+    await userEvent.click(screen.getByRole('button', { name: 'Theme' }));
+    await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Dark' }));
 
     expect(screen.getByRole('button', { name: 'Zoom 110%, reset' })).toBeTruthy();
     expect(document.documentElement.dataset.theme).toBe('dark');

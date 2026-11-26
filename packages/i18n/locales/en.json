@@ -252,6 +252,8 @@
   "document.openExternalLink.title": "Open link in your browser?",
   "document.openExternalLink.body": "This will open {url} in your default browser.",
   "view.options.label": "View options",
+  "view.options.textWidth": "Text Width",
+  "view.options.documentStyle": "Document Style",
   "document.openExternalLink.open": "Open",
   "document.openExternalLink.cancel": "Cancel",
   "shortcuts.column.action": "Action",

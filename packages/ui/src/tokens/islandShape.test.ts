@@ -59,11 +59,11 @@ describe('island shape', () => {
     expect(button).toMatch(/height: var\(--island-button-size\);/);
   });
 
-  it('the view options draw their lists from the island tokens', () => {
-    const lists = declarationsOf('select', VIEW_OPTIONS_STYLES);
+  it('the view options draw their menu buttons from the island tokens', () => {
+    const menuButton = declarationsOf('button', VIEW_OPTIONS_STYLES);
 
-    expect(lists).toMatch(/border-radius: var\(--island-button-radius\);/);
-    expect(lists).toMatch(/height: var\(--island-button-size\);/);
+    expect(menuButton).toMatch(/border-radius: var\(--island-button-radius\);/);
+    expect(menuButton).toMatch(/height: var\(--island-button-size\);/);
   });
 
   it('pressed state not by colour alone: a pressed button changes its fill and its border, and in a contrast theme uses the system highlight', () => {
