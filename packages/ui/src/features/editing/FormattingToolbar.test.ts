@@ -55,6 +55,42 @@ describe('FormattingToolbar', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Rich text' }));
   });
 
+  it('leaves arrow keys with alt, ctrl or meta to the app shortcuts', () => {
+    renderToolbar();
+    const italicButton = screen.getByRole('button', { name: 'Italic' });
+    italicButton.focus();
+
+    const presses = ['altKey', 'ctrlKey', 'metaKey'].map((modifier) => {
+      const press = new KeyboardEvent('keydown', {
+        key: 'ArrowLeft',
+        bubbles: true,
+        cancelable: true,
+        [modifier]: true,
+      });
+      italicButton.dispatchEvent(press);
+      return press;
+    });
+
+    expect(presses.map((press) => press.defaultPrevented)).toEqual([false, false, false]);
+    expect(document.activeElement).toBe(italicButton);
+  });
+
+  it("leaves home and a menu button's down arrow with ctrl to the app shortcuts", () => {
+    renderToolbar();
+    const headingButton = screen.getByRole('button', { name: /^Text style/ });
+    headingButton.focus();
+
+    const presses = ['Home', 'ArrowDown'].map((key) => {
+      const press = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ctrlKey: true });
+      headingButton.dispatchEvent(press);
+      return press;
+    });
+
+    expect(presses.map((press) => press.defaultPrevented)).toEqual([false, false]);
+    expect(document.activeElement).toBe(headingButton);
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
   it('Escape returns focus to the editor with its selection', async () => {
     const { onReturnToEditor } = renderToolbar();
     screen.getByRole('button', { name: 'Bold' }).focus();

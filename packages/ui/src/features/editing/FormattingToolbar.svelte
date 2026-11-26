@@ -58,6 +58,10 @@
     return toolbar ? [...toolbar.querySelectorAll<HTMLElement>('[data-toolbox-control]')] : [];
   }
 
+  function hasCommandModifier(event: KeyboardEvent): boolean {
+    return event.ctrlKey || event.altKey || event.metaKey;
+  }
+
   function moveFocus(event: KeyboardEvent) {
     if (event.isComposing) return;
     if (event.key === 'Escape') {
@@ -65,6 +69,7 @@
       onReturnToEditor();
       return;
     }
+    if (hasCommandModifier(event)) return;
     const all = controls();
     const index = event.target instanceof HTMLElement ? all.indexOf(event.target) : -1;
     const isRightToLeft = toolbar ? globalThis.getComputedStyle(toolbar).direction === 'rtl' : false;
@@ -97,7 +102,7 @@
   }
 
   function openMenuWithDown(event: KeyboardEvent, items: ContextMenuItem<MenuChoice>[]) {
-    if (event.key !== 'ArrowDown' || event.isComposing) return;
+    if (event.key !== 'ArrowDown' || event.isComposing || hasCommandModifier(event)) return;
     event.preventDefault();
     openMenu(event, items);
   }
