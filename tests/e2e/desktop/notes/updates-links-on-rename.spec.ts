@@ -72,10 +72,7 @@ describe('links follow a renamed note', () => {
 
   it('rename with preview, then undo restores names and links', async () => {
     await (await mainWindow.treeItem('notes.tree.title', 'Draft')).click();
-    const backlinks = app.browser.$('#note-backlinks-heading');
-    await app.browser.waitUntil(async () => (await backlinks.getText()) === 'Linked from 3 notes', {
-      timeout: INDEX_WAIT_MS,
-    });
+    await mainWindow.waitForBacklinksHeading('Linked from 3 notes', INDEX_WAIT_MS);
 
     await mainWindow.pressKeyOn(await mainWindow.treeItem('notes.tree.title', 'Draft'), 'F2');
     const renameInput = app.browser.$('input[aria-label="New name for Draft"]');

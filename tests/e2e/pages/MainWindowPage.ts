@@ -108,6 +108,14 @@ export class MainWindowPage {
     );
   }
 
+  async waitForBacklinksHeading(expectedHeading: string, timeoutMs: number): Promise<void> {
+    const heading = this.browser.$('.backlinks > h2');
+    await this.browser.waitUntil(async () => (await heading.getText()) === expectedHeading, {
+      timeout: timeoutMs,
+      timeoutMsg: `The backlinks heading never became "${expectedHeading}"`,
+    });
+  }
+
   async documentText(): Promise<string> {
     return this.browser.$('main article').getText();
   }

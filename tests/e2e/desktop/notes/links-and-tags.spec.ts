@@ -70,18 +70,13 @@ describe('backlinks and tags', () => {
 
   it('a link added by another program appears within 3 seconds', async () => {
     await (await mainWindow.treeItem('notes.tree.title', 'Plan')).click();
-    const heading = app.browser.$('#note-backlinks-heading');
-    await app.browser.waitUntil(async () => (await heading.getText()) === 'Linked from no other note', {
-      timeout: INDEX_WAIT_MS,
-    });
+    await mainWindow.waitForBacklinksHeading('Linked from no other note', INDEX_WAIT_MS);
 
     writeFileSync(join(notesFolder, 'Inbox.md'), '# Inbox\n\nRead the [[Plan]] today.\n');
     expect(notesSnapshot.changedNotes()).toEqual(['Inbox.md']);
     notesSnapshot = NotesFolderSnapshot.take(notesFolder);
 
-    await app.browser.waitUntil(async () => (await heading.getText()) === 'Linked from 1 note', {
-      timeout: OUTSIDE_CHANGE_BUDGET_MS,
-    });
+    await mainWindow.waitForBacklinksHeading('Linked from 1 note', OUTSIDE_CHANGE_BUDGET_MS);
     expect(await app.browser.$('.backlinks button').getText()).toContain('Read the [[Plan]] today.');
     expect(await findAccessibilityViolations(app.browser)).toEqual([]);
   });

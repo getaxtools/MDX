@@ -38,4 +38,20 @@ describe('NoteBacklinks', () => {
 
     expect(screen.getByText('No other note links here yet.')).toBeTruthy();
   });
+
+  it('two backlinks sections are each named by their own heading', () => {
+    const translator = createTranslator();
+    render(NoteBacklinks, { backlinks: [], noteName: 'Plan', translator, onCommand: vi.fn() });
+    render(NoteBacklinks, {
+      backlinks: [{ path: 'Inbox.md', lineNumber: 3, line: 'See [[Draft]] today.' }],
+      noteName: 'Draft',
+      translator,
+      onCommand: vi.fn(),
+    });
+
+    const sections = screen.getAllByRole('region');
+
+    expect(screen.getByRole('region', { name: 'Linked from no other note' })).toBe(sections[0]);
+    expect(screen.getByRole('region', { name: 'Linked from 1 note' })).toBe(sections[1]);
+  });
 });

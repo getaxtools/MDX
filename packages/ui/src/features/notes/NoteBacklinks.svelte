@@ -13,14 +13,15 @@
   }
 
   const { backlinks, noteName, translator, onCommand }: Props = $props();
+  const headingId = $props.id();
 
   function fileNameOf(path: string): string {
     return path.split('/').at(-1) ?? path;
   }
 </script>
 
-<section class="backlinks" aria-labelledby="note-backlinks-heading">
-  <h2 id="note-backlinks-heading">
+<section class="backlinks" aria-labelledby={headingId}>
+  <h2 id={headingId}>
     {translator.translate('notes.backlinks.title', { count: backlinks.length })}
   </h2>
   {#if backlinks.length === 0}
