@@ -23,7 +23,7 @@
     purpose?: string;
     primary?: PrimaryAction | undefined;
     closeTooltip?: string;
-    /** For a warning, so a stray Enter cannot take the step. */
+    /** For a warning: focus starts on Cancel and only pressing the primary takes the step, never Enter elsewhere. */
     shouldStartOnCancel?: boolean;
     /** A dialog with nothing to apply: the shared frame with only the header Close. */
     isInformational?: boolean;
@@ -129,7 +129,7 @@
   }
 
   function activatePrimaryOnEnter(event: KeyboardEvent) {
-    if (!primary || primary.isDisabled || !activatesPrimary(event)) return;
+    if (!primary || primary.isDisabled || shouldStartOnCancel || !activatesPrimary(event)) return;
     event.preventDefault();
     activatePrimary();
   }

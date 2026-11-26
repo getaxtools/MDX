@@ -236,6 +236,53 @@ describe('Dialog frame', () => {
     expect(onActivate).not.toHaveBeenCalled();
   });
 
+  it('a warning starts on cancel: enter in the body does not take the step', async () => {
+    const { onClose, onActivate } = renderFrame({ shouldStartOnCancel: true, children: MESSAGE_ONLY });
+
+    screen.getByRole('region', { name: 'Rename Workspace' }).focus();
+    await userEvent.keyboard('{Enter}');
+
+    expect(onActivate).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('a warning starts on cancel: enter on the dialog itself does not take the step', async () => {
+    const { onClose, onActivate } = renderFrame({ shouldStartOnCancel: true, children: MESSAGE_ONLY });
+
+    screen.getByRole('dialog').focus();
+    await userEvent.keyboard('{Enter}');
+
+    expect(onActivate).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('a warning starts on cancel: enter in a field does not take the step', async () => {
+    const { onActivate } = renderFrame({ shouldStartOnCancel: true });
+
+    screen.getByRole('textbox', { name: 'Name' }).focus();
+    await userEvent.keyboard('{Enter}');
+
+    expect(onActivate).not.toHaveBeenCalled();
+  });
+
+  it('a warning starts on cancel: ctrl+enter in a multi-line field does not take the step', async () => {
+    const { onActivate } = renderFrame({ shouldStartOnCancel: true, children: NOTES_FIELD });
+
+    screen.getByRole('textbox', { name: 'Notes' }).focus();
+    await userEvent.keyboard('{Control>}{Enter}{/Control}');
+
+    expect(onActivate).not.toHaveBeenCalled();
+  });
+
+  it('a warning starts on cancel: the primary still takes the step when it is pressed', async () => {
+    const { onActivate } = renderFrame({ shouldStartOnCancel: true });
+
+    screen.getByRole('button', { name: 'Rename' }).focus();
+    await userEvent.keyboard('{Enter}');
+
+    expect(onActivate).toHaveBeenCalledOnce();
+  });
+
   it('contrast theme backdrop: forced colours draw a solid system backdrop with no blur and a visible border', () => {
     const styles = readFileSync(join(import.meta.dirname, 'Dialog.svelte'), 'utf8');
     const forcedColours = /@media \(forced-colors: active\) \{([\s\S]*?)\n {2}\}/.exec(styles)?.[1] ?? '';
