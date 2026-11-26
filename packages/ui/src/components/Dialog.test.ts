@@ -422,6 +422,43 @@ describe('Dialog frame', () => {
     expect(fadeOut).not.toMatch(/transform|scale|translate/);
   });
 
+  it('an informational dialog has the shared frame with only the header close, focused first', () => {
+    render(Dialog, {
+      title: 'About MDX',
+      closeLabel: 'Close',
+      closeTooltip: 'Close (Esc)',
+      isInformational: true,
+      onClose: vi.fn(),
+      children: MESSAGE_ONLY,
+    });
+    const close = screen.getByRole('button', { name: 'Close' });
+
+    expect(screen.getAllByRole('button')).toEqual([close]);
+    expect(close.closest('header')).not.toBeNull();
+    expect(screen.getByRole('dialog').lastElementChild).toBe(
+      screen.getByRole('region', { name: 'About MDX' }),
+    );
+    expect(close.title).toBe('Close (Esc)');
+    expect(document.activeElement).toBe(close);
+  });
+
+  it('an informational dialog closes with esc and returns focus to the opener', async () => {
+    const opener = focusOpener();
+    const onClose = vi.fn(() => view.unmount());
+    const view = render(Dialog, {
+      title: 'About MDX',
+      closeLabel: 'Close',
+      isInformational: true,
+      onClose,
+      children: MESSAGE_ONLY,
+    });
+
+    await userEvent.keyboard('{Escape}');
+
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(document.activeElement).toBe(opener);
+  });
+
   it('keeps the earlier layout with one close button when no cancel label is given', () => {
     render(Dialog, { title: 'About MDX', closeLabel: 'Close', onClose: vi.fn(), children: NAME_FIELD });
 

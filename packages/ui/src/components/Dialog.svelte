@@ -25,6 +25,8 @@
     closeTooltip?: string;
     /** For a warning, so a stray Enter cannot take the step. */
     shouldStartOnCancel?: boolean;
+    /** A dialog with nothing to apply: the shared frame with only the header Close. */
+    isInformational?: boolean;
   }
 
   const {
@@ -39,15 +41,20 @@
     primary,
     closeTooltip,
     shouldStartOnCancel = false,
+    isInformational = false,
   }: Props = $props();
 
-  const isSharedFrame = $derived(cancelLabel !== undefined);
+  const isSharedFrame = $derived(cancelLabel !== undefined || isInformational);
+  const hasActions = $derived(
+    !isSharedFrame || footer !== undefined || cancelLabel !== undefined || primary !== undefined,
+  );
   const opener = globalThis.document.activeElement;
 
   let backdropElement: HTMLDivElement | undefined = $state();
   let dialogElement: HTMLDivElement | undefined = $state();
   let contentElement: HTMLDivElement | undefined = $state();
   let closeButton: HTMLButtonElement | undefined = $state();
+  let headerCloseButton: HTMLButtonElement | undefined = $state();
   let cancelButton: HTMLButtonElement | undefined = $state();
   let primaryButton: HTMLButtonElement | undefined = $state();
   let isClosing = $state(false);
@@ -101,7 +108,7 @@
     const field = contentElement ? firstFieldIn(contentElement) : undefined;
     const enabledPrimary = primary?.isDisabled ? undefined : primaryButton;
     const initial = shouldStartOnCancel ? cancelButton : (field ?? enabledPrimary ?? cancelButton);
-    (initial ?? dialogElement)?.focus();
+    (initial ?? headerCloseButton ?? dialogElement)?.focus();
   }
 
   function returnFocusToOpener() {
@@ -185,7 +192,13 @@
           {#if purpose}<p id="dialog-purpose" class="purpose">{purpose}</p>{/if}
         </div>
         {#if canClose}
-          <button class="close" aria-label={closeLabel} title={closeTooltip ?? closeLabel} onclick={close}>
+          <button
+            bind:this={headerCloseButton}
+            class="close"
+            aria-label={closeLabel}
+            title={closeTooltip ?? closeLabel}
+            onclick={close}
+          >
             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
               <path d="M4 4l8 8M12 4l-8 8" />
             </svg>
@@ -200,24 +213,26 @@
     <div bind:this={contentElement} class="content" role="region" aria-labelledby="dialog-title" tabindex="0">
       {@render children()}
     </div>
-    <div class="actions">
-      {@render footer?.()}
-      {#if isSharedFrame}
-        {#if canClose}
-          <button bind:this={cancelButton} class="quiet" onclick={close}>{cancelLabel}</button>
+    {#if hasActions}
+      <div class="actions">
+        {@render footer?.()}
+        {#if isSharedFrame}
+          {#if canClose && cancelLabel !== undefined}
+            <button bind:this={cancelButton} class="quiet" onclick={close}>{cancelLabel}</button>
+          {/if}
+          {#if primary}
+            <button
+              bind:this={primaryButton}
+              class="primary"
+              disabled={primary.isDisabled}
+              onclick={activatePrimary}>{primary.label}</button
+            >
+          {/if}
+        {:else if canClose}
+          <button bind:this={closeButton} onclick={onClose}>{closeLabel}</button>
         {/if}
-        {#if primary}
-          <button
-            bind:this={primaryButton}
-            class="primary"
-            disabled={primary.isDisabled}
-            onclick={activatePrimary}>{primary.label}</button
-          >
-        {/if}
-      {:else if canClose}
-        <button bind:this={closeButton} onclick={onClose}>{closeLabel}</button>
-      {/if}
-    </div>
+      </div>
+    {/if}
   </div>
 </div>
 

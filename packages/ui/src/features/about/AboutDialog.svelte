@@ -29,6 +29,8 @@
 <Dialog
   title={translator.translate('about.title')}
   closeLabel={translator.translate('about.close')}
+  closeTooltip={translator.translate('dialog.close.tooltip')}
+  isInformational
   {onClose}
 >
   <p>

@@ -118,6 +118,7 @@
   "about.licenses.filter": "Filter packages by name",
   "about.licenses.noText": "This package ships no license file; it is licensed under {license}.",
   "about.close": "Close",
+  "dialog.close.tooltip": "Close (Esc)",
   "document.remoteImageBlocked": "Remote image not loaded: {url}",
   "document.emptyState": "Open a Markdown document to get started (Ctrl+O), or drop one here.",
   "document.contextMenu.label": "Document actions",
