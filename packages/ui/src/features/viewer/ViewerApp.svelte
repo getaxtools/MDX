@@ -900,6 +900,7 @@
   />
   {#if snapshot.externalLinkRequest !== undefined}
     <ConfirmDialog
+      {translator}
       title={translator.translate('document.openExternalLink.title')}
       message={translator.translate('document.openExternalLink.body', { url: snapshot.externalLinkRequest })}
       confirmLabel={translator.translate('document.openExternalLink.open')}
@@ -910,6 +911,7 @@
   {/if}
   {#if snapshot.outsideLinkRequest !== undefined}
     <ConfirmDialog
+      {translator}
       title={translator.translate('specViewer.outsideLink.title')}
       message={translator.translate('specViewer.outsideLink.body', {
         path: snapshot.outsideLinkRequest.targetPath,
@@ -1052,6 +1054,7 @@
   {/if}
   {#if snapshot.protectedNotes?.isAskingToLock}
     <ConfirmDialog
+      {translator}
       title={translator.translate('protectedNotes.lock.unsavedTitle')}
       message={translator.translate('protectedNotes.lock.unsavedMessage')}
       confirmLabel={translator.translate('protectedNotes.lock.lockAnyway')}
@@ -1069,6 +1072,7 @@
   {/if}
   {#if snapshot.openDialog === 'protectedPrintWarning'}
     <ConfirmDialog
+      {translator}
       title={translator.translate('protectedNotes.copyWarning.print.title')}
       message={translator.translate('protectedNotes.copyWarning.print.message')}
       confirmLabel={translator.translate('protectedNotes.copyWarning.print.confirm')}
@@ -1079,6 +1083,7 @@
   {/if}
   {#if snapshot.openDialog === 'protectedExportWarning'}
     <ConfirmDialog
+      {translator}
       title={translator.translate('protectedNotes.copyWarning.export.title')}
       message={translator.translate('protectedNotes.copyWarning.export.message')}
       confirmLabel={translator.translate('protectedNotes.copyWarning.export.confirm')}
@@ -1089,6 +1094,7 @@
   {/if}
   {#if snapshot.openDialog === 'clearAllData'}
     <ConfirmDialog
+      {translator}
       title={translator.translate('privacy.clearAllData.title')}
       message={translator.translate('privacy.clearAllData.message')}
       confirmLabel={translator.translate('privacy.clearAllData.confirm')}
@@ -1100,6 +1106,7 @@
   {#if snapshot.unsavedChanges}
     {@const fileNames = snapshot.unsavedChanges.fileNames}
     <ConfirmDialog
+      {translator}
       title={translator.translate('saving.unsavedDialog.title')}
       message={translator.translate('saving.unsavedDialog.message', {
         count: fileNames.length,

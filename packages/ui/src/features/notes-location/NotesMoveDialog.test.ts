@@ -8,6 +8,10 @@ import NotesMoveDialog from './NotesMoveDialog.svelte';
 
 const OLD_COPY = { locationId: 'location-1', path: 'C:\\Notes', fileCount: 1240, totalBytes: 3 * 1024 ** 2 };
 
+function buttonName(button: Element): string {
+  return button.getAttribute('aria-label') ?? button.textContent.trim();
+}
+
 function renderDialog(dialog: MoveDialog) {
   const onCommand = vi.fn<(command: ViewerCommand) => void>();
   render(NotesMoveDialog, { dialog, translator: createTranslator(), onCommand });
@@ -75,10 +79,11 @@ describe('NotesMoveDialog', () => {
 
     await userEvent.keyboard('{Enter}');
 
-    expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual([
-      'Resume',
+    expect(screen.getAllByRole('button').map(buttonName)).toEqual([
+      'Close',
       'Cancel Move',
       'Later',
+      'Resume',
     ]);
     expect(screen.getByRole('alertdialog').textContent).toContain(
       'The drive of the new folder is full. MDX stopped at Plan.md.',

@@ -18,6 +18,7 @@
 
 {#key dialog.kind}
   <ConfirmDialog
+    {translator}
     title={text.title}
     message={text.message}
     confirmLabel={text.confirm.label}

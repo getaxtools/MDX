@@ -15,7 +15,7 @@
     onClose: () => void;
     children: Snippet;
     /** More controls for the fixed footer, shown before the close button. */
-    footer?: Snippet;
+    footer?: Snippet | undefined;
     /** False while the dialog must be finished, not closed: it then has no close button and ignores Escape. */
     canClose?: boolean;
     /** Giving a Cancel label turns on the shared frame: header Close, quiet Cancel, one primary. */
@@ -30,6 +30,8 @@
     shouldStartOnCancel?: boolean;
     /** A dialog with nothing to apply: the shared frame with only the header Close. */
     isInformational?: boolean;
+    /** A question that interrupts: announced as an alert dialog and described by its body. */
+    isAlert?: boolean;
   }
 
   const {
@@ -45,15 +47,21 @@
     closeTooltip,
     shouldStartOnCancel = false,
     isInformational = false,
+    isAlert = false,
   }: Props = $props();
 
   const frameId = $props.id();
   const titleId = `${frameId}-title`;
   const purposeId = `${frameId}-purpose`;
+  const contentId = `${frameId}-content`;
   const isSharedFrame = $derived(cancelLabel !== undefined || isInformational);
   const hasActions = $derived(
     !isSharedFrame || footer !== undefined || cancelLabel !== undefined || primary !== undefined,
   );
+  const descriptionId = $derived.by(() => {
+    if (isSharedFrame && purpose) return purposeId;
+    return isAlert ? contentId : undefined;
+  });
   const opener = globalThis.document.activeElement;
 
   let backdropElement: HTMLDivElement | undefined = $state();
@@ -201,10 +209,10 @@
     class="dialog"
     class:shared-frame={isSharedFrame}
     class:closing={isClosing}
-    role="dialog"
+    role={isAlert ? 'alertdialog' : 'dialog'}
     aria-modal="true"
     aria-labelledby={titleId}
-    aria-describedby={isSharedFrame && purpose ? purposeId : undefined}
+    aria-describedby={descriptionId}
     tabindex="-1"
     onkeydowncapture={ignoreKeyPressWhileClosing}
     onkeyupcapture={ignoreKeyReleaseWhileClosing}
@@ -235,7 +243,14 @@
     {/if}
     <!-- Long content scrolls, so keyboard users must be able to focus it to scroll it (WCAG 2.1.1). -->
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-    <div bind:this={contentElement} class="content" role="region" aria-labelledby={titleId} tabindex="0">
+    <div
+      bind:this={contentElement}
+      id={contentId}
+      class="content"
+      role="region"
+      aria-labelledby={titleId}
+      tabindex="0"
+    >
       {@render children()}
     </div>
     {#if hasActions}
@@ -352,6 +367,8 @@
 
   .heading {
     flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   header h2 {

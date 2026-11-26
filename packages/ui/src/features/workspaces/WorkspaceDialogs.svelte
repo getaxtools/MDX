@@ -95,6 +95,7 @@
   />
 {:else if dialog === 'deleteWorkspace' && shown}
   <ConfirmDialog
+    {translator}
     title={translator.translate('workspaces.deleteDialog.title', {
       name: workspaceNameOf(shown, translator),
     })}

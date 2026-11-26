@@ -97,6 +97,17 @@ describe('Dialog frame', () => {
     expect(within(deletion).getByRole('region', { name: 'Delete Workspace' })).toBeTruthy();
   });
 
+  it('a question is announced as an alert dialog and described by its body', () => {
+    renderFrame({ title: 'Delete Workspace?', purpose: undefined, children: MESSAGE_ONLY, isAlert: true });
+
+    const question = screen.getByRole('alertdialog', { name: 'Delete Workspace?' });
+
+    expect(document.getElementById(question.getAttribute('aria-describedby') ?? '')?.textContent).toBe(
+      'The workspace has no open documents.',
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
   it('focus starts in the first field and enter activates the primary', async () => {
     const { onActivate, onClose } = renderFrame();
 
@@ -393,6 +404,15 @@ describe('Dialog frame', () => {
     await nextTask();
 
     expect(document.activeElement).toBe(restoreIdeas);
+  });
+
+  it('a long title or purpose with a name or path wraps inside the header beside the close', () => {
+    const styles = readFileSync(join(import.meta.dirname, 'Dialog.svelte'), 'utf8');
+
+    const heading = /\n {2}\.heading \{([^}]*)\}/.exec(styles)?.[1] ?? '';
+
+    expect(heading).toMatch(/min-width: 0;/);
+    expect(heading).toMatch(/overflow-wrap: anywhere;/);
   });
 
   it('contrast theme backdrop: forced colours draw a solid system backdrop with no blur and a visible border', () => {

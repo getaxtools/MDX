@@ -13,6 +13,7 @@ const THEMES = [
 ] as const;
 
 const WORKSPACE_FILE = 'handbook.mdxworkspace';
+const FRAME = '[aria-modal="true"][aria-labelledby]';
 
 interface OpeningContext {
   readonly browser: WebdriverIO.Browser;
@@ -32,7 +33,7 @@ async function runCommand(mainWindow: MainWindowPage, search: string, option: st
 }
 
 function isFocusInsideFrame(): boolean {
-  const frame = document.querySelector('[role="dialog"][aria-labelledby]');
+  const frame = document.querySelector('[aria-modal="true"][aria-labelledby]');
   return frame?.contains(document.activeElement) ?? false;
 }
 
@@ -60,6 +61,10 @@ const DIALOGS: readonly DialogOpening[] = [
   {
     name: 'Rename workspace',
     open: async ({ mainWindow }) => runCommand(mainWindow, '>rename workspace', 'Rename Workspace…'),
+  },
+  {
+    name: 'Clear All Data question',
+    open: async ({ mainWindow }) => runCommand(mainWindow, '>clear all data', 'Clear All Data…'),
   },
 ];
 
@@ -117,7 +122,7 @@ describe('Dialogs share one frame', () => {
       );
       for (const dialog of dialogs) {
         await dialog.open({ browser: app.browser, mainWindow, workspace });
-        const frame = app.browser.$('[role="dialog"][aria-labelledby]');
+        const frame = app.browser.$(FRAME);
         await frame.waitForDisplayed();
         const close = frame.$('header button[aria-label="Close"]');
         const context = `${dialog.name} in ${theme.label}`;

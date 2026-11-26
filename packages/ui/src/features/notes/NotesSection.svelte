@@ -307,6 +307,7 @@
 {#if deletingNode}
   {@const node = deletingNode}
   <ConfirmDialog
+    {translator}
     title={translator.translate('notes.trash.confirmTitle', { name: node.name })}
     message={translator.translate(
       node.folder ? 'notes.trash.confirmWithChildren' : 'notes.trash.confirmMessage',
