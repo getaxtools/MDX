@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { createRawSnippet } from 'svelte';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import Dialog from './Dialog.svelte';
+import { CLOSE_FALLBACK_MS } from './dialogClosing';
 
 const NAME_FIELD = createRawSnippet(() => ({ render: () => '<label>Name <input /></label>' }));
 const NOTES_FIELD = createRawSnippet(() => ({ render: () => '<label>Notes <textarea></textarea></label>' }));
@@ -36,6 +37,27 @@ function focusOpener(): HTMLButtonElement {
   onTestFinished(() => opener.remove());
   opener.focus();
   return opener;
+}
+
+/** jsdom runs no CSS animations, so this stands in for the exit fade until the returned function ends it. */
+function holdExitFade(): () => void {
+  let endFade: (() => void) | undefined;
+  const finished = new Promise<void>((resolve) => {
+    endFade = resolve;
+  });
+  Object.defineProperty(HTMLElement.prototype, 'getAnimations', {
+    configurable: true,
+    value: () => [{ finished }],
+  });
+  onTestFinished(() => {
+    Reflect.deleteProperty(HTMLElement.prototype, 'getAnimations');
+  });
+  return () => endFade?.();
+}
+
+/** Lets every promise callback queued so far run first. */
+async function nextTask(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 function buttonName(button: Element): string {
@@ -222,6 +244,182 @@ describe('Dialog frame', () => {
       /\.backdrop\.shared-frame \{[^}]*backdrop-filter: none;[^}]*background: Canvas;/,
     );
     expect(forcedColours).toMatch(/\.dialog\.shared-frame \{[^}]*border-color: CanvasText;/);
+  });
+
+  it('sheet opens and closes: the close waits for the exit fade, then focus returns to the opener', async () => {
+    const endExitFade = holdExitFade();
+    const opener = focusOpener();
+    const view = renderFrame();
+    view.onClose.mockImplementation(() => view.unmount());
+
+    await userEvent.keyboard('{Escape}');
+
+    expect(view.onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
+
+    endExitFade();
+
+    await vi.waitFor(() => expect(view.onClose).toHaveBeenCalledOnce());
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it('sheet opens and closes: a fade that never reports its end still closes', async () => {
+    holdExitFade();
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const { onClose } = renderFrame();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await vi.advanceTimersByTimeAsync(CLOSE_FALLBACK_MS - 1);
+
+    expect(onClose).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('sheet opens and closes: a second close or an enter during the fade does nothing more', async () => {
+    const endExitFade = holdExitFade();
+    const { onClose, onActivate } = renderFrame();
+
+    await userEvent.keyboard('{Escape}');
+    await fireEvent.keyDown(screen.getByRole('textbox', { name: 'Name' }), { key: 'Enter' });
+    await fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    endExitFade();
+
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    expect(onActivate).not.toHaveBeenCalled();
+  });
+
+  it('sheet opens and closes: a dialog removed during the fade does not close again', async () => {
+    const endExitFade = holdExitFade();
+    const view = renderFrame();
+
+    await userEvent.keyboard('{Escape}');
+    view.unmount();
+    endExitFade();
+    await nextTask();
+
+    expect(view.onClose).not.toHaveBeenCalled();
+  });
+
+  it('sheet opens and closes: the focused primary does not run from the keyboard during the fade', async () => {
+    const endExitFade = holdExitFade();
+    const { onClose, onActivate } = renderFrame({ children: MESSAGE_ONLY });
+
+    await userEvent.keyboard('{Escape}');
+    await userEvent.keyboard('{Enter}');
+    await userEvent.keyboard(' ');
+    endExitFade();
+
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    expect(onActivate).not.toHaveBeenCalled();
+  });
+
+  it('sheet opens and closes: a focused footer control does not run from the keyboard during the fade', async () => {
+    const endExitFade = holdExitFade();
+    const onExport = vi.fn();
+    const exportButton = createRawSnippet(() => ({
+      render: () => '<button>Export</button>',
+      setup: (button: Element) => {
+        button.addEventListener('click', onExport);
+      },
+    }));
+    const { onClose } = renderFrame({ children: MESSAGE_ONLY, footer: exportButton });
+    screen.getByRole('button', { name: 'Export' }).focus();
+
+    await userEvent.keyboard('{ >}{Escape}{/ }');
+    await userEvent.keyboard('{Enter}');
+    await userEvent.keyboard(' ');
+    endExitFade();
+
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    expect(onExport).not.toHaveBeenCalled();
+  });
+
+  it('sheet opens and closes: a key released during the fade still reaches the app', async () => {
+    const endExitFade = holdExitFade();
+    const releasedKeys: string[] = [];
+    const trackRelease = (event: KeyboardEvent) => releasedKeys.push(event.key);
+    window.addEventListener('keyup', trackRelease);
+    onTestFinished(() => window.removeEventListener('keyup', trackRelease));
+    const { onClose } = renderFrame({ children: MESSAGE_ONLY });
+
+    await userEvent.keyboard('{Control>}{Escape}{/Control}');
+    endExitFade();
+
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    expect(releasedKeys).toContain('Control');
+  });
+
+  it('sheet opens and closes: a click during the fade leaves focus in the dialog', async () => {
+    const endExitFade = holdExitFade();
+    const { onClose } = renderFrame({ children: MESSAGE_ONLY });
+    const frame = screen.getByRole('dialog');
+    const backdrop = frame.parentElement ?? frame;
+
+    const canClickMoveFocusWhileOpen = await fireEvent.mouseDown(frame);
+    await userEvent.keyboard('{Escape}');
+    const canClickMoveFocusDuringFade = await fireEvent.mouseDown(backdrop);
+    endExitFade();
+
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    expect(canClickMoveFocusWhileOpen).toBe(true);
+    expect(canClickMoveFocusDuringFade).toBe(false);
+  });
+
+  it('sheet opens and closes: a dialog the caller keeps open can be closed again', async () => {
+    const endExitFade = holdExitFade();
+    const { onClose } = renderFrame();
+
+    await userEvent.keyboard('{Escape}');
+    endExitFade();
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    await userEvent.keyboard('{Escape}');
+
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledTimes(2));
+  });
+
+  it('sheet opens and closes: a close handler that fails leaves the dialog ready to close again', async () => {
+    const { onClose } = renderFrame();
+    onClose.mockImplementationOnce(() => {
+      throw new Error('close failed');
+    });
+    const reportedErrors: unknown[] = [];
+    const catchReportedError = (event: ErrorEvent) => {
+      event.preventDefault();
+      reportedErrors.push(event.error);
+    };
+    globalThis.addEventListener('error', catchReportedError);
+    onTestFinished(() => {
+      globalThis.removeEventListener('error', catchReportedError);
+    });
+
+    await userEvent.keyboard('{Escape}');
+    await userEvent.keyboard('{Escape}');
+
+    expect(reportedErrors).toHaveLength(1);
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it('sheet opens and closes: the close fades over the medium speed with the exit easing', () => {
+    const styles = readFileSync(join(import.meta.dirname, 'Dialog.svelte'), 'utf8');
+    const tokens = readFileSync(join(import.meta.dirname, '..', 'tokens', 'tokens.css'), 'utf8');
+    const fadeOut = /@keyframes fade-out \{([\s\S]*?)\n {2}\}/.exec(styles)?.[1] ?? '';
+    const closingBackdrop = /\.backdrop\.closing \{([^}]*)\}/.exec(styles)?.[1] ?? '';
+
+    expect(closingBackdrop).toMatch(
+      /animation: fade-out var\(--motion-medium\) var\(--easing-exit\) forwards;/,
+    );
+    expect(closingBackdrop).not.toMatch(/pointer-events/);
+    expect(styles).toMatch(/\.dialog\.shared-frame\.closing \{[^}]*pointer-events: none;/);
+    expect(styles).not.toMatch(/\.dialog[^{]*\.closing \{[^}]*animation/);
+    expect(tokens).toMatch(/--easing-exit: cubic-bezier\(/);
+    expect(fadeOut).toMatch(/opacity: 0;/);
+    expect(fadeOut).not.toMatch(/transform|scale|translate/);
   });
 
   it('keeps the earlier layout with one close button when no cancel label is given', () => {

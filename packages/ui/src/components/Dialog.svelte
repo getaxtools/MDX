@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount, type Snippet } from 'svelte';
+  import { flushSync, onMount, type Snippet } from 'svelte';
+  import { animationsEnded } from './dialogClosing';
   import { activatesPrimary, firstFieldIn, wrappedFocusTarget } from './dialogKeyboard';
 
   interface PrimaryAction {
@@ -43,21 +44,58 @@
   const isSharedFrame = $derived(cancelLabel !== undefined);
   const opener = globalThis.document.activeElement;
 
+  let backdropElement: HTMLDivElement | undefined = $state();
   let dialogElement: HTMLDivElement | undefined = $state();
   let contentElement: HTMLDivElement | undefined = $state();
   let closeButton: HTMLButtonElement | undefined = $state();
   let cancelButton: HTMLButtonElement | undefined = $state();
   let primaryButton: HTMLButtonElement | undefined = $state();
+  let isClosing = $state(false);
+  let isMounted = false;
 
   $effect(() => {
     if (!isSharedFrame) closeButton?.focus();
   });
 
   onMount(() => {
-    if (!isSharedFrame) return;
-    focusInitialControl();
-    return returnFocusToOpener;
+    isMounted = true;
+    if (isSharedFrame) focusInitialControl();
+    return () => {
+      isMounted = false;
+      if (isSharedFrame) returnFocusToOpener();
+    };
   });
+
+  function close() {
+    if (isClosing) return;
+    if (!isSharedFrame || !backdropElement) {
+      onClose();
+      return;
+    }
+    isClosing = true;
+    flushSync();
+    const exitFade = animationsEnded(backdropElement);
+    if (!exitFade) {
+      finishClose();
+      return;
+    }
+    void exitFade.then(() => {
+      if (isMounted) finishClose();
+    });
+  }
+
+  function finishClose() {
+    try {
+      onClose();
+    } finally {
+      isClosing = false;
+    }
+  }
+
+  function activatePrimary() {
+    if (!primary || primary.isDisabled || isClosing) return;
+    primary.onActivate();
+  }
 
   function focusInitialControl() {
     const field = contentElement ? firstFieldIn(contentElement) : undefined;
@@ -86,14 +124,30 @@
   function activatePrimaryOnEnter(event: KeyboardEvent) {
     if (!primary || primary.isDisabled || !activatesPrimary(event)) return;
     event.preventDefault();
-    primary.onActivate();
+    activatePrimary();
+  }
+
+  function ignoreKeyPressWhileClosing(event: KeyboardEvent) {
+    if (!isClosing) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  // The release still bubbles, so the app's held-modifier tracking sees it.
+  function ignoreKeyReleaseWhileClosing(event: KeyboardEvent) {
+    if (isClosing) event.preventDefault();
+  }
+
+  // A click on the faded dialog lands on the backdrop, which would move focus to the page.
+  function keepFocusWhileClosing(event: MouseEvent) {
+    if (isClosing) event.preventDefault();
   }
 
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
       if (!canClose || event.defaultPrevented || event.isComposing) return;
       event.stopPropagation();
-      onClose();
+      close();
       return;
     }
     if (!isSharedFrame) return;
@@ -102,16 +156,26 @@
   }
 </script>
 
-<div class="backdrop" class:shared-frame={isSharedFrame}>
+<div
+  bind:this={backdropElement}
+  class="backdrop"
+  class:shared-frame={isSharedFrame}
+  class:closing={isClosing}
+  role="presentation"
+  onmousedown={keepFocusWhileClosing}
+>
   <div
     bind:this={dialogElement}
     class="dialog"
     class:shared-frame={isSharedFrame}
+    class:closing={isClosing}
     role="dialog"
     aria-modal="true"
     aria-labelledby="dialog-title"
     aria-describedby={isSharedFrame && purpose ? 'dialog-purpose' : undefined}
     tabindex="-1"
+    onkeydowncapture={ignoreKeyPressWhileClosing}
+    onkeyupcapture={ignoreKeyReleaseWhileClosing}
     onkeydown={handleKeydown}
   >
     {#if isSharedFrame}
@@ -121,7 +185,7 @@
           {#if purpose}<p id="dialog-purpose" class="purpose">{purpose}</p>{/if}
         </div>
         {#if canClose}
-          <button class="close" aria-label={closeLabel} title={closeTooltip ?? closeLabel} onclick={onClose}>
+          <button class="close" aria-label={closeLabel} title={closeTooltip ?? closeLabel} onclick={close}>
             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
               <path d="M4 4l8 8M12 4l-8 8" />
             </svg>
@@ -140,14 +204,14 @@
       {@render footer?.()}
       {#if isSharedFrame}
         {#if canClose}
-          <button bind:this={cancelButton} class="quiet" onclick={onClose}>{cancelLabel}</button>
+          <button bind:this={cancelButton} class="quiet" onclick={close}>{cancelLabel}</button>
         {/if}
         {#if primary}
           <button
             bind:this={primaryButton}
             class="primary"
             disabled={primary.isDisabled}
-            onclick={primary.onActivate}>{primary.label}</button
+            onclick={activatePrimary}>{primary.label}</button
           >
         {/if}
       {:else if canClose}
@@ -229,6 +293,14 @@
 
   .dialog.shared-frame {
     animation-duration: var(--motion-slow);
+  }
+
+  .backdrop.closing {
+    animation: fade-out var(--motion-medium) var(--easing-exit) forwards;
+  }
+
+  .dialog.shared-frame.closing {
+    pointer-events: none;
   }
 
   header {
@@ -314,6 +386,12 @@
 
   @keyframes fade-in {
     from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes fade-out {
+    to {
       opacity: 0;
     }
   }
