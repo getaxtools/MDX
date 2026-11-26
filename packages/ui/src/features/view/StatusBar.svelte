@@ -1,10 +1,15 @@
 <script lang="ts">
-  import { wordGoalProgress } from '@mdx/core';
-  import type { Translator } from '@mdx/i18n';
+  import { canZoomIn, canZoomOut, wordGoalProgress } from '@mdx/core';
+  import type { MessageKey, Translator } from '@mdx/i18n';
   import ContextMenu from '../../components/ContextMenu.svelte';
   import KindIcon from '../control-wheel/KindIcon.svelte';
   import { KIND_ICONS, kindColourOf, kindNameOf } from '../control-wheel/kindPresentation';
-  import { tooltipWithShortcut } from '../shortcuts/commandShortcuts';
+  import {
+    COMMAND_SHORTCUTS,
+    shortcutLabelFor,
+    tooltipWithShortcut,
+    type CommandShortcut,
+  } from '../shortcuts/commandShortcuts';
   import { contextMenuPosition, type ContextMenuRequest } from '../../components/ContextMenuItem';
   import {
     DETECT_ENCODING_ITEM,
@@ -36,6 +41,10 @@
     statusMessage?: string | undefined;
     onShowWordGoal?: () => void;
     onResetZoom: () => void;
+    onZoomIn?: () => void;
+    onZoomOut?: () => void;
+    /** The shortcuts in effect, named in the zoom tooltips. */
+    shortcuts?: readonly CommandShortcut[];
     onReopenWithEncoding?: (encoding: string | undefined) => void;
     /** The prompt injection check of the shown document; the badge shows once it has finished. */
     injectionCheck?: InjectionCheckView | undefined;
@@ -60,6 +69,9 @@
     statusMessage,
     onShowWordGoal = () => undefined,
     onResetZoom,
+    onZoomIn = () => undefined,
+    onZoomOut = () => undefined,
+    shortcuts = COMMAND_SHORTCUTS,
     onReopenWithEncoding = () => undefined,
     injectionCheck,
     onShowInjectionCheck = () => undefined,
@@ -68,6 +80,23 @@
   }: Props = $props();
 
   let encodingMenuRequest: ContextMenuRequest | undefined = $state();
+  let zoomOutButton: HTMLButtonElement | undefined = $state();
+  let zoomInButton: HTMLButtonElement | undefined = $state();
+  let lastZoomStep: 'zoomIn' | 'zoomOut' | undefined;
+
+  function stepZoom(step: 'zoomIn' | 'zoomOut') {
+    lastZoomStep = step;
+    if (step === 'zoomIn') onZoomIn();
+    else onZoomOut();
+  }
+
+  $effect(() => {
+    const isAtHighest = !canZoomIn(zoomPercent);
+    const isAtLowest = !canZoomOut(zoomPercent);
+    if (lastZoomStep === 'zoomIn' && isAtHighest) zoomOutButton?.focus();
+    if (lastZoomStep === 'zoomOut' && isAtLowest) zoomInButton?.focus();
+    lastZoomStep = undefined;
+  });
 
   function chooseEncoding(itemId: EncodingMenuItemId) {
     onReopenWithEncoding(itemId === DETECT_ENCODING_ITEM ? undefined : itemId);
@@ -109,6 +138,13 @@
       .join(' '),
   );
   const encodingName = $derived(document?.encoding.toUpperCase() ?? '');
+  function zoomTooltip(labelKey: MessageKey, kind: 'zoomIn' | 'zoomOut' | 'resetZoom'): string {
+    return tooltipWithShortcut(
+      translator.translate(labelKey),
+      shortcutLabelFor({ kind }, translator, shortcuts),
+    );
+  }
+
   const location = $derived(
     document?.isUntitled
       ? translator.translate('statusBar.notSaved', { fileName: document.fileName })
@@ -172,13 +208,6 @@
         })}
       </span>
     {/if}
-    <button
-      title={translator.translate('statusBar.resetZoom', { percent: zoomPercent })}
-      aria-label={translator.translate('statusBar.resetZoom', { percent: zoomPercent })}
-      onclick={onResetZoom}
-    >
-      {translator.translate('statusBar.zoom', { percent: zoomPercent })}
-    </button>
     {#if controlWheelButton}
       {@const kind = kindNameOf(controlWheelButton.activeKindId, translator)}
       <button
@@ -192,6 +221,38 @@
         <KindIcon paths={KIND_ICONS[controlWheelButton.activeKindId]} />
         {kind}
       </button>
+    {/if}
+    {#if document}
+      <span class="zoom-stepper">
+        <button
+          bind:this={zoomOutButton}
+          class="zoom-step"
+          title={zoomTooltip('menu.view.zoomOut', 'zoomOut')}
+          aria-label={translator.translate('menu.view.zoomOut')}
+          disabled={!canZoomOut(zoomPercent)}
+          onclick={() => stepZoom('zoomOut')}
+        >
+          −
+        </button>
+        <button
+          class="zoom-value"
+          title={zoomTooltip('menu.view.resetZoom', 'resetZoom')}
+          aria-label={translator.translate('statusBar.resetZoom', { percent: zoomPercent })}
+          onclick={onResetZoom}
+        >
+          {translator.translate('statusBar.zoom', { percent: zoomPercent })}
+        </button>
+        <button
+          bind:this={zoomInButton}
+          class="zoom-step"
+          title={zoomTooltip('menu.view.zoomIn', 'zoomIn')}
+          aria-label={translator.translate('menu.view.zoomIn')}
+          disabled={!canZoomIn(zoomPercent)}
+          onclick={() => stepZoom('zoomIn')}
+        >
+          +
+        </button>
+      </span>
     {/if}
   </div>
 </footer>
@@ -259,6 +320,31 @@
     width: 1rem;
     height: 1rem;
     color: var(--kind-colour);
+  }
+
+  .zoom-stepper {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .zoom-stepper button {
+    min-width: 1.5rem;
+    min-height: 1.5rem;
+  }
+
+  .zoom-value {
+    min-width: 4ch;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .zoom-step:disabled {
+    color: var(--color-text-tertiary);
+  }
+
+  @media (forced-colors: active) {
+    .zoom-step:disabled {
+      color: GrayText;
+    }
   }
 
   .words {

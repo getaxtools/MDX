@@ -166,6 +166,14 @@ export function zoomOut(settings: ViewSettings): ViewSettings {
   return previous === undefined ? settings : { ...settings, zoomPercent: previous };
 }
 
+export function canZoomIn(zoomPercent: number): boolean {
+  return ZOOM_LEVELS_PERCENT.some((level) => level > zoomPercent);
+}
+
+export function canZoomOut(zoomPercent: number): boolean {
+  return ZOOM_LEVELS_PERCENT.some((level) => level < zoomPercent);
+}
+
 /** Sets one of the zoom steps; any other value leaves the zoom as it is. */
 export function setZoom(settings: ViewSettings, zoomPercent: number): ViewSettings {
   return ZOOM_LEVELS_PERCENT.includes(zoomPercent) ? { ...settings, zoomPercent } : settings;

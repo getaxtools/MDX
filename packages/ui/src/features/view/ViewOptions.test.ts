@@ -12,18 +12,10 @@ function renderViewOptions(settings = DEFAULT_VIEW_SETTINGS) {
 }
 
 describe('ViewOptions', () => {
-  it('shows the zoom level and zooms in, out and back to 100%', async () => {
-    const { onCommand } = renderViewOptions({ ...DEFAULT_VIEW_SETTINGS, zoomPercent: 125 });
+  it('leaves zoom to the status bar', () => {
+    renderViewOptions({ ...DEFAULT_VIEW_SETTINGS, zoomPercent: 125 });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Zoom In' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Zoom Out' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Zoom 125%' }));
-
-    expect(onCommand.mock.calls.map((call: unknown[]) => call[0])).toEqual([
-      { kind: 'zoomIn' },
-      { kind: 'zoomOut' },
-      { kind: 'resetZoom' },
-    ]);
+    expect(screen.queryByRole('button', { name: /zoom/i })).toBeNull();
   });
 
   it('chooses a theme', async () => {

@@ -206,7 +206,6 @@
   "document.openExternalLink.title": "இணைப்பை உங்கள் உலாவியில் திறக்கவா?",
   "document.openExternalLink.body": "இது {url}-ஐ உங்கள் இயல்புநிலை உலாவியில் திறக்கும்.",
   "view.options.label": "காட்சி விருப்பங்கள்",
-  "view.zoomLevel": "பெரிதாக்கல் {percent}%",
   "document.openExternalLink.open": "திற",
   "document.openExternalLink.cancel": "ரத்துசெய்",
   "shortcuts.column.action": "செயல்",

@@ -33,23 +33,6 @@
 </script>
 
 <div class="view-options" role="group" aria-label={translator.translate('view.options.label')}>
-  <button
-    aria-label={translator.translate('menu.view.zoomOut')}
-    title={translator.translate('menu.view.zoomOut')}
-    onclick={() => onCommand({ kind: 'zoomOut' })}>−</button
-  >
-  <button
-    class="zoom-level"
-    title={translator.translate('menu.view.resetZoom')}
-    onclick={() => onCommand({ kind: 'resetZoom' })}
-  >
-    {translator.translate('view.zoomLevel', { percent: settings.zoomPercent })}
-  </button>
-  <button
-    aria-label={translator.translate('menu.view.zoomIn')}
-    title={translator.translate('menu.view.zoomIn')}
-    onclick={() => onCommand({ kind: 'zoomIn' })}>+</button
-  >
   <select aria-label={translator.translate('menu.view.theme')} value={settings.theme} onchange={chooseTheme}>
     {#each THEME_PREFERENCES as theme (theme)}
       <option value={theme}>{translator.translate(`menu.view.theme.${theme}`)}</option>
@@ -84,8 +67,8 @@
     justify-content: flex-end;
   }
 
-  button,
   select {
+    max-width: 9rem;
     height: var(--island-button-size);
     padding: 0 var(--space-2);
     border: 0;
@@ -99,11 +82,7 @@
       color var(--motion-fast) ease-out;
   }
 
-  select {
-    max-width: 9rem;
-  }
-
-  :is(button, select):hover {
+  select:hover {
     background: var(--color-surface-hover);
     color: var(--color-text);
   }
@@ -114,12 +93,6 @@
     font-family: var(--font-ui);
   }
 
-  .zoom-level {
-    min-width: 4.5em;
-    font-variant-numeric: tabular-nums;
-  }
-
-  button:focus-visible,
   select:focus-visible {
     outline: 2px solid var(--color-focus);
     outline-offset: -2px;

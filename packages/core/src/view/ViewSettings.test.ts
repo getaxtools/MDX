@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canZoomIn,
+  canZoomOut,
   DEFAULT_VIEW_SETTINGS,
   panelWidthOf,
   parseViewSettings,
@@ -15,6 +17,7 @@ import {
   toggleExplorerSection,
   zoomIn,
   zoomOut,
+  ZOOM_LEVELS_PERCENT,
 } from './ViewSettings';
 
 const atZoom = (zoomPercent: number) => ({ ...DEFAULT_VIEW_SETTINGS, zoomPercent });
@@ -67,6 +70,20 @@ describe('view settings', () => {
   it('sets one of the zoom steps and ignores other values', () => {
     expect(setZoom(DEFAULT_VIEW_SETTINGS, 175).zoomPercent).toBe(175);
     expect(setZoom(DEFAULT_VIEW_SETTINGS, 177).zoomPercent).toBe(100);
+  });
+
+  it('the stepper steps through the same levels as the shortcuts', () => {
+    const visited: number[] = [];
+    let settings = atZoom(ZOOM_LEVELS_PERCENT[0] ?? 0);
+    while (canZoomIn(settings.zoomPercent)) {
+      visited.push(settings.zoomPercent);
+      settings = zoomIn(settings);
+    }
+    visited.push(settings.zoomPercent);
+
+    expect(visited).toEqual(ZOOM_LEVELS_PERCENT);
+    expect(canZoomOut(ZOOM_LEVELS_PERCENT[0] ?? 0)).toBe(false);
+    expect(canZoomOut(100)).toBe(true);
   });
 
   it('resets zoom to 100%', () => {

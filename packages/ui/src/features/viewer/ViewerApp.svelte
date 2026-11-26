@@ -879,6 +879,9 @@
         onShowInjectionCheck={() =>
           void controller.execute({ kind: 'showSidebarView', sidebarView: 'promptInjection' })}
         onResetZoom={() => void controller.execute({ kind: 'resetZoom' })}
+        onZoomIn={() => void controller.execute({ kind: 'zoomIn' })}
+        onZoomOut={() => void controller.execute({ kind: 'zoomOut' })}
+        {shortcuts}
         onReopenWithEncoding={(encoding: string | undefined) =>
           void controller.execute(
             encoding === undefined

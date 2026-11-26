@@ -206,7 +206,6 @@
   "document.openExternalLink.title": "ブラウザーでリンクを開きますか?",
   "document.openExternalLink.body": "既定のブラウザーで {url} を開きます。",
   "view.options.label": "表示オプション",
-  "view.zoomLevel": "ズーム {percent}%",
   "document.openExternalLink.open": "開く",
   "document.openExternalLink.cancel": "キャンセル",
   "shortcuts.column.action": "操作",

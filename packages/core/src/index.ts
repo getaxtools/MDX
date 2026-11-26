@@ -96,6 +96,8 @@ export {
   ZOOM_LEVELS_PERCENT,
   WHEEL_DOCKS,
   CTRL_WHEEL_ACTIONS,
+  canZoomIn,
+  canZoomOut,
   panelWidthOf,
   parseViewSettings,
   resetPanelWidth,

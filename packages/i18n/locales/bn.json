@@ -206,7 +206,6 @@
   "document.openExternalLink.title": "আপনার ব্রাউজারে লিঙ্কটি খুলবেন?",
   "document.openExternalLink.body": "এটি আপনার ডিফল্ট ব্রাউজারে {url} খুলবে।",
   "view.options.label": "দেখার বিকল্প",
-  "view.zoomLevel": "জুম {percent}%",
   "document.openExternalLink.open": "খুলুন",
   "document.openExternalLink.cancel": "বাতিল করুন",
   "shortcuts.column.action": "ক্রিয়া",

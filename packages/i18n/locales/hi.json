@@ -206,7 +206,6 @@
   "document.openExternalLink.title": "लिंक को अपने ब्राउज़र में खोलें?",
   "document.openExternalLink.body": "इससे {url} आपके डिफ़ॉल्ट ब्राउज़र में खुलेगा।",
   "view.options.label": "देखने के विकल्प",
-  "view.zoomLevel": "ज़ूम {percent}%",
   "document.openExternalLink.open": "खोलें",
   "document.openExternalLink.cancel": "रद्द करें",
   "shortcuts.column.action": "क्रिया",
