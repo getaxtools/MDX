@@ -534,6 +534,43 @@ describe('Dialog frame', () => {
     expect(releasedKeys).toContain('Control');
   });
 
+  it('sheet opens and closes: an app shortcut pressed during the fade still reaches the app', async () => {
+    const endExitFade = holdExitFade();
+    const shortcutsReachingTheApp: string[] = [];
+    const trackShortcut = (event: KeyboardEvent) => {
+      if (event.ctrlKey && !event.defaultPrevented) shortcutsReachingTheApp.push(event.key);
+    };
+    window.addEventListener('keydown', trackShortcut);
+    onTestFinished(() => window.removeEventListener('keydown', trackShortcut));
+    const { onClose } = renderFrame();
+
+    await userEvent.keyboard('{Escape}');
+    await userEvent.keyboard('{Control>}e{/Control}');
+    endExitFade();
+
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    expect(shortcutsReachingTheApp).toEqual(['Control', 'e']);
+  });
+
+  it('sheet opens and closes: typing during the fade reaches neither the field nor the app', async () => {
+    const endExitFade = holdExitFade();
+    const keysReachingTheApp: string[] = [];
+    const trackKey = (event: KeyboardEvent) => keysReachingTheApp.push(event.key);
+    window.addEventListener('keydown', trackKey);
+    onTestFinished(() => window.removeEventListener('keydown', trackKey));
+    const { onClose } = renderFrame();
+    const field = screen.getByRole<HTMLInputElement>('textbox', { name: 'Name' });
+    const nameBeforeTyping = field.value;
+
+    await userEvent.keyboard('{Escape}');
+    await userEvent.keyboard('ab');
+    endExitFade();
+
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    expect(field.value).toBe(nameBeforeTyping);
+    expect(keysReachingTheApp).toEqual([]);
+  });
+
   it('sheet opens and closes: a click during the fade leaves focus in the dialog', async () => {
     const endExitFade = holdExitFade();
     const { onClose } = renderFrame({ children: MESSAGE_ONLY });

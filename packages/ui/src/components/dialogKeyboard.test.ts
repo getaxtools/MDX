@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { activatesPrimary, firstFieldIn, wrappedFocusTarget, type DialogKeyEvent } from './dialogKeyboard';
+import {
+  activatesPrimary,
+  firstFieldIn,
+  isAppShortcut,
+  wrappedFocusTarget,
+  type DialogKeyEvent,
+} from './dialogKeyboard';
 
 function enterOn(target: Element, keys: Partial<DialogKeyEvent> = {}): DialogKeyEvent {
   return {
@@ -66,6 +72,37 @@ describe('activatesPrimary', () => {
 
   it('ignores other keys', () => {
     expect(activatesPrimary(enterOn(document.createElement('input'), { key: 'a' }))).toBe(false);
+  });
+});
+
+describe('isAppShortcut', () => {
+  const field = document.createElement('input');
+
+  it('takes a key held with ctrl, alt or meta as the app’s', () => {
+    const results = [
+      { key: 'e', ctrlKey: true },
+      { key: 'w', ctrlKey: true, altKey: true },
+      { key: 'ArrowLeft', altKey: true },
+      { key: ',', metaKey: true },
+    ].map((keys) => isAppShortcut(enterOn(field, keys)));
+
+    expect(results).toEqual([true, true, true, true]);
+  });
+
+  it('leaves enter, space and escape to the dialog even with a modifier held', () => {
+    const results = ['Enter', ' ', 'Escape'].map((key) =>
+      isAppShortcut(enterOn(field, { key, ctrlKey: true })),
+    );
+
+    expect(results).toEqual([false, false, false]);
+  });
+
+  it('leaves a key without ctrl, alt or meta to the dialog', () => {
+    const results = [{ key: 'a' }, { key: 'A', shiftKey: true }, { key: 'Tab' }, { key: 'F2' }].map((keys) =>
+      isAppShortcut(enterOn(field, keys)),
+    );
+
+    expect(results).toEqual([false, false, false, false]);
   });
 });
 

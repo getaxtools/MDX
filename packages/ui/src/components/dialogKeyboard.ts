@@ -44,6 +44,14 @@ export function activatesPrimary(event: DialogKeyEvent): boolean {
   return true;
 }
 
+const KEYS_A_CONTROL_ACTS_ON = new Set(['Enter', ' ', 'Escape']);
+
+/** A key held with Ctrl, Alt or Meta that no dialog control acts on, such as Ctrl+E, which belongs to the app. */
+export function isAppShortcut(event: DialogKeyEvent): boolean {
+  const hasCommandModifier = event.ctrlKey || event.altKey || event.metaKey;
+  return hasCommandModifier && !KEYS_A_CONTROL_ACTS_ON.has(event.key);
+}
+
 export function focusablesIn(container: Element): HTMLElement[] {
   return [...container.querySelectorAll<HTMLElement>(FOCUSABLE)];
 }

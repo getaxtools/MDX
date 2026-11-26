@@ -1,7 +1,7 @@
 <script lang="ts">
   import { flushSync, onMount, type Snippet } from 'svelte';
   import { animationsEnded } from './dialogClosing';
-  import { activatesPrimary, firstFieldIn, wrappedFocusTarget } from './dialogKeyboard';
+  import { activatesPrimary, firstFieldIn, isAppShortcut, wrappedFocusTarget } from './dialogKeyboard';
 
   interface PrimaryAction {
     label: string;
@@ -168,7 +168,7 @@
   }
 
   function ignoreKeyPressWhileClosing(event: KeyboardEvent) {
-    if (!isClosing) return;
+    if (!isClosing || isAppShortcut(event)) return;
     event.preventDefault();
     event.stopPropagation();
   }
