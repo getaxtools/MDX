@@ -47,6 +47,9 @@
     isInformational = false,
   }: Props = $props();
 
+  const frameId = $props.id();
+  const titleId = `${frameId}-title`;
+  const purposeId = `${frameId}-purpose`;
   const isSharedFrame = $derived(cancelLabel !== undefined || isInformational);
   const hasActions = $derived(
     !isSharedFrame || footer !== undefined || cancelLabel !== undefined || primary !== undefined,
@@ -200,8 +203,8 @@
     class:closing={isClosing}
     role="dialog"
     aria-modal="true"
-    aria-labelledby="dialog-title"
-    aria-describedby={isSharedFrame && purpose ? 'dialog-purpose' : undefined}
+    aria-labelledby={titleId}
+    aria-describedby={isSharedFrame && purpose ? purposeId : undefined}
     tabindex="-1"
     onkeydowncapture={ignoreKeyPressWhileClosing}
     onkeyupcapture={ignoreKeyReleaseWhileClosing}
@@ -210,8 +213,8 @@
     {#if isSharedFrame}
       <header>
         <div class="heading">
-          <h2 id="dialog-title">{title}</h2>
-          {#if purpose}<p id="dialog-purpose" class="purpose">{purpose}</p>{/if}
+          <h2 id={titleId}>{title}</h2>
+          {#if purpose}<p id={purposeId} class="purpose">{purpose}</p>{/if}
         </div>
         {#if canClose}
           <button
@@ -228,11 +231,11 @@
         {/if}
       </header>
     {:else}
-      <h2 id="dialog-title">{title}</h2>
+      <h2 id={titleId}>{title}</h2>
     {/if}
     <!-- Long content scrolls, so keyboard users must be able to focus it to scroll it (WCAG 2.1.1). -->
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-    <div bind:this={contentElement} class="content" role="region" aria-labelledby="dialog-title" tabindex="0">
+    <div bind:this={contentElement} class="content" role="region" aria-labelledby={titleId} tabindex="0">
       {@render children()}
     </div>
     {#if hasActions}

@@ -81,7 +81,7 @@ describe('links follow a renamed note', () => {
     const renameInput = app.browser.$('input[aria-label="New name for Draft"]');
     await renameInput.setValue('Plan');
     await mainWindow.pressKeyOn(renameInput, 'Enter');
-    const preview = app.browser.$('[role="dialog"][aria-labelledby="dialog-title"]');
+    const preview = app.browser.$('[role="dialog"][aria-labelledby]');
     await app.browser.waitUntil(async () => (await preview.$('h2').getText()) === 'Update links to Plan?');
     const previewText = await preview.getText();
     expect(previewText).toContain('See [[Plan]] today.');

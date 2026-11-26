@@ -32,7 +32,7 @@ async function runCommand(mainWindow: MainWindowPage, search: string, option: st
 }
 
 function isFocusInsideFrame(): boolean {
-  const frame = document.querySelector('[role="dialog"][aria-labelledby="dialog-title"]');
+  const frame = document.querySelector('[role="dialog"][aria-labelledby]');
   return frame?.contains(document.activeElement) ?? false;
 }
 
@@ -117,7 +117,7 @@ describe('Dialogs share one frame', () => {
       );
       for (const dialog of dialogs) {
         await dialog.open({ browser: app.browser, mainWindow, workspace });
-        const frame = app.browser.$('[role="dialog"][aria-labelledby="dialog-title"]');
+        const frame = app.browser.$('[role="dialog"][aria-labelledby]');
         await frame.waitForDisplayed();
         const close = frame.$('header button[aria-label="Close"]');
         const context = `${dialog.name} in ${theme.label}`;

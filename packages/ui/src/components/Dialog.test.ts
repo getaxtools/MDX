@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { createRawSnippet } from 'svelte';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
@@ -81,6 +81,20 @@ describe('Dialog frame', () => {
 
     expect(description?.textContent).toBe('The name shows in the title bar and the workspace switcher.');
     expect(screen.getAllByRole('button').map(buttonName)).toEqual(['Close', 'Cancel', 'Rename']);
+  });
+
+  it('two frames open at once are each named by their own title and described by their own purpose', () => {
+    renderFrame();
+    renderFrame({ title: 'Delete Workspace', purpose: 'The documents in it stay where they are.' });
+
+    const rename = screen.getByRole('dialog', { name: 'Rename Workspace' });
+    const deletion = screen.getByRole('dialog', { name: 'Delete Workspace' });
+
+    expect(document.getElementById(deletion.getAttribute('aria-describedby') ?? '')?.textContent).toBe(
+      'The documents in it stay where they are.',
+    );
+    expect(within(rename).getByRole('region', { name: 'Rename Workspace' })).toBeTruthy();
+    expect(within(deletion).getByRole('region', { name: 'Delete Workspace' })).toBeTruthy();
   });
 
   it('focus starts in the first field and enter activates the primary', async () => {
