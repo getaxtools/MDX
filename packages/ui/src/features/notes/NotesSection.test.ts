@@ -2,21 +2,22 @@ import { createTranslator } from '@mdx/i18n';
 import { InMemoryNoteFiles } from '@mdx/platform';
 import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { NotesCommand } from './NotesActions';
 import NotesSection from './NotesSection.svelte';
 import { NoteTreeMemory } from './NoteTreeMemory';
 
 const JOURNAL = 'E:\\Journal';
+const INBOX = 'E:\\Journal\\Inbox.md';
 
 function renderTree({ isDeletionConfirmed = true, memory = new NoteTreeMemory() } = {}) {
   const noteFiles = new InMemoryNoteFiles({
     folders: ['E:\\Journal\\Projects', 'E:\\Journal\\Daily'],
     notes: ['E:\\Journal\\Projects.md', 'E:\\Journal\\Projects\\Plan.md', 'E:\\Journal\\Inbox.md'],
   });
-  const onCommand = vi.fn<(command: NotesCommand | { kind: string }) => void>();
+  const onCommand = vi.fn<(command: NotesCommand | { kind: string }) => Promise<void> | void>();
   const onOpenDocument = vi.fn<(path: string) => void>();
-  const { unmount } = render(NotesSection, {
+  const { unmount, rerender } = render(NotesSection, {
     locationPath: JOURNAL,
     revision: 0,
     isDeletionConfirmed,
@@ -31,7 +32,14 @@ function renderTree({ isDeletionConfirmed = true, memory = new NoteTreeMemory() 
     memory,
   });
   const row = (name: string) => screen.findByRole('treeitem', { name });
-  return { onCommand, onOpenDocument, row, unmount };
+  return { noteFiles, onCommand, onOpenDocument, row, rerender, unmount };
+}
+
+async function renameInboxToIdeas(): Promise<void> {
+  await userEvent.keyboard('{F2}');
+  const input = screen.getByRole('textbox', { name: 'New name for Inbox' });
+  await userEvent.clear(input);
+  await userEvent.type(input, 'Ideas{Enter}');
 }
 
 describe('NotesSection', () => {
@@ -94,6 +102,37 @@ describe('NotesSection', () => {
       note: expect.objectContaining({ displayPath: 'E:\\Journal\\Inbox.md' }) as unknown,
       name: 'Ideas',
     });
+  });
+
+  it('a renamed note keeps the focus in the tree', async () => {
+    const { noteFiles, onCommand, rerender, row } = renderTree();
+    onCommand.mockImplementation(async () => {
+      await noteFiles.renameNote({ location: JOURNAL, note: INBOX, name: 'Ideas' });
+    });
+    (await row('Inbox')).focus();
+
+    await renameInboxToIdeas();
+    await rerender({ revision: 1 });
+
+    expect(document.activeElement).toBe(await row('Ideas'));
+  });
+
+  it('a renamed note leaves the focus in a dialog the rename opened', async () => {
+    const { noteFiles, onCommand, rerender, row } = renderTree();
+    const dialogButton = document.createElement('button');
+    document.body.append(dialogButton);
+    onTestFinished(() => dialogButton.remove());
+    onCommand.mockImplementation(async () => {
+      await noteFiles.renameNote({ location: JOURNAL, note: INBOX, name: 'Ideas' });
+      dialogButton.focus();
+    });
+    (await row('Inbox')).focus();
+
+    await renameInboxToIdeas();
+    await rerender({ revision: 1 });
+    await row('Ideas');
+
+    expect(document.activeElement).toBe(dialogButton);
   });
 
   it('Escape leaves a rename without renaming', async () => {

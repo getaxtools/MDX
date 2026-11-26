@@ -74,9 +74,15 @@
     input.select();
   }
 
+  function isFocusHeldOutsideTree(row: HTMLElement): boolean {
+    const focused = globalThis.document.activeElement;
+    if (focused === null || focused === globalThis.document.body) return false;
+    return !row.closest('[role="tree"]')?.contains(focused);
+  }
+
   function focusWhenWanted(row: HTMLElement, path: string) {
     if (tree.focusPath?.toLowerCase() !== path.toLowerCase()) return;
-    row.focus();
+    if (!isFocusHeldOutsideTree(row)) row.focus();
     tree.onFocused();
   }
 </script>
