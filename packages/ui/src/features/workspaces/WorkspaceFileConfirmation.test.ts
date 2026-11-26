@@ -48,6 +48,39 @@ describe('WorkspaceFileConfirmation', () => {
     ).toEqual(['D:\\team\\docs', 'E:\\shared', 'D:\\team\\notes.md']);
   });
 
+  it('opens in the shared frame with focus on cancel and open as the primary', () => {
+    renderConfirmation();
+
+    const close = screen.getByRole('button', { name: 'Close' });
+
+    expect(close.closest('header')).not.toBeNull();
+    expect(close.title).toBe('Close (Esc)');
+    expect(
+      screen
+        .getAllByRole('button')
+        .map((button) => button.getAttribute('aria-label') ?? button.textContent.trim()),
+    ).toEqual(['Close', 'Cancel', 'Open']);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel' }));
+  });
+
+  it('a stray enter cancels instead of making the folders readable', async () => {
+    const { onOpen, onCancel } = renderConfirmation();
+
+    await userEvent.keyboard('{Enter}');
+
+    expect(onCancel).toHaveBeenCalledOnce();
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it('enter in the list does not open', async () => {
+    const { onOpen } = renderConfirmation();
+
+    screen.getByRole('region', { name: 'Open the workspace Handbook?' }).focus();
+    await userEvent.keyboard('{Enter}');
+
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
   it('opens only when asked, and Cancel creates nothing', async () => {
     const { onOpen, onCancel } = renderConfirmation();
 

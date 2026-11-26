@@ -20,11 +20,20 @@
     ...pending.workspace.roots.map((root) => root.displayPath),
     ...pending.workspace.favourites.map((favourite) => favourite.location.displayPath),
   ]);
+  const openLabel = $derived(
+    pending.isKindDisabled
+      ? translator.translate('workspaces.fileDialog.enableAndOpen', { kind })
+      : translator.translate('workspaces.fileDialog.open'),
+  );
 </script>
 
 <Dialog
   title={translator.translate('workspaces.fileDialog.title', { name: pending.workspace.name })}
-  closeLabel={translator.translate('workspaces.fileDialog.cancel')}
+  closeLabel={translator.translate('dialog.close.label')}
+  closeTooltip={translator.translate('dialog.close.tooltip')}
+  cancelLabel={translator.translate('workspaces.fileDialog.cancel')}
+  primary={{ label: openLabel, onActivate: onOpen }}
+  shouldStartOnCancel
   onClose={onCancel}
 >
   <p>{translator.translate('workspaces.fileDialog.kind', { kind })}</p>
@@ -38,14 +47,6 @@
       {/each}
     </ul>
   {/if}
-  <div class="actions">
-    <button type="button" onclick={onOpen}>
-      {pending.isKindDisabled
-        ? translator.translate('workspaces.fileDialog.enableAndOpen', { kind })
-        : translator.translate('workspaces.fileDialog.open')}
-    </button>
-    <button type="button" onclick={onCancel}>{translator.translate('workspaces.fileDialog.cancel')}</button>
-  </div>
 </Dialog>
 
 <style>
@@ -61,24 +62,5 @@
     font-family: var(--font-mono);
     font-size: var(--text-size-small);
     overflow-wrap: anywhere;
-  }
-
-  .actions {
-    display: flex;
-    gap: var(--space-2);
-  }
-
-  button {
-    height: 32px;
-    padding: 0 var(--space-3);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-medium);
-    background: var(--color-surface-raised);
-    color: var(--color-text);
-    font: inherit;
-  }
-
-  button:focus-visible {
-    outline: 2px solid var(--color-focus);
   }
 </style>

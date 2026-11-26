@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MainWindowPage } from '../../pages/MainWindowPage';
 import { DesktopApp } from '../../support/DesktopApp';
@@ -10,9 +11,11 @@ const THEMES = [
   { id: 'highContrast', label: 'High Contrast' },
 ] as const;
 
+const WORKSPACE_FILE = 'handbook.mdxworkspace';
+
 interface DialogOpening {
   readonly name: string;
-  readonly open: (mainWindow: MainWindowPage) => Promise<void>;
+  readonly open: (mainWindow: MainWindowPage, workspace: TestWorkspace) => Promise<void>;
 }
 
 async function runCommand(mainWindow: MainWindowPage, search: string, option: string): Promise<void> {
@@ -30,6 +33,11 @@ const DIALOGS: readonly DialogOpening[] = [
   { name: 'About MDX', open: async (mainWindow) => runCommand(mainWindow, '>about', 'About MDX') },
   { name: 'Keyboard Shortcuts', open: async (mainWindow) => mainWindow.pressShortcut('F1') },
   { name: 'Word goal', open: async (mainWindow) => runCommand(mainWindow, '>word goal', 'Set Word Goal') },
+  {
+    name: 'Workspace file',
+    open: async (_mainWindow, workspace) =>
+      DesktopApp.launchSecondInstance({ workspace, documentFileNames: [WORKSPACE_FILE] }),
+  },
 ];
 
 describe('Dialogs share one frame', () => {
@@ -38,6 +46,14 @@ describe('Dialogs share one frame', () => {
 
   beforeEach(() => {
     workspace = TestWorkspace.create();
+    const file = {
+      format: 'mdx-workspace',
+      formatVersion: 1,
+      name: 'Handbook',
+      kind: 'markdownViewer',
+      roots: ['.'],
+    };
+    writeFileSync(workspace.documentPath(WORKSPACE_FILE), JSON.stringify(file));
   });
 
   afterEach(async () => {
@@ -56,7 +72,7 @@ describe('Dialogs share one frame', () => {
         app.browser.execute((id) => document.documentElement.dataset.theme === id, theme.id),
       );
       for (const dialog of DIALOGS) {
-        await dialog.open(mainWindow);
+        await dialog.open(mainWindow, workspace);
         const frame = app.browser.$('[role="dialog"][aria-labelledby="dialog-title"]');
         await frame.waitForDisplayed();
         const close = frame.$('header button[aria-label="Close"]');
