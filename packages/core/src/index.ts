@@ -50,6 +50,13 @@ export {
   type SavedWorkspaceKinds,
 } from './workspace-kinds/WorkspaceKindsState';
 export {
+  flipKindSwitch,
+  kindsPageEntriesOf,
+  type KindsPageEntry,
+  type KindsPageStatus,
+  type KindSwitchState,
+} from './workspace-kinds/kindsPageEntriesOf';
+export {
   hitTestRing,
   ringLayout,
   rimArcPath,
