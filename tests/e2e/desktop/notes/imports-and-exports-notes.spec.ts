@@ -114,5 +114,10 @@ describe('importing and exporting notes', () => {
     );
     expect(readFileSync(join(destination, 'Projects', 'chart.png'), 'utf8')).toBe('not really a picture');
     expect(existsSync(join(destination, 'Finance'))).toBe(false);
+    expect(await dialog.$$('button').map(async (button) => button.getAttribute('aria-label'))).toEqual([
+      'Close',
+    ]);
+    await mainWindow.pressShortcut('Escape');
+    await dialog.waitForExist({ reverse: true });
   });
 });

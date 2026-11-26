@@ -1453,7 +1453,6 @@
   "notes.export.replace": "Replace",
   "notes.export.start": "Export",
   "notes.export.cancel": "Cancel",
-  "notes.export.done": "Close",
   "notes.export.summary": "{count, plural, one {# file was} other {# files were}} exported to {folder}.",
   "notes.export.attachmentsLeftOut": "{count, plural, one {# file the note shows is} other {# files the note shows are}} outside its folder and {count, plural, one {was} other {were}} not copied.",
   "notes.export.excludedLeftOut": "{count, plural, one {# file under an excluded path was} other {# files under excluded paths were}} left out.",

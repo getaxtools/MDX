@@ -14,11 +14,32 @@
 
   const summary = $derived(view.summary);
   const canExport = $derived(view.destination !== undefined && !view.isExporting && summary === undefined);
+  const isAskingToReplace = $derived(view.existingFileCount !== undefined && summary === undefined);
+  const primary = $derived.by(() => {
+    if (summary) return undefined;
+    if (isAskingToReplace) {
+      return {
+        label: translator.translate('notes.export.replace'),
+        onActivate: () => onCommand({ kind: 'replaceExportedNotes' }),
+        isDisabled: view.isExporting,
+      };
+    }
+    return {
+      label: translator.translate('notes.export.start'),
+      onActivate: () => onCommand({ kind: 'startNotesExport' }),
+      isDisabled: !canExport,
+    };
+  });
 </script>
 
 <Dialog
   title={translator.translate('notes.export.title', { name: view.name })}
-  closeLabel={translator.translate(summary ? 'notes.export.done' : 'notes.export.cancel')}
+  closeLabel={translator.translate('dialog.close.label')}
+  closeTooltip={translator.translate('dialog.close.tooltip')}
+  cancelLabel={summary ? undefined : translator.translate('notes.export.cancel')}
+  isInformational={summary !== undefined}
+  {primary}
+  shouldStartOnCancel={isAskingToReplace}
   onClose={() => onCommand({ kind: 'closeNotesTransfer' })}
 >
   {#if summary}
@@ -71,17 +92,6 @@
       <p role="alert">{translator.translate(view.failure.messageKey, { path: view.failure.path })}</p>
     {/if}
   {/if}
-  {#snippet footer()}
-    {#if view.existingFileCount !== undefined && !summary}
-      <button disabled={view.isExporting} onclick={() => onCommand({ kind: 'replaceExportedNotes' })}>
-        {translator.translate('notes.export.replace')}
-      </button>
-    {:else if !summary}
-      <button disabled={!canExport} onclick={() => onCommand({ kind: 'startNotesExport' })}>
-        {translator.translate('notes.export.start')}
-      </button>
-    {/if}
-  {/snippet}
 </Dialog>
 
 <style>
