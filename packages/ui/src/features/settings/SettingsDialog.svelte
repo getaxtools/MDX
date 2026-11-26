@@ -129,7 +129,9 @@
 
 <Dialog
   title={translator.translate('settings.title')}
-  closeLabel={translator.translate('about.close')}
+  closeLabel={translator.translate('dialog.close.label')}
+  closeTooltip={translator.translate('dialog.close.tooltip')}
+  isInformational
   {onClose}
 >
   <input

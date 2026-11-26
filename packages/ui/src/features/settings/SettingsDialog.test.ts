@@ -257,4 +257,24 @@ describe('SettingsDialog', () => {
 
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it('opens in the shared frame with only the header close, since every setting applies at once', async () => {
+    const { onClose } = renderSettings();
+    const close = screen.getByRole('button', { name: 'Close' });
+
+    await userEvent.click(close);
+
+    expect(close.title).toBe('Close (Esc)');
+    expect(close.closest('header')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('enter in the search box closes nothing', async () => {
+    const { onClose } = renderSettings();
+
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search settings' }), 'theme{Enter}');
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });
