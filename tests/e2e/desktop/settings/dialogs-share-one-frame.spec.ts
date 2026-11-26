@@ -1,4 +1,6 @@
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MainWindowPage } from '../../pages/MainWindowPage';
 import { ProtectedNotesPage } from '../../pages/ProtectedNotesPage';
@@ -12,13 +14,18 @@ const THEMES = [
   { id: 'highContrast', label: 'High Contrast' },
 ] as const;
 
+type Theme = (typeof THEMES)[number];
+
 const WORKSPACE_FILE = 'handbook.mdxworkspace';
+const PICKED_FOLDERS_VARIABLE = 'MDX_UI_TEST_PICKED_FOLDERS';
+const INDEX_WAIT_MS = 10_000;
 const FRAME = '[aria-modal="true"][aria-labelledby]';
 
 interface OpeningContext {
   readonly browser: WebdriverIO.Browser;
   readonly mainWindow: MainWindowPage;
   readonly workspace: TestWorkspace;
+  readonly theme: Theme;
 }
 
 interface DialogOpening {
@@ -90,6 +97,32 @@ const NOTES_DIALOGS: readonly DialogOpening[] = [
   },
 ];
 
+function draftNoteName(theme: Theme): string {
+  return `${theme.label} draft`;
+}
+
+async function renameLinkedDraft({ browser, mainWindow, theme }: OpeningContext): Promise<void> {
+  const draft = draftNoteName(theme);
+  await (await mainWindow.treeItem('notes.tree.title', draft)).click();
+  await mainWindow.waitForBacklinksHeading('Linked from 1 note', INDEX_WAIT_MS);
+  await mainWindow.pressKeyOn(await mainWindow.treeItem('notes.tree.title', draft), 'F2');
+  const renameInput = browser.$(`input[aria-label="New name for ${draft}"]`);
+  await renameInput.setValue(`${theme.label} plan`);
+  await mainWindow.pressKeyOn(renameInput, 'Enter');
+}
+
+async function importEmptyFolderUntilReport({ browser, mainWindow }: OpeningContext): Promise<void> {
+  await runCommand(mainWindow, '>import notes from a folder', 'Import Notes from a Folder…');
+  const frame = browser.$(FRAME);
+  await frame.waitForDisplayed();
+  await frame.$('progress').waitForExist({ reverse: true });
+}
+
+const NOTES_ON_DISK_DIALOGS: readonly DialogOpening[] = [
+  { name: 'Note Import report', open: importEmptyFolderUntilReport },
+  { name: 'Note Link Updates', open: renameLinkedDraft },
+];
+
 describe('Dialogs share one frame', () => {
   let workspace: TestWorkspace;
   let app: DesktopApp;
@@ -121,7 +154,7 @@ describe('Dialogs share one frame', () => {
         app.browser.execute((id) => document.documentElement.dataset.theme === id, theme.id),
       );
       for (const dialog of dialogs) {
-        await dialog.open({ browser: app.browser, mainWindow, workspace });
+        await dialog.open({ browser: app.browser, mainWindow, workspace, theme });
         const frame = app.browser.$(FRAME);
         await frame.waitForDisplayed();
         const close = frame.$('header button[aria-label="Close"]');
@@ -152,5 +185,29 @@ describe('Dialogs share one frame', () => {
     await new ProtectedNotesPage(app.browser, mainWindow).createNotesWorkspace('Journal');
 
     await checkEachDialogInEachTheme(mainWindow, NOTES_DIALOGS);
+  });
+
+  it('opens the note import report and the link updates preview in light, dark and high contrast with a header close and no accessibility violations', async () => {
+    const notesFolder = join(workspace.homeDocumentsFolder, 'MDX Notes');
+    mkdirSync(notesFolder, { recursive: true });
+    for (const theme of THEMES) {
+      const draft = draftNoteName(theme);
+      writeFileSync(join(notesFolder, `${draft}.md`), `# ${draft}\n`);
+      writeFileSync(join(notesFolder, `${theme.label} inbox.md`), `See [[${draft}]] today.\n`);
+    }
+    const emptyFolder = realpathSync.native(mkdtempSync(join(tmpdir(), 'mdx-frame-import-')));
+    try {
+      const pickedFolders = THEMES.map(() => emptyFolder).join(';');
+      app = await DesktopApp.launch({ workspace, environment: { [PICKED_FOLDERS_VARIABLE]: pickedFolders } });
+      const mainWindow = new MainWindowPage(app.browser);
+      await mainWindow.emptyStateText();
+      await new ProtectedNotesPage(app.browser, mainWindow).createNotesWorkspace('Journal', {
+        holdsFiles: true,
+      });
+
+      await checkEachDialogInEachTheme(mainWindow, NOTES_ON_DISK_DIALOGS);
+    } finally {
+      rmSync(emptyFolder, { recursive: true, force: true });
+    }
   });
 });

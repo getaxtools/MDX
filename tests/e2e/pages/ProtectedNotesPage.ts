@@ -20,7 +20,10 @@ export class ProtectedNotesPage {
     private readonly mainWindow: MainWindowPage,
   ) {}
 
-  async createNotesWorkspace(name: string): Promise<void> {
+  async createNotesWorkspace(
+    name: string,
+    { holdsFiles = false }: { readonly holdsFiles?: boolean } = {},
+  ): Promise<void> {
     await this.turnOnNotes();
     await this.mainWindow.searchInCommandPalette('>New Workspace…');
     await this.mainWindow.waitForCommandPaletteOption('New Workspace…');
@@ -29,7 +32,7 @@ export class ProtectedNotesPage {
     await dialog.$('input#workspace-name').setValue(name);
     await this.mainWindow.chooseOption(`${DIALOG_SELECTOR} select#workspace-kind`, 'notes');
     await dialog.$('[role="group"][aria-labelledby="notes-location-label"] code').waitForDisplayed();
-    await this.mainWindow.confirmNotesFolder({ holdsFiles: false });
+    await this.mainWindow.confirmNotesFolder({ holdsFiles });
     await dialog.$('button=Create').click();
     await this.browser.waitUntil(async () => (await this.mainWindow.windowTitle()) === `${name} - MDX`);
   }

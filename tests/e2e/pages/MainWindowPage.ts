@@ -109,8 +109,8 @@ export class MainWindowPage {
   }
 
   async waitForBacklinksHeading(expectedHeading: string, timeoutMs: number): Promise<void> {
-    const heading = this.browser.$('.backlinks > h2');
-    await this.browser.waitUntil(async () => (await heading.getText()) === expectedHeading, {
+    const headingText = async () => this.browser.$('.backlinks > h2').getText();
+    await this.browser.waitUntil(async () => (await headingText()) === expectedHeading, {
       timeout: timeoutMs,
       timeoutMsg: `The backlinks heading never became "${expectedHeading}"`,
     });
