@@ -2,6 +2,7 @@ import { WORKSPACE_KINDS, WorkspaceKindsState, type WorkspaceKind } from '@mdx/c
 import { createTranslator } from '@mdx/i18n';
 import { render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
+import { tick } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
 import WorkspaceKindsPage from './WorkspaceKindsPage.svelte';
 
@@ -53,9 +54,11 @@ describe('WorkspaceKindsPage', () => {
   });
 
   it('choose a kind from its card', async () => {
-    const { onCommand, onClose } = renderPage(ALL_KINDS_ON);
+    const { onCommand, onClose, rerender } = renderPage(ALL_KINDS_ON);
 
     await userEvent.click(within(cardOf('Notes')).getByRole('button', { name: 'Notes' }));
+    await rerender({ kinds: ALL_KINDS_ON.switchKind('notes') });
+    await tick();
 
     expect(onCommand).toHaveBeenCalledWith({ kind: 'switchWorkspaceKind', kindId: 'notes' });
     expect(onClose).not.toHaveBeenCalled();
@@ -63,15 +66,54 @@ describe('WorkspaceKindsPage', () => {
   });
 
   it('choosing a card switches kind and announces it', async () => {
-    const { onCommand } = renderPage(ALL_KINDS_ON);
+    const { onCommand, rerender } = renderPage(ALL_KINDS_ON);
     const specViewer = within(cardOf('Spec viewer')).getByRole('button', { name: 'Spec viewer' });
 
     const markdownViewer = within(cardOf('Markdown viewer')).getByRole('button', { name: 'Markdown viewer' });
     expect(markdownViewer.getAttribute('aria-pressed')).toBe('true');
     expect(specViewer.getAttribute('aria-pressed')).toBe('false');
     await userEvent.click(specViewer);
+    await rerender({ kinds: ALL_KINDS_ON.switchKind('specViewer') });
+    await tick();
 
     expect(onCommand).toHaveBeenCalledWith({ kind: 'switchWorkspaceKind', kindId: 'specViewer' });
+    expect(announcement()).toBe('Showing Spec viewer.');
+  });
+
+  it('a chosen kind that is not shown in the end is not announced', async () => {
+    const { onCommand, rerender } = renderPage(ALL_KINDS_ON);
+
+    await userEvent.click(within(cardOf('Notes')).getByRole('button', { name: 'Notes' }));
+    await rerender({ kinds: ALL_KINDS_ON });
+    await tick();
+
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'switchWorkspaceKind', kindId: 'notes' });
+    expect(announcement()).toBe('');
+  });
+
+  it('choosing the active kind drops an earlier choice', async () => {
+    const { rerender } = renderPage(ALL_KINDS_ON);
+
+    await userEvent.click(within(cardOf('Notes')).getByRole('button', { name: 'Notes' }));
+    await userEvent.click(within(cardOf('Markdown viewer')).getByRole('button', { name: 'Markdown viewer' }));
+    await rerender({ kinds: ALL_KINDS_ON.switchKind('notes') });
+    await tick();
+
+    expect(announcement()).toBe('');
+  });
+
+  it('only the last chosen kind is announced', async () => {
+    const { rerender } = renderPage(ALL_KINDS_ON);
+
+    await userEvent.click(within(cardOf('Notes')).getByRole('button', { name: 'Notes' }));
+    await userEvent.click(within(cardOf('Spec viewer')).getByRole('button', { name: 'Spec viewer' }));
+    await rerender({ kinds: ALL_KINDS_ON.switchKind('notes') });
+    await tick();
+    const afterTheFirstSwitch = announcement();
+    await rerender({ kinds: ALL_KINDS_ON.switchKind('specViewer') });
+    await tick();
+
+    expect(afterTheFirstSwitch).toBe('');
     expect(announcement()).toBe('Showing Spec viewer.');
   });
 

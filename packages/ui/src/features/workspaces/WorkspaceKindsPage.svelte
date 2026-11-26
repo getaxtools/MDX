@@ -14,6 +14,7 @@
   import { KIND_ICONS, kindColourOf, kindDescriptionOf, kindNameOf } from '../control-wheel/kindPresentation';
   import {
     applyWorkspaceKindCommand,
+    kindShownNoticeOf,
     type WorkspaceKindCommand,
   } from '../control-wheel/workspaceKindCommands';
   import type { ViewerCommand } from '../viewer/viewerCommands';
@@ -38,6 +39,14 @@
 
   const entries = $derived(kindsPageEntriesOf(kinds));
   let announcement = $state('');
+  let chosenKindId: WorkspaceKindId | undefined = $state();
+
+  $effect(() => {
+    if (chosenKindId === undefined || kinds.activeKindId() !== chosenKindId) return;
+    const notice = kindShownNoticeOf(chosenKindId, translator);
+    chosenKindId = undefined;
+    void announce(translator.translate(notice.key, notice.values));
+  });
 
   function nameOf(kindId: WorkspaceKindId): string {
     return kindNameOf(kindId, translator);
@@ -57,7 +66,7 @@
 
   function choose(kindId: WorkspaceKindId) {
     const command: WorkspaceKindCommand = { kind: 'switchWorkspaceKind', kindId };
-    void announce(noticeTextOf(command));
+    chosenKindId = noticeTextOf(command) === undefined ? undefined : kindId;
     onCommand(command);
   }
 
