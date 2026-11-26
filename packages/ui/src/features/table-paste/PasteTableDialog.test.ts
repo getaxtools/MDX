@@ -1,5 +1,5 @@
 import { createTranslator } from '@mdx/i18n';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import PasteTableDialog from './PasteTableDialog.svelte';
@@ -78,5 +78,57 @@ describe('PasteTableDialog', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens in the shared frame with a header close, a quiet cancel and open as new document as the one primary', () => {
+    renderDialog();
+    const dialog = screen.getByRole('dialog', { name: 'Paste Table from Excel' });
+    const close = screen.getByRole('button', { name: 'Close' });
+    const buttonNames = within(dialog)
+      .getAllByRole('button')
+      .map((button) => button.textContent.trim() || button.getAttribute('aria-label'));
+
+    expect(close.title).toBe('Close (Esc)');
+    expect(close.closest('header')).not.toBeNull();
+    expect(buttonNames).toEqual(['Close', 'Copy Markdown', 'Cancel', 'Open as New Document']);
+    expect(dialog.getAttribute('aria-describedby')).not.toBeNull();
+    expect(document.getElementById(dialog.getAttribute('aria-describedby') ?? '')?.textContent).toContain(
+      'paste them below with Ctrl+V',
+    );
+  });
+
+  it('ctrl+enter in the cells box opens the table, and enter alone adds a line', async () => {
+    const { onOpenAsNewDocument } = renderDialog();
+    await pasteCells(EXCEL_CELLS);
+    const cells = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Cells' });
+    cells.focus();
+
+    await userEvent.keyboard('{Enter}');
+    expect(onOpenAsNewDocument).not.toHaveBeenCalled();
+    expect(cells.value).toBe('Fruit\tQty\nApple\t3\n\n');
+
+    await userEvent.keyboard('{Control>}{Enter}{/Control}');
+    expect(onOpenAsNewDocument).toHaveBeenCalledWith(markdownOutput());
+  });
+
+  it('enter on the header-row checkbox opens the table', async () => {
+    const { onOpenAsNewDocument } = renderDialog();
+    await pasteCells(EXCEL_CELLS);
+    screen.getByRole('checkbox', { name: 'First row is a header' }).focus();
+
+    await userEvent.keyboard('{Enter}');
+
+    expect(onOpenAsNewDocument).toHaveBeenCalledWith(markdownOutput());
+  });
+
+  it('escape while composing text closes nothing', async () => {
+    const { onClose } = renderDialog();
+
+    await fireEvent.keyDown(screen.getByRole('textbox', { name: 'Cells' }), {
+      key: 'Escape',
+      isComposing: true,
+    });
+
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

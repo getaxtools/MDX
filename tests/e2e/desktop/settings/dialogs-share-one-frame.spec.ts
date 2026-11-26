@@ -35,6 +35,10 @@ const DIALOGS: readonly DialogOpening[] = [
   { name: 'Word goal', open: async (mainWindow) => runCommand(mainWindow, '>word goal', 'Set Word Goal') },
   { name: 'Settings', open: async (mainWindow) => mainWindow.pressShortcut('Ctrl+,') },
   {
+    name: 'Paste Table from Excel',
+    open: async (mainWindow) => runCommand(mainWindow, '>paste table', 'Paste Table from Excel…'),
+  },
+  {
     name: 'Workspace file',
     open: async (_mainWindow, workspace) =>
       DesktopApp.launchSecondInstance({ workspace, documentFileNames: [WORKSPACE_FILE] }),
