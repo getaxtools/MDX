@@ -9,7 +9,7 @@
     type WorkspaceKindsState,
   } from '@mdx/core';
   import type { MessageKey, Translator } from '@mdx/i18n';
-  import { tick } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import KindIcon from '../control-wheel/KindIcon.svelte';
   import { KIND_ICONS, kindColourOf, kindDescriptionOf, kindNameOf } from '../control-wheel/kindPresentation';
   import {
@@ -40,6 +40,9 @@
   const entries = $derived(kindsPageEntriesOf(kinds));
   let announcement = $state('');
   let chosenKindId: WorkspaceKindId | undefined = $state();
+  let pageElement: HTMLElement | undefined = $state();
+
+  onMount(() => pageElement?.focus());
 
   $effect(() => {
     if (chosenKindId === undefined || kinds.activeKindId() !== chosenKindId) return;
@@ -106,7 +109,13 @@
 
 <!-- Esc leaves the page from any control on it, so the landmark listens for the key. -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<main class="kinds-page" tabindex="-1" aria-labelledby="kinds-page-heading" onkeydown={handleKeydown}>
+<main
+  bind:this={pageElement}
+  class="kinds-page"
+  tabindex="-1"
+  aria-labelledby="kinds-page-heading"
+  onkeydown={handleKeydown}
+>
   <h1 id="kinds-page-heading">{translator.translate('workspaceKinds.page.title')}</h1>
   <p class="introduction">{translator.translate('workspaceKinds.page.introduction')}</p>
   <ul class="cards" aria-label={translator.translate('workspaceKinds.page.kinds')}>
@@ -374,6 +383,11 @@
 
   button:focus-visible {
     outline: 2px solid var(--color-focus);
+  }
+
+  .kinds-page:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: -2px;
   }
 
   .visually-hidden {

@@ -80,7 +80,9 @@
   import WordGoalDialog from '../word-goals/WordGoalDialog.svelte';
   import WorkspaceDialogs from '../workspaces/WorkspaceDialogs.svelte';
   import { isWorkspaceDialog } from '../workspaces/WorkspaceActions';
+  import WorkspaceKindsPage from '../workspaces/WorkspaceKindsPage.svelte';
   import WorkspaceButton from '../workspaces/WorkspaceButton.svelte';
+  import { isWorkspaceKindCommand } from '../control-wheel/workspaceKindCommands';
   import NotesLocationMissing from '../notes-location/NotesLocationMissing.svelte';
   import NotesMoveDialog from '../notes-location/NotesMoveDialog.svelte';
   import NoteTrashDialog from '../notes/NoteTrashDialog.svelte';
@@ -162,12 +164,14 @@
   );
   const isWheelOpenedAtPointer = $derived(snapshot?.viewer.viewSettings.isWheelOpenedAtPointer ?? false);
   const isControlWheelOpen = $derived(isControlWheelShownIn(snapshot));
+  const controlWheelShortcut = $derived(
+    shortcutLabelFor({ kind: 'toggleControlWheel' }, translator, shortcuts),
+  );
   const controlWheelButton: ControlWheelButton | undefined = $derived.by(() => {
     if (!snapshot?.viewer.viewSettings.isWheelButtonInStatusBar) return undefined;
-    const shortcut = shortcutLabelFor({ kind: 'toggleControlWheel' }, translator, shortcuts);
     return {
       activeKindId: snapshot.viewer.workspaceKinds.activeKindId(),
-      ...(shortcut ? { shortcut } : {}),
+      ...(controlWheelShortcut ? { shortcut: controlWheelShortcut } : {}),
       onShowControlWheel: () => void controller.execute({ kind: 'toggleControlWheel' }),
     };
   });
@@ -271,6 +275,28 @@
     if (!isFromKeyboard) return;
     await tick();
     focusDocument();
+  }
+
+  async function closeKindsPage() {
+    await controller.execute({ kind: 'closeWorkspaceKindsPage' });
+    await tick();
+    focusDocument();
+  }
+
+  /** The page announces what is done on it, so its kind commands do not show the app's notice. */
+  function runKindsPageCommand(command: ViewerCommand) {
+    if (isWorkspaceKindCommand(command)) void controller.runWorkspaceKindsPageCommand(command);
+    else void controller.execute(command);
+  }
+
+  /** Esc leaves the kinds page from anywhere, unless a dialog, a menu or the palette takes it first. */
+  function isKindsPageEscape(event: KeyboardEvent): boolean {
+    return (
+      event.key === 'Escape' &&
+      !event.isComposing &&
+      snapshot?.isWorkspaceKindsPageShown === true &&
+      !isOverlayOpenIn(globalThis.document)
+    );
   }
 
   /** While editing, the first tab stop may be the preview splitter, and an editor still loading takes focus once ready. */
@@ -403,6 +429,11 @@
 
   function handleKeydown(event: KeyboardEvent) {
     if (event.defaultPrevented) return;
+    if (isKindsPageEscape(event)) {
+      event.preventDefault();
+      void closeKindsPage();
+      return;
+    }
     if (isRegionKey(event)) {
       const direction = event.shiftKey ? -1 : 1;
       if (moveFocusBetweenRegions(globalThis.document, direction, globalThis.document.activeElement))
@@ -579,52 +610,54 @@
         />
       {/if}
       <div class="workspace">
-        <TabStripView
-          tabs={snapshot.viewer.tabStrip.tabs()}
-          activeKey={activeTab?.location.canonicalKey}
-          pathStatuses={snapshot.pathStatuses}
-          unsavedKeys={snapshot.unsavedDocumentKeys}
-          {translator}
-          onActivate={(canonicalKey: string) => controller.activateTab(canonicalKey)}
-          onCommand={(command: ViewerCommand) => void controller.execute(command)}
-          onShowSidebar={viewSettings.isSidebarVisible
-            ? undefined
-            : () => void controller.execute({ kind: 'showSidebar' })}
-        />
-        <div class="document-header">
-          {#if viewSettings.isBreadcrumbsVisible && activeTab && snapshot.activeDocument}
-            <Breadcrumbs
-              displayPath={snapshot.activeDocument.displayPath}
-              fileName={snapshot.activeDocument.fileName}
-              hasFolder={!snapshot.activeDocument.isUntitled}
-              outline={snapshot.activeDocument.outline}
-              {currentHeadingId}
-              {translator}
-              onRevealInExplorer={() =>
-                void controller.execute({ kind: 'showSidebarView', sidebarView: 'explorer' })}
-              onSelectHeading={goToHeading}
-            />
-          {/if}
-          <DocumentToolbar
-            {viewSettings}
-            hasDocument={snapshot.activeDocument !== undefined}
-            canBeFavourite={activeTab !== undefined && !isActiveUntitled}
-            isFavourite={isActiveFavourite}
-            isEditing={snapshot.isActiveDocumentEditing ?? false}
+        {#if !snapshot.isWorkspaceKindsPageShown}
+          <TabStripView
+            tabs={snapshot.viewer.tabStrip.tabs()}
+            activeKey={activeTab?.location.canonicalKey}
+            pathStatuses={snapshot.pathStatuses}
+            unsavedKeys={snapshot.unsavedDocumentKeys}
             {translator}
+            onActivate={(canonicalKey: string) => controller.activateTab(canonicalKey)}
             onCommand={(command: ViewerCommand) => void controller.execute(command)}
+            onShowSidebar={viewSettings.isSidebarVisible
+              ? undefined
+              : () => void controller.execute({ kind: 'showSidebar' })}
           />
-          {#if editedDocument}
-            <FormattingToolbar
-              formatting={editorFormatting}
-              editingMode={snapshot.editingMode ?? 'source'}
+          <div class="document-header">
+            {#if viewSettings.isBreadcrumbsVisible && activeTab && snapshot.activeDocument}
+              <Breadcrumbs
+                displayPath={snapshot.activeDocument.displayPath}
+                fileName={snapshot.activeDocument.fileName}
+                hasFolder={!snapshot.activeDocument.isUntitled}
+                outline={snapshot.activeDocument.outline}
+                {currentHeadingId}
+                {translator}
+                onRevealInExplorer={() =>
+                  void controller.execute({ kind: 'showSidebarView', sidebarView: 'explorer' })}
+                onSelectHeading={goToHeading}
+              />
+            {/if}
+            <DocumentToolbar
+              {viewSettings}
+              hasDocument={snapshot.activeDocument !== undefined}
+              canBeFavourite={activeTab !== undefined && !isActiveUntitled}
+              isFavourite={isActiveFavourite}
+              isEditing={snapshot.isActiveDocumentEditing ?? false}
               {translator}
-              onRun={runToolboxAction}
-              onToggleEditingMode={() => void controller.execute({ kind: 'toggleEditingMode' })}
-              onReturnToEditor={() => shownEditor?.focus()}
+              onCommand={(command: ViewerCommand) => void controller.execute(command)}
             />
-          {/if}
-        </div>
+            {#if editedDocument}
+              <FormattingToolbar
+                formatting={editorFormatting}
+                editingMode={snapshot.editingMode ?? 'source'}
+                {translator}
+                onRun={runToolboxAction}
+                onToggleEditingMode={() => void controller.execute({ kind: 'toggleEditingMode' })}
+                onReturnToEditor={() => shownEditor?.focus()}
+              />
+            {/if}
+          </div>
+        {/if}
         <span class="mode-announcement" role="status">
           {#key snapshot.editingModeAnnouncement?.number}
             {snapshot.editingModeAnnouncement
@@ -642,7 +675,15 @@
           onDismiss={() => controller.dismissNotice()}
         />
         <div class="reading-area" data-focus-region>
-          {#if snapshot.missingNotesLocation !== undefined}
+          {#if snapshot.isWorkspaceKindsPageShown}
+            <WorkspaceKindsPage
+              kinds={snapshot.viewer.workspaceKinds}
+              {controlWheelShortcut}
+              {translator}
+              onCommand={runKindsPageCommand}
+              onClose={() => void closeKindsPage()}
+            />
+          {:else if snapshot.missingNotesLocation !== undefined}
             <NotesLocationMissing
               path={snapshot.missingNotesLocation}
               {translator}
