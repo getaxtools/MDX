@@ -22,7 +22,7 @@ function renderDialog({
 }: DialogState = {}) {
   const onCommand = vi.fn<(command: ViewerCommand) => void>();
   const onClose = vi.fn();
-  render(ProtectedSetUpDialog, {
+  const { rerender } = render(ProtectedSetUpDialog, {
     recoveryKey,
     isRecoveryKeyCovered,
     problem,
@@ -31,7 +31,7 @@ function renderDialog({
     onCommand,
     onClose,
   });
-  return { onCommand, onClose };
+  return { onCommand, onClose, rerender };
 }
 
 async function choosePasswords(password: string, repeated: string) {
@@ -80,6 +80,15 @@ describe('ProtectedSetUpDialog', () => {
       password: 'correct horse battery',
     });
     expect(screen.getByLabelText<HTMLInputElement>('Password').value).toBe('');
+  });
+
+  it('a second protect notes right after set-up started sends nothing more', async () => {
+    const { onCommand } = renderDialog();
+    await choosePasswords('correct horse battery', 'correct horse battery');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Protect Notes' }));
+
+    expect(onCommand).toHaveBeenCalledTimes(1);
   });
 
   it('asks for a new password, so no saved password is filled in', async () => {
@@ -155,11 +164,161 @@ describe('ProtectedSetUpDialog', () => {
     expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
   });
 
+  it('opens in the shared frame with a header close, a quiet cancel and continue as the one primary', () => {
+    renderDialog();
+
+    expect(screen.getByRole('button', { name: 'Close' }).title).toBe('Close (Esc)');
+    expect(screen.getByRole('button', { name: 'Cancel' }).classList.contains('primary')).toBe(false);
+    expect(screen.getByRole('button', { name: 'Continue' }).classList.contains('primary')).toBe(true);
+  });
+
+  it('after continue, focus is in the password field and protect notes is the primary', async () => {
+    renderDialog();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+    expect(document.activeElement).toBe(screen.getByLabelText('Password'));
+    expect(screen.getByRole('button', { name: 'Protect Notes' }).classList.contains('primary')).toBe(true);
+  });
+
+  it('enter in the second password field sets up the section', async () => {
+    const { onCommand } = renderDialog();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    await userEvent.type(screen.getByLabelText('Password'), 'correct horse battery');
+    await userEvent.type(screen.getByLabelText('Password again'), 'correct horse battery{Enter}');
+
+    expect(onCommand).toHaveBeenCalledWith({
+      kind: 'setUpProtectedSection',
+      password: 'correct horse battery',
+    });
+    expect(screen.getByLabelText<HTMLInputElement>('Password').value).toBe('');
+    expect(screen.getByLabelText<HTMLInputElement>('Password again').value).toBe('');
+  });
+
+  it('enter in the first password field with the second still empty says the passwords are not the same', async () => {
+    const { onCommand } = renderDialog();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    await userEvent.type(screen.getByLabelText('Password'), 'correct horse battery{Enter}');
+
+    expect(onCommand).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert').textContent).toBe('The two passwords are not the same.');
+  });
+
+  it('enter in the first password field sets up the section once both match', async () => {
+    const { onCommand } = renderDialog();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    await userEvent.type(screen.getByLabelText('Password again'), 'correct horse battery');
+    await userEvent.type(screen.getByLabelText('Password'), 'correct horse battery{Enter}');
+
+    expect(onCommand).toHaveBeenCalledWith({
+      kind: 'setUpProtectedSection',
+      password: 'correct horse battery',
+    });
+  });
+
+  it('enter in the confirmation field finishes once the end is right', async () => {
+    const { onCommand } = renderDialog({ recoveryKey: RECOVERY_KEY });
+
+    await userEvent.type(
+      screen.getByLabelText('Type the last two groups of the recovery key'),
+      'TV1Z-7Q{Enter}',
+    );
+
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'finishProtectedSetUp' });
+  });
+
+  it('enter with a wrong end in the confirmation field keeps the recovery key on screen', async () => {
+    const { onCommand } = renderDialog({ recoveryKey: RECOVERY_KEY });
+
+    await userEvent.type(
+      screen.getByLabelText('Type the last two groups of the recovery key'),
+      'TV1Z-7R{Enter}',
+    );
+
+    expect(onCommand).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert').textContent).toContain('That is not how the recovery key ends.');
+    expect(screen.getByLabelText('Recovery key').textContent).toBe(RECOVERY_KEY);
+  });
+
+  it('while the recovery key is shown, finish is the only button', () => {
+    renderDialog({ recoveryKey: RECOVERY_KEY });
+
+    expect(screen.getAllByRole('button').map((button) => button.textContent.trim())).toEqual(['Finish']);
+  });
+
+  it('the covered recovery key offers only the header close', () => {
+    renderDialog({ isRecoveryKeyCovered: true });
+
+    expect(screen.getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Close',
+    ]);
+  });
+
   it('can be cancelled before set-up starts', async () => {
     const { onClose } = renderDialog();
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('focus starts on continue', () => {
+    renderDialog();
+
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Continue' }));
+  });
+
+  it('while the section is being set up, the disabled primary says so and nothing closes', async () => {
+    const { onCommand, onClose, rerender } = renderDialog();
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    await userEvent.type(screen.getByLabelText('Password'), 'correct horse battery');
+    await userEvent.type(screen.getByLabelText('Password again'), 'correct horse battery');
+
+    await rerender({ isBusy: true });
+    screen.getByRole('region', { name: 'Protect Notes' }).focus();
+    await userEvent.keyboard('{Enter}');
+    await userEvent.keyboard('{Escape}');
+
+    expect(screen.getByRole('button', { name: 'Setting up…' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByLabelText<HTMLInputElement>('Password').disabled).toBe(true);
+    expect(screen.getByLabelText<HTMLInputElement>('Password again').disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Close' })).toBeNull();
+    expect(onCommand).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('the confirmation field neither suggests earlier entries nor checks spelling', () => {
+    renderDialog({ recoveryKey: RECOVERY_KEY });
+    const field = screen.getByLabelText('Type the last two groups of the recovery key');
+
+    expect(field.getAttribute('autocomplete')).toBe('off');
+    expect(field.getAttribute('spellcheck')).toBe('false');
+  });
+
+  it('when the section locks while the key is shown, focus moves to close and esc closes', async () => {
+    const { onClose, rerender } = renderDialog({ recoveryKey: RECOVERY_KEY });
+
+    await rerender({ recoveryKey: undefined, isRecoveryKeyCovered: true });
+
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Close' }));
+    await userEvent.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('after a failed set-up, focus returns to the password field', async () => {
+    const { rerender } = renderDialog();
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+    await rerender({ isBusy: true });
+    // WebView2 drops focus from a field once it is disabled; jsdom keeps it there.
+    screen.getByLabelText('Password').blur();
+    await rerender({ isBusy: false, problem: 'protectedNotes.setUp.alreadySetUp' });
+
+    expect(document.activeElement).toBe(screen.getByLabelText('Password'));
+    expect(screen.getByRole('alert').textContent).toBe('This notes folder already has a protected section.');
   });
 });

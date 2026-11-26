@@ -1537,7 +1537,6 @@
   "protectedNotes.output.unavailable": "Protected notes cannot be copied as HTML yet.",
   "protectedNotes.setUp.unfinished": "Set-up of the protected section is not finished: its recovery key still has to be confirmed. Come back to that workspace and unlock its protected notes to finish.",
   "protectedNotes.setUp.recoveryKeyCovered": "The protected notes locked before set-up finished. Unlock them to see the recovery key again and finish set-up.",
-  "protectedNotes.setUp.close": "Close",
   "protectedNotes.setUp.doNotCopy": "Write the key down rather than copying it: copied text stays on the clipboard, where other apps and clipboard history can read it.",
   "help.shortcuts.altGrLayouts": "On keyboard layouts where AltGr types letters, a Ctrl+Alt shortcut such as Ctrl+Alt+L may type a letter instead. Lock protected notes with their Lock button or the command palette then."
 }

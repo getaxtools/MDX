@@ -41,10 +41,15 @@
 
   $effect(() => firstField?.focus());
 
+  let wasBusy = false;
+  $effect(() => {
+    if (wasBusy && !isBusy && recoveryKey === undefined) firstField?.focus();
+    wasBusy = isBusy;
+  });
+
   const passwordMessageKey = $derived(passwordProblem ? PASSWORD_PROBLEMS[passwordProblem] : problem);
 
-  function setUp(event: SubmitEvent) {
-    event.preventDefault();
+  function setUp() {
     passwordProblem = passwordProblemOf(password, repeatedPassword);
     if (passwordProblem) return;
     onCommand({ kind: 'setUpProtectedSection', password });
@@ -52,26 +57,45 @@
     repeatedPassword = '';
   }
 
-  function finish(event: SubmitEvent) {
-    event.preventDefault();
+  function finish() {
     isEndWrong = recoveryKey === undefined || !isRecoveryKeyConfirmed(recoveryKey, typedEnd);
     typedEnd = '';
     if (!isEndWrong) onCommand({ kind: 'finishProtectedSetUp' });
   }
+
+  const primary = $derived.by(() => {
+    if (isRecoveryKeyCovered) return undefined;
+    if (recoveryKey !== undefined) {
+      return { label: translator.translate('protectedNotes.setUp.finish'), onActivate: finish };
+    }
+    if (!hasReadWarning) {
+      return {
+        label: translator.translate('protectedNotes.setUp.continue'),
+        onActivate: () => (hasReadWarning = true),
+      };
+    }
+    return {
+      label: translator.translate(isBusy ? 'protectedNotes.setUp.working' : 'protectedNotes.setUp.create'),
+      onActivate: setUp,
+      isDisabled: isBusy,
+    };
+  });
 </script>
 
 <Dialog
   title={translator.translate('protectedNotes.setUp.title')}
-  closeLabel={translator.translate(
-    isRecoveryKeyCovered ? 'protectedNotes.setUp.close' : 'protectedNotes.setUp.cancel',
-  )}
+  closeLabel={translator.translate('dialog.close.label')}
+  closeTooltip={translator.translate('dialog.close.tooltip')}
+  cancelLabel={isRecoveryKeyCovered ? undefined : translator.translate('protectedNotes.setUp.cancel')}
+  {primary}
+  isInformational={isRecoveryKeyCovered}
   canClose={recoveryKey === undefined && !isBusy}
   {onClose}
 >
   {#if isRecoveryKeyCovered}
     <p>{translator.translate('protectedNotes.setUp.recoveryKeyCovered')}</p>
   {:else if recoveryKey !== undefined}
-    <form onsubmit={finish} autocomplete="off">
+    <div class="fields">
       <p>{translator.translate('protectedNotes.setUp.recoveryKeyIntro')}</p>
       <p class="recovery-key" aria-label={translator.translate('protectedNotes.setUp.recoveryKey')}>
         <code>{recoveryKey}</code>
@@ -90,12 +114,9 @@
       <p id="protected-recovery-end-error" class="error" role="alert">
         {isEndWrong ? translator.translate('protectedNotes.setUp.wrongEnd') : ''}
       </p>
-      <div class="actions">
-        <button type="submit" class="primary">{translator.translate('protectedNotes.setUp.finish')}</button>
-      </div>
-    </form>
+    </div>
   {:else if hasReadWarning}
-    <form onsubmit={setUp} autocomplete="off">
+    <div class="fields">
       <label for="protected-password">{translator.translate('protectedNotes.setUp.password')}</label>
       <input
         bind:this={firstField}
@@ -125,25 +146,15 @@
       <p id="protected-password-error" class="error" role="alert">
         {passwordMessageKey ? translator.translate(passwordMessageKey) : ''}
       </p>
-      <div class="actions">
-        <button type="submit" class="primary" disabled={isBusy}>
-          {translator.translate(isBusy ? 'protectedNotes.setUp.working' : 'protectedNotes.setUp.create')}
-        </button>
-      </div>
-    </form>
+    </div>
   {:else}
     <p>{translator.translate('protectedNotes.setUp.warning')}</p>
     <p>{translator.translate('protectedNotes.setUp.warningRecoveryKey')}</p>
-    <div class="actions">
-      <button class="primary" onclick={() => (hasReadWarning = true)}>
-        {translator.translate('protectedNotes.setUp.continue')}
-      </button>
-    </div>
   {/if}
 </Dialog>
 
 <style>
-  form {
+  .fields {
     display: grid;
     gap: var(--space-2);
   }
@@ -188,29 +199,7 @@
     color: var(--color-text-secondary);
   }
 
-  .actions {
-    display: flex;
-    gap: var(--space-2);
-    margin-top: var(--space-2);
-  }
-
-  button {
-    height: 32px;
-    padding: 0 var(--space-3);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-medium);
-    background: var(--color-surface-raised);
-    color: var(--color-text);
-    font: inherit;
-  }
-
-  button.primary {
-    border-color: var(--color-accent);
-    background: var(--color-accent);
-    color: var(--color-accent-text);
-  }
-
-  :is(input, button):focus-visible {
+  input:focus-visible {
     outline: 2px solid var(--color-focus);
   }
 </style>
