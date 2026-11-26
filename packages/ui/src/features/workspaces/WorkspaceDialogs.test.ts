@@ -154,6 +154,16 @@ describe('workspace dialogs', () => {
     );
   });
 
+  it('enter on a chosen icon creates the workspace', async () => {
+    const { onCommand } = renderDialog('newWorkspace');
+
+    await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Reading');
+    await userEvent.click(screen.getByRole('radio', { name: 'Book' }));
+    await userEvent.keyboard('{Enter}');
+
+    expect(onCommand).toHaveBeenCalledWith(expect.objectContaining({ name: 'Reading', icon: 'book' }));
+  });
+
   it('the colour always comes with the name', () => {
     renderDialog('newWorkspace');
 
@@ -248,6 +258,33 @@ describe('workspace dialogs', () => {
     await userEvent.keyboard('{Escape}');
 
     expect(onClose).toHaveBeenCalled();
+    expect(onCommand).not.toHaveBeenCalled();
+  });
+
+  it('the new workspace dialog opens in the shared frame with the name focused and create as the primary', async () => {
+    renderDialog('newWorkspace');
+    const dialog = screen.getByRole('dialog', { name: 'New Workspace' });
+
+    const close = within(dialog).getByRole('button', { name: 'Close' });
+    const footerButtons = within(dialog)
+      .getAllByRole('button')
+      .filter((button) => button !== close)
+      .map((button) => button.textContent.trim());
+
+    expect(close.title).toBe('Close (Esc)');
+    expect(footerButtons).toEqual(['Cancel', 'Create']);
+    await vi.waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Name' })),
+    );
+  });
+
+  it('cancel closes the dialog without creating a workspace', async () => {
+    const { onCommand, onClose } = renderDialog('newWorkspace');
+
+    await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Journal');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());
     expect(onCommand).not.toHaveBeenCalled();
   });
 

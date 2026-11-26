@@ -38,6 +38,14 @@ const DIALOGS: readonly DialogOpening[] = [
     open: async (_mainWindow, workspace) =>
       DesktopApp.launchSecondInstance({ workspace, documentFileNames: [WORKSPACE_FILE] }),
   },
+  {
+    name: 'New workspace',
+    open: async (mainWindow) => runCommand(mainWindow, '>new workspace', 'New Workspace…'),
+  },
+  {
+    name: 'Rename workspace',
+    open: async (mainWindow) => runCommand(mainWindow, '>rename workspace', 'Rename Workspace…'),
+  },
 ];
 
 describe('Dialogs share one frame', () => {

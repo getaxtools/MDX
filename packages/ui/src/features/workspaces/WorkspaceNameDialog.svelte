@@ -81,7 +81,7 @@
     problem && (hasTriedToConfirm || name.length > 0) ? nameProblemMessage(problem, kindId, translator) : '',
   );
 
-  /** After the dialog has focused its close button, the name field takes the focus. */
+  /** Selecting the whole name lets a rename replace it by typing. */
   $effect(() => {
     const field = input;
     void Promise.resolve().then(() => {
@@ -90,8 +90,7 @@
     });
   });
 
-  function confirm(event: SubmitEvent) {
-    event.preventDefault();
+  function confirm() {
     hasTriedToConfirm = true;
     if (problem || (isNotesStepShown && notesLocationPath === undefined)) return;
     const hasFolderStep = hasAppearanceChoices && kindId === DEFAULT_WORKSPACE_KIND_ID && isFolderStepChosen;
@@ -108,10 +107,13 @@
 
 <Dialog
   title={translator.translate(titleKey)}
-  closeLabel={translator.translate('workspaces.dialog.cancel')}
+  closeLabel={translator.translate('dialog.close.label')}
+  closeTooltip={translator.translate('dialog.close.tooltip')}
+  cancelLabel={translator.translate('workspaces.dialog.cancel')}
+  primary={{ label: translator.translate(confirmKey), onActivate: confirm }}
   {onClose}
 >
-  <form onsubmit={confirm}>
+  <div class="fields">
     <label for="workspace-name">{translator.translate('workspaces.dialog.name')}</label>
     <input
       bind:this={input}
@@ -177,15 +179,11 @@
         </label>
       {/if}
     {/if}
-    <div class="actions">
-      <button type="submit">{translator.translate(confirmKey)}</button>
-      <button type="button" onclick={onClose}>{translator.translate('workspaces.dialog.cancel')}</button>
-    </div>
-  </form>
+  </div>
 </Dialog>
 
 <style>
-  form {
+  .fields {
     display: grid;
     gap: var(--space-2);
     min-width: 320px;
@@ -255,22 +253,7 @@
     font-size: var(--text-size-small);
   }
 
-  .actions {
-    display: flex;
-    gap: var(--space-2);
-  }
-
-  button {
-    height: 32px;
-    padding: 0 var(--space-3);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-medium);
-    background: var(--color-surface-raised);
-    color: var(--color-text);
-    font: inherit;
-  }
-
-  :is(input, select, button):focus-visible {
+  :is(input, select):focus-visible {
     outline: 2px solid var(--color-focus);
   }
 </style>
