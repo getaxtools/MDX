@@ -81,5 +81,10 @@ describe('the Notes trash', () => {
     await app.browser.waitUntil(() => existsSync(join(notesFolder, 'Plan.md')));
     await trash.$('p=The trash is empty.').waitForDisplayed();
     expect(readdirSync(join(notesFolder, '.mdx-notes', 'trash'))).toEqual([]);
+    expect(await trash.$$('button').map(async (button) => button.getAttribute('aria-label'))).toEqual([
+      'Close',
+    ]);
+    await trash.$('button[aria-label="Close"]').click();
+    await trash.waitForExist({ reverse: true });
   });
 });

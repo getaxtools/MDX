@@ -1009,7 +1009,6 @@
   "notes.tree.delete": "Move to Trash",
   "notes.tree.showTrash": "Show Trash",
   "notes.trash.title": "Notes Trash",
-  "notes.trash.close": "Close",
   "notes.trash.empty": "The trash is empty.",
   "notes.trash.description": "Deleted notes stay in the trash inside your notes folder until you empty it.",
   "notes.trash.place": "Was in {folder}",

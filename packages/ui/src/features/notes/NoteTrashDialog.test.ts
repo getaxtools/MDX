@@ -21,11 +21,35 @@ const ENTRIES: readonly NoteTrashEntry[] = [
 
 function renderDialog(entries: readonly NoteTrashEntry[] = ENTRIES) {
   const onCommand = vi.fn<(command: ViewerCommand) => void>();
-  render(NoteTrashDialog, { entries, translator: createTranslator(), onCommand, onClose: vi.fn() });
-  return { onCommand };
+  const onClose = vi.fn();
+  render(NoteTrashDialog, { entries, translator: createTranslator(), onCommand, onClose });
+  return { onCommand, onClose };
 }
 
 describe('NoteTrashDialog', () => {
+  it('opens in the shared frame with only the header close, which takes focus', () => {
+    renderDialog();
+
+    const close = screen.getByRole('button', { name: 'Close' });
+
+    expect(close.getAttribute('title')).toBe('Close (Esc)');
+    expect(document.activeElement).toBe(close);
+    expect(
+      screen
+        .getAllByRole('button')
+        .map((button) => button.textContent.trim() || button.getAttribute('aria-label')),
+    ).toEqual(['Close', 'Restore', 'Restore', 'Empty Trash…']);
+  });
+
+  it('esc closes the trash without restoring or emptying anything', async () => {
+    const { onCommand, onClose } = renderDialog();
+
+    await userEvent.keyboard('{Escape}');
+
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(onCommand).not.toHaveBeenCalled();
+  });
+
   it('lists deleted notes with their place', () => {
     renderDialog();
 

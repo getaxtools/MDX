@@ -34,7 +34,9 @@
 
 <Dialog
   title={translator.translate('notes.trash.title')}
-  closeLabel={translator.translate('notes.trash.close')}
+  closeLabel={translator.translate('dialog.close.label')}
+  closeTooltip={translator.translate('dialog.close.tooltip')}
+  isInformational
   {onClose}
 >
   <p class="description">{translator.translate('notes.trash.description')}</p>
