@@ -274,9 +274,17 @@ mod tests {
     }
 
     #[test]
-    fn an_older_database_is_copied_before_it_is_upgraded() {
+    fn upgrade_keeps_a_copy_of_the_earlier_database() {
         let folder = tempfile::tempdir().unwrap();
-        first_step_database(folder.path()).close().unwrap();
+        let connection = first_step_database(folder.path());
+        connection
+            .execute_batch(
+                "INSERT INTO workspaces (id, kind_id, position) VALUES
+                    ('second', 'markdownViewer', 1),
+                    ('third', 'markdownViewer', 2)",
+            )
+            .unwrap();
+        connection.close().unwrap();
 
         WorkspaceDatabase::new(folder.path())
             .load_registry()
@@ -287,7 +295,8 @@ mod tests {
             schema_version(&Connection::open(&copy).unwrap()).unwrap(),
             1
         );
-        assert_eq!(workspace_count(&copy), 1);
+        assert_eq!(workspace_count(&copy), 3);
+        assert!(!partial_path_for(&copy).exists());
     }
 
     #[test]
@@ -349,7 +358,7 @@ mod tests {
     }
 
     #[test]
-    fn keeps_the_newest_two_copies_and_nothing_else_is_removed() {
+    fn only_the_two_newest_copies_are_kept_and_nothing_else_is_removed() {
         let folder = tempfile::tempdir().unwrap();
         let connection = first_step_database(folder.path());
         let now = SystemTime::now();
@@ -424,7 +433,7 @@ mod tests {
     }
 
     #[test]
-    fn a_retried_upgrade_keeps_the_copy_made_first() {
+    fn a_retried_upgrade_keeps_the_first_copy() {
         let folder = tempfile::tempdir().unwrap();
         let connection = first_step_database(folder.path());
         fs::write(copy_path(folder.path(), "1.0.0", 1), b"earlier copy").unwrap();
@@ -438,7 +447,7 @@ mod tests {
     }
 
     #[test]
-    fn no_upgrade_runs_when_the_copy_cannot_be_made() {
+    fn a_copy_that_cannot_be_written_stops_the_upgrade() {
         let folder = tempfile::tempdir().unwrap();
         first_step_database(folder.path()).close().unwrap();
         let blocked_copy = copy_path(folder.path(), APP_VERSION, 1);

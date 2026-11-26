@@ -420,7 +420,7 @@ describe('WorkspaceStateStorage', () => {
     expect(storage.shownWorkspace()?.id).toBe('default');
   });
 
-  it('Clear All Data on the earlier state file still clears the store when it can be opened', async () => {
+  it('clearing while running on the earlier state file still clears the store when it can be opened', async () => {
     const workspaceStore = new RecordingWorkspaceStore();
     workspaceStore.failsNextImport = true;
     const { storage } = createStorage(workspaceStore);
@@ -433,7 +433,7 @@ describe('WorkspaceStateStorage', () => {
     expect(storage.hasWorkspaces()).toBe(false);
   });
 
-  it('after Clear All Data on the earlier state file the next start has one empty default workspace', async () => {
+  it('clearing while running on the earlier state file leaves one empty default workspace for the next start', async () => {
     const workspaceStore = new RecordingWorkspaceStore();
     workspaceStore.failsNextImport = true;
     const appState = new InMemoryAppState(earlierStateWithFavourite('C:\\a.md'));

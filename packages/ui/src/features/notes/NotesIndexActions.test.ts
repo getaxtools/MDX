@@ -273,7 +273,7 @@ describe('the notes index', () => {
     expect(noteFiles.notePaths()).toEqual(['E:\\Journal\\Plan.md']);
   });
 
-  it('a Clear All Data that fails part-way still removes the notes index and says the clear failed', async () => {
+  it('when part of the clear fails the notes index is still removed and the clear says it failed', async () => {
     const { controller, notesIndex, snapshot, workspaceStore } = await startInJournal();
     workspaceStore.nextClearFailure = 'afterDeleting';
 
