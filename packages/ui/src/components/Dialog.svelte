@@ -23,7 +23,10 @@
     purpose?: string;
     primary?: PrimaryAction | undefined;
     closeTooltip?: string;
-    /** For a warning: focus starts on Cancel and only pressing the primary takes the step, never Enter elsewhere. */
+    /**
+     * For a warning: focus starts on Cancel, or moves there when the dialog turns into one, even from a
+     * field, and only pressing the primary takes the step, never Enter elsewhere.
+     */
     shouldStartOnCancel?: boolean;
     /** A dialog with nothing to apply: the shared frame with only the header Close. */
     isInformational?: boolean;
@@ -59,9 +62,21 @@
   let primaryButton: HTMLButtonElement | undefined = $state();
   let isClosing = $state(false);
   let isMounted = false;
+  let wasWarning: boolean | undefined;
+  const isPrimaryShown = $derived(primary !== undefined);
 
   $effect(() => {
     if (!isSharedFrame) closeButton?.focus();
+  });
+
+  $effect(() => {
+    const isWarning = shouldStartOnCancel;
+    if (isWarning && wasWarning === false) (cancelButton ?? headerCloseButton ?? dialogElement)?.focus();
+    wasWarning = isWarning;
+  });
+
+  $effect(() => {
+    if (!isPrimaryShown && isMounted) refocusIfLost();
   });
 
   onMount(() => {
@@ -109,6 +124,13 @@
     const enabledPrimary = primary?.isDisabled ? undefined : primaryButton;
     const initial = shouldStartOnCancel ? cancelButton : (field ?? enabledPrimary ?? cancelButton);
     (initial ?? headerCloseButton ?? dialogElement)?.focus();
+  }
+
+  // A focused button that is removed leaves focus on the page, where Escape no longer reaches the dialog.
+  function refocusIfLost() {
+    const active = globalThis.document.activeElement;
+    if (active && active !== globalThis.document.body) return;
+    (cancelButton ?? headerCloseButton ?? dialogElement)?.focus();
   }
 
   function returnFocusToOpener() {

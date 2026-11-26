@@ -283,6 +283,67 @@ describe('Dialog frame', () => {
     expect(onActivate).toHaveBeenCalledOnce();
   });
 
+  it('a dialog that turns into a warning moves focus to cancel, so a second enter does not take the step', async () => {
+    const { onClose, onActivate, rerender } = renderFrame({ children: MESSAGE_ONLY });
+    expect(focusedButtonName()).toBe('Rename');
+
+    await rerender({ shouldStartOnCancel: true, primary: { label: 'Replace', onActivate } });
+    await userEvent.keyboard('{Enter}');
+
+    expect(onActivate).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('when the focused primary goes away, focus moves to the header close and esc still closes', async () => {
+    const { onClose, rerender } = renderFrame({ children: MESSAGE_ONLY });
+    expect(focusedButtonName()).toBe('Rename');
+
+    await rerender({ primary: undefined, cancelLabel: undefined, isInformational: true });
+
+    expect(focusedButtonName()).toBe('Close');
+    await userEvent.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('when the focused primary goes away and cancel stays, focus moves to cancel', async () => {
+    const { rerender } = renderFrame({ children: MESSAGE_ONLY });
+    expect(focusedButtonName()).toBe('Rename');
+
+    await rerender({ primary: undefined });
+
+    expect(focusedButtonName()).toBe('Cancel');
+  });
+
+  it('a primary that goes away while typing in a field leaves focus in the field', async () => {
+    const { rerender } = renderFrame({ children: NAME_FIELD });
+    const field = screen.getByRole('textbox', { name: 'Name' });
+    field.focus();
+
+    await rerender({ primary: undefined });
+
+    expect(document.activeElement).toBe(field);
+  });
+
+  it('a dialog that cannot be cancelled and turns into a warning moves focus off its primary, so enter does not take the step', async () => {
+    const { onActivate, rerender } = renderFrame({ children: MESSAGE_ONLY, canClose: false });
+    expect(focusedButtonName()).toBe('Rename');
+
+    await rerender({ shouldStartOnCancel: true });
+    await userEvent.keyboard('{Enter}');
+
+    expect(document.activeElement).toBe(screen.getByRole('dialog'));
+    expect(onActivate).not.toHaveBeenCalled();
+  });
+
+  it('a dialog that turns into a warning moves focus from a field to cancel', async () => {
+    const { rerender } = renderFrame({ children: NAME_FIELD });
+    screen.getByRole('textbox', { name: 'Name' }).focus();
+
+    await rerender({ shouldStartOnCancel: true });
+
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel' }));
+  });
+
   it('contrast theme backdrop: forced colours draw a solid system backdrop with no blur and a visible border', () => {
     const styles = readFileSync(join(import.meta.dirname, 'Dialog.svelte'), 'utf8');
     const forcedColours = /@media \(forced-colors: active\) \{([\s\S]*?)\n {2}\}/.exec(styles)?.[1] ?? '';
