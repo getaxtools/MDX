@@ -79,6 +79,10 @@ const NOTES_DIALOGS: readonly DialogOpening[] = [
     open: async ({ mainWindow }) =>
       runCommand(mainWindow, '>new note from template', 'New Note from Template…'),
   },
+  {
+    name: 'Export All Notes',
+    open: async ({ mainWindow }) => runCommand(mainWindow, '>export all notes', 'Export All Notes…'),
+  },
 ];
 
 describe('Dialogs share one frame', () => {
