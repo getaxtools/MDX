@@ -74,6 +74,7 @@ import {
   applyWorkspaceKindCommand,
   kindShownNoticeOf,
   type WorkspaceKindCommand,
+  type WorkspaceKindNotice,
 } from '../control-wheel/workspaceKindCommands';
 import type { DocumentLink } from '../document-view/DocumentLink';
 import {
@@ -292,6 +293,8 @@ export interface ViewerSnapshot {
   /** A heading to show once the document a link opened is shown. */
   readonly linkedHeadingRequest?: LinkedHeadingRequest;
   readonly isSourceView?: boolean;
+  /** The Workspace kinds page fills the reading area; dialogs still open over it. */
+  readonly isWorkspaceKindsPageShown?: boolean;
   readonly unsavedChanges?: UnsavedChangesRequest;
   readonly pathStatuses: ReadonlyMap<string, PathStatus>;
   /** How often each shown folder changed on disk, so its listing reloads when the count goes up. */
@@ -404,6 +407,12 @@ interface PendingProtectedCopy {
   readonly canonicalKey: string;
 }
 
+/** Where the Workspace kinds page was opened: it closes once another document is shown in that workspace. */
+interface KindsPagePlace {
+  readonly workspaceId: string | undefined;
+  readonly activeKey: string | undefined;
+}
+
 type CommandHandlers = {
   readonly [Kind in ViewerCommand['kind']]?: (
     command: Extract<ViewerCommand, { kind: Kind }>,
@@ -425,6 +434,7 @@ export class ViewerController {
   private pendingOutlineRefresh: ReturnType<typeof setTimeout> | undefined;
   private activeDocument: RenderedActiveDocument | undefined;
   private openDialog: ViewerDialog | undefined;
+  private kindsPage: KindsPagePlace | undefined;
   private readonly workspaceActions: WorkspaceActions;
   private readonly workspaceFileActions: WorkspaceFileActions | undefined;
   private readonly notesLocationActions: NotesLocationActions | undefined;
@@ -1498,6 +1508,14 @@ export class ViewerController {
     },
     switchWorkspaceKind: (command) => this.runWorkspaceKindCommand(command),
     setWorkspaceKindEnabled: (command) => this.runWorkspaceKindCommand(command),
+    showWorkspaceKindsPage: () => {
+      this.kindsPage = this.kindsPagePlace();
+      this.publish(this.composeSnapshot(this.snapshot.notice));
+    },
+    closeWorkspaceKindsPage: () => {
+      this.kindsPage = undefined;
+      this.publish(this.composeSnapshot(this.snapshot.notice));
+    },
     runEditorCommand: ({ command }) => {
       this.editingActions.runEditorCommand(command);
     },
@@ -1839,7 +1857,20 @@ export class ViewerController {
     this.publish(this.composeSnapshot(this.snapshot.notice));
   }
 
+  /** The shown kinds page announces what is done on it, so the app's notice stays out of the way. */
+  async runWorkspaceKindsPageCommand(command: WorkspaceKindCommand): Promise<void> {
+    const notice = await this.applyWorkspaceKindCommand(command);
+    if (notice && !this.kindsPage) this.showNotice(notice.key, notice.values);
+  }
+
   private async runWorkspaceKindCommand(command: WorkspaceKindCommand): Promise<void> {
+    const notice = await this.applyWorkspaceKindCommand(command);
+    if (notice) this.showNotice(notice.key, notice.values);
+  }
+
+  private async applyWorkspaceKindCommand(
+    command: WorkspaceKindCommand,
+  ): Promise<WorkspaceKindNotice | undefined> {
     const { session, translator } = this.dependencies;
     const kindWorkspace =
       command.kind === 'switchWorkspaceKind'
@@ -1847,15 +1878,29 @@ export class ViewerController {
         : undefined;
     if (kindWorkspace && kindWorkspace.id !== session.shownWorkspace()?.id) {
       await this.workspaceActions.run({ kind: 'switchWorkspace', workspaceId: kindWorkspace.id });
-      if (session.shownWorkspace()?.id !== kindWorkspace.id) return;
-      const notice = kindShownNoticeOf(session.currentState().workspaceKinds.activeKindId(), translator);
-      this.showNotice(notice.key, notice.values);
-      return;
+      if (session.shownWorkspace()?.id !== kindWorkspace.id) return undefined;
+      return kindShownNoticeOf(session.currentState().workspaceKinds.activeKindId(), translator);
     }
     const current = session.currentState().workspaceKinds;
     const { state, notice } = applyWorkspaceKindCommand(current, command, translator);
     if (state !== current) session.updateWorkspaceKinds(() => state);
-    if (notice) this.showNotice(notice.key, notice.values);
+    return notice;
+  }
+
+  private kindsPagePlace(): KindsPagePlace {
+    const { session } = this.dependencies;
+    return {
+      workspaceId: session.shownWorkspace()?.id,
+      activeKey: session.currentState().tabStrip.activeTab()?.location.canonicalKey,
+    };
+  }
+
+  /** Another workspace brings its own tabs, so only a new document within the same workspace closes the page. */
+  private followKindsPage(): void {
+    if (!this.kindsPage) return;
+    const place = this.kindsPagePlace();
+    if (place.workspaceId !== this.kindsPage.workspaceId) this.kindsPage = place;
+    else if (place.activeKey !== this.kindsPage.activeKey) this.kindsPage = undefined;
   }
 
   /** The translator is made once at startup, so a new language shows after the next start. */
@@ -2061,6 +2106,7 @@ export class ViewerController {
 
   private handleSessionChange(): void {
     this.navigation.recordActiveDocument();
+    this.followKindsPage();
     this.showSpecProjects();
     this.publish(this.composeSnapshot(this.snapshot.notice));
     this.showViewStateInMenu();
@@ -2280,6 +2326,7 @@ export class ViewerController {
       ...this.linkRequestsPart(),
       ...(this.linkedHeadingRequest ? { linkedHeadingRequest: this.linkedHeadingRequest } : {}),
       ...(this.isSourceView ? { isSourceView: true } : {}),
+      ...(this.kindsPage ? { isWorkspaceKindsPageShown: true } : {}),
       ...this.unsavedChangesPart(),
       ...this.workspacesPart(),
       ...this.notesPart(),

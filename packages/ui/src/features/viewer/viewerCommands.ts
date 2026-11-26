@@ -55,6 +55,8 @@ export type ViewerCommand =
   | { readonly kind: 'openNewWindow' }
   | { readonly kind: 'toggleControlWheel' }
   | { readonly kind: 'showWorkspaceKindSettings' }
+  | { readonly kind: 'showWorkspaceKindsPage' }
+  | { readonly kind: 'closeWorkspaceKindsPage' }
   | { readonly kind: 'showWordGoal' }
   | { readonly kind: 'setWordGoal'; readonly goal: number }
   | { readonly kind: 'clearWordGoal' }
