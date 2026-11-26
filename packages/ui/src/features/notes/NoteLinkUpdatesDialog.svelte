@@ -33,7 +33,11 @@
 
 <Dialog
   title={translator.translate('notes.linkUpdates.title', { name: preview.noteName })}
-  closeLabel={translator.translate('notes.linkUpdates.skip')}
+  closeLabel={translator.translate('dialog.close.label')}
+  closeTooltip={translator.translate('dialog.close.tooltip')}
+  cancelLabel={translator.translate('notes.linkUpdates.skip')}
+  primary={{ label: translator.translate('notes.linkUpdates.update'), onActivate: updateLinks }}
+  shouldStartOnCancel
   {onClose}
 >
   <p class="description">
@@ -104,9 +108,6 @@
       <input id="note-link-updates-always" type="checkbox" bind:checked={isAlwaysApplied} />
       {translator.translate('notes.linkUpdates.always')}
     </label>
-    <button type="button" onclick={updateLinks}>
-      {translator.translate('notes.linkUpdates.update')}
-    </button>
   {/snippet}
 </Dialog>
 
@@ -180,22 +181,7 @@
     margin-inline-end: auto;
   }
 
-  button {
-    height: 32px;
-    padding: 0 var(--space-4);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-medium);
-    background: var(--color-surface-raised);
-    color: var(--color-text);
-    font: inherit;
-    font-weight: 500;
-  }
-
-  button:hover {
-    background: var(--color-surface-hover);
-  }
-
-  :is(button, input):focus-visible {
+  input:focus-visible {
     outline: 2px solid var(--color-focus);
     outline-offset: 2px;
   }

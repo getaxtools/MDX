@@ -98,13 +98,37 @@ describe('NoteLinkUpdatesDialog', () => {
     expect(screen.getByRole('button', { name: 'Update Links' })).toBeTruthy();
   });
 
+  it('opens in the shared frame with a header close, a quiet don’t update and update links as the one primary', async () => {
+    const { onCommand, onClose } = renderDialog();
+
+    const close = screen.getByRole('button', { name: 'Close' });
+    await userEvent.click(close);
+
+    expect(close.getAttribute('title')).toBe('Close (Esc)');
+    expect(screen.getByRole('button', { name: 'Update Links' }).classList.contains('primary')).toBe(true);
+    expect(screen.getByRole('button', { name: "Don't Update" }).classList.contains('quiet')).toBe(true);
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(onCommand).not.toHaveBeenCalled();
+  });
+
+  it('enter on don’t update leaves the links as they are', async () => {
+    const { onCommand, onClose } = renderDialog();
+
+    await userEvent.keyboard('{Enter}');
+
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(onCommand).not.toHaveBeenCalled();
+  });
+
   it('updates the links with Always chosen, by keyboard alone', async () => {
     const { onCommand, onClose } = renderDialog();
     const always = screen.getByRole('checkbox', { name: 'Always update links without asking' });
     const update = screen.getByRole('button', { name: 'Update Links' });
 
-    always.focus();
+    await userEvent.tab({ shift: true });
+    expect(document.activeElement).toBe(always);
     await userEvent.keyboard(' ');
+    await userEvent.tab();
     await userEvent.tab();
     expect(document.activeElement).toBe(update);
     await userEvent.keyboard('{Enter}');
