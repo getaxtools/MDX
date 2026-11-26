@@ -19,10 +19,11 @@
   let name = $state('');
   let nameInput: HTMLInputElement | undefined = $state();
 
+  const hasTemplates = $derived(templates.length > 0);
+
   $effect(() => nameInput?.focus());
 
-  function create(event: SubmitEvent) {
-    event.preventDefault();
+  function create() {
     if (template === '' || name.trim() === '') return;
     onCommand({ kind: 'createNoteFromTemplate', template, name: name.trim() });
     onClose();
@@ -31,15 +32,25 @@
 
 <Dialog
   title={translator.translate('notes.templates.title')}
-  closeLabel={translator.translate('notes.templates.cancel')}
+  closeLabel={translator.translate('dialog.close.label')}
+  closeTooltip={translator.translate('dialog.close.tooltip')}
+  cancelLabel={hasTemplates ? translator.translate('notes.templates.cancel') : undefined}
+  primary={hasTemplates
+    ? {
+        label: translator.translate('notes.templates.create'),
+        onActivate: create,
+        isDisabled: name.trim() === '',
+      }
+    : undefined}
+  isInformational={!hasTemplates}
   {onClose}
 >
-  {#if templates.length === 0}
+  {#if !hasTemplates}
     <p class="description">
       {translator.translate('notes.templates.none', { folder: templatesFolder })}
     </p>
   {:else}
-    <form onsubmit={create}>
+    <div class="fields">
       <label for="note-template">{translator.translate('notes.templates.template')}</label>
       <select id="note-template" bind:value={template}>
         {#each templates as name (name)}
@@ -48,17 +59,12 @@
       </select>
       <label for="note-from-template-name">{translator.translate('notes.templates.name')}</label>
       <input id="note-from-template-name" bind:this={nameInput} bind:value={name} />
-      <div class="actions">
-        <button type="submit" disabled={name.trim() === ''}>
-          {translator.translate('notes.templates.create')}
-        </button>
-      </div>
-    </form>
+    </div>
   {/if}
 </Dialog>
 
 <style>
-  form {
+  .fields {
     display: grid;
     gap: var(--space-2);
   }
@@ -79,22 +85,7 @@
     font: inherit;
   }
 
-  .actions {
-    display: flex;
-    gap: var(--space-2);
-  }
-
-  button {
-    height: 32px;
-    padding: 0 var(--space-3);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-medium);
-    background: var(--color-surface-raised);
-    color: var(--color-text);
-    font: inherit;
-  }
-
-  :is(input, select, button):focus-visible {
+  :is(input, select):focus-visible {
     outline: 2px solid var(--color-focus);
   }
 </style>
