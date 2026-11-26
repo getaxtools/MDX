@@ -7,13 +7,51 @@ import type { ViewerCommand } from '../viewer/viewerCommands';
 import NoteImportDialog from './NoteImportDialog.svelte';
 import type { NoteImportView } from './NoteTransferActions';
 
+const COPYING: NoteImportView = { progress: { done: 3, total: 10, isListing: false } };
+
 function renderDialog(view: NoteImportView) {
   const onCommand = vi.fn<(command: ViewerCommand) => void>();
-  render(NoteImportDialog, { view, translator: createTranslator(), onCommand });
-  return { onCommand };
+  const translator = createTranslator();
+  const { rerender } = render(NoteImportDialog, { view, translator, onCommand });
+  return { onCommand, showView: (next: NoteImportView) => rerender({ view: next, translator, onCommand }) };
 }
 
 describe('NoteImportDialog', () => {
+  it('opens in the shared frame with a header close, a quiet continue in background and stop import as the one primary', async () => {
+    const { onCommand } = renderDialog(COPYING);
+
+    const close = screen.getByRole('button', { name: 'Close' });
+    await userEvent.click(screen.getByRole('button', { name: 'Continue in Background' }));
+
+    expect(close.getAttribute('title')).toBe('Close (Esc)');
+    expect(screen.getByRole('button', { name: 'Stop Import' }).classList.contains('primary')).toBe(true);
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'closeNotesTransfer' });
+    expect(onCommand).not.toHaveBeenCalledWith({ kind: 'cancelNotesImport' });
+  });
+
+  it('while copying, focus starts on continue in background, so enter does not stop the import', async () => {
+    const { onCommand } = renderDialog(COPYING);
+
+    await userEvent.keyboard('{Enter}');
+
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Continue in Background' }));
+    expect(onCommand).not.toHaveBeenCalledWith({ kind: 'cancelNotesImport' });
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'closeNotesTransfer' });
+  });
+
+  it('the report offers only the header close, and esc closes it after stop import took focus', async () => {
+    const { onCommand, showView } = renderDialog(COPYING);
+    screen.getByRole('button', { name: 'Stop Import' }).focus();
+
+    await showView({ ...COPYING, report: { ...EMPTY_IMPORT_REPORT, copiedFiles: 3, wasCancelled: true } });
+    await userEvent.keyboard('{Escape}');
+
+    expect(screen.getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Close',
+    ]);
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'closeNotesTransfer' });
+  });
+
   it('shows progress while copying and stops on request', async () => {
     const { onCommand } = renderDialog({ progress: { done: 3, total: 10, isListing: false } });
 

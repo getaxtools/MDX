@@ -14,11 +14,24 @@
 
   const report = $derived(view.report);
   const isRunning = $derived(report === undefined && view.failure === undefined);
+  const stopImport = $derived(
+    isRunning
+      ? {
+          label: translator.translate('notes.import.cancel'),
+          onActivate: () => onCommand({ kind: 'cancelNotesImport' }),
+        }
+      : undefined,
+  );
 </script>
 
 <Dialog
   title={translator.translate('notes.import.title')}
-  closeLabel={translator.translate(isRunning ? 'notes.import.runInBackground' : 'notes.import.close')}
+  closeLabel={translator.translate('dialog.close.label')}
+  closeTooltip={translator.translate('dialog.close.tooltip')}
+  cancelLabel={isRunning ? translator.translate('notes.import.runInBackground') : undefined}
+  isInformational={!isRunning}
+  primary={stopImport}
+  shouldStartOnCancel={isRunning}
   onClose={() => onCommand({ kind: 'closeNotesTransfer' })}
 >
   {#if isRunning}
@@ -98,13 +111,6 @@
       <p>{translator.translate('notes.import.skipped', { count: report.skippedEntries })}</p>
     {/if}
   {/if}
-  {#snippet footer()}
-    {#if isRunning}
-      <button onclick={() => onCommand({ kind: 'cancelNotesImport' })}>
-        {translator.translate('notes.import.cancel')}
-      </button>
-    {/if}
-  {/snippet}
 </Dialog>
 
 <style>
@@ -124,19 +130,5 @@
 
   progress {
     width: 100%;
-  }
-
-  button {
-    min-height: 32px;
-    padding: 0 var(--space-3);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-medium);
-    background: var(--color-surface-raised);
-    color: var(--color-text);
-    font: inherit;
-  }
-
-  button:focus-visible {
-    outline: 2px solid var(--color-focus);
   }
 </style>

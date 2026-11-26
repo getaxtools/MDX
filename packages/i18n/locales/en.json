@@ -1425,7 +1425,6 @@
   "notes.import.progress": "Copying {done, number} of {total, number} files…",
   "notes.import.cancel": "Stop Import",
   "notes.import.runInBackground": "Continue in Background",
-  "notes.import.close": "Close",
   "notes.import.summary": "{count, plural, one {# file was copied} other {# files were copied}} into the notes folder. The folder you imported from was not changed.",
   "notes.import.cancelledSummary": "The import was stopped after {count, plural, one {# file} other {# files}}. The copied files stay in the notes folder.",
   "notes.import.renamedHeading": "Saved under a new name",

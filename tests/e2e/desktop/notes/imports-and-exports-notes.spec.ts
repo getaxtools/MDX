@@ -89,6 +89,11 @@ describe('importing and exporting notes', () => {
     expect(readFileSync(join(notesFolder, 'Plan.md'), 'utf8')).toBe('# Mine\n');
     expect(existsSync(join(notesFolder, '.app-settings'))).toBe(false);
     expect(readFileSync(join(vault, 'Plan.md'), 'utf8')).toBe(PLAN_WITH_BLOCK_REFERENCE);
+    expect(await report.$$('button').map(async (button) => button.getAttribute('aria-label'))).toEqual([
+      'Close',
+    ]);
+    await mainWindow.pressShortcut('Escape');
+    await report.waitForExist({ reverse: true });
   });
 
   it('exports a folder with its attachments, byte for byte', async () => {
