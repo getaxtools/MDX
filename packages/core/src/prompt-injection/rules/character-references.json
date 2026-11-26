@@ -1,0 +1,27 @@
+{
+  "named": {
+    "amp": "U+0026",
+    "lt": "U+003C",
+    "gt": "U+003E",
+    "quot": "U+0022",
+    "apos": "U+0027",
+    "nbsp": "U+00A0",
+    "shy": "U+00AD",
+    "zwnj": "U+200C",
+    "zwj": "U+200D",
+    "lrm": "U+200E",
+    "rlm": "U+200F",
+    "ZeroWidthSpace": "U+200B",
+    "NegativeVeryThinSpace": "U+200B",
+    "NegativeThinSpace": "U+200B",
+    "NegativeMediumSpace": "U+200B",
+    "NegativeThickSpace": "U+200B",
+    "NoBreak": "U+2060",
+    "ApplyFunction": "U+2061",
+    "af": "U+2061",
+    "InvisibleTimes": "U+2062",
+    "it": "U+2062",
+    "InvisibleComma": "U+2063",
+    "ic": "U+2063"
+  }
+}

@@ -17,12 +17,8 @@
 
   let goalText = $state(untrack(() => (currentGoal === undefined ? '' : String(currentGoal))));
   let isInvalid = $state(false);
-  let input: HTMLInputElement | undefined = $state();
 
-  $effect(() => input?.focus());
-
-  function setGoal(event: SubmitEvent) {
-    event.preventDefault();
+  function setGoal() {
     const goal = Number(goalText.trim());
     isInvalid = !isValidWordGoal(goal);
     if (!isInvalid) onCommand({ kind: 'setWordGoal', goal });
@@ -31,13 +27,15 @@
 
 <Dialog
   title={translator.translate('wordGoal.title')}
-  closeLabel={translator.translate('wordGoal.cancel')}
+  closeLabel={translator.translate('dialog.close.label')}
+  closeTooltip={translator.translate('dialog.close.tooltip')}
+  cancelLabel={translator.translate('wordGoal.cancel')}
+  primary={{ label: translator.translate('wordGoal.save'), onActivate: setGoal }}
   {onClose}
 >
-  <form onsubmit={setGoal}>
+  <div class="fields">
     <label for="word-goal">{translator.translate('wordGoal.label')}</label>
     <input
-      bind:this={input}
       bind:value={goalText}
       id="word-goal"
       inputmode="numeric"
@@ -48,19 +46,18 @@
     <p id="word-goal-error" class="error" role="alert">
       {isInvalid ? translator.translate('wordGoal.invalid') : ''}
     </p>
-    <div class="actions">
-      <button type="submit">{translator.translate('wordGoal.save')}</button>
-      {#if currentGoal !== undefined}
-        <button type="button" onclick={() => onCommand({ kind: 'clearWordGoal' })}>
-          {translator.translate('wordGoal.clear')}
-        </button>
-      {/if}
-    </div>
-  </form>
+  </div>
+  {#snippet footer()}
+    {#if currentGoal !== undefined}
+      <button type="button" onclick={() => onCommand({ kind: 'clearWordGoal' })}>
+        {translator.translate('wordGoal.clear')}
+      </button>
+    {/if}
+  {/snippet}
 </Dialog>
 
 <style>
-  form {
+  .fields {
     display: grid;
     gap: var(--space-2);
   }
@@ -89,19 +86,20 @@
     color: var(--color-text-secondary);
   }
 
-  .actions {
-    display: flex;
-    gap: var(--space-2);
-  }
-
   button {
     height: 32px;
-    padding: 0 var(--space-3);
+    padding: 0 var(--space-4);
     border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-medium);
     background: var(--color-surface-raised);
     color: var(--color-text);
     font: inherit;
+    font-weight: 500;
+    transition: background-color var(--motion-fast) ease-out;
+  }
+
+  button:hover {
+    background: var(--color-surface-hover);
   }
 
   :is(input, button):focus-visible {

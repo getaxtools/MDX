@@ -1,0 +1,8 @@
+# The real clipboard is one for the whole machine, and nextest runs each test in a process of its
+# own, so the tests that use it run one at a time.
+[test-groups]
+real-clipboard = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'test(/clipboard::tests::/)'
+test-group = 'real-clipboard'

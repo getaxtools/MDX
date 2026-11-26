@@ -1,4 +1,5 @@
 import {
+  isProtectedLocation,
   measureDocument,
   availableSnippets,
   clearWordGoal,
@@ -9,16 +10,35 @@ import {
   type DocumentStatistics,
   type Favourite,
   type RecentFile,
+  type RestoreOutcome,
   type ViewerSession,
   type ViewerState,
+  type InjectionFinding,
+  InjectionIgnoreList,
+  type WorkspaceKindId,
+  type WorkspaceRegistry,
   parseFavouritesFile,
   toFavouritesFile,
+  notesLocationOf,
+  notesSettingsOf,
+  isInsideFolder,
+  type FrontMatterEdit,
+  type EditingModeSetting,
+  DEFAULT_SPEC_SEARCH_FILTER,
+  withJumpListRemovals,
+  NO_JUMP_LIST_REMOVALS,
+  type SpecSearchFilter,
 } from '@mdx/core';
+import type { EmbedResolver, WikiLinkSuggester } from '@mdx/editor';
 import type { MessageKey, Translator } from '@mdx/i18n';
 import {
   DocumentOpenError,
+  hasFile,
+  isProtectedNoteLocation,
   isUntitledLocation,
   type AppMenuPort,
+  type JumpListPort,
+  type AppWindowsPort,
   type DesktopShellPort,
   type DocumentExportPort,
   type ExportFormat,
@@ -38,14 +58,36 @@ import {
   type LineEnding,
   type OpenedDocument,
   type PathStatus,
+  type RecentWorkspaceMenuEntry,
+  type WorkspaceFilePort,
+  type NoteFilesPort,
+  type NoteTransferPort,
+  type NotesIndexPort,
+  type ProtectedNotesPort,
+  type SpecProjectPort,
+  type NotesFolderInspection,
+  type NotesLocationPort,
+  type NotesMovePort,
 } from '@mdx/platform';
-import type { MarkdownRenderer, OutlineEntry } from '@mdx/renderer';
-import { applyWorkspaceKindCommand, type WorkspaceKindCommand } from '../control-wheel/workspaceKindCommands';
+import type { MarkdownRenderer, OutlineEntry, RenderOptions, ResourceUrlResolver } from '@mdx/renderer';
+import {
+  applyWorkspaceKindCommand,
+  kindShownNoticeOf,
+  type WorkspaceKindCommand,
+  type WorkspaceKindNotice,
+} from '../control-wheel/workspaceKindCommands';
 import type { DocumentLink } from '../document-view/DocumentLink';
+import {
+  PropertyEditing,
+  propertiesEditabilityOf,
+  type PropertiesEditability,
+} from '../document-view/PropertyEditing';
 import { DocumentAttachments } from '../editing/DocumentAttachments';
+import { AppWindowActions } from './AppWindowActions';
 import { DocumentEditing } from '../editing/DocumentEditing';
 import type { FindQuery } from '../find/findTextRanges';
 import { EditingActions } from '../editing/EditingActions';
+import { EditingModeActions, type EditingModeAnnouncement } from '../editing/EditingModeActions';
 import type { EditorRequest } from '../editing/editingCommands';
 import { ExplorerFolderActions } from '../explorer/ExplorerFolderActions';
 import { FolderRefresh } from '../folder-tree/FolderRefresh';
@@ -59,11 +101,86 @@ import { shortcutLabelFor } from '../shortcuts/commandShortcuts';
 import { effectiveCommandShortcuts } from '../shortcuts/effectiveCommandShortcuts';
 import { REBINDABLE_COMMANDS } from '../shortcuts/rebindableCommands';
 import { isTabCommand } from '../tabs/tabCommands';
+import {
+  WorkspaceActions,
+  type NewWorkspaceFromFile,
+  type NotesSetup,
+  type WorkspaceDialog,
+} from '../workspaces/WorkspaceActions';
+import {
+  isWorkspaceCommand,
+  isWorkspaceFileCommand,
+  workspaceNameOf,
+  type WorkspaceFileCommand,
+} from '../workspaces/workspaceCommands';
+import { WorkspaceFileActions, type PendingWorkspaceFile } from '../workspaces/WorkspaceFileActions';
+import { NotesLocationActions, isNotesLocationCommand } from '../notes-location/NotesLocationActions';
+import {
+  NotesMoveActions,
+  isNotesMoveCommand,
+  type NotesMoveCommand,
+  type NotesMoveDialog,
+} from '../notes-location/NotesMoveActions';
+import { notesMoveStatusText } from '../notes-location/notesMoveText';
+import type { MoveNotice } from '../notes-location/moveProblemNotice';
+import {
+  NotesActions,
+  isNotesCommand,
+  type NotesActionsDependencies,
+  type NotesCommand,
+  type NotesView,
+} from '../notes/NotesActions';
+import type { NoteTransferDialog } from '../notes/NoteTransferActions';
+import { NotesIndexActions, type NoteBacklinks } from '../notes/NotesIndexActions';
+import { SpecViewerActions, type SpecProjectsView } from '../spec-viewer/SpecViewerActions';
+import { SpecDocumentRenderings } from '../spec-viewer/SpecDocumentRenderings';
+import { SpecProjectChecks } from '../spec-viewer/SpecProjectChecks';
+import type { SpecPreview } from '../spec-viewer/specPreview';
+import { specPreviewFor, viewLocationFor } from '../spec-viewer/specViewLocations';
+import type { OutsideLinkRequest } from '../spec-viewer/outsideLinkRequest';
+import {
+  isRefusedInReadOnlyWorkspace,
+  isSpecViewerCommand,
+  type FollowSpecLinkCommand,
+  type SpecViewerCommand,
+} from '../spec-viewer/specViewerCommands';
+import { windowTitleFor } from '../workspaces/windowTitle';
+import { recentWorkspaceLinks } from '../workspaces/recentWorkspaceLinks';
+import { jumpListWorkspacesOf } from '../workspaces/jumpListWorkspaces';
 import { applySessionCommand } from './applySessionCommand';
 import { LiveReload } from './LiveReload';
+import { InjectionCheckActions, type InjectionCheckView } from '../prompt-injection/InjectionCheckActions';
+import { InjectionChecker } from '../prompt-injection/InjectionChecker';
+import {
+  isInjectionCheckCommand,
+  type InjectionCheckCommand,
+} from '../prompt-injection/injectionCheckCommands';
+import {
+  startModuleWorker,
+  type InjectionCheckWorkerStarter,
+} from '../prompt-injection/InjectionCheckWorker';
 import { commandForMenuItem, type ViewerCommand } from './viewerCommands';
+import { NO_PROTECTED_DOCUMENTS, type ProtectedDocuments } from '../editing/editorSpellCheck';
+import { ProtectedNotesActions, type ProtectedNotesView } from '../protected-notes/ProtectedNotesActions';
+import {
+  isProtectedNotesCommand,
+  type ProtectedNotesCommand,
+} from '../protected-notes/protectedNotesCommands';
 
 export const STATE_SAVE_DELAY_MS = 500;
+const MOVE_NOTICE_ACTION_LABELS: Readonly<Record<NotesMoveCommand['kind'], MessageKey>> = {
+  changeNotesLocation: 'notesLocation.move.change',
+  startNotesMove: 'notesLocation.move.start',
+  resumeNotesMove: 'notesLocation.move.resume',
+  stopNotesMove: 'notesLocation.move.stop',
+  cancelNotesMove: 'notesLocation.move.cancelMove',
+  postponeNotesMove: 'notesLocation.move.later',
+  keepOldNotesCopy: 'notesLocation.move.keepOldCopy',
+  askToRemoveOldNotesCopy: 'notesLocation.move.removeOldCopy',
+  removeOldNotesCopy: 'notesLocation.move.moveToRecycleBin',
+  stopNotesMoveAndClose: 'notesLocation.move.stopAndClose',
+  keepMovingNotes: 'notesLocation.move.keepMoving',
+};
 export const MAX_RECENT_MENU_ENTRIES = 10;
 /** How long typing pauses before the preview beside the editor shows the new text. */
 export const LIVE_PREVIEW_DELAY_MS = 150;
@@ -73,6 +190,11 @@ const LARGE_DOCUMENT_LIVE_PREVIEW_DELAY_MS = 500;
 const LARGE_DOCUMENT_CHARACTERS = 256_000;
 const SCROLL_RATIO_PRECISION = 0.001;
 const EXPORT_EXTENSIONS: Readonly<Record<ExportFormat, string>> = { html: '.html', plainText: '.txt' };
+
+/** The check waits for the frame that draws the document, and then for the browser to finish it. */
+function runAfterNextFrame(run: () => void): void {
+  globalThis.requestAnimationFrame(() => globalThis.setTimeout(run, 0));
+}
 
 /** `Guide.md` exports as `Guide.html` or `Guide.txt`. */
 function exportFileNameFor(fileName: string, format: ExportFormat): string {
@@ -86,6 +208,8 @@ export interface ViewerControllerDependencies {
   readonly renderer: MarkdownRenderer;
   readonly translator: Translator;
   readonly menu?: AppMenuPort;
+  /** The taskbar Jump List, on systems that have one. */
+  readonly jumpList?: JumpListPort;
   readonly watcher?: DocumentWatcherPort;
   readonly resources?: DocumentResourcesPort;
   readonly printer?: DocumentPrinterPort;
@@ -96,6 +220,26 @@ export interface ViewerControllerDependencies {
   readonly desktopShell?: DesktopShellPort;
   readonly documentExport?: DocumentExportPort;
   readonly attachments?: AttachmentPort;
+  readonly workspaceFiles?: WorkspaceFilePort;
+  readonly notesLocations?: NotesLocationPort;
+  readonly notesMoves?: NotesMovePort;
+  readonly noteFiles?: NoteFilesPort;
+  /** Imports a vault-style folder into a Notes location and exports notes out of it. */
+  readonly noteTransfer?: NoteTransferPort;
+  readonly notesIndex?: NotesIndexPort;
+  readonly specProjects?: SpecProjectPort;
+  /** The other windows of the app; absent where there is only one, such as in the browser. */
+  readonly appWindows?: AppWindowsPort;
+  /** The clock for daily notes and templates; the real one unless a test sets it. */
+  readonly now?: () => Date;
+  /** Starts the worker that checks large documents for prompt injection; tests pass a fake. */
+  readonly startInjectionCheckWorker?: InjectionCheckWorkerStarter;
+  /** Runs work once the shown document has been drawn; the next animation frame unless a test sets it. */
+  readonly afterPaint?: (run: () => void) => void;
+  /** Which documents belong to a protected section; none until protected notes supply the rule. */
+  readonly protectedDocuments?: ProtectedDocuments;
+  /** The encrypted section of a Notes workspace; without it no section is offered. */
+  readonly protectedNotes?: ProtectedNotesPort;
 }
 
 export interface RenderedActiveDocument {
@@ -110,6 +254,8 @@ export interface RenderedActiveDocument {
   readonly lineEnding: LineEnding;
   readonly scrollRatio: number;
   readonly frontMatter?: string;
+  /** Present for a note of the shown Notes workspace that has front matter. */
+  readonly propertiesEditability?: PropertiesEditability;
   /** The text shown, which is the edited text while the document has unsaved changes. */
   readonly source: string;
 }
@@ -125,23 +271,94 @@ export interface ViewerSnapshot {
   readonly findQuery?: FindQuery;
   /** Goes up each time the Find in Folders box should get the keyboard focus. */
   readonly folderSearchFocusRequest?: number;
+  /** What the search box holds when it next gets the focus, such as `tag:work` for a chosen tag. */
+  readonly folderSearchQuery?: string;
+  /** The notes linking to the shown note, in a Notes workspace. */
+  readonly noteBacklinks?: NoteBacklinks;
+  /** The prompt injection check of the shown document, once one has started. */
+  readonly injectionCheck?: InjectionCheckView;
+  /** A range of the shown document to outline in the source view, such as a finding. */
+  readonly sourceRangeRequest?: SourceRangeRequest;
+  /** A finding of the shown document was revealed, so its hidden characters are shown whatever the setting. */
+  readonly isRevealingFinding?: boolean;
   /** Goes up each time the shown document should be copied as HTML, from the Edit menu or the palette. */
   readonly copyAsHtmlRequest?: number;
   /** The format the shown document should export to, numbered so the same format can be asked again. */
   readonly exportRequest?: ExportRequest;
+  /** Goes up each time the shown document should be printed, once it has finished drawing. */
+  readonly printRequest?: number;
   readonly externalLinkRequest?: string;
+  /** A link of a Spec viewer workspace that leads outside its folders, opened only once the user agrees. */
+  readonly outsideLinkRequest?: OutsideLinkRequest;
+  /** A heading to show once the document a link opened is shown. */
+  readonly linkedHeadingRequest?: LinkedHeadingRequest;
   readonly isSourceView?: boolean;
+  /** The Workspace kinds page fills the reading area; dialogs still open over it. */
+  readonly isWorkspaceKindsPageShown?: boolean;
   readonly unsavedChanges?: UnsavedChangesRequest;
   readonly pathStatuses: ReadonlyMap<string, PathStatus>;
   /** How often each shown folder changed on disk, so its listing reloads when the count goes up. */
   readonly folderRevisions: ReadonlyMap<string, number>;
   readonly isActiveDocumentEditing?: boolean;
+  /** Rich text or Source for the edited document: the setting, or Source for a document too large for Rich text. */
+  readonly editingMode?: EditingModeSetting;
+  readonly editingModeAnnouncement?: EditingModeAnnouncement;
   /** Open documents whose edited text is not saved yet. */
   readonly unsavedDocumentKeys: ReadonlySet<string>;
+  /** The note whose property is being written, whose fields wait without asking for a save. */
+  readonly propertySavingKey?: string;
   readonly editorRequest?: EditorRequest;
+  /** Absent while the earlier state file stands in for the workspace store. */
+  readonly workspaces?: WorkspacesView;
+  /** The folder of the shown Notes workspace while it cannot be found. */
+  readonly missingNotesLocation?: string;
+  /** The note tree, shown in place of Folders in a Notes workspace whose folder is there. */
+  readonly notes?: NotesView;
+  /** The protected section of the shown Notes workspace, once it has been read. */
+  readonly protectedNotes?: ProtectedNotesView;
+  /** The spec projects, shown in place of Folders in a Spec viewer workspace. */
+  readonly specProjects?: SpecProjectsView;
+  /** The "Spec after this change" previews open in tabs, by tab key. */
+  readonly specPreviews?: ReadonlyMap<string, SpecPreview>;
+  /** The step of a move of the notes folder that waits for the user. */
+  readonly notesMoveDialog?: NotesMoveDialog;
+  /** The status bar's word on a move of the notes folder, which keeps the notes read-only. */
+  readonly notesMoveStatus?: string;
+  /** The active document is in a notes folder being moved, so the editor refuses typing. */
+  readonly isActiveDocumentReadOnly?: boolean;
+}
+
+export interface WorkspacesView {
+  readonly registry: WorkspaceRegistry;
+  readonly shownWorkspaceId: string;
+  /** The kind the New Workspace dialog starts on. */
+  readonly kindForNewWorkspace?: WorkspaceKindId;
+  /** A workspace file New Workspace finishes; its kind cannot be changed. */
+  readonly newWorkspaceFromFile?: NewWorkspaceFromFile;
+  /** A workspace file waiting for the user to confirm it. */
+  readonly pendingFile?: PendingWorkspaceFile;
+  /** Loaded when New Workspace opens, to suggest and check a Notes folder. */
+  readonly notesSetup?: NotesSetup;
 }
 
 /** A button in the notice bar that runs a command, such as Locate for a file that has moved. */
+export interface LinkedHeadingRequest {
+  readonly canonicalKey: string;
+  /** The part of the link after #, as written. */
+  readonly fragment: string;
+  readonly number: number;
+}
+
+/** Numbered, so the same range can be asked for again. */
+export interface SourceRangeRequest {
+  readonly canonicalKey: string;
+  readonly from: number;
+  readonly to: number;
+  /** Zero-based. */
+  readonly line: number;
+  readonly number: number;
+}
+
 export interface NoticeAction {
   readonly label: string;
   readonly command: ViewerCommand;
@@ -159,9 +376,17 @@ export type ViewerDialog =
   | 'commandPalette'
   | 'settings'
   | 'clearAllData'
+  | 'protectedExportWarning'
+  | 'protectedPrintWarning'
   | 'controlWheel'
   | 'workspaceKindSettings'
-  | 'wordGoal';
+  | 'wordGoal'
+  | 'noteTrash'
+  | 'noteFromTemplate'
+  | 'noteLinkUpdates'
+  | 'protectedSetUp'
+  | NoteTransferDialog
+  | WorkspaceDialog;
 
 const DIALOGS_BY_COMMAND: Partial<Record<ViewerCommand['kind'], ViewerDialog>> = {
   showAbout: 'about',
@@ -173,6 +398,20 @@ const DIALOGS_BY_COMMAND: Partial<Record<ViewerCommand['kind'], ViewerDialog>> =
 };
 
 type SnapshotListener = (snapshot: ViewerSnapshot) => void;
+
+type ProtectedCopyOutput =
+  { readonly kind: 'print' } | { readonly kind: 'export'; readonly format: ExportFormat };
+
+interface PendingProtectedCopy {
+  readonly output: ProtectedCopyOutput;
+  readonly canonicalKey: string;
+}
+
+/** Where the Workspace kinds page was opened: it closes once another document is shown in that workspace. */
+interface KindsPagePlace {
+  readonly workspaceId: string | undefined;
+  readonly activeKey: string | undefined;
+}
 
 type CommandHandlers = {
   readonly [Kind in ViewerCommand['kind']]?: (
@@ -186,33 +425,69 @@ export class ViewerController {
   private readonly stopActions: (() => void)[] = [];
   private pendingSave: ReturnType<typeof setTimeout> | undefined;
   private renderedDocument: OpenedDocument | undefined;
+  private renderedNoteList: object | undefined;
+  private renderedSpecRendering: object | undefined;
+  private readonly specDocumentRenderings: SpecDocumentRenderings;
   private renderedText: string | undefined;
   private hasRenderedSourceLines = false;
   private pendingLivePreview: ReturnType<typeof setTimeout> | undefined;
   private pendingOutlineRefresh: ReturnType<typeof setTimeout> | undefined;
   private activeDocument: RenderedActiveDocument | undefined;
   private openDialog: ViewerDialog | undefined;
+  private kindsPage: KindsPagePlace | undefined;
+  private readonly workspaceActions: WorkspaceActions;
+  private readonly workspaceFileActions: WorkspaceFileActions | undefined;
+  private readonly notesLocationActions: NotesLocationActions | undefined;
+  private readonly notesMoveActions: NotesMoveActions | undefined;
+  private readonly notesActions: NotesActions | undefined;
+  private readonly notesIndexActions: NotesIndexActions | undefined;
+  private readonly protectedNotesActions: ProtectedNotesActions | undefined;
+  private readonly specViewerActions: SpecViewerActions | undefined;
+  private readonly specProjectChecks: SpecProjectChecks;
+  /** The scan whose documents were last checked for prompt injection without the user asking. */
+  private checkedSpecView: SpecProjectsView | undefined;
+  private shownSpecFoldersKey: string | undefined;
+  private readonly specPreviews = new Map<string, SpecPreview>();
+  private pendingWorkspaceFile: PendingWorkspaceFile | undefined;
   private noticeActions: readonly NoticeAction[] = [];
   private findRequest = 0;
   private findQuery: FindQuery | undefined;
   private folderSearchFocusRequest = 0;
+  private folderSearchQuery: string | undefined;
   private copyAsHtmlRequest = 0;
   private exportRequest: ExportRequest | undefined;
+  /** An export or print of a protected note that waits for the user to accept an unprotected copy. */
+  private pendingProtectedCopy: PendingProtectedCopy | undefined;
+  private printRequest = 0;
   private externalLinkRequest: string | undefined;
+  private outsideLinkRequest: OutsideLinkRequest | undefined;
+  private linkedHeadingRequest: LinkedHeadingRequest | undefined;
   private isSourceView = false;
   private shownMenuViewState = '';
+  private shownWindowTitle = '';
   private shownMenuShortcuts = '';
   private shownRecentFiles: ViewerState['recentFiles'] | undefined;
+  private shownRecentWorkspaces = '';
+  private shownJumpListWorkspaces: string | undefined;
+  /** The list sent and not answered yet, so the same list is not sent twice while it waits. */
+  private sentJumpListWorkspaces: string | undefined;
+  private jumpListUpdate: Promise<void> = Promise.resolve();
   private pathStatuses: ReadonlyMap<string, PathStatus> = new Map();
   private checkedLocationKeys = '';
   private readonly liveReload: LiveReload | undefined;
   private readonly folderRefresh: FolderRefresh;
   private readonly explorerFolderActions: ExplorerFolderActions;
   private readonly saving: DocumentSaving;
+  private readonly propertyEditing: PropertyEditing;
   private readonly editing = new DocumentEditing();
   private readonly editingActions: EditingActions;
+  private readonly editingModes: EditingModeActions;
   private readonly navigation: DocumentNavigation;
   private readonly documentAttachments: DocumentAttachments | undefined;
+  private readonly injectionChecks: InjectionCheckActions;
+  private sourceRangeRequest: SourceRangeRequest | undefined;
+  private revealedFindingKey: string | undefined;
+  private readonly appWindowActions: AppWindowActions | undefined;
 
   constructor(private readonly dependencies: ViewerControllerDependencies) {
     this.snapshot = {
@@ -221,25 +496,10 @@ export class ViewerController {
       folderRevisions: new Map(),
       unsavedDocumentKeys: new Set(),
     };
-    this.saving = new DocumentSaving(dependencies.session, this.editing, {
-      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
-      onSaveFailed: (fileName) => this.showNotice('errors.document.saveFailed', { path: fileName }),
-      onChangedOnDisk: (location) => this.showChangedOnDiskNotice(location, 'errors.document.changedOnDisk'),
-      onCannotSaveInPlace: (location, failure) =>
-        this.showNotice(`errors.document.${failure}`, { path: location.fileName }, [
-          {
-            label: dependencies.translator.translate('menu.file.saveAs'),
-            command: { kind: 'saveDocumentAs' },
-          },
-        ]),
-    });
-    this.editingActions = new EditingActions(dependencies.session, this.editing, {
-      onChange: () => {
-        this.publish(this.composeSnapshot(this.snapshot.notice));
-        void this.refreshActiveDocument();
-      },
-      onConflict: (location) => this.showChangedOnDiskNotice(location, 'editing.conflict.message'),
-    });
+    this.saving = this.createDocumentSaving();
+    this.editingActions = this.createEditingActions();
+    this.propertyEditing = this.createPropertyEditing();
+    this.editingModes = this.createEditingModes();
     this.liveReload = dependencies.watcher
       ? new LiveReload(dependencies.watcher, dependencies.session, (changedKeys) => {
           this.refreshPathStatuses({ isForced: true });
@@ -248,10 +508,560 @@ export class ViewerController {
       : undefined;
     this.explorerFolderActions = new ExplorerFolderActions(dependencies.session, dependencies.folders);
     this.navigation = new DocumentNavigation(dependencies.session, (path) => this.openDocument(path));
-    this.folderRefresh = new FolderRefresh(dependencies.folderWatcher, () =>
-      this.publish(this.composeSnapshot(this.snapshot.notice)),
-    );
+    this.folderRefresh = new FolderRefresh(dependencies.folderWatcher, () => {
+      this.notesActions?.forgetNoteList();
+      this.publish(this.composeSnapshot(this.snapshot.notice));
+    });
     this.documentAttachments = this.createDocumentAttachments();
+    this.workspaceActions = this.createWorkspaceActions();
+    this.appWindowActions = this.createAppWindowActions();
+    this.workspaceFileActions = this.createWorkspaceFileActions();
+    this.notesLocationActions = this.createNotesLocationActions();
+    this.notesMoveActions = this.createNotesMoveActions();
+    this.notesActions = this.createNotesActions();
+    this.notesIndexActions = this.createNotesIndexActions();
+    this.protectedNotesActions = this.createProtectedNotesActions();
+    this.specDocumentRenderings = this.createSpecDocumentRenderings();
+    this.specProjectChecks = this.createSpecProjectChecks();
+    this.specViewerActions = this.createSpecViewerActions();
+    this.injectionChecks = this.createInjectionCheckActions();
+  }
+
+  private createEditingActions(): EditingActions {
+    return new EditingActions(this.dependencies.session, this.editing, {
+      onChange: () => {
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+        void this.refreshActiveDocument();
+      },
+      onConflict: (location) => this.showChangedOnDiskNotice(location, 'editing.conflict.message'),
+    });
+  }
+
+  private createEditingModes(): EditingModeActions {
+    return new EditingModeActions(this.dependencies.session, {
+      activeEditedLocation: () => this.editedLocation(),
+      showNotice: (key, values) => this.showNotice(key, values),
+      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+    });
+  }
+
+  private createInjectionCheckActions(): InjectionCheckActions {
+    const {
+      session,
+      startInjectionCheckWorker = startModuleWorker,
+      afterPaint = runAfterNextFrame,
+    } = this.dependencies;
+    return new InjectionCheckActions({
+      session,
+      checker: new InjectionChecker(startInjectionCheckWorker),
+      afterPaint,
+      isAgentContext: (opened) =>
+        this.isSpecViewerShown() &&
+        this.specViewerActions?.holdsDocument(opened.location.displayPath) === true,
+      now: () => (this.dependencies.now?.() ?? new Date()).getTime(),
+      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+    });
+  }
+
+  private createSpecDocumentRenderings(): SpecDocumentRenderings {
+    const { translator, renderer } = this.dependencies;
+    return new SpecDocumentRenderings({
+      translator,
+      readText: (rootPath, relativePath) =>
+        this.specViewerActions?.readProjectText(rootPath, relativePath) ?? Promise.resolve(undefined),
+      outlineOf: (text) => renderer.outlineOf(text),
+    });
+  }
+
+  private createSpecViewerActions(): SpecViewerActions | undefined {
+    const { specProjects } = this.dependencies;
+    if (!specProjects) return undefined;
+    return new SpecViewerActions({
+      specProjects,
+      onChange: () => {
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+        this.checkSpecProjectsOnce();
+      },
+    });
+  }
+
+  private createSpecProjectChecks(): SpecProjectChecks {
+    const { session, startInjectionCheckWorker = startModuleWorker } = this.dependencies;
+    return new SpecProjectChecks({
+      checker: new InjectionChecker(startInjectionCheckWorker),
+      ignoreEntries: () => session.currentState().injectionIgnoreList.entries(),
+      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+    });
+  }
+
+  /** Each new scan of a Spec viewer workspace is checked once it is shown, unless the setting is Off. */
+  private checkSpecProjectsOnce(): void {
+    const view = this.specViewerActions?.view();
+    if (!view) this.specProjectChecks.clear();
+    if (!view?.roots || view === this.checkedSpecView) return;
+    this.checkedSpecView = view;
+    const { session, afterPaint = runAfterNextFrame } = this.dependencies;
+    if (session.currentState().viewSettings.automaticInjectionCheck === 'off') return;
+    afterPaint(() => void this.checkSpecProjects());
+  }
+
+  private async runSpecProjectsCommand(kind: 'checkSpecProjects' | 'refreshSpecProjects'): Promise<void> {
+    if (kind === 'checkSpecProjects') await this.checkSpecProjects();
+    else await this.specViewerActions?.refresh();
+  }
+
+  private checkSpecProjects(): Promise<void> {
+    return this.specProjectChecks.check(this.specViewerActions?.scannedDocuments() ?? []);
+  }
+
+  private createPropertyEditing(): PropertyEditing {
+    return new PropertyEditing({
+      session: this.dependencies.session,
+      editing: this.editing,
+      saving: this.saving,
+      editingActions: this.editingActions,
+      isNote: (location) => this.notesActions?.isNote(location) ?? false,
+    });
+  }
+
+  private async runInjectionCheckCommand(command: InjectionCheckCommand): Promise<void> {
+    if (command.kind === 'checkForPromptInjection') {
+      if (!this.activeDocument) return;
+      this.dependencies.session.updateViewSettings((viewSettings) =>
+        showSidebarView(viewSettings, 'promptInjection'),
+      );
+      await this.injectionChecks.checkShownDocument();
+    } else if (command.kind === 'revealInjectionFinding') this.revealInjectionFinding(command.finding);
+    else if (command.kind === 'ignoreInjectionFinding')
+      this.injectionChecks.ignore(command.finding, command.scope);
+    else if (command.kind === 'showInjectionFindingAgain') this.injectionChecks.showAgain(command.finding);
+    else {
+      this.dependencies.session.updateInjectionIgnoreList(() => InjectionIgnoreList.empty());
+      this.showNotice('promptInjection.settings.ignoredReset');
+    }
+  }
+
+  /** The editor selects the finding; otherwise the source view opens with the finding outlined. */
+  private revealInjectionFinding(finding: InjectionFinding): void {
+    const place = this.injectionChecks.placeOf(finding);
+    if (!place) return;
+    this.revealedFindingKey = place.documentKey;
+    if (this.editingActions.isActiveDocumentEditing()) {
+      this.editingActions.revealRange(place.range);
+      return;
+    }
+    this.isSourceView = true;
+    this.sourceRangeRequest = {
+      canonicalKey: place.documentKey,
+      from: place.from,
+      to: place.to,
+      line: place.range.from.line,
+      number: (this.sourceRangeRequest?.number ?? 0) + 1,
+    };
+    this.publish(this.composeSnapshot(this.snapshot.notice));
+    this.showViewStateInMenu();
+  }
+
+  /** In a Spec viewer workspace, what a document's cross-links need is read before it renders. */
+  private specPreparationFor(document: OpenedDocument | undefined): Promise<void> | undefined {
+    const view = this.specViewerActions?.view();
+    if (!document || !this.isSpecViewerShown()) return undefined;
+    if (!this.specDocumentRenderings.needsPreparing(document.location, view)) return undefined;
+    return this.specDocumentRenderings.prepare(document.location, view);
+  }
+
+  private createNotesActions(): NotesActions | undefined {
+    const { session, noteFiles } = this.dependencies;
+    if (!noteFiles) return undefined;
+    return new NotesActions({
+      session,
+      noteFiles,
+      ...(this.dependencies.notesIndex ? { notesIndex: this.dependencies.notesIndex } : {}),
+      translator: this.dependencies.translator,
+      unsavedKeys: () => this.editing.unsavedKeys(),
+      isIndexComplete: () => this.notesIndexActions?.isIndexComplete() ?? false,
+      openForEditing: async (path) => {
+        await this.openDocument(path);
+        this.editingActions.startEditingActiveDocument();
+      },
+      showNotice: (key, values, actions) => this.showNotice(key, values, actions),
+      showTrashDialog: () => {
+        this.openDialog = 'noteTrash';
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+      },
+      showTemplateDialog: () => {
+        this.openDialog = 'noteFromTemplate';
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+      },
+      showLinkUpdatesDialog: () => {
+        this.openDialog = 'noteLinkUpdates';
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+      },
+      closeLinkUpdatesDialog: () => {
+        if (this.openDialog !== 'noteLinkUpdates') return;
+        this.openDialog = undefined;
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+      },
+      ...this.noteTransferPart(),
+      now: this.dependencies.now ?? (() => new Date()),
+      openDocument: (path) => this.openDocument(path),
+      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+    });
+  }
+
+  private createProtectedNotesActions(): ProtectedNotesActions | undefined {
+    const { session, protectedNotes } = this.dependencies;
+    if (!protectedNotes) return undefined;
+    return new ProtectedNotesActions({
+      session,
+      protectedNotes,
+      whenWindowReported: () => this.appWindowActions?.whenReported() ?? Promise.resolve(),
+      showSetUpDialog: () => {
+        this.openDialog = 'protectedSetUp';
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+      },
+      closeSetUpDialog: () => {
+        if (this.openDialog === 'protectedSetUp') this.openDialog = undefined;
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+      },
+      showNotice: (key, values) => this.showNotice(key, values),
+      saveProtectedEdits: () => this.saveProtectedEdits(),
+      hasUnsavedProtectedEdits: () => this.unsavedProtectedLocations().length > 0,
+      startEditing: () => this.editingActions.startEditingActiveDocument(),
+      wait: (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)),
+      now: () => (this.dependencies.now ?? (() => new Date()))().getTime(),
+      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+    });
+  }
+
+  private unsavedProtectedLocations(): DocumentLocation[] {
+    return this.dependencies.session
+      .currentState()
+      .tabStrip.tabs()
+      .map((tab) => tab.location)
+      .filter(
+        (location) =>
+          isProtectedNoteLocation(location) && this.editing.hasUnsavedChanges(location.canonicalKey),
+      );
+  }
+
+  /** A lock waits for this, in every window, so no edit of a protected note is lost unasked. */
+  private async saveProtectedEdits(): Promise<boolean> {
+    let isEverythingSaved = true;
+    for (const location of this.unsavedProtectedLocations()) {
+      isEverythingSaved = (await this.saving.saveUnsavedChanges(location)) && isEverythingSaved;
+    }
+    return isEverythingSaved;
+  }
+
+  /** A protected note is not exported, printed or copied as HTML, which would leave it unprotected. */
+  private refusesProtectedOutput(): boolean {
+    const location = this.dependencies.session.currentState().tabStrip.activeTab()?.location;
+    if (!location || !isProtectedNoteLocation(location)) return false;
+    this.showNotice('protectedNotes.output.unavailable');
+    return true;
+  }
+
+  private async runProtectedNotesCommand(command: ProtectedNotesCommand): Promise<void> {
+    if (this.refuseWhileNotesMove()) return;
+    await this.protectedNotesActions?.run(command);
+  }
+
+  private noteTransferPart(): Pick<
+    NotesActionsDependencies,
+    'noteTransfer' | 'showTransferDialog' | 'closeTransferDialog' | 'showNoteAs'
+  > {
+    const { noteTransfer } = this.dependencies;
+    return {
+      ...(noteTransfer ? { noteTransfer } : {}),
+      showTransferDialog: (dialog) => {
+        this.openDialog = dialog;
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+      },
+      closeTransferDialog: () => {
+        if (this.openDialog === 'noteImport' || this.openDialog === 'noteExport') this.openDialog = undefined;
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+      },
+      // The app's own HTML export and printing work on the shown document, so the note is shown first.
+      showNoteAs: async (note, output) => {
+        await this.openDocument(note.displayPath);
+        await this.refreshActiveDocument();
+        await this.execute(
+          output === 'html' ? { kind: 'exportDocument', format: 'html' } : { kind: 'print' },
+        );
+      },
+    };
+  }
+
+  /** The shown document has finished drawing after a print request, so the window is printed now. */
+  printShownDocument(): void {
+    if (this.activeDocument) this.dependencies.printer?.printActiveDocument();
+  }
+
+  /** The notes and folders directly inside a folder of the shown Notes workspace. */
+  listNoteFolder(folderPath: string): Promise<FolderListing> {
+    return this.notesActions?.listFolder(folderPath) ?? Promise.resolve({ folders: [], documents: [] });
+  }
+
+  private createNotesLocationActions(): NotesLocationActions | undefined {
+    const { session, notesLocations } = this.dependencies;
+    if (!notesLocations) return undefined;
+    return new NotesLocationActions({
+      session,
+      notesLocations,
+      pickFolder: () => this.pickNotesFolder(),
+      showNotice: (key, values) => this.showNotice(key, values),
+      onChange: () => {
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+        void this.showNotesIndex();
+      },
+    });
+  }
+
+  private createNotesMoveActions(): NotesMoveActions | undefined {
+    const { session, notesMoves, translator } = this.dependencies;
+    if (!notesMoves) return undefined;
+    return new NotesMoveActions({
+      session,
+      notesMoves,
+      locale: translator.locale,
+      pickFolder: () => this.pickNotesFolder(),
+      showNotice: (notice, actions) => this.showMoveNotice(notice, actions),
+      hasUnsavedDocumentsIn: (folder) => this.hasUnsavedDocumentsIn(folder),
+      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+      onSwitched: async () => {
+        await this.notesLocationActions?.check();
+        await this.showNotesIndex();
+        this.refreshPathStatuses({ isForced: true });
+      },
+    });
+  }
+
+  private hasUnsavedDocumentsIn(folder: string): boolean {
+    return [...this.editing.unsavedKeys()].some((key) => isInsideFolder(key, folder));
+  }
+
+  /** Files of a notes folder are being copied, so closing the window asks first. */
+  isCopyingNotes(): boolean {
+    return this.notesMoveActions?.isCopying() ?? false;
+  }
+
+  /** Whether the window may close now; while notes are copied the user is asked first. */
+  confirmClosingDuringNotesMove(): Promise<boolean> {
+    return this.notesMoveActions?.confirmClosing() ?? Promise.resolve(true);
+  }
+
+  private showMoveNotice(notice: MoveNotice, commands: readonly NotesMoveCommand[] = []): void {
+    const { translator } = this.dependencies;
+    const actions = commands.map((command) => ({
+      label: translator.translate(MOVE_NOTICE_ACTION_LABELS[command.kind]),
+      command,
+    }));
+    this.showNotice(notice.key, notice.values, actions);
+  }
+
+  /** Whether a document lies in a notes folder being moved, which nothing may change until it ends. */
+  private isInMovingNotes(canonicalKey: string): boolean {
+    return this.notesMoveActions?.isReadOnly(canonicalKey) ?? false;
+  }
+
+  private refuseWhileNotesMove(): boolean {
+    const shown = this.dependencies.session.shownWorkspace();
+    const location = shown ? notesLocationOf(shown) : undefined;
+    if (!location || !this.isInMovingNotes(location.canonicalKey)) return false;
+    this.showNotice('notesLocation.move.readOnly');
+    return true;
+  }
+
+  private createNotesIndexActions(): NotesIndexActions | undefined {
+    const { notesIndex } = this.dependencies;
+    if (!notesIndex) return undefined;
+    return new NotesIndexActions({
+      notesIndex,
+      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+      onNotesChanged: () => {
+        this.notesActions?.forgetNoteList();
+        void this.refreshActiveDocument();
+      },
+    });
+  }
+
+  /** Suggests notes after `[[` while a note of the shown Notes workspace is edited. */
+  wikiLinkSuggesterFor(document: DocumentLocation): WikiLinkSuggester | undefined {
+    return this.notesIndexActions?.linkSuggesterFor(document, () => this.notesActions?.noteEntries());
+  }
+
+  /** The embeds Rich text shows for a document, from its workspace kind; undefined when it has none. */
+  embedResolverFor(document: DocumentLocation): EmbedResolver | undefined {
+    return this.notesActions?.embedResolverFor(document);
+  }
+
+  /** The window got the focus: a Notes folder that reports no changes is checked again now. */
+  windowFocused(): Promise<void> {
+    return this.notesIndexActions?.windowFocused() ?? Promise.resolve();
+  }
+
+  private async runSpecViewerCommand(command: SpecViewerCommand): Promise<void> {
+    const { session, renderer, translator } = this.dependencies;
+    if (command.kind === 'checkSpecProjects' || command.kind === 'refreshSpecProjects') {
+      await this.runSpecProjectsCommand(command.kind);
+      return;
+    }
+    if (command.kind === 'followSpecLink') {
+      await this.followSpecLink(command);
+      return;
+    }
+    if (command.kind === 'openSpecFinding') {
+      await this.openDocumentAtLine(command.documentPath, command.line);
+      return;
+    }
+    if (command.kind !== 'openSpecPreview') {
+      const location = viewLocationFor(this.specViewerActions?.view(), command, translator);
+      if (location) session.openView(location);
+      return;
+    }
+    const actions = this.specViewerActions;
+    const opened = actions ? await specPreviewFor(command, { actions, renderer, translator }) : undefined;
+    if (!opened) return;
+    this.specPreviews.set(opened.location.canonicalKey, opened.preview);
+    session.openView(opened.location);
+  }
+
+  /** Follows a linked folder only after the user agrees in a system dialog that names its real target. */
+  private async followSpecLink(command: FollowSpecLinkCommand): Promise<void> {
+    const actions = this.specViewerActions;
+    const scanned = actions?.view()?.roots?.find((root) => root.root.canonicalKey === command.rootKey);
+    if (!actions || !scanned) return;
+    try {
+      await actions.followLink(scanned.root.displayPath, command.linkPath);
+    } catch (error) {
+      this.showOpenFailure(error, command.linkPath);
+    }
+  }
+
+  /** Opens a document at the heading that holds a line, as the viewer shows headings, not lines. */
+  private async openDocumentAtLine(documentPath: string, line: number | undefined): Promise<void> {
+    await this.openDocuments([documentPath]);
+    const outline = this.activeDocument?.outline ?? [];
+    const heading = line === undefined ? undefined : outline.filter((entry) => entry.line <= line - 1).at(-1);
+    if (heading) this.revealLinkedHeading(`#${heading.id}`);
+  }
+
+  /** Documents are never changed from a Spec viewer workspace, so its files stay as agents wrote them. */
+  private isSpecViewerShown(): boolean {
+    return this.dependencies.session.shownWorkspace()?.kindId === 'specViewer';
+  }
+
+  /** A Spec viewer workspace's folders are scanned again only when the workspace or its folders change. */
+  private showSpecProjects(): void {
+    const actions = this.specViewerActions;
+    if (!actions) return;
+    const { session } = this.dependencies;
+    const shown = session.shownWorkspace();
+    const folderPaths = session
+      .currentState()
+      .explorerFolders.folders()
+      .map((folder) => folder.displayPath);
+    const key = shown?.kindId === 'specViewer' ? JSON.stringify([shown.id, folderPaths]) : undefined;
+    if (key === this.shownSpecFoldersKey) return;
+    this.shownSpecFoldersKey = key;
+    if (key === undefined) actions.hide();
+    else void actions.show(folderPaths);
+  }
+
+  /** The index follows the shown workspace: a Notes workspace whose folder is there, or none. */
+  private async showNotesIndex(): Promise<void> {
+    const shown = this.dependencies.session.shownWorkspace();
+    const isMissing = this.notesLocationActions?.missingLocation() !== undefined;
+    const location = shown && !isMissing ? notesLocationOf(shown) : undefined;
+    await this.notesIndexActions?.show(location, notesSettingsOf(shown).excludedPaths);
+  }
+
+  private createDocumentSaving(): DocumentSaving {
+    const { session, translator } = this.dependencies;
+    return new DocumentSaving(session, this.editing, {
+      onChange: () => this.publish(this.composeSnapshot(this.snapshot.notice)),
+      onSaveFailed: (fileName) => this.showNotice('errors.document.saveFailed', { path: fileName }),
+      onChangedOnDisk: (location) => this.showChangedOnDiskNotice(location, 'errors.document.changedOnDisk'),
+      onCannotSaveInPlace: (location, failure) =>
+        this.showNotice(`errors.document.${failure}`, { path: location.fileName }, [
+          { label: translator.translate('menu.file.saveAs'), command: { kind: 'saveDocumentAs' } },
+        ]),
+    });
+  }
+
+  private createWorkspaceFileActions(): WorkspaceFileActions | undefined {
+    const { session, translator, workspaceFiles } = this.dependencies;
+    if (!workspaceFiles) return undefined;
+    return new WorkspaceFileActions({
+      session,
+      translator,
+      workspaceFiles,
+      showConfirmation: (pending) => {
+        this.pendingWorkspaceFile = pending;
+        this.openDialog = pending ? 'openWorkspaceFile' : undefined;
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+      },
+      showNotice: (key, values) => this.showNotice(key, values),
+      switchTo: (workspaceId) => this.workspaceActions.switchTo(workspaceId),
+      createAndShow: async (request, lists) => {
+        await this.workspaceActions.createAndShow(request, lists);
+      },
+      chooseNotesFolder: (request, workspace) =>
+        this.workspaceActions.chooseFolderForWorkspaceFile({ request, workspace }),
+    });
+  }
+
+  private createWorkspaceActions(): WorkspaceActions {
+    const { session, translator } = this.dependencies;
+    return new WorkspaceActions({
+      session,
+      translator,
+      confirmLeavingDocuments: () => this.saving.confirmClosingWindow(),
+      showDialog: (dialog) => {
+        this.openDialog = dialog;
+        this.publish(this.composeSnapshot(this.snapshot.notice));
+      },
+      showNotice: (key, values) => this.showNotice(key, values),
+      showSwitchedWorkspace: () => this.showSwitchedWorkspace(),
+      focusWindowShowing: this.dependencies.appWindows
+        ? (workspaceId) =>
+            this.dependencies.appWindows?.focusWindowShowing(workspaceId) ?? Promise.resolve(false)
+        : undefined,
+      addFolder: () => this.explorerFolderActions.openFolder(),
+      notesLocations: this.dependencies.notesLocations,
+    });
+  }
+
+  /** Edits were saved or discarded before the switch, so the new workspace starts with none. */
+  private async runWorkspaceFileCommand(command: WorkspaceFileCommand): Promise<void> {
+    const actions = this.workspaceFileActions;
+    if (!actions) return;
+    if (command.kind === 'exportWorkspace') await actions.export();
+    else if (command.kind === 'openWorkspaceFile') await actions.open();
+    else if (command.kind === 'confirmOpenWorkspaceFile') await actions.confirm();
+    else actions.cancel();
+  }
+
+  /** Workspace files opened from Windows while the app runs, and the one it was started with. */
+  private async offerWorkspaceFiles(): Promise<void> {
+    const { workspaceFiles } = this.dependencies;
+    const actions = this.workspaceFileActions;
+    if (!workspaceFiles || !actions) return;
+    this.stopActions.push(workspaceFiles.onWorkspaceFileOpened((contents) => void actions.offer(contents)));
+    const startupFile = await workspaceFiles.takeStartupWorkspaceFile();
+    if (startupFile) await actions.offer(startupFile);
+  }
+
+  private async showSwitchedWorkspace(): Promise<void> {
+    this.editing.keepOnly(new Set());
+    this.navigation.forgetHistory();
+    this.navigation.recordActiveDocument();
+    this.refreshPathStatuses();
+    await this.refreshActiveDocument();
+    await this.notesLocationActions?.check();
+    await this.showNotesIndex();
+    this.showSpecProjects();
   }
 
   private createDocumentAttachments(): DocumentAttachments | undefined {
@@ -259,7 +1069,7 @@ export class ViewerController {
     if (!attachments) return undefined;
     return new DocumentAttachments(session, attachments, {
       isEditing: () => this.editingActions.isActiveDocumentEditing(),
-      insertLinks: (links, point) => this.editingActions.insertPictureLinks(links, point),
+      insertLinks: (links, place) => this.editingActions.insertPictureLinks(links, place),
       notify: (key, values) => this.showNotice(key, values),
       askToSaveFirst: () =>
         this.showNotice('attachments.saveFirst', undefined, [
@@ -270,30 +1080,87 @@ export class ViewerController {
 
   /** Saves a picture pasted into the editor; undefined when it cannot be added. */
   pastePicture(bytes: Uint8Array): Promise<string | undefined> {
+    const active = this.dependencies.session.currentState().tabStrip.activeTab()?.location;
+    if (active && this.isInMovingNotes(active.canonicalKey)) {
+      this.showNotice('notesLocation.move.readOnly');
+      return Promise.resolve(undefined);
+    }
     return this.documentAttachments?.pastePicture(bytes) ?? Promise.resolve(undefined);
   }
 
+  /**
+   * Edit > Paste as Plain Text and the palette: the one place the app reads the clipboard, and only
+   * while the active document is being edited. The text goes to the document the command was for,
+   * and is dropped when another document became active during the read.
+   */
+  async pastePlainText(): Promise<void> {
+    const shell = this.dependencies.desktopShell;
+    const targetKey = this.editingActions.activeEditingDocumentKey();
+    if (!shell || targetKey === undefined) return;
+    try {
+      this.editingActions.insertPlainText(targetKey, await shell.readClipboardText());
+    } catch (error) {
+      const isTooLarge = error instanceof DocumentOpenError && error.failure === 'tooLarge';
+      this.showNotice(isTooLarge ? 'editor.pastePlainText.tooLarge' : 'editor.pastePlainText.failed');
+    }
+  }
+
+  /** The Image button: chosen picture files are copied next to the active document and linked at the caret. */
+  addPictureFiles(): Promise<void> {
+    const filterName = this.dependencies.translator.translate('attachments.pictureFilter');
+    return this.documentAttachments?.addPictureFiles(filterName) ?? Promise.resolve();
+  }
+
   async start(): Promise<void> {
-    const { session, requests } = this.dependencies;
-    const { wasReset } = await session.restore();
+    const { session, requests, appWindows } = this.dependencies;
+    const restoreOutcome = await session.restore(await appWindows?.startupWorkspaceId());
     this.navigation.recordActiveDocument();
     this.publish(this.composeSnapshot(undefined));
-    if (wasReset) this.showNotice('errors.appState.reset');
+    this.reportRestoreOutcome(restoreOutcome);
     this.stopActions.push(session.subscribe(() => this.handleSessionChange()));
     this.stopActions.push(requests.onDocumentsRequested((paths) => void this.openDocuments(paths)));
     this.listenToMenu();
     this.refreshPathStatuses();
     if (this.liveReload) this.stopActions.push(this.liveReload.start());
     this.stopActions.push(this.folderRefresh.start());
+    if (this.notesIndexActions) this.stopActions.push(this.notesIndexActions.start());
+    if (this.specViewerActions) this.stopActions.push(this.specViewerActions.start());
     if (this.documentAttachments) this.stopActions.push(this.documentAttachments.start());
+    if (this.notesMoveActions) this.stopActions.push(this.notesMoveActions.start());
     await this.openDocuments(await requests.takeStartupDocuments());
     await this.refreshActiveDocument();
+    await this.notesLocationActions?.check();
+    await this.showNotesIndex();
+    this.showSpecProjects();
+    await this.notesMoveActions?.offerUnfinishedMoves();
+    await this.offerWorkspaceFiles();
+    await this.startWindowFeatures();
+  }
+
+  /** The protected section is read once the app knows which workspace this window shows. */
+  private async startWindowFeatures(): Promise<void> {
+    if (this.appWindowActions) this.stopActions.push(await this.appWindowActions.start());
+    if (this.protectedNotesActions) this.stopActions.push(this.protectedNotesActions.start());
+    await this.protectedNotesActions?.refreshIfChanged();
+  }
+
+  private reportRestoreOutcome({
+    wasReset,
+    newerSavedState,
+    hasEarlierVersionChanges,
+  }: RestoreOutcome): void {
+    if (newerSavedState?.appVersion !== undefined)
+      this.showNotice('errors.appState.newerVersion', { version: newerSavedState.appVersion });
+    else if (newerSavedState) this.showNotice('errors.appState.newerVersionUnnamed');
+    else if (wasReset) this.showNotice('errors.appState.reset');
+    else if (hasEarlierVersionChanges) this.showNotice('workspaces.earlierVersionChanges');
   }
 
   stop(): void {
     for (const stopAction of this.stopActions.splice(0)) stopAction();
     clearTimeout(this.pendingSave);
     clearTimeout(this.pendingLivePreview);
+    this.injectionChecks.stop();
   }
 
   async saveNow(): Promise<void> {
@@ -351,7 +1218,7 @@ export class ViewerController {
   private async reopenActiveDocumentWithEncoding(encoding: string | undefined): Promise<void> {
     const { session } = this.dependencies;
     const location = session.currentState().tabStrip.activeTab()?.location;
-    if (!location || isUntitledLocation(location)) return;
+    if (!location || !hasFile(location)) return;
     try {
       await session.reopenWithEncoding(location.canonicalKey, encoding);
     } catch {
@@ -397,6 +1264,21 @@ export class ViewerController {
     return this.dependencies.renderer.render(markdown, { resolveResourceUrl: () => undefined }).html;
   }
 
+  /** Sanitized HTML for a block of an open document, its pictures and links resolved as its preview resolves them. */
+  renderDocumentBlock(canonicalKey: string, markdown: string): string {
+    const document = this.dependencies.session.openedDocument(canonicalKey);
+    if (!document) return this.renderPreview(markdown);
+    return this.dependencies.renderer.render(markdown, {
+      resolveResourceUrl: this.resourceResolverFor(document.location),
+      ...this.notesRenderingFor(document.location),
+    }).html;
+  }
+
+  private resourceResolverFor(location: DocumentLocation): ResourceUrlResolver {
+    const { resources } = this.dependencies;
+    return (source) => (hasFile(location) ? resources?.imageUrl(location.displayPath, source) : undefined);
+  }
+
   hasUnsavedDocuments(): boolean {
     return this.saving.hasUnsavedDocuments();
   }
@@ -418,13 +1300,73 @@ export class ViewerController {
     }
     const { links, session } = this.dependencies;
     const activeLocation = session.currentState().tabStrip.activeTab()?.location;
-    if (!links || !activeLocation || isUntitledLocation(activeLocation)) return;
-    const documentPath = activeLocation.displayPath;
-    try {
-      await this.openDocuments([await links.resolveDocumentLink(documentPath, link.href)]);
-    } catch (error) {
-      this.showOpenFailure(error, link.href);
+    if (!activeLocation || !hasFile(activeLocation)) return;
+    if (link.kind === 'unresolvedNote') {
+      this.notesActions?.offerNoteFor(link.href, activeLocation);
+      return;
     }
+    if (!links || (await this.asksBeforeLeavingGrantedFolders(activeLocation.displayPath, link.href))) {
+      return;
+    }
+    await this.openDocumentLink(activeLocation.displayPath, link.href);
+  }
+
+  async answerOutsideLink(shouldOpen: boolean): Promise<void> {
+    const request = this.outsideLinkRequest;
+    this.outsideLinkRequest = undefined;
+    this.publish(this.composeSnapshot(this.snapshot.notice));
+    if (shouldOpen && request) {
+      await this.openDocumentLink(request.documentPath, request.href, request.targetPath);
+    }
+  }
+
+  private async openDocumentLink(documentPath: string, href: string, expectedTarget?: string): Promise<void> {
+    const { links } = this.dependencies;
+    if (!links) return;
+    try {
+      await this.openDocuments([await links.resolveDocumentLink(documentPath, href, expectedTarget)]);
+      this.revealLinkedHeading(href);
+    } catch (error) {
+      this.showOpenFailure(error, href);
+    }
+  }
+
+  /**
+   * A Spec viewer workspace reads only granted folders unless the user agrees to follow a link out of them;
+   * the app resolves the link, through any folder links, and names the document it really leads to.
+   */
+  private async asksBeforeLeavingGrantedFolders(documentPath: string, href: string): Promise<boolean> {
+    const { links } = this.dependencies;
+    if (!links || !this.isSpecViewerShown()) return false;
+    const inspected = await links.inspectDocumentLink(documentPath, href).catch(() => undefined);
+    if (!inspected || inspected.isGranted) return false;
+    this.outsideLinkRequest = { documentPath, href, targetPath: inspected.path };
+    this.publish(this.composeSnapshot(this.snapshot.notice));
+    return true;
+  }
+
+  /** A link such as `plan.md#next-steps` opens the document at that heading. */
+  private revealLinkedHeading(href: string): void {
+    const fragment = href.split('#')[1];
+    const opened = this.dependencies.session.currentState().tabStrip.activeTab()?.location;
+    if (!fragment || !opened) return;
+    this.linkedHeadingRequest = {
+      canonicalKey: opened.canonicalKey,
+      fragment,
+      number: (this.linkedHeadingRequest?.number ?? 0) + 1,
+    };
+    this.publish(this.composeSnapshot(this.snapshot.notice));
+  }
+
+  private specRenderingFor(location: DocumentLocation): Pick<RenderOptions, 'specStructure'> {
+    if (!this.isSpecViewerShown()) return {};
+    const specStructure = this.specDocumentRenderings.renderingFor(location);
+    return specStructure ? { specStructure } : {};
+  }
+
+  private notesRenderingFor(location: DocumentLocation): Pick<RenderOptions, 'notes'> {
+    const notes = this.notesActions?.renderingFor(location);
+    return notes ? { notes } : {};
   }
 
   answerExternalLink(shouldOpen: boolean): void {
@@ -451,6 +1393,8 @@ export class ViewerController {
 
   closeDialog(): void {
     this.openDialog = undefined;
+    this.pendingProtectedCopy = undefined;
+    this.workspaceActions.forgetWorkspaceFile();
     this.publish(this.composeSnapshot(this.snapshot.notice));
   }
 
@@ -463,6 +1407,15 @@ export class ViewerController {
       this.changeLanguage(command.language);
       return;
     }
+    if (this.isSpecViewerShown() && isRefusedInReadOnlyWorkspace(command)) {
+      this.showNotice('specViewer.readOnly');
+      return;
+    }
+    const featureRun = this.runFeatureCommand(command);
+    if (featureRun) {
+      await featureRun;
+      return;
+    }
     if (applySessionCommand(this.dependencies.session, command)) return;
     const dialog = DIALOGS_BY_COMMAND[command.kind];
     if (dialog) {
@@ -472,6 +1425,38 @@ export class ViewerController {
     }
     const handler = this.commandHandlers[command.kind] as ((command: ViewerCommand) => unknown) | undefined;
     await handler?.(command);
+  }
+
+  /**
+   * Starts a command one feature's actions run; undefined when it belongs to none of them. Other
+   * commands must start without waiting, so a save takes the text as it was when Save was chosen.
+   */
+  private runFeatureCommand(command: ViewerCommand): Promise<void> | undefined {
+    if (isNotesLocationCommand(command)) return this.notesLocationActions?.run(command) ?? Promise.resolve();
+    if (isNotesMoveCommand(command)) return this.runNotesMoveCommand(command);
+    if (isNotesCommand(command)) return this.runNotesCommand(command);
+    if (isProtectedNotesCommand(command)) return this.runProtectedNotesCommand(command);
+    return this.runWorkspaceFeatureCommand(command);
+  }
+
+  private runWorkspaceFeatureCommand(command: ViewerCommand): Promise<void> | undefined {
+    if (isSpecViewerCommand(command)) return this.runSpecViewerCommand(command);
+    if (isWorkspaceFileCommand(command)) return this.runWorkspaceFileCommand(command);
+    if (isWorkspaceCommand(command)) return this.workspaceActions.run(command);
+    if (isInjectionCheckCommand(command)) return this.runInjectionCheckCommand(command);
+    return undefined;
+  }
+
+  /** Change Location starts from Settings, which closes so the folder picker and the plan can show. */
+  private async runNotesMoveCommand(command: NotesMoveCommand): Promise<void> {
+    if (command.kind === 'changeNotesLocation') this.openDialog = undefined;
+    await this.notesMoveActions?.run(command);
+  }
+
+  private async runNotesCommand(command: NotesCommand): Promise<void> {
+    if (this.refuseWhileNotesMove()) return;
+    await this.notesActions?.run(command);
+    if (command.kind === 'updateNotesSettings') await this.showNotesIndex();
   }
 
   private readonly commandHandlers: CommandHandlers = {
@@ -488,8 +1473,17 @@ export class ViewerController {
     toggleFavourite: () => this.toggleActiveFavourite(),
     exportFavourites: () => this.exportFavourites(),
     importFavourites: () => this.importFavourites(),
-    refreshFolders: () => this.folderRefresh.refreshShownFolders(),
-    toggleEditing: () => this.editingActions.toggleActiveDocument(),
+    refreshFolders: () => {
+      this.folderRefresh.refreshShownFolders();
+      void this.specViewerActions?.refresh();
+    },
+    toggleEditing: () => {
+      this.editingActions.toggleActiveDocument();
+      const location = this.editedLocation();
+      if (location) this.editingModes.explainSourceFor(location);
+    },
+    toggleEditingMode: () => this.editingModes.toggleMode(),
+    setEditingMode: ({ editingMode }) => this.editingModes.changeMode(editingMode),
     togglePreviewBesideEditor: () => this.togglePreviewBesideEditor(),
     newDocument: () => this.openNewDocument(),
     goBack: () => this.navigation.goBack(),
@@ -497,6 +1491,8 @@ export class ViewerController {
     copyPath: ({ path }) => this.copyPath(path),
     revealInFileManager: ({ path }) => this.revealInFileManager(path),
     toggleFullScreen: () => this.dependencies.desktopShell?.toggleFullScreen(),
+    openLanguageSettings: () => this.dependencies.desktopShell?.openLanguageSettings(),
+    openNewWindow: () => this.openNewWindow(),
     toggleControlWheel: () => this.toggleControlWheel(),
     setWordGoal: ({ goal }) => this.changeWordGoal((goals, key) => setWordGoal(goals, key, goal)),
     clearWordGoal: () => this.changeWordGoal(clearWordGoal),
@@ -512,24 +1508,49 @@ export class ViewerController {
     },
     switchWorkspaceKind: (command) => this.runWorkspaceKindCommand(command),
     setWorkspaceKindEnabled: (command) => this.runWorkspaceKindCommand(command),
+    showWorkspaceKindsPage: () => {
+      this.kindsPage = this.kindsPagePlace();
+      this.publish(this.composeSnapshot(this.snapshot.notice));
+    },
+    closeWorkspaceKindsPage: () => {
+      this.kindsPage = undefined;
+      this.publish(this.composeSnapshot(this.snapshot.notice));
+    },
     runEditorCommand: ({ command }) => {
       this.editingActions.runEditorCommand(command);
     },
+    pastePlainText: () => this.pastePlainText(),
     revertDocument: () => this.editingActions.revertActiveDocument(),
-    changeOutlineSection: ({ line, action }) => {
-      const refusal = this.editingActions.changeOutlineSection(line, action);
+    changeOutlineSection: async ({ line, action }) => {
+      const refusal = await this.editingActions.changeOutlineSection(line, action);
       if (refusal) this.showNotice(`outline.section.refused.${refusal}`);
     },
     reloadActiveDocument: () => this.reloadActiveDocument(),
+    editProperty: ({ canonicalKey, edit }) => this.editProperty(canonicalKey, edit),
+    editPropertiesInNote: () => this.editingActions.editActiveDocumentFromStart(),
     reloadFromDisk: ({ canonicalKey }) => this.editingActions.reloadFromDisk(canonicalKey),
     overwriteChangesOnDisk: ({ canonicalKey }) => this.saving.overwriteChangesOnDisk(canonicalKey),
     print: () => {
-      if (this.activeDocument) this.dependencies.printer?.printActiveDocument();
+      if (!this.activeDocument || this.asksBeforeCopying({ kind: 'print' })) return;
+      this.startPrint();
     },
+    confirmProtectedCopy: () => this.confirmProtectedCopy(),
     showFolderSearch: () => {
+      this.folderSearchQuery = undefined;
       this.dependencies.session.updateViewSettings((viewSettings) => showSidebarView(viewSettings, 'search'));
       this.folderSearchFocusRequest += 1;
       this.publish(this.composeSnapshot(this.snapshot.notice));
+    },
+    showNotesWithTag: ({ tag }) => {
+      this.folderSearchQuery = `tag:${tag}`;
+      this.dependencies.session.updateViewSettings((viewSettings) => showSidebarView(viewSettings, 'search'));
+      this.folderSearchFocusRequest += 1;
+      this.publish(this.composeSnapshot(this.snapshot.notice));
+    },
+    openBacklink: async ({ path, noteName }) => {
+      const displayPath = this.notesIndexActions?.displayPathOf(path);
+      if (displayPath === undefined) return;
+      await this.openSearchMatch(displayPath, { text: noteName, isCaseSensitive: false, isWholeWord: false });
     },
     openSearchMatch: ({ path, query, options }) => this.openSearchMatch(path, { text: query, ...options }),
     showFind: () => {
@@ -538,15 +1559,16 @@ export class ViewerController {
       this.publish(this.composeSnapshot(this.snapshot.notice));
     },
     copyAsHtml: () => {
-      if (!this.activeDocument) return;
+      if (!this.activeDocument || this.refusesProtectedOutput()) return;
       this.copyAsHtmlRequest += 1;
       this.publish(this.composeSnapshot(this.snapshot.notice));
     },
-    copyHtml: ({ html }) => this.copyHtml(html),
+    copyHtml: ({ html }) => {
+      if (!this.refusesProtectedOutput()) void this.copyHtml(html);
+    },
     exportDocument: ({ format }) => {
-      if (!this.activeDocument) return;
-      this.exportRequest = { format, number: (this.exportRequest?.number ?? 0) + 1 };
-      this.publish(this.composeSnapshot(this.snapshot.notice));
+      if (!this.activeDocument || this.asksBeforeCopying({ kind: 'export', format })) return;
+      this.startExport(format);
     },
     saveExport: ({ format, contents }) => this.saveExport(format, contents),
     confirmClearAllData: () => this.confirmClearAllData(),
@@ -573,6 +1595,7 @@ export class ViewerController {
     );
     this.showViewStateInMenu();
     this.showRecentFilesInMenu();
+    this.showRecentWorkspacesInJumpList();
     this.showShortcutsInMenu();
   }
 
@@ -580,16 +1603,26 @@ export class ViewerController {
     const { menu, session } = this.dependencies;
     if (!menu) return;
     const { viewSettings } = session.currentState();
-    const { theme, readingWidth, typography, isStatusBarVisible, isPreviewBesideEditor } = viewSettings;
+    const {
+      theme,
+      readingWidth,
+      typography,
+      editingMode,
+      isStatusBarVisible,
+      isPreviewBesideEditor,
+      isShowingHiddenCharacters,
+    } = viewSettings;
     const state = {
       theme,
       readingWidth,
       typography,
+      editingMode,
       isSidebarVisible: isSidebarViewShown(viewSettings, 'explorer'),
       isOutlineVisible: isSidebarViewShown(viewSettings, 'outline'),
       isStatusBarVisible,
       isSourceView: this.isSourceView,
       isPreviewBesideEditor,
+      isShowingHiddenCharacters,
     };
     const stateKey = JSON.stringify(state);
     if (stateKey === this.shownMenuViewState) return;
@@ -617,10 +1650,60 @@ export class ViewerController {
   private showRecentFilesInMenu(): void {
     const { menu, session } = this.dependencies;
     const { recentFiles } = session.currentState();
-    if (!menu || recentFiles === this.shownRecentFiles) return;
+    const workspaces = this.recentWorkspacesForMenu();
+    const workspacesKey = JSON.stringify(workspaces);
+    if (!menu || (recentFiles === this.shownRecentFiles && workspacesKey === this.shownRecentWorkspaces))
+      return;
     this.shownRecentFiles = recentFiles;
+    this.shownRecentWorkspaces = workspacesKey;
     const displayPaths = recentFiles.entries().map((recentFile) => recentFile.location.displayPath);
-    void menu.showRecentFiles(displayPaths.slice(0, MAX_RECENT_MENU_ENTRIES));
+    void menu.showRecentFiles(displayPaths.slice(0, MAX_RECENT_MENU_ENTRIES), workspaces);
+  }
+
+  /**
+   * Lists the recent workspaces in the Jump List, one update after another; a refusal or a failure leaves
+   * the app as it is, and a failed list is sent again on the next change.
+   */
+  private showRecentWorkspacesInJumpList(): void {
+    const { jumpList, session, translator } = this.dependencies;
+    const registry = this.workspacesPart().workspaces?.registry;
+    if (!jumpList || !registry) return;
+    const { workspaceKinds, jumpListRemovals } = session.currentState();
+    const removals = jumpListRemovals ?? NO_JUMP_LIST_REMOVALS;
+    const workspaces = jumpListWorkspacesOf(registry, workspaceKinds, { translator, removals });
+    const workspacesKey = JSON.stringify(workspaces);
+    if (workspacesKey === this.shownJumpListWorkspaces || workspacesKey === this.sentJumpListWorkspaces)
+      return;
+    this.sentJumpListWorkspaces = workspacesKey;
+    const category = translator.translate('workspaces.jumpList.category');
+    this.jumpListUpdate = this.jumpListUpdate
+      .then(() => jumpList.showRecentWorkspaces(category, workspaces))
+      .then(({ removedWorkspaceIds }) => {
+        this.shownJumpListWorkspaces = workspacesKey;
+        this.rememberJumpListRemovals(removedWorkspaceIds);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.sentJumpListWorkspaces === workspacesKey) this.sentJumpListWorkspaces = undefined;
+      });
+  }
+
+  private rememberJumpListRemovals(workspaceIds: readonly string[]): void {
+    if (workspaceIds.length === 0) return;
+    const nowMs = (this.dependencies.now?.() ?? new Date()).getTime();
+    this.dependencies.session.updateJumpListRemovals((removals) =>
+      withJumpListRemovals(removals, workspaceIds, nowMs),
+    );
+  }
+
+  /** The other workspaces of enabled kinds, most recently used first. */
+  private recentWorkspacesForMenu(): RecentWorkspaceMenuEntry[] {
+    const { session, translator } = this.dependencies;
+    const view = this.workspacesPart().workspaces;
+    if (!view) return [];
+    return recentWorkspaceLinks(view, session.currentState().workspaceKinds, translator)
+      .slice(0, MAX_RECENT_MENU_ENTRIES)
+      .map(({ id, name }) => ({ id, name }));
   }
 
   private refreshPathStatuses({ isForced = false } = {}): void {
@@ -628,7 +1711,7 @@ export class ViewerController {
     const { tabStrip, favourites, recentFiles, explorerFolders } = session.currentState();
     const entries = [...tabStrip.tabs(), ...favourites.favourites(), ...recentFiles.entries()];
     const locations = [...entries.map((entry) => entry.location), ...explorerFolders.folders()].filter(
-      (location) => !isUntitledLocation(location),
+      (location) => hasFile(location),
     );
     const locationKeys = JSON.stringify(locations.map((location) => location.canonicalKey));
     if (!isForced && locationKeys === this.checkedLocationKeys) return;
@@ -639,18 +1722,36 @@ export class ViewerController {
     });
   }
 
+  /** When a file was last changed, read without opening it; undefined when that is not known. */
+  readModifiedTime(path: string): Promise<number | undefined> {
+    return this.dependencies.session.readModifiedTime(path);
+  }
+
+  /** A document of a protected section, which must never be spell checked or otherwise leak its words. */
+  isProtectedDocument(location: DocumentLocation): boolean {
+    return (this.dependencies.protectedDocuments ?? NO_PROTECTED_DOCUMENTS).isProtected(location);
+  }
+
   /** The subfolders and Markdown documents in a folder; empty when the folder cannot be read. */
   listFolderContents(folderPath: string): Promise<FolderListing> {
     return this.explorerFolderActions.listFolderContents(folderPath);
   }
 
   /** Finds text in the opened and favourite folders, for the Search view. */
-  searchFolders(query: string, options: TextSearchOptions): Promise<FolderSearchResults> {
+  searchFolders(
+    query: string,
+    options: TextSearchOptions,
+    specFilter: SpecSearchFilter = DEFAULT_SPEC_SEARCH_FILTER,
+  ): Promise<FolderSearchResults> {
+    if (this.notesIndexActions?.isShown()) return this.notesIndexActions.search(query);
+    if (this.specViewerActions && this.isSpecViewerShown()) {
+      return this.specViewerActions.searchDocuments(query, options, specFilter);
+    }
     return this.explorerFolderActions.searchDocuments(query, options);
   }
 
   hasSearchableFolders(): boolean {
-    return this.explorerFolderActions.hasSearchedFolders();
+    return this.notesIndexActions?.isShown() === true || this.explorerFolderActions.hasSearchedFolders();
   }
 
   /** Opens a document found by Find in Folders with the find bar showing the same matches. */
@@ -669,7 +1770,9 @@ export class ViewerController {
 
   /** Records the source editor's text for a document; the window shows when it has unsaved changes. */
   updateEditedText(canonicalKey: string, text: string): void {
+    if (this.isInMovingNotes(canonicalKey)) return;
     this.editingActions.updateText(canonicalKey, text);
+    this.injectionChecks.textEdited(canonicalKey, text);
     if (this.isPreviewBesideEditor()) this.scheduleLivePreview(text.length);
     else this.scheduleOutlineRefresh(canonicalKey, text);
   }
@@ -715,7 +1818,7 @@ export class ViewerController {
   private async reloadActiveDocument(): Promise<void> {
     const { session, translator } = this.dependencies;
     const location = session.currentState().tabStrip.activeTab()?.location;
-    if (!location || isUntitledLocation(location)) return;
+    if (!location || !hasFile(location)) return;
     const { canonicalKey } = location;
     if (!this.editing.hasUnsavedChanges(canonicalKey)) {
       await this.editingActions.reloadFromDisk(canonicalKey);
@@ -754,12 +1857,50 @@ export class ViewerController {
     this.publish(this.composeSnapshot(this.snapshot.notice));
   }
 
-  private runWorkspaceKindCommand(command: WorkspaceKindCommand): void {
+  /** The shown kinds page announces what is done on it, so the app's notice stays out of the way. */
+  async runWorkspaceKindsPageCommand(command: WorkspaceKindCommand): Promise<void> {
+    const notice = await this.applyWorkspaceKindCommand(command);
+    if (notice && !this.kindsPage) this.showNotice(notice.key, notice.values);
+  }
+
+  private async runWorkspaceKindCommand(command: WorkspaceKindCommand): Promise<void> {
+    const notice = await this.applyWorkspaceKindCommand(command);
+    if (notice) this.showNotice(notice.key, notice.values);
+  }
+
+  private async applyWorkspaceKindCommand(
+    command: WorkspaceKindCommand,
+  ): Promise<WorkspaceKindNotice | undefined> {
     const { session, translator } = this.dependencies;
+    const kindWorkspace =
+      command.kind === 'switchWorkspaceKind'
+        ? session.workspaces()?.lastShownOfKind(command.kindId)
+        : undefined;
+    if (kindWorkspace && kindWorkspace.id !== session.shownWorkspace()?.id) {
+      await this.workspaceActions.run({ kind: 'switchWorkspace', workspaceId: kindWorkspace.id });
+      if (session.shownWorkspace()?.id !== kindWorkspace.id) return undefined;
+      return kindShownNoticeOf(session.currentState().workspaceKinds.activeKindId(), translator);
+    }
     const current = session.currentState().workspaceKinds;
     const { state, notice } = applyWorkspaceKindCommand(current, command, translator);
     if (state !== current) session.updateWorkspaceKinds(() => state);
-    if (notice) this.showNotice(notice.key, notice.values);
+    return notice;
+  }
+
+  private kindsPagePlace(): KindsPagePlace {
+    const { session } = this.dependencies;
+    return {
+      workspaceId: session.shownWorkspace()?.id,
+      activeKey: session.currentState().tabStrip.activeTab()?.location.canonicalKey,
+    };
+  }
+
+  /** Another workspace brings its own tabs, so only a new document within the same workspace closes the page. */
+  private followKindsPage(): void {
+    if (!this.kindsPage) return;
+    const place = this.kindsPagePlace();
+    if (place.workspaceId !== this.kindsPage.workspaceId) this.kindsPage = place;
+    else if (place.activeKey !== this.kindsPage.activeKey) this.kindsPage = undefined;
   }
 
   /** The translator is made once at startup, so a new language shows after the next start. */
@@ -787,8 +1928,71 @@ export class ViewerController {
     this.dependencies.session.clearAllData();
     this.navigation.forgetHistory();
     this.navigation.recordActiveDocument();
-    await this.saveNow();
-    this.showNotice('privacy.clearAllData.done');
+    const hasClearedEverything = await this.clearEveryStoredPart();
+    this.showNotice(hasClearedEverything ? 'privacy.clearAllData.done' : 'privacy.clearAllData.failed');
+    await this.showNotesIndex();
+  }
+
+  /** Every part is cleared even when an earlier one fails, so one failure leaves as little behind as it can. */
+  private async clearEveryStoredPart(): Promise<boolean> {
+    const parts: readonly (() => Promise<unknown>)[] = [
+      () => this.dependencies.session.clearStoredData(),
+      async () => this.notesIndexActions?.clearAll(),
+      async () => {
+        await this.dependencies.notesMoves?.clearMoves();
+        this.notesMoveActions?.forgetMoves();
+      },
+      () => this.saveNow(),
+    ];
+    let hasClearedEveryPart = true;
+    for (const clearPart of parts) {
+      try {
+        await clearPart();
+      } catch {
+        hasClearedEveryPart = false;
+      }
+    }
+    return hasClearedEveryPart;
+  }
+
+  /**
+   * An export or print of a protected note writes a copy that is not protected, so the user is asked
+   * first and nothing starts until they accept.
+   */
+  private asksBeforeCopying(output: ProtectedCopyOutput): boolean {
+    const document = this.activeDocument;
+    if (!document || !isProtectedLocation(document)) return false;
+    this.pendingProtectedCopy = { output, canonicalKey: document.canonicalKey };
+    this.openDialog = output.kind === 'print' ? 'protectedPrintWarning' : 'protectedExportWarning';
+    this.publish(this.composeSnapshot(this.snapshot.notice));
+    return true;
+  }
+
+  /** Starts the export or print the user accepted, if the same note is still shown. */
+  private confirmProtectedCopy(): void {
+    const pending = this.pendingProtectedCopy;
+    this.pendingProtectedCopy = undefined;
+    this.openDialog = undefined;
+    if (!pending || this.activeDocument?.canonicalKey !== pending.canonicalKey) {
+      this.publish(this.composeSnapshot(this.snapshot.notice));
+      return;
+    }
+    if (pending.output.kind === 'print') this.startPrint();
+    else this.startExport(pending.output.format);
+  }
+
+  private startExport(format: ExportFormat): void {
+    this.exportRequest = { format, number: (this.exportRequest?.number ?? 0) + 1 };
+    this.publish(this.composeSnapshot(this.snapshot.notice));
+  }
+
+  private startPrint(): void {
+    if (this.editingActions.isActiveDocumentEditing()) {
+      this.dependencies.printer?.printActiveDocument();
+      return;
+    }
+    this.printRequest += 1;
+    this.publish(this.composeSnapshot(this.snapshot.notice));
   }
 
   private async saveExport(format: ExportFormat, contents: string): Promise<void> {
@@ -869,7 +2073,7 @@ export class ViewerController {
 
   private toggleActiveFavourite(): void {
     const activeTab = this.dependencies.session.currentState().tabStrip.activeTab();
-    if (!activeTab || isUntitledLocation(activeTab.location)) return;
+    if (!activeTab || !hasFile(activeTab.location)) return;
     this.dependencies.session.updateFavourites((favourites) => favourites.toggle(activeTab.location, 'file'));
   }
 
@@ -902,9 +2106,12 @@ export class ViewerController {
 
   private handleSessionChange(): void {
     this.navigation.recordActiveDocument();
+    this.followKindsPage();
+    this.showSpecProjects();
     this.publish(this.composeSnapshot(this.snapshot.notice));
     this.showViewStateInMenu();
     this.showRecentFilesInMenu();
+    this.showRecentWorkspacesInJumpList();
     this.showShortcutsInMenu();
     this.refreshPathStatuses();
     this.liveReload?.watchOpenTabs();
@@ -917,7 +2124,31 @@ export class ViewerController {
       ),
     );
     this.scheduleSave();
+    this.injectionChecks.viewChanged();
+    this.appWindowActions?.reportState();
+    void this.protectedNotesActions?.refreshIfChanged();
     void this.refreshActiveDocument();
+  }
+
+  private createAppWindowActions(): AppWindowActions | undefined {
+    const { appWindows, session } = this.dependencies;
+    if (!appWindows) return undefined;
+    return new AppWindowActions({
+      appWindows,
+      session,
+      showWorkspace: async ({ workspaceId, documentPaths }) => {
+        await this.workspaceActions.switchTo(workspaceId, { mayFocusOtherWindow: false });
+        if (session.shownWorkspace()?.id === workspaceId) await this.openDocuments(documentPaths);
+        else if (documentPaths.length > 0) await appWindows.routeDocuments(documentPaths);
+      },
+      showSwitchedWorkspace: () => this.showSwitchedWorkspace(),
+      showNotice: (key) => this.showNotice(key),
+      saveNow: () => this.saveNow(),
+    });
+  }
+
+  private async openNewWindow(): Promise<void> {
+    await this.appWindowActions?.openNewWindow();
   }
 
   private scheduleSave(): void {
@@ -928,23 +2159,49 @@ export class ViewerController {
   /** Renders the active document again when it or its edited text changed. */
   private async refreshActiveDocument(): Promise<void> {
     const document = await this.loadActiveDocument();
+    void this.notesIndexActions?.showBacklinksOf(document?.location);
+    if (document) await this.notesActions?.prepareRendering(document.location);
+    const specPreparation = this.specPreparationFor(document);
+    if (specPreparation) await specPreparation;
     const text = document ? this.textShownFor(document) : undefined;
     const shouldMarkSourceLines = this.isPreviewBesideEditor();
-    if (
-      document === this.renderedDocument &&
-      text === this.renderedText &&
-      shouldMarkSourceLines === this.hasRenderedSourceLines
-    ) {
-      return;
+    const noteList = this.notesActions?.noteListVersion();
+    const specRendering = this.specDocumentRenderings.version();
+    if (!this.isRenderUpToDate({ document, text, shouldMarkSourceLines, noteList, specRendering })) {
+      this.renderedSpecRendering = specRendering;
+      this.renderedNoteList = noteList;
+      this.renderedDocument = document;
+      this.renderedText = text;
+      this.hasRenderedSourceLines = shouldMarkSourceLines;
+      this.activeDocument = this.renderedActiveDocument(document, text, shouldMarkSourceLines);
+      this.publish(this.composeSnapshot(this.snapshot.notice));
     }
-    this.renderedDocument = document;
-    this.renderedText = text;
-    this.hasRenderedSourceLines = shouldMarkSourceLines;
-    this.activeDocument =
-      document && text !== undefined ? this.render(document, text, shouldMarkSourceLines) : undefined;
-    this.publish(this.composeSnapshot(this.snapshot.notice));
+    this.injectionChecks.documentShown(document, text);
   }
 
+  private renderedActiveDocument(
+    document: OpenedDocument | undefined,
+    text: string | undefined,
+    shouldMarkSourceLines: boolean,
+  ): RenderedActiveDocument | undefined {
+    return document && text !== undefined ? this.render(document, text, shouldMarkSourceLines) : undefined;
+  }
+
+  private isRenderUpToDate(next: {
+    readonly document: OpenedDocument | undefined;
+    readonly text: string | undefined;
+    readonly shouldMarkSourceLines: boolean;
+    readonly noteList: object | undefined;
+    readonly specRendering: object | undefined;
+  }): boolean {
+    return (
+      next.document === this.renderedDocument &&
+      next.text === this.renderedText &&
+      next.shouldMarkSourceLines === this.hasRenderedSourceLines &&
+      next.noteList === this.renderedNoteList &&
+      next.specRendering === this.renderedSpecRendering
+    );
+  }
   /** While the document is edited without a preview beside it, its last rendered text is enough. */
   private textShownFor(document: OpenedDocument): string {
     const { canonicalKey } = document.location;
@@ -996,12 +2253,12 @@ export class ViewerController {
     text: string,
     shouldMarkSourceLines: boolean,
   ): RenderedActiveDocument {
-    const { resources } = this.dependencies;
     const isUntitled = isUntitledLocation(document.location);
     const { html, outline, frontMatter } = this.dependencies.renderer.render(text, {
-      resolveResourceUrl: (source) =>
-        isUntitled ? undefined : resources?.imageUrl(document.location.displayPath, source),
+      resolveResourceUrl: this.resourceResolverFor(document.location),
       includeSourceLines: shouldMarkSourceLines,
+      ...this.notesRenderingFor(document.location),
+      ...this.specRenderingFor(document.location),
     });
     return {
       canonicalKey: document.location.canonicalKey,
@@ -1016,7 +2273,39 @@ export class ViewerController {
       source: text,
       scrollRatio: this.dependencies.session.currentState().tabStrip.activeTab()?.scrollRatio ?? 0,
       ...(frontMatter === undefined ? {} : { frontMatter }),
+      ...this.propertiesEditabilityPart(document.location, text, frontMatter),
     };
+  }
+
+  private propertiesEditabilityPart(
+    location: DocumentLocation,
+    text: string,
+    frontMatter: string | undefined,
+  ): Pick<RenderedActiveDocument, 'propertiesEditability'> {
+    if (frontMatter === undefined || isUntitledLocation(location) || !this.notesActions?.isNote(location)) {
+      return {};
+    }
+    return { propertiesEditability: propertiesEditabilityOf(text, frontMatter) };
+  }
+
+  private propertySavingPart(): Pick<ViewerSnapshot, 'propertySavingKey'> {
+    const propertySavingKey = this.propertyEditing.noteBeingSaved();
+    return propertySavingKey === undefined ? {} : { propertySavingKey };
+  }
+
+  private async editProperty(canonicalKey: string, edit: FrontMatterEdit): Promise<void> {
+    if (this.isInMovingNotes(canonicalKey)) {
+      this.showNotice('notesLocation.move.readOnly');
+      return;
+    }
+    const outcome = await this.propertyEditing.editProperty(canonicalKey, edit);
+    this.publish(this.composeSnapshot(this.snapshot.notice));
+    const fileName = this.dependencies.session.openedDocument(canonicalKey)?.location.fileName ?? '';
+    if (outcome === 'refusedUnsavedChanges') {
+      this.showNotice('document.properties.refused.unsavedChanges', { name: fileName });
+    } else if (outcome === 'refusedCannotEdit') {
+      this.showNotice('document.properties.refused.cannotEdit', { name: fileName });
+    }
   }
 
   private composeSnapshot(notice: string | undefined): ViewerSnapshot {
@@ -1025,22 +2314,166 @@ export class ViewerController {
       pathStatuses: this.pathStatuses,
       folderRevisions: this.folderRefresh.revisionsByFolder(),
       unsavedDocumentKeys: this.editing.unsavedKeys(),
+      ...this.propertySavingPart(),
       ...(this.editingActions.isActiveDocumentEditing() ? { isActiveDocumentEditing: true } : {}),
+      ...this.editingModePart(),
       ...this.editorRequestPart(),
       ...(this.activeDocument ? { activeDocument: this.activeDocument } : {}),
       ...(notice === undefined ? {} : { notice }),
       ...(notice !== undefined && this.noticeActions.length > 0 ? { noticeActions: this.noticeActions } : {}),
       ...(this.openDialog === undefined ? {} : { openDialog: this.openDialog }),
       ...this.documentRequestsPart(),
-      ...(this.externalLinkRequest === undefined ? {} : { externalLinkRequest: this.externalLinkRequest }),
+      ...this.linkRequestsPart(),
+      ...(this.linkedHeadingRequest ? { linkedHeadingRequest: this.linkedHeadingRequest } : {}),
       ...(this.isSourceView ? { isSourceView: true } : {}),
+      ...(this.kindsPage ? { isWorkspaceKindsPageShown: true } : {}),
       ...this.unsavedChangesPart(),
+      ...this.workspacesPart(),
+      ...this.notesPart(),
+      ...this.specProjectsPart(),
+      ...this.injectionCheckPart(),
+      ...this.notesMovePart(),
+    };
+  }
+
+  private notesMovePart(): Pick<
+    ViewerSnapshot,
+    'notesMoveDialog' | 'notesMoveStatus' | 'isActiveDocumentReadOnly'
+  > {
+    const actions = this.notesMoveActions;
+    if (!actions) return {};
+    const dialog = actions.dialogShown();
+    const status = actions.statusShown();
+    const activeKey = this.dependencies.session.currentState().tabStrip.activeTab()?.location.canonicalKey;
+    return {
+      ...(dialog ? { notesMoveDialog: dialog } : {}),
+      ...(status ? { notesMoveStatus: notesMoveStatusText(status, this.dependencies.translator) } : {}),
+      ...(activeKey !== undefined && this.isInMovingNotes(activeKey)
+        ? { isActiveDocumentReadOnly: true }
+        : {}),
+    };
+  }
+
+  /** The check and an outlined range belong to the shown document only. */
+  private injectionCheckPart(): Pick<
+    ViewerSnapshot,
+    'injectionCheck' | 'sourceRangeRequest' | 'isRevealingFinding'
+  > {
+    const shownKey = this.activeDocument?.canonicalKey;
+    const injectionCheck = this.injectionChecks.view();
+    const sourceRangeRequest = this.sourceRangeRequest;
+    return {
+      ...(shownKey !== undefined && this.revealedFindingKey === shownKey ? { isRevealingFinding: true } : {}),
+      ...(injectionCheck && injectionCheck.documentKey === shownKey ? { injectionCheck } : {}),
+      ...(sourceRangeRequest && sourceRangeRequest.canonicalKey === shownKey ? { sourceRangeRequest } : {}),
+    };
+  }
+
+  private editingModePart(): Pick<ViewerSnapshot, 'editingMode' | 'editingModeAnnouncement'> {
+    const location = this.editedLocation();
+    const announcement = this.editingModes.announcement();
+    return {
+      ...(location ? { editingMode: this.editingModes.modeFor(location.canonicalKey) } : {}),
+      ...(announcement ? { editingModeAnnouncement: announcement } : {}),
+    };
+  }
+
+  /** The active document while it is open in the editor. */
+  private editedLocation(): DocumentLocation | undefined {
+    if (!this.editingActions.isActiveDocumentEditing()) return undefined;
+    return this.dependencies.session.currentState().tabStrip.activeTab()?.location;
+  }
+
+  private specProjectsPart(): Pick<ViewerSnapshot, 'specProjects' | 'specPreviews'> {
+    const view = this.specViewerActions?.view();
+    const previews = this.specPreviews.size > 0 ? { specPreviews: this.specPreviews } : {};
+    const injectionFindings = this.specProjectChecks.findings();
+    const specProjects = view && injectionFindings.size > 0 ? { ...view, injectionFindings } : view;
+    return specProjects ? { specProjects, ...previews } : previews;
+  }
+
+  /** Either the missing folder's path or, while the folder is there, its note tree. */
+  private notesPart(): Pick<ViewerSnapshot, 'missingNotesLocation' | 'notes' | 'noteBacklinks'> {
+    const missingNotesLocation = this.notesLocationActions?.missingLocation();
+    if (missingNotesLocation !== undefined) return { missingNotesLocation };
+    const notes = this.notesActions?.view();
+    if (!notes) return {};
+    return {
+      notes: { ...notes, ...this.notesIndexPart() },
+      ...this.noteBacklinksPart(),
+      ...this.protectedNotesPart(),
+    };
+  }
+
+  private protectedNotesPart(): Pick<ViewerSnapshot, 'protectedNotes'> {
+    const protectedNotes = this.protectedNotesActions?.view();
+    return protectedNotes ? { protectedNotes } : {};
+  }
+
+  private notesIndexPart(): Pick<NotesView, 'indexStatus' | 'tags'> {
+    const indexStatus = this.notesIndexActions?.status();
+    const tags = this.notesIndexActions?.tags();
+    return { ...(indexStatus ? { indexStatus } : {}), ...(tags ? { tags } : {}) };
+  }
+
+  /** Only the shown note's backlinks; while another note loads, none. */
+  private noteBacklinksPart(): Pick<ViewerSnapshot, 'noteBacklinks'> {
+    const backlinks = this.notesIndexActions?.backlinks();
+    const isForShownNote = backlinks?.canonicalKey === this.activeDocument?.canonicalKey;
+    return backlinks && isForShownNote ? { noteBacklinks: backlinks } : {};
+  }
+
+  private notesSetupPart(): Pick<WorkspacesView, 'notesSetup'> {
+    const notesSetup = this.workspaceActions.notesSetup();
+    return notesSetup ? { notesSetup } : {};
+  }
+
+  /** What a folder for a new Notes workspace holds; without a Notes port nothing is there to look at. */
+  inspectNotesFolder(path: string): Promise<NotesFolderInspection> {
+    return this.dependencies.notesLocations?.inspectFolder(path) ?? Promise.resolve('empty');
+  }
+
+  /** The folder picker for a Notes folder; the picked folder becomes readable, as any opened folder. */
+  async pickNotesFolder(): Promise<string | undefined> {
+    const picked = await this.dependencies.folders?.pickFolder();
+    return picked?.displayPath;
+  }
+
+  private workspacesPart(): Pick<ViewerSnapshot, 'workspaces'> {
+    const { session } = this.dependencies;
+    const registry = session.workspaces();
+    const shownWorkspaceId = session.shownWorkspace()?.id;
+    if (!registry || shownWorkspaceId === undefined) return {};
+    const kindForNewWorkspace = this.workspaceActions.kindForNewWorkspace();
+    const newWorkspaceFromFile = this.workspaceActions.newWorkspaceFromFile();
+    return {
+      workspaces: {
+        registry,
+        shownWorkspaceId,
+        ...(kindForNewWorkspace ? { kindForNewWorkspace } : {}),
+        ...(newWorkspaceFromFile ? { newWorkspaceFromFile } : {}),
+        ...(this.pendingWorkspaceFile ? { pendingFile: this.pendingWorkspaceFile } : {}),
+        ...this.notesSetupPart(),
+      },
+    };
+  }
+
+  private linkRequestsPart(): Pick<ViewerSnapshot, 'externalLinkRequest' | 'outsideLinkRequest'> {
+    return {
+      ...(this.externalLinkRequest === undefined ? {} : { externalLinkRequest: this.externalLinkRequest }),
+      ...(this.outsideLinkRequest ? { outsideLinkRequest: this.outsideLinkRequest } : {}),
     };
   }
 
   private documentRequestsPart(): Pick<
     ViewerSnapshot,
-    'findRequest' | 'findQuery' | 'copyAsHtmlRequest' | 'exportRequest' | 'folderSearchFocusRequest'
+    | 'findRequest'
+    | 'findQuery'
+    | 'copyAsHtmlRequest'
+    | 'exportRequest'
+    | 'printRequest'
+    | 'folderSearchFocusRequest'
+    | 'folderSearchQuery'
   > {
     return {
       ...(this.findRequest > 0 ? { findRequest: this.findRequest } : {}),
@@ -1048,8 +2481,10 @@ export class ViewerController {
       ...(this.folderSearchFocusRequest > 0
         ? { folderSearchFocusRequest: this.folderSearchFocusRequest }
         : {}),
+      ...(this.folderSearchQuery === undefined ? {} : { folderSearchQuery: this.folderSearchQuery }),
       ...(this.copyAsHtmlRequest > 0 ? { copyAsHtmlRequest: this.copyAsHtmlRequest } : {}),
       ...(this.exportRequest ? { exportRequest: this.exportRequest } : {}),
+      ...(this.printRequest > 0 ? { printRequest: this.printRequest } : {}),
     };
   }
 
@@ -1066,5 +2501,26 @@ export class ViewerController {
   private publish(snapshot: ViewerSnapshot): void {
     this.snapshot = snapshot;
     for (const listener of this.listeners) listener(snapshot);
+    this.showWindowTitle(snapshot);
   }
+
+  private showWindowTitle({ activeDocument }: ViewerSnapshot): void {
+    const { session, translator, desktopShell } = this.dependencies;
+    const shown = session.shownWorkspace();
+    const title = windowTitleFor(
+      {
+        documentName: activeDocument && windowDocumentName(activeDocument, translator),
+        workspaceName: shown ? workspaceNameOf(shown, translator) : undefined,
+      },
+      translator,
+    );
+    if (title === this.shownWindowTitle) return;
+    this.shownWindowTitle = title;
+    void desktopShell?.setWindowTitle(title);
+  }
+}
+
+/** A protected note never puts its title in the window title, which Windows shows in many places. */
+function windowDocumentName(document: RenderedActiveDocument, translator: Translator): string {
+  return isProtectedLocation(document) ? translator.translate('window.protectedNote') : document.fileName;
 }

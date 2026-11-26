@@ -29,11 +29,29 @@ describe('view commands', () => {
       wheelDock: 'bottomInlineEnd',
       isWheelOpenedAtPointer: false,
       isWheelButtonInStatusBar: false,
+      editingMode: 'richText',
       isSlashMenuInRichText: true,
       isSlashMenuInSource: false,
+      isSpellCheckedInRichText: true,
+      isSpellCheckedInSource: false,
+      isNoteDeletionConfirmed: true,
+      isNoteLinkUpdateConfirmed: true,
+      isShowingHiddenCharacters: false,
+      automaticInjectionCheck: 'agentContext',
+      ctrlWheelAction: 'moveBetweenFiles',
     });
     expect(applyViewCommand(withoutSidebar, { kind: 'resetZoom' }).zoomPercent).toBe(100);
     expect(applyViewCommand(withoutSidebar, { kind: 'zoomOut' }).zoomPercent).toBe(100);
+  });
+
+  it('hides the side bar whatever it shows, and shows the same view again', () => {
+    const outline = { ...DEFAULT_VIEW_SETTINGS, sidebarView: 'outline' as const };
+
+    const hidden = applyViewCommand(outline, { kind: 'hideSidebar' });
+    const shown = applyViewCommand(hidden, { kind: 'showSidebar' });
+
+    expect(hidden).toMatchObject({ isSidebarVisible: false, sidebarView: 'outline' });
+    expect(shown).toMatchObject({ isSidebarVisible: true, sidebarView: 'outline' });
   });
 
   it('sets the zoom to a chosen step', () => {
@@ -120,5 +138,14 @@ describe('view commands', () => {
     expect(
       applyViewCommand(withButton, { kind: 'toggleWheelButtonInStatusBar' }).isWheelButtonInStatusBar,
     ).toBe(false);
+  });
+
+  it('asks before updating note links until asking is turned off', () => {
+    const withoutAsking = applyViewCommand(DEFAULT_VIEW_SETTINGS, {
+      kind: 'toggleNoteLinkUpdateConfirmation',
+    });
+
+    expect(DEFAULT_VIEW_SETTINGS.isNoteLinkUpdateConfirmed).toBe(true);
+    expect(withoutAsking.isNoteLinkUpdateConfirmed).toBe(false);
   });
 });

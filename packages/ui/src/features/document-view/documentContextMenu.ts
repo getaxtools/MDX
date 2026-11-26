@@ -4,6 +4,7 @@ import { shortcutLabelFor } from '../shortcuts/commandShortcuts';
 import type { ViewerCommand } from '../viewer/viewerCommands';
 
 export type DocumentMenuItemId =
+  | 'editFormula'
   | 'copy'
   | 'copyAsHtml'
   | 'selectAll'
@@ -24,11 +25,18 @@ export interface DocumentMenuState {
   readonly isOutlineVisible: boolean;
   readonly isFavourite: boolean;
   readonly canBeFavourite: boolean;
+  /** Whether the menu was opened on a rendered formula, which Edit Formula opens in the equation editor. */
+  readonly isOnFormula?: boolean;
 }
 
-type ItemHandledByTheView = 'copy' | 'copyAsHtml' | 'selectAll';
+type ItemHandledByTheView = 'editFormula' | 'copy' | 'copyAsHtml' | 'selectAll';
 
-const ITEMS_HANDLED_BY_THE_VIEW: readonly DocumentMenuItemId[] = ['copy', 'copyAsHtml', 'selectAll'];
+const ITEMS_HANDLED_BY_THE_VIEW: readonly DocumentMenuItemId[] = [
+  'editFormula',
+  'copy',
+  'copyAsHtml',
+  'selectAll',
+];
 
 const COMMANDS_BY_ITEM: Readonly<Record<Exclude<DocumentMenuItemId, ItemHandledByTheView>, ViewerCommand>> = {
   find: { kind: 'showFind' },
@@ -57,8 +65,13 @@ export function documentContextMenuItems(
     shortcut: shortcutOf(id, translator),
     ...extra,
   });
+  const formulaItems = state.isOnFormula ? [item('editFormula', 'document.menu.editFormula')] : [];
   return [
-    item('copy', 'menu.edit.copy', { isDisabled: !state.hasSelection }),
+    ...formulaItems,
+    item('copy', 'menu.edit.copy', {
+      isDisabled: !state.hasSelection,
+      hasSeparatorBefore: formulaItems.length > 0,
+    }),
     item('copyAsHtml', 'menu.edit.copyAsHtml', { isDisabled: state.isSourceView }),
     item('selectAll', 'menu.edit.selectAll'),
     item('find', 'menu.edit.find', { hasSeparatorBefore: true }),

@@ -1,6 +1,8 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer, type AddressInfo } from 'node:net';
+import { readdirSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { remote } from 'webdriverio';
@@ -15,10 +17,20 @@ const LOCALHOST = '127.0.0.1';
 const DRIVER_READY_TIMEOUT_MS = 30_000;
 const DRIVER_POLL_INTERVAL_MS = 100;
 const APP_EXIT_TIMEOUT_MS = 10_000;
+/**
+ * Each launch gets a WebView2 profile of its own here. WebView2 still holds its profile for a moment
+ * after the app exits, so the profiles live outside the test's folder, which is removed at once.
+ */
+const WEBVIEW_PROFILES_FOLDER = join(tmpdir(), 'mdx-ui-test-webview');
+/** Another run's profile is left alone, unless it is this old and so cannot be in use any more. */
+const ABANDONED_PROFILE_AGE_MS = 24 * 60 * 60 * 1000;
+let launchCount = 0;
 
 export interface LaunchOptions {
   readonly workspace: TestWorkspace;
   readonly documentFileNames?: readonly string[];
+  /** More environment variables for the app, such as the folders a debug build answers its folder picker with. */
+  readonly environment?: Readonly<Record<string, string>>;
 }
 
 export class DesktopApp {
@@ -28,25 +40,46 @@ export class DesktopApp {
     private readonly driverPort: number,
   ) {}
 
-  static async launch({ workspace, documentFileNames = [] }: LaunchOptions): Promise<DesktopApp> {
+  static async launch({
+    workspace,
+    documentFileNames = [],
+    environment = {},
+  }: LaunchOptions): Promise<DesktopApp> {
     const driverPort = await findFreePort();
+    launchCount += 1;
+    removeUnusedWebViewProfiles();
     const appProcess = spawn(UI_TEST_APP_PATH, documentPaths(workspace, documentFileNames), {
       env: {
+        // WebView2 lets go of its profile a little after the app exits, and an app started
+        // meanwhile on the same profile fails to start, so no two launches share one, unless the
+        // spec chose a profile itself.
+        WEBVIEW2_USER_DATA_FOLDER: join(
+          WEBVIEW_PROFILES_FOLDER,
+          `${String(process.pid)}-${String(launchCount)}`,
+        ),
         ...process.env,
         MDX_DATA_DIR: workspace.profileFolder,
+        MDX_DOCUMENTS_DIR: workspace.homeDocumentsFolder,
         TAURI_WEBDRIVER_PORT: String(driverPort),
+        ...environment,
       },
       stdio: 'ignore',
       windowsHide: true,
     });
-    await waitForDriver(driverPort, appProcess);
-    const browser = await remote({
-      hostname: LOCALHOST,
-      port: driverPort,
-      logLevel: 'warn',
-      capabilities: { 'wdio:enforceWebDriverClassic': true },
-    });
-    return new DesktopApp(browser, appProcess, driverPort);
+    try {
+      await waitForDriver(driverPort, appProcess);
+      const browser = await remote({
+        hostname: LOCALHOST,
+        port: driverPort,
+        logLevel: 'warn',
+        capabilities: { 'wdio:enforceWebDriverClassic': true },
+      });
+      return new DesktopApp(browser, appProcess, driverPort);
+    } catch (error) {
+      // An app left running would take every later launch as a second instance of it.
+      appProcess.kill();
+      throw error;
+    }
   }
 
   /** Starts a second copy of the app, the way Explorer does, and waits for it to hand over and exit. */
@@ -88,6 +121,34 @@ async function exitsWithin(exited: Promise<unknown>, timeoutMs: number): Promise
   const hasExitedInTime = await Promise.race([exited.then(() => true), timedOut]);
   timeout.abort();
   return hasExitedInTime;
+}
+
+/**
+ * This run's profiles of earlier launches, and other runs' long abandoned ones; another run's
+ * recent profile may be in use by a run going on beside this one. A profile WebView2 still holds is
+ * left for a later launch to remove.
+ */
+function removeUnusedWebViewProfiles(): void {
+  let profiles: string[];
+  try {
+    profiles = readdirSync(WEBVIEW_PROFILES_FOLDER);
+  } catch {
+    return;
+  }
+  const ownPrefix = `${String(process.pid)}-`;
+  for (const profile of profiles) {
+    const folder = join(WEBVIEW_PROFILES_FOLDER, profile);
+    try {
+      if (!profile.startsWith(ownPrefix) && !isAbandoned(folder)) continue;
+      rmSync(folder, { recursive: true, force: true });
+    } catch {
+      // Still in use by a WebView2 that has not let go of it yet.
+    }
+  }
+}
+
+function isAbandoned(folder: string): boolean {
+  return Date.now() - statSync(folder).mtimeMs > ABANDONED_PROFILE_AGE_MS;
 }
 
 function documentPaths(workspace: TestWorkspace, fileNames: readonly string[]): string[] {

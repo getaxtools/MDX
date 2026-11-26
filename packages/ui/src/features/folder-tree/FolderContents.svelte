@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { Translator } from '@mdx/i18n';
   import type { FolderListing } from '@mdx/platform';
-  import { SvelteSet } from 'svelte/reactivity';
   import FolderContents from './FolderContents.svelte';
+  import { FolderTreeState } from './FolderTreeState';
   import { isInsideFolder } from './isInsideFolder';
   import { scrollIntoViewWhen } from './scrollIntoViewWhen';
   import { activateWithKeyboard } from './treeKeyboard';
@@ -16,6 +16,8 @@
     folderRevisions: ReadonlyMap<string, number>;
     activeDocumentKey?: string | undefined;
     shouldRevealActiveDocument?: boolean;
+    /** Shared by the whole tree; a tree that does not pass one keeps its own. */
+    treeState?: FolderTreeState;
     onListFolder: (folderPath: string) => Promise<FolderListing>;
     onShowFolder: (folderPath: string) => () => void;
     onOpenDocument: (documentPath: string) => void;
@@ -28,14 +30,14 @@
     folderRevisions,
     activeDocumentKey,
     shouldRevealActiveDocument = false,
+    treeState = new FolderTreeState(),
     onListFolder,
     onShowFolder,
     onOpenDocument,
   }: Props = $props();
 
   const revision = $derived(folderRevisions.get(folderPath) ?? 0);
-  const expandedSubfolderKeys = new SvelteSet<string>();
-  let listing: FolderListing | undefined = $state();
+  const listing = $derived(treeState.listings.get(folderPath));
   let revealedDocumentKey: string | undefined;
 
   $effect(() => onShowFolder(folderPath));
@@ -43,7 +45,7 @@
   $effect(() => {
     const requestedRevision = revision;
     void onListFolder(folderPath).then((nextListing) => {
-      if (requestedRevision === revision) listing = nextListing;
+      if (requestedRevision === revision) treeState.listings.set(folderPath, nextListing);
     });
   });
 
@@ -54,13 +56,8 @@
     const ancestor = key
       ? listing.folders.find((folder) => isInsideFolder(key, folder.canonicalKey))
       : undefined;
-    if (ancestor) expandedSubfolderKeys.add(ancestor.canonicalKey);
+    if (ancestor) treeState.expandedFolderPaths.add(ancestor.displayPath);
   });
-
-  function toggleSubfolder(key: string) {
-    if (expandedSubfolderKeys.has(key)) expandedSubfolderKeys.delete(key);
-    else expandedSubfolderKeys.add(key);
-  }
 </script>
 
 <ul class="folder-contents" role="group">
@@ -81,7 +78,7 @@
     </li>
   {:else}
     {#each listing.folders as folder (folder.canonicalKey)}
-      {@const isExpanded = expandedSubfolderKeys.has(folder.canonicalKey)}
+      {@const isExpanded = treeState.expandedFolderPaths.has(folder.displayPath)}
       <li role="none">
         <div
           role="treeitem"
@@ -90,7 +87,7 @@
           aria-level={level}
           aria-expanded={isExpanded}
           title={folder.displayPath}
-          onclick={() => toggleSubfolder(folder.canonicalKey)}
+          onclick={() => treeState.toggleFolder(folder.displayPath)}
           onkeydown={activateWithKeyboard}
         >
           <TreeChevron {isExpanded} />
@@ -105,6 +102,7 @@
             {folderRevisions}
             {activeDocumentKey}
             {shouldRevealActiveDocument}
+            {treeState}
             {onListFolder}
             {onShowFolder}
             {onOpenDocument}

@@ -3,16 +3,21 @@ export type ThemePreference =
 export type ColorScheme = 'light' | 'dark';
 export type ReadingWidth = 'narrow' | 'medium' | 'wide' | 'full';
 export type Typography = 'github' | 'book' | 'academic';
+export type EditingModeSetting = 'richText' | 'source';
 /** A language tag such as `hi` or `pt-BR`, or `system` to follow the language of Windows. */
 export type LanguagePreference = 'system' | (string & {});
-export type ExplorerSection = 'favourites' | 'folders' | 'recentFiles';
+export type ExplorerSection = 'favourites' | 'folders' | 'protectedNotes' | 'tags' | 'recentFiles';
 /** The side bar, whatever view it shows; saved as `explorer` by earlier versions. */
 export type ResizablePanel = 'explorer';
-export type SidebarView = 'explorer' | 'search' | 'outline';
+export type SidebarView = 'explorer' | 'search' | 'outline' | 'promptInjection';
 /** Where workspace kinds can be switched: the control wheel, the kind bar in the activity bar, or both. */
 export type KindSwitcher = 'wheel' | 'bar' | 'both';
+/** Which documents the prompt injection check reads by itself: agent files, remote copies and spec projects by default. */
+export type AutomaticInjectionCheck = 'off' | 'agentContext' | 'allDocuments';
 /** The bottom corner the control wheel opens in; the inline end is the right in left-to-right layouts. */
 export type WheelDock = 'bottomInlineEnd' | 'bottomInlineStart';
+/** What Ctrl with the mouse wheel does over a document: turn the file arc, or zoom as it did before. */
+export type CtrlWheelAction = 'moveBetweenFiles' | 'zoom';
 
 export interface ViewSettings {
   readonly theme: ThemePreference;
@@ -40,9 +45,22 @@ export interface ViewSettings {
   /** The control wheel opens where the pointer is instead of in its corner. */
   readonly isWheelOpenedAtPointer: boolean;
   readonly isWheelButtonInStatusBar: boolean;
+  /** Rich text shows formatting like the preview, with the Markdown where the caret is; Source shows all of it. */
+  readonly editingMode: EditingModeSetting;
   /** A slash at the start of a line or after a space opens the insert menu, per editing mode. */
   readonly isSlashMenuInRichText: boolean;
   readonly isSlashMenuInSource: boolean;
+  /** The operating system marks misspelled words in prose, per editing mode. */
+  readonly isSpellCheckedInRichText: boolean;
+  readonly isSpellCheckedInSource: boolean;
+  /** Deleting a note asks first; the note goes to the Notes trash either way. */
+  readonly isNoteDeletionConfirmed: boolean;
+  /** Renaming or moving a note shows the link changes it needs before making them; Undo works either way. */
+  readonly isNoteLinkUpdateConfirmed: boolean;
+  /** Invisible, control, direction and variation characters are drawn as labelled markers. */
+  readonly isShowingHiddenCharacters: boolean;
+  readonly automaticInjectionCheck: AutomaticInjectionCheck;
+  readonly ctrlWheelAction: CtrlWheelAction;
 }
 
 export const THEME_PREFERENCES: readonly ThemePreference[] = [
@@ -67,13 +85,28 @@ export const THEME_COLOR_SCHEMES: Readonly<Record<Exclude<ThemePreference, 'syst
 };
 export const READING_WIDTHS: readonly ReadingWidth[] = ['narrow', 'medium', 'wide', 'full'];
 export const TYPOGRAPHIES: readonly Typography[] = ['github', 'book', 'academic'];
-export const EXPLORER_SECTIONS: readonly ExplorerSection[] = ['favourites', 'folders', 'recentFiles'];
+export const EDITING_MODES: readonly EditingModeSetting[] = ['richText', 'source'];
+/** What saved settings from before Rich text existed mean, so upgraded installations keep Source. */
+const EDITING_MODE_OF_EARLIER_SETTINGS: EditingModeSetting = 'source';
+export const EXPLORER_SECTIONS: readonly ExplorerSection[] = [
+  'favourites',
+  'folders',
+  'protectedNotes',
+  'tags',
+  'recentFiles',
+];
 export const MIN_EXPLORER_SECTION_HEIGHT_PX = 48;
 export const MAX_EXPLORER_SECTION_HEIGHT_PX = 4000;
 export const RESIZABLE_PANELS: readonly ResizablePanel[] = ['explorer'];
-export const SIDEBAR_VIEWS: readonly SidebarView[] = ['explorer', 'search', 'outline'];
+export const SIDEBAR_VIEWS: readonly SidebarView[] = ['explorer', 'search', 'outline', 'promptInjection'];
+export const AUTOMATIC_INJECTION_CHECKS: readonly AutomaticInjectionCheck[] = [
+  'off',
+  'agentContext',
+  'allDocuments',
+];
 export const KIND_SWITCHERS: readonly KindSwitcher[] = ['wheel', 'bar', 'both'];
 export const WHEEL_DOCKS: readonly WheelDock[] = ['bottomInlineEnd', 'bottomInlineStart'];
+export const CTRL_WHEEL_ACTIONS: readonly CtrlWheelAction[] = ['moveBetweenFiles', 'zoom'];
 export const DEFAULT_PANEL_WIDTHS_PX: Readonly<Record<ResizablePanel, number>> = {
   explorer: 260,
 };
@@ -109,9 +142,19 @@ export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
   wheelDock: 'bottomInlineEnd',
   isWheelOpenedAtPointer: false,
   isWheelButtonInStatusBar: false,
+  editingMode: 'richText',
   isSlashMenuInRichText: true,
   isSlashMenuInSource: false,
+  isSpellCheckedInRichText: true,
+  isSpellCheckedInSource: false,
+  isNoteDeletionConfirmed: true,
+  isNoteLinkUpdateConfirmed: true,
+  isShowingHiddenCharacters: false,
+  automaticInjectionCheck: 'agentContext',
+  ctrlWheelAction: 'moveBetweenFiles',
 };
+
+export const VIEW_SETTING_FIELDS: ReadonlySet<string> = new Set(Object.keys(DEFAULT_VIEW_SETTINGS));
 
 export function zoomIn(settings: ViewSettings): ViewSettings {
   const next = ZOOM_LEVELS_PERCENT.find((level) => level > settings.zoomPercent);
@@ -121,6 +164,14 @@ export function zoomIn(settings: ViewSettings): ViewSettings {
 export function zoomOut(settings: ViewSettings): ViewSettings {
   const previous = ZOOM_LEVELS_PERCENT.findLast((level) => level < settings.zoomPercent);
   return previous === undefined ? settings : { ...settings, zoomPercent: previous };
+}
+
+export function canZoomIn(zoomPercent: number): boolean {
+  return ZOOM_LEVELS_PERCENT.some((level) => level > zoomPercent);
+}
+
+export function canZoomOut(zoomPercent: number): boolean {
+  return ZOOM_LEVELS_PERCENT.some((level) => level < zoomPercent);
 }
 
 /** Sets one of the zoom steps; any other value leaves the zoom as it is. */
@@ -209,9 +260,6 @@ export function parseViewSettings(saved: unknown): ViewSettings {
     sidebarView,
     isStatusBarVisible,
     isBreadcrumbsVisible,
-    collapsedExplorerSections,
-    explorerSectionHeights,
-    panelWidths,
     isPreviewBesideEditor,
     editorSharePercent,
   } = saved as Record<string, unknown>;
@@ -225,15 +273,55 @@ export function parseViewSettings(saved: unknown): ViewSettings {
     sidebarView: oneOf(SIDEBAR_VIEWS, sidebarView, DEFAULT_VIEW_SETTINGS.sidebarView),
     isStatusBarVisible: booleanOr(isStatusBarVisible, true),
     isBreadcrumbsVisible: booleanOr(isBreadcrumbsVisible, true),
+    ...parseExplorerLayout(saved as Record<string, unknown>),
+    isPreviewBesideEditor: isPreviewBesideEditor === true,
+    editorSharePercent: parseEditorShare(editorSharePercent),
+    ...parseFeatureSettings(saved as Record<string, unknown>),
+  };
+}
+
+type FeatureSettings = KindSwitcherSettings &
+  Pick<
+    ViewSettings,
+    | 'editingMode'
+    | 'isSlashMenuInRichText'
+    | 'isSlashMenuInSource'
+    | 'isSpellCheckedInRichText'
+    | 'isSpellCheckedInSource'
+    | 'isNoteDeletionConfirmed'
+    | 'isNoteLinkUpdateConfirmed'
+    | 'isShowingHiddenCharacters'
+    | 'automaticInjectionCheck'
+    | 'ctrlWheelAction'
+  >;
+
+/** The settings of the control wheel, editing, notes, the injection check and Ctrl with the mouse wheel. */
+function parseFeatureSettings(saved: Record<string, unknown>): FeatureSettings {
+  return {
+    ...parseKindSwitcherSettings(saved),
+    ...parseEditingSettings(saved),
+    ...parseNoteQuestionSettings(saved),
+    ...parseInjectionCheckSettings(saved),
+    ...parseCtrlWheelSetting(saved),
+  };
+}
+
+function parseExplorerLayout(
+  saved: Record<string, unknown>,
+): Pick<ViewSettings, 'collapsedExplorerSections' | 'explorerSectionHeights' | 'panelWidths'> {
+  const { collapsedExplorerSections } = saved;
+  return {
     collapsedExplorerSections: EXPLORER_SECTIONS.filter(
       (section) => Array.isArray(collapsedExplorerSections) && collapsedExplorerSections.includes(section),
     ),
-    explorerSectionHeights: parseSectionHeights(explorerSectionHeights),
-    panelWidths: parsePanelWidths(panelWidths),
-    isPreviewBesideEditor: isPreviewBesideEditor === true,
-    editorSharePercent: parseEditorShare(editorSharePercent),
-    ...parseKindSwitcherSettings(saved as Record<string, unknown>),
-    ...parseSlashMenuSettings(saved as Record<string, unknown>),
+    explorerSectionHeights: parseSectionHeights(saved.explorerSectionHeights),
+    panelWidths: parsePanelWidths(saved.panelWidths),
+  };
+}
+
+function parseCtrlWheelSetting(saved: Record<string, unknown>): Pick<ViewSettings, 'ctrlWheelAction'> {
+  return {
+    ctrlWheelAction: oneOf(CTRL_WHEEL_ACTIONS, saved.ctrlWheelAction, DEFAULT_VIEW_SETTINGS.ctrlWheelAction),
   };
 }
 
@@ -251,12 +339,44 @@ function parseKindSwitcherSettings(saved: Record<string, unknown>): KindSwitcher
   };
 }
 
-function parseSlashMenuSettings(
+function parseNoteQuestionSettings(
   saved: Record<string, unknown>,
-): Pick<ViewSettings, 'isSlashMenuInRichText' | 'isSlashMenuInSource'> {
+): Pick<ViewSettings, 'isNoteDeletionConfirmed' | 'isNoteLinkUpdateConfirmed'> {
   return {
+    isNoteDeletionConfirmed: saved.isNoteDeletionConfirmed !== false,
+    isNoteLinkUpdateConfirmed: saved.isNoteLinkUpdateConfirmed !== false,
+  };
+}
+
+function parseInjectionCheckSettings(
+  saved: Record<string, unknown>,
+): Pick<ViewSettings, 'isShowingHiddenCharacters' | 'automaticInjectionCheck'> {
+  return {
+    isShowingHiddenCharacters: saved.isShowingHiddenCharacters === true,
+    automaticInjectionCheck: oneOf(
+      AUTOMATIC_INJECTION_CHECKS,
+      saved.automaticInjectionCheck,
+      DEFAULT_VIEW_SETTINGS.automaticInjectionCheck,
+    ),
+  };
+}
+
+function parseEditingSettings(
+  saved: Record<string, unknown>,
+): Pick<
+  ViewSettings,
+  | 'editingMode'
+  | 'isSlashMenuInRichText'
+  | 'isSlashMenuInSource'
+  | 'isSpellCheckedInRichText'
+  | 'isSpellCheckedInSource'
+> {
+  return {
+    editingMode: oneOf(EDITING_MODES, saved.editingMode, EDITING_MODE_OF_EARLIER_SETTINGS),
     isSlashMenuInRichText: saved.isSlashMenuInRichText !== false,
     isSlashMenuInSource: saved.isSlashMenuInSource === true,
+    isSpellCheckedInRichText: saved.isSpellCheckedInRichText !== false,
+    isSpellCheckedInSource: saved.isSpellCheckedInSource === true,
   };
 }
 

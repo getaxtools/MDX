@@ -1,8 +1,22 @@
-import MarkdownIt from 'markdown-it';
+import MarkdownIt, { type Token } from 'markdown-it';
 import { describe, expect, it } from 'vitest';
-import { alertsPlugin } from './alertsPlugin';
+import { alertsPlugin, calloutLookOf } from './alertsPlugin';
 
 const markdown = new MarkdownIt().use(alertsPlugin);
+const MANY_CALLOUTS = 40_000;
+/**
+ * How many times longer the callouts may take than as many plain quotes. Editing the tokens in one
+ * pass stays under 2, inserting once per callout took more than 8. A ratio holds on a busy machine, a
+ * time does not.
+ */
+const MAX_SLOWDOWN_OVER_PLAIN_QUOTES = 5;
+const LARGE_DOCUMENT_TIMEOUT_MS = 120_000;
+
+function timedParse(source: string): { tokens: Token[]; ms: number } {
+  const startedAt = performance.now();
+  const tokens = markdown.parse(source, {});
+  return { tokens, ms: performance.now() - startedAt };
+}
 
 describe('alertsPlugin', () => {
   it.each(['note', 'tip', 'important', 'warning', 'caution'])('turns a [!%s] quote into an alert', (kind) => {
@@ -85,4 +99,35 @@ describe('alertsPlugin', () => {
 
     expect(html).toContain('<blockquote>\n<p>Inner quote</p>\n</blockquote>\n</div>\n<p>After</p>');
   });
+
+  it('gives the look of each known callout type and none for an unknown one', () => {
+    expect(calloutLookOf('TIP')).toBe('tip');
+    expect(calloutLookOf('danger')).toBe('caution');
+    expect(calloutLookOf('mystery')).toBeUndefined();
+  });
+
+  it(
+    'turns thousands of quotes into callouts quickly',
+    () => {
+      const plainQuotes = Array.from(
+        { length: MANY_CALLOUTS },
+        (_, index) => `> Quote ${String(index)}.\n> Text.`,
+      ).join('\n\n');
+      const callouts = Array.from(
+        { length: MANY_CALLOUTS },
+        (_, index) => `> [!NOTE]\n> Callout ${String(index)}.`,
+      ).join('\n\n');
+      timedParse(plainQuotes);
+
+      const plainQuotesParse = timedParse(plainQuotes);
+      const calloutsParse = timedParse(callouts);
+
+      expect(calloutsParse.ms / plainQuotesParse.ms).toBeLessThan(MAX_SLOWDOWN_OVER_PLAIN_QUOTES);
+      const titles = calloutsParse.tokens.filter(
+        (token) => token.attrGet('class') === 'markdown-alert-title',
+      );
+      expect(titles).toHaveLength(MANY_CALLOUTS);
+    },
+    LARGE_DOCUMENT_TIMEOUT_MS,
+  );
 });

@@ -5,6 +5,8 @@ export interface ContextMenuItem<ItemId extends string> {
   readonly hasSeparatorBefore?: boolean;
   /** Shown next to the label, for example `Ctrl+W`. */
   readonly shortcut?: string | undefined;
+  /** Whether an item that turns something on or off is on; such an item is a menu item checkbox. */
+  readonly isChecked?: boolean | undefined;
 }
 
 export interface ContextMenuRequest {

@@ -206,7 +206,6 @@
   "document.openExternalLink.title": "లింక్‌ను మీ బ్రౌజర్‌లో తెరవాలా?",
   "document.openExternalLink.body": "ఇది {url} ను మీ డిఫాల్ట్ బ్రౌజర్‌లో తెరుస్తుంది.",
   "view.options.label": "వీక్షణ ఎంపికలు",
-  "view.zoomLevel": "జూమ్ {percent}%",
   "document.openExternalLink.open": "తెరువు",
   "document.openExternalLink.cancel": "రద్దు చేయి",
   "shortcuts.column.action": "చర్య",

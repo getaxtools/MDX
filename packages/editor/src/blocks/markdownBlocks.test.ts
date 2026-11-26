@@ -1,10 +1,10 @@
-import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { EditorState } from '@codemirror/state';
 import { describe, expect, it } from 'vitest';
+import { markdownSyntax } from '../syntax/markdownSyntax';
 import { blockAt, frontMatterEndOf, siblingBlocksAt } from './markdownBlocks';
 
 function stateOf(doc: string): EditorState {
-  return EditorState.create({ doc, extensions: [markdown({ base: markdownLanguage })] });
+  return EditorState.create({ doc, extensions: [markdownSyntax()] });
 }
 
 function blockTextAt(doc: string, search: string): string | undefined {
@@ -63,11 +63,25 @@ describe('markdown blocks', () => {
     expect(blockAt(stateOf(doc), doc.indexOf('x^2'))?.kind).toBe('mathBlock');
   });
 
+  it('two dollars without a closing line start a paragraph, not a math block', () => {
+    const doc = 'Text\n\n$$ is what it costs\n\nAfter';
+
+    expect(blockAt(stateOf(doc), doc.indexOf('costs'))?.kind).toBe('paragraph');
+  });
+
+  it('TOML front matter is never a block', () => {
+    const doc = '+++\ntitle = "Guide"\n+++\n\nText\n';
+    const state = stateOf(doc);
+
+    expect(frontMatterEndOf(state)).toBe(doc.indexOf('\n\nText'));
+    expect(blockAt(state, doc.indexOf('title'))).toBeUndefined();
+  });
+
   it('front matter is never a block', () => {
     const doc = '---\ntitle: Guide\n---\n\n# Guide\n';
     const state = stateOf(doc);
 
-    expect(frontMatterEndOf(state.doc)).toBe(20);
+    expect(frontMatterEndOf(state)).toBe(20);
     expect(blockAt(state, doc.indexOf('title'))).toBeUndefined();
     expect(siblingBlocksAt(state, doc.indexOf('# Guide'))?.blocks).toEqual([
       { kind: 'heading', from: 22, to: 29 },

@@ -47,7 +47,7 @@
 
   button {
     border: 1px solid var(--color-notice-border);
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-medium);
     background: none;
     color: var(--color-text);
     font: inherit;

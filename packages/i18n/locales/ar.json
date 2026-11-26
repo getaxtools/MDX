@@ -206,7 +206,6 @@
   "document.openExternalLink.title": "هل تريد فتح الارتباط في المستعرض؟",
   "document.openExternalLink.body": "سيؤدي هذا إلى فتح {url} في المستعرض الافتراضي.",
   "view.options.label": "خيارات العرض",
-  "view.zoomLevel": "التكبير/التصغير {percent}%",
   "document.openExternalLink.open": "فتح",
   "document.openExternalLink.cancel": "إلغاء الأمر",
   "shortcuts.column.action": "الإجراء",

@@ -1,3 +1,4 @@
+import { EDITOR_SHORTCUTS } from '@mdx/editor/shortcuts';
 import { createTranslator, englishCatalog } from '@mdx/i18n';
 import { describe, expect, it } from 'vitest';
 import {
@@ -19,6 +20,45 @@ function keys(key: string, modifiers: Partial<ShortcutKeyEvent> = {}): ShortcutK
     ...modifiers,
   };
 }
+
+describe('the file arc keys', () => {
+  it('ctrl+down and ctrl+up step the arc forward and back', () => {
+    expect(commandForShortcut(keys('ArrowDown', { ctrlKey: true }), 'windows')).toEqual({
+      kind: 'stepFileArcForward',
+    });
+    expect(commandForShortcut(keys('ArrowUp', { ctrlKey: true }), 'windows')).toEqual({
+      kind: 'stepFileArcBack',
+    });
+  });
+
+  it('the keys do nothing during composition', () => {
+    expect(
+      commandForShortcut(keys('ArrowDown', { ctrlKey: true, isComposing: true }), 'windows'),
+    ).toBeUndefined();
+  });
+
+  it('leaves Ctrl+Alt+Down to the editor for another cursor', () => {
+    expect(commandForShortcut(keys('ArrowDown', { ctrlKey: true, altKey: true }), 'windows')).toBeUndefined();
+  });
+});
+
+describe('the moved editing keys', () => {
+  it('Ctrl+E toggles editing and Ctrl+/ switches Rich text and Source', () => {
+    expect(commandForShortcut(keys('e', { ctrlKey: true }), 'windows')).toEqual({ kind: 'toggleEditing' });
+    expect(commandForShortcut(keys('/', { ctrlKey: true }), 'windows')).toEqual({
+      kind: 'toggleEditingMode',
+    });
+  });
+
+  it('the shortcut tables have no duplicate key', () => {
+    const allCombinations = [
+      ...COMMAND_SHORTCUTS.flatMap(({ combinations }) => combinations),
+      ...EDITOR_SHORTCUTS.map(({ combination }) => combination),
+    ].map((combination) => combination.join('+').toLowerCase());
+
+    expect(allCombinations.filter((name, index) => allCombinations.indexOf(name) !== index)).toEqual([]);
+  });
+});
 
 describe('commandForShortcut on Windows', () => {
   it.each([
@@ -76,6 +116,40 @@ describe('commandForShortcut on Windows', () => {
 
   it('ignores shortcuts while an input method is composing text', () => {
     expect(commandForShortcut(keys('o', { ctrlKey: true, isComposing: true }), 'windows')).toBeUndefined();
+  });
+
+  it('opens the workspace switcher with Ctrl+Alt+W, but not while composing', () => {
+    const ctrlAltW = keys('w', { ctrlKey: true, altKey: true });
+
+    expect(commandForShortcut(ctrlAltW, 'windows')).toEqual({ kind: 'showWorkspaceSwitcher' });
+    expect(commandForShortcut({ ...ctrlAltW, isComposing: true }, 'windows')).toBeUndefined();
+  });
+
+  it('Ctrl+Alt+L locks the protected notes, a combination no other command or editor key uses', () => {
+    const lockCombination = 'ctrl+alt+l';
+    const others = [
+      ...COMMAND_SHORTCUTS.filter(({ command }) => command.kind !== 'lockProtectedNotes').flatMap(
+        ({ combinations }) => combinations,
+      ),
+      ...EDITOR_SHORTCUTS.map(({ combination }) => combination),
+    ].map((combination) => combination.join('+').toLowerCase());
+
+    expect(commandForShortcut(keys('l', { ctrlKey: true, altKey: true }), 'windows')).toEqual({
+      kind: 'lockProtectedNotes',
+    });
+    expect(others).not.toContain(lockCombination);
+  });
+
+  it('AltGr+L typing ł does not lock, as Windows sends AltGr as Ctrl+Alt', () => {
+    expect(commandForShortcut(keys('ł', { ctrlKey: true, altKey: true }), 'windows')).toBeUndefined();
+  });
+
+  it('the shortcut table has no duplicate combination', () => {
+    const combinations = COMMAND_SHORTCUTS.flatMap((shortcut) =>
+      shortcut.combinations.map((combination) => combination.join('+').toLowerCase()),
+    );
+
+    expect(new Set(combinations).size).toBe(combinations.length);
   });
 });
 

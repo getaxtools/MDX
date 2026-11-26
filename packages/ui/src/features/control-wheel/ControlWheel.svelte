@@ -2,20 +2,36 @@
   import {
     hitTestRing,
     ringLayout,
-    sectorPath,
+    type RingHit,
     type RingPoint,
+    type RingSector,
     type WheelDock,
     type WorkspaceKindsState,
   } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
-  import { onMount, untrack } from 'svelte';
+  import { untrack } from 'svelte';
   import { horizontalDirectionOf } from '../../components/textDirection';
   import type { ViewerCommand } from '../viewer/viewerCommands';
   import KindIcon from './KindIcon.svelte';
   import KindSettingsPopup from './KindSettingsPopup.svelte';
-  import { CHECK_ICON, GEAR_ICON, KIND_ICONS, kindNameOf } from './kindPresentation';
-  import { wheelKeyAction, type WheelKeyAction } from './wheelKeyboard';
+  import { GEAR_ICON } from './kindPresentation';
+  import WheelCaption from './WheelCaption.svelte';
+  import {
+    EDGE_BAND_REM,
+    insetForRadius,
+    liftTranslation,
+    percentPositionOf,
+    RING_RADII,
+    SURFACE_RADIUS,
+    VIEW_BOX_SIZE,
+  } from './wheelDimensions';
+  import { isKeyboardMovement, wheelKeyAction, type WheelKeyAction } from './wheelKeyboard';
+  import { readWheelMediaPreferences } from './wheelMediaPreferences';
+  import { wheelMotion, type WheelPhase } from './wheelMotion';
   import { wheelPlacement } from './wheelPlacement';
+  import WheelKeyCaps from './WheelKeyCaps.svelte';
+  import WheelRing from './WheelRing.svelte';
+  import WheelSegment from './WheelSegment.svelte';
 
   interface Props {
     kinds: WorkspaceKindsState;
@@ -24,9 +40,12 @@
     pointer?: RingPoint | undefined;
     /** Opens with the kind choices shown, as Choose Workspace Kinds does. */
     shouldShowKindSettings?: boolean;
+    /** The wheel was closed and is fading out: it ignores input, and calls onClosed once it has gone. */
+    isClosing?: boolean;
     translator: Translator;
     onCommand: (command: ViewerCommand) => void;
     onClose: () => void;
+    onClosed?: () => void;
   }
 
   const {
@@ -34,17 +53,21 @@
     dock,
     pointer,
     shouldShowKindSettings = false,
+    isClosing = false,
     translator,
     onCommand,
     onClose,
+    onClosed = () => undefined,
   }: Props = $props();
 
-  const RING_RADII = { outer: 96, inner: 40 };
-  const VIEW_BOX_SIZE = 200;
-  const SECTOR_GAP_RADIANS = 0.035;
   const DEFAULT_ROOT_FONT_SIZE_PX = 16;
-  const CAPTION_HEIGHT_REM = 2;
+  const CAPTION_HEIGHT_REM = 3.75;
   const STATUS_BAR_ALLOWANCE_REM = 2;
+  /** Longer than the close motion, in case its end is never reported. */
+  const CLOSE_SAFETY_MS = 150;
+  const ICON_SIZE_PX = 22;
+  const LIT_ICON_SIZE_PX = 26;
+  const LIT_ICON_SCALE = LIT_ICON_SIZE_PX / ICON_SIZE_PX;
 
   let wheel: HTMLElement | undefined = $state();
   let gearButton: HTMLButtonElement | undefined = $state();
@@ -54,8 +77,14 @@
   let windowHeight = $state(globalThis.innerHeight);
   let focusedIndex = $state(activeIndex());
   let pointedIndex: number | undefined = $state();
+  let confirmedIndex: number | undefined = $state();
+  let isKeyboardInUse = $state(false);
+  let isFocusInMenu = $state(false);
   let isKindSettingsOpen = $state(untrack(() => shouldShowKindSettings));
-  const openedAtPointer = untrack(() => pointer);
+  let openedAtPointer = $state(untrack(() => pointer));
+  let preferences = $state(readWheelMediaPreferences(globalThis.document.documentElement));
+  let hasBeenShownAgain = $state(false);
+  let hasOpened = false;
 
   const rootFontSizePx =
     Number.parseFloat(globalThis.getComputedStyle(globalThis.document.documentElement).fontSize) ||
@@ -63,7 +92,15 @@
   const enabledKindIds = $derived(kinds.enabledKindIds());
   const layout = $derived(ringLayout(enabledKindIds.length, RING_RADII, direction));
   const currentIndex = $derived(Math.min(focusedIndex, enabledKindIds.length - 1));
-  const captionKindId = $derived(enabledKindIds[pointedIndex ?? currentIndex]);
+  const litIndex = $derived(pointedIndex ?? currentIndex);
+  const captionKindId = $derived(enabledKindIds[litIndex]);
+  const motion = $derived(
+    wheelMotion({ segmentCount: enabledKindIds.length, isMotionReduced: preferences.isMotionReduced }),
+  );
+  const phase: WheelPhase = $derived.by(() => {
+    if (isClosing) return 'closing';
+    return hasBeenShownAgain ? 'reopened' : 'opening';
+  });
   const placement = $derived(
     wheelPlacement({
       dock,
@@ -76,25 +113,73 @@
       pointer: openedAtPointer,
     }),
   );
+  const pixelsPerUnit = $derived(placement.diameterPx / VIEW_BOX_SIZE || 1);
+  const edgeBand = $derived((EDGE_BAND_REM * rootFontSizePx) / pixelsPerUnit);
+  const edgeBandInset = $derived(insetForRadius(RING_RADII.outer + edgeBand));
+  const surfaceInset = insetForRadius(SURFACE_RADIUS);
 
   function activeIndex(): number {
     return Math.max(kinds.enabledKindIds().indexOf(kinds.activeKindId()), 0);
   }
 
-  onMount(() => {
+  // Open and closing are one effect, so its cleanup (listeners off, focus back) runs the moment the
+  // wheel starts closing, and again on removal if it never closed.
+  $effect(() => {
+    if (isClosing) return untrack(startClosing);
+    return untrack(startOpen);
+  });
+
+  function startOpen() {
+    if (hasOpened) showAgain();
+    hasOpened = true;
     const previouslyFocused = globalThis.document.activeElement;
     if (wheel) direction = horizontalDirectionOf(wheel);
     if (!isKindSettingsOpen) segmentElements[currentIndex]?.focus();
-    function closeOnPressOutside(event: PointerEvent) {
-      if (event.target instanceof Node && !wheel?.contains(event.target)) onClose();
-    }
     globalThis.addEventListener('pointerdown', closeOnPressOutside, true);
     return () => {
       globalThis.removeEventListener('pointerdown', closeOnPressOutside, true);
-      if (previouslyFocused instanceof HTMLElement && previouslyFocused.isConnected)
-        previouslyFocused.focus();
+      returnFocus(previouslyFocused);
     };
-  });
+  }
+
+  function showAgain() {
+    hasBeenShownAgain = true;
+    focusedIndex = activeIndex();
+    pointedIndex = undefined;
+    confirmedIndex = undefined;
+    isKeyboardInUse = false;
+    isKindSettingsOpen = shouldShowKindSettings;
+    openedAtPointer = pointer;
+    preferences = readWheelMediaPreferences(globalThis.document.documentElement);
+  }
+
+  function startClosing() {
+    if (preferences.isMotionReduced) {
+      onClosed();
+      return undefined;
+    }
+    const safetyTimer = globalThis.setTimeout(onClosed, CLOSE_SAFETY_MS);
+    return () => globalThis.clearTimeout(safetyTimer);
+  }
+
+  function finishClosing(event: AnimationEvent) {
+    if (isClosing && event.target === event.currentTarget) onClosed();
+  }
+
+  /** Focus that moved on to something else, such as another dialog, stays there. */
+  function returnFocus(target: Element | null) {
+    const focused = globalThis.document.activeElement;
+    const isFocusOnWheel = !focused || focused === globalThis.document.body || wheel?.contains(focused);
+    if (isFocusOnWheel && target instanceof HTMLElement && target.isConnected) target.focus();
+  }
+
+  function closeOnPressOutside(event: PointerEvent) {
+    if (event.target instanceof Node && !wheel?.contains(event.target)) onClose();
+  }
+
+  function closeOnWindowBlur() {
+    if (!isClosing) onClose();
+  }
 
   function chooseAndStay(index: number) {
     const kindId = enabledKindIds[index];
@@ -102,6 +187,7 @@
   }
 
   function chooseAndClose(index: number) {
+    confirmedIndex = index;
     chooseAndStay(index);
     onClose();
   }
@@ -124,6 +210,7 @@
     const action = wheelKeyAction(event, { segmentCount, focusedIndex: currentIndex, direction });
     if (action.action === 'none') return;
     event.preventDefault();
+    if (isKeyboardMovement(action)) isKeyboardInUse = true;
     runKeyAction(action);
   }
 
@@ -131,6 +218,7 @@
     if (event.isComposing) return;
     if (event.key === 'Tab') {
       event.preventDefault();
+      isKeyboardInUse = true;
       focusSegment(currentIndex);
     } else if (event.key === 'Escape') {
       event.preventDefault();
@@ -149,25 +237,40 @@
     };
   }
 
+  /** The same test decides what lights up and what a click chooses. */
+  function ringHitAt(event: MouseEvent): RingHit | undefined {
+    const point = pointInRing(event);
+    return point ? hitTestRing(point, layout, edgeBand) : undefined;
+  }
+
   /** Screen readers activate an item without a pointer position, so the item clicked comes first. */
   function chooseFromClick(event: MouseEvent) {
+    if (isClosing) return;
     const segment =
       event.target instanceof Element ? event.target.closest<HTMLElement>('[data-segment]') : null;
     if (segment) {
       chooseAndClose(Number(segment.dataset.segment));
       return;
     }
-    const point = pointInRing(event);
-    const hit = point ? hitTestRing(point, layout) : undefined;
+    const hit = ringHitAt(event);
     if (hit?.area === 'segment') chooseAndClose(hit.index);
     else if (hit?.area === 'gear') openKindSettings();
     else if (hit?.area === 'outside') onClose();
   }
 
-  function showPointedSegment(event: PointerEvent) {
-    const point = pointInRing(event);
-    const hit = point ? hitTestRing(point, layout) : undefined;
+  function lightPointedSegment(event: PointerEvent) {
+    if (isClosing) return;
+    const hit = ringHitAt(event);
     pointedIndex = hit?.area === 'segment' ? hit.index : undefined;
+  }
+
+  function liftValue(sector: RingSector): string | undefined {
+    if (sector.index !== litIndex || preferences.isMotionReduced) return undefined;
+    return liftTranslation(sector, layout, pixelsPerUnit);
+  }
+
+  function iconScale(sector: RingSector): number | undefined {
+    return sector.index === litIndex && !preferences.isMotionReduced ? LIT_ICON_SCALE : undefined;
   }
 
   function openKindSettings() {
@@ -180,149 +283,140 @@
   }
 </script>
 
-<svelte:window bind:innerWidth={windowWidth} bind:innerHeight={windowHeight} onblur={onClose} />
+<svelte:window bind:innerWidth={windowWidth} bind:innerHeight={windowHeight} onblur={closeOnWindowBlur} />
 
 <!-- Placement and segment positions are screen coordinates already mirrored for right-to-left, so they use left. -->
 <div
   bind:this={wheel}
   class="control-wheel"
+  class:is-reopened={phase === 'reopened'}
+  class:is-closing={phase === 'closing'}
   role="dialog"
   aria-label={translator.translate('controlWheel.label')}
+  inert={isClosing}
   style:left="{placement.centerX - placement.diameterPx / 2}px"
   style:top="{placement.centerY - placement.diameterPx / 2}px"
   style:width="{placement.diameterPx}px"
   style:height="{placement.diameterPx}px"
+  style:--surface-duration="{motion.surface.durationMs}ms"
+  style:--close-duration="{motion.close.durationMs}ms"
+  style:--confirm-duration="{motion.confirm.durationMs}ms"
 >
-  {#if captionKindId && !isKindSettingsOpen}
-    <p class="caption" aria-hidden="true">
-      {translator.translate('controlWheel.caption', {
-        kind: kindNameOf(captionKindId, translator),
-        number: enabledKindIds.indexOf(captionKindId) + 1,
-      })}
-    </p>
-  {/if}
-  <svg class="ring" viewBox="-100 -100 200 200" aria-hidden="true">
-    {#each layout.sectors as sector (sector.index)}
-      <path
-        class="sector"
-        class:active={enabledKindIds[sector.index] === kinds.activeKindId()}
-        class:focused={sector.index === currentIndex}
-        class:pointed={sector.index === pointedIndex}
-        d={sectorPath(sector, layout, SECTOR_GAP_RADIANS)}
-      />
-    {/each}
-  </svg>
   <div
-    class="segments"
-    role="menu"
-    tabindex="-1"
-    aria-label={translator.translate('controlWheel.kinds.label')}
-    onclick={chooseFromClick}
-    onkeydown={handleSegmentKeydown}
-    onpointermove={showPointedSegment}
-    onpointerleave={() => (pointedIndex = undefined)}
-  >
-    {#each layout.sectors as sector (sector.index)}
-      {@const kindId = enabledKindIds[sector.index]}
-      {#if kindId}
-        {@const name = kindNameOf(kindId, translator)}
-        <div
-          bind:this={segmentElements[sector.index]}
-          class="segment"
-          role="menuitemradio"
-          tabindex={sector.index === currentIndex ? 0 : -1}
-          aria-label={name}
-          aria-checked={kindId === kinds.activeKindId()}
-          aria-keyshortcuts={String(sector.index + 1)}
-          title={translator.translate('controlWheel.segment.tooltip', {
-            kind: name,
-            number: sector.index + 1,
-          })}
-          data-segment={sector.index}
-          style:left="calc(50% + {sector.iconCenter.x / 2}%)"
-          style:top="calc(50% + {sector.iconCenter.y / 2}%)"
-          onfocus={() => (focusedIndex = sector.index)}
-        >
-          <KindIcon paths={KIND_ICONS[kindId]} />
-          {#if kindId === kinds.activeKindId()}
-            <span class="check"><KindIcon paths={CHECK_ICON} /></span>
-          {/if}
-        </div>
+    class="surface"
+    data-testid="wheel-surface"
+    data-surface={preferences.isSurfaceOpaque ? 'opaque' : 'frosted'}
+    style:inset={surfaceInset}
+    aria-hidden="true"
+    onanimationend={finishClosing}
+  ></div>
+  {#if captionKindId && !isKindSettingsOpen}
+    <WheelCaption
+      kindId={captionKindId}
+      number={litIndex + 1}
+      side={placement.captionSide}
+      isSurfaceOpaque={preferences.isSurfaceOpaque}
+      {phase}
+      {translator}
+    />
+  {/if}
+  <div class="wheel-content">
+    <WheelRing
+      {layout}
+      kindIds={enabledKindIds}
+      activeKindId={kinds.activeKindId()}
+      {litIndex}
+      focusOutlineIndex={isKeyboardInUse && isFocusInMenu ? currentIndex : undefined}
+      {confirmedIndex}
+      {motion}
+      {phase}
+      isMotionReduced={preferences.isMotionReduced}
+    />
+    <div
+      class="segments"
+      role="menu"
+      tabindex="-1"
+      aria-label={translator.translate('controlWheel.kinds.label')}
+      onclick={chooseFromClick}
+      onkeydown={handleSegmentKeydown}
+      onpointermove={lightPointedSegment}
+      onpointerleave={() => (pointedIndex = undefined)}
+      onfocusin={() => (isFocusInMenu = true)}
+      onfocusout={() => (isFocusInMenu = false)}
+    >
+      <div class="edge-band" style:inset={edgeBandInset} aria-hidden="true"></div>
+      {#each layout.sectors as sector (sector.index)}
+        {@const kindId = enabledKindIds[sector.index]}
+        {#if kindId}
+          <WheelSegment
+            bind:element={segmentElements[sector.index]}
+            {kindId}
+            index={sector.index}
+            position={percentPositionOf(sector.iconCenter)}
+            isActive={kindId === kinds.activeKindId()}
+            isLit={sector.index === litIndex}
+            isFocusable={sector.index === currentIndex}
+            step={motion.segments[sector.index]}
+            lift={liftValue(sector)}
+            iconScale={iconScale(sector)}
+            {phase}
+            {translator}
+            onFocus={() => (focusedIndex = sector.index)}
+          />
+        {/if}
+      {/each}
+      {#if isKeyboardInUse}
+        <WheelKeyCaps {layout} />
       {/if}
-    {/each}
+    </div>
+    <button
+      bind:this={gearButton}
+      class="gear"
+      aria-label={translator.translate('controlWheel.gear.label')}
+      title={translator.translate('controlWheel.gear.label')}
+      aria-haspopup="dialog"
+      aria-expanded={isKindSettingsOpen}
+      onclick={() => (isKindSettingsOpen ? closeKindSettings() : openKindSettings())}
+      onkeydown={handleGearKeydown}
+    >
+      <KindIcon paths={GEAR_ICON} />
+    </button>
   </div>
-  <button
-    bind:this={gearButton}
-    class="gear"
-    aria-label={translator.translate('controlWheel.gear.label')}
-    title={translator.translate('controlWheel.gear.label')}
-    aria-haspopup="dialog"
-    aria-expanded={isKindSettingsOpen}
-    onclick={() => (isKindSettingsOpen ? closeKindSettings() : openKindSettings())}
-    onkeydown={handleGearKeydown}
-  >
-    <KindIcon paths={GEAR_ICON} />
-  </button>
   {#if isKindSettingsOpen}
     <KindSettingsPopup {kinds} {translator} {onCommand} onClose={closeKindSettings} />
   {/if}
 </div>
 
 <style>
+  /* The wheel is drawn outside the app shell, so it sets the interface font and colour itself. */
   .control-wheel {
     position: fixed;
     z-index: 25;
-    animation: wheel-in var(--motion-fast) var(--easing-standard);
-  }
-
-  @keyframes wheel-in {
-    from {
-      opacity: 0;
-      transform: scale(0.9);
-    }
-  }
-
-  .caption {
-    position: absolute;
-    inset-block-end: 100%;
-    inset-inline: 0;
-    width: max-content;
-    max-width: 16rem;
-    margin: 0 auto var(--space-2);
-    padding: var(--space-1) var(--space-3);
-    border-radius: 999px;
-    background: var(--color-surface-raised);
-    box-shadow: var(--shadow-small);
+    font-family: var(--font-ui);
     color: var(--color-text);
-    font-size: var(--text-size-small);
   }
 
-  .ring {
-    width: 100%;
-    height: 100%;
-    filter: drop-shadow(0 4px 12px rgb(0 0 0 / 18%));
+  .control-wheel.is-closing {
+    pointer-events: none;
   }
 
-  .sector {
-    fill: var(--color-surface-raised);
-    fill-rule: evenodd;
-    stroke: var(--color-border);
-    stroke-width: 1;
+  .surface {
+    position: absolute;
+    border: 1px solid color-mix(in srgb, var(--color-border-strong) 70%, transparent);
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--color-wheel-surface) var(--wheel-surface-opacity), transparent);
+    backdrop-filter: var(--wheel-surface-backdrop);
+    box-shadow: var(--shadow-wheel);
   }
 
-  .sector.pointed {
-    fill: var(--color-surface-hover);
+  .surface[data-surface='opaque'] {
+    background: var(--color-wheel-surface);
+    backdrop-filter: none;
   }
 
-  .sector.active {
-    fill: var(--color-surface-selected);
-    stroke: var(--color-accent);
-    stroke-width: 2;
-  }
-
-  .sector.focused {
-    stroke: var(--color-focus);
-    stroke-width: 3;
+  .wheel-content {
+    position: absolute;
+    inset: 0;
   }
 
   .segments {
@@ -332,39 +426,9 @@
     outline: none;
   }
 
-  .segment {
+  .edge-band {
     position: absolute;
-    display: grid;
-    place-items: center;
-    width: 22%;
-    height: 22%;
     border-radius: 50%;
-    transform: translate(-50%, -50%);
-    color: var(--color-text-secondary);
-    outline: none;
-  }
-
-  .segment[aria-checked='true'] {
-    color: var(--color-accent);
-  }
-
-  .check {
-    position: absolute;
-    inset-block-start: 0;
-    inset-inline-end: 0;
-    display: grid;
-    place-items: center;
-    width: 1rem;
-    height: 1rem;
-    border-radius: 50%;
-    background: var(--color-accent);
-    color: var(--color-accent-text);
-  }
-
-  .check :global(svg) {
-    width: 0.75rem;
-    height: 0.75rem;
-    stroke-width: 2.4;
   }
 
   .gear {
@@ -377,51 +441,56 @@
     height: 24%;
     border: 1px solid var(--color-border);
     border-radius: 50%;
-    background: var(--color-surface);
+    background: var(--color-wheel-tile);
     color: var(--color-text-secondary);
     transform: translate(-50%, -50%);
   }
 
   .gear:hover,
   .gear[aria-expanded='true'] {
+    background: color-mix(in srgb, var(--color-text) 8%, var(--color-wheel-tile));
     color: var(--color-text);
-    background: var(--color-surface-hover);
   }
 
   .gear:focus-visible {
     outline: 3px solid var(--color-focus);
   }
 
+  @media (prefers-reduced-motion: no-preference) {
+    .surface,
+    .gear {
+      animation: surface-in var(--surface-duration) var(--easing-emphasized) both;
+    }
+
+    .is-reopened .surface,
+    .is-reopened .gear {
+      animation: none;
+    }
+
+    .is-closing .surface,
+    .is-closing .wheel-content {
+      animation: surface-out var(--close-duration) ease-in both;
+    }
+  }
+
+  @keyframes surface-in {
+    from {
+      opacity: 0;
+      scale: 0.92;
+    }
+  }
+
+  @keyframes surface-out {
+    to {
+      opacity: 0;
+      scale: 0.96;
+    }
+  }
+
   @media (forced-colors: active) {
-    .ring {
-      forced-color-adjust: none;
-      filter: none;
-    }
-
-    .sector,
-    .sector.pointed {
-      fill: Canvas;
-      stroke: CanvasText;
-    }
-
-    .sector.active {
-      stroke: Highlight;
-      stroke-width: 3;
-    }
-
-    .sector.focused {
-      stroke: Highlight;
-      stroke-width: 5;
-    }
-
-    .segment,
-    .segment[aria-checked='true'] {
-      color: CanvasText;
-    }
-
-    .check {
-      background: Highlight;
-      color: HighlightText;
+    .surface {
+      border-color: CanvasText;
+      box-shadow: none;
     }
   }
 </style>

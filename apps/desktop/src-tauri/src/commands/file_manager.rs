@@ -25,6 +25,27 @@ pub async fn reveal_in_file_manager(
         .map_err(|_| DocumentError::Unreadable)
 }
 
+/// The Windows settings page for languages, whose installed dictionaries spell check uses.
+#[cfg(windows)]
+const LANGUAGE_SETTINGS_URI: &str = "ms-settings:regionlanguage";
+
+/// Opens the operating system's language settings. The address is fixed here, so the page can
+/// only ever open this one settings page.
+#[tauri::command]
+pub fn open_language_settings(app: AppHandle) -> Result<(), DocumentError> {
+    #[cfg(windows)]
+    {
+        app.opener()
+            .open_url(LANGUAGE_SETTINGS_URI, None::<&str>)
+            .map_err(|_| DocumentError::InvalidRequest)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        Err(DocumentError::InvalidRequest)
+    }
+}
+
 fn revealable_path(path: &Path, access: &DocumentAccessList) -> Result<PathBuf, DocumentError> {
     let location = locate_document(path)?;
     if access.is_allowed(&location) || access.is_folder_allowed(&location) {

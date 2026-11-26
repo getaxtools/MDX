@@ -1,0 +1,10 @@
+{
+  "headings": [
+    { "level": 1, "text": "Notes corpus" },
+    { "level": 2, "text": "Links" },
+    { "level": 2, "text": "Tags in many scripts" },
+    { "level": 2, "text": "The final heading" }
+  ],
+  "linkTargets": ["Plan", "Projects/Budget", "Plan", "diagram.png"],
+  "tags": ["writing/drafts", "తెలుగు", "हिन्दी", "日本語", "café"]
+}

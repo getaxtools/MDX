@@ -39,6 +39,19 @@ describe('KeyboardShortcutsDialog', () => {
     expect(screen.getByRole('status').textContent).toBe('No shortcut matches “banana”.');
   });
 
+  it('opens in the shared frame with only the header close, whose tooltip names esc', async () => {
+    const onClose = vi.fn();
+    render(KeyboardShortcutsDialog, { translator: createTranslator(), onClose });
+    const close = screen.getByRole('button', { name: 'Close' });
+
+    await userEvent.click(close);
+
+    expect(screen.getAllByRole('button')).toEqual([close]);
+    expect(close.closest('header')).not.toBeNull();
+    expect(close.title).toBe('Close (Esc)');
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it('closes with Escape', async () => {
     const onClose = vi.fn();
     render(KeyboardShortcutsDialog, { translator: createTranslator(), onClose });

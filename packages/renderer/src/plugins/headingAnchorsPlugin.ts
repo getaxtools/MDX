@@ -2,12 +2,16 @@ import type { Env, MarkdownIt, Token } from 'markdown-it';
 
 export const HEADING_ID_PREFIX = 'mdx-';
 
+/** What a heading is in a spec document: a delta section, a requirement or a scenario. */
+export type OutlineRole = 'deltaSection' | 'requirement' | 'scenario';
+
 export interface OutlineEntry {
   readonly level: number;
   readonly text: string;
   readonly id: string;
   /** The zero-based line of the full document, front matter included, where the heading starts. */
   readonly line: number;
+  readonly role?: OutlineRole | undefined;
 }
 
 export type OutlineEnvironment = Env & {

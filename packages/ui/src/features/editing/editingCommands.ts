@@ -1,10 +1,14 @@
-import type { EditorMenuCommand, SectionAction } from '@mdx/editor';
+import type { EditingModeSetting } from '@mdx/core';
+import type { EditorMenuCommand, EditorTextRange, SectionAction } from '@mdx/editor';
 
 export type EditingCommand =
   | { readonly kind: 'toggleEditing' }
+  | { readonly kind: 'toggleEditingMode' }
+  | { readonly kind: 'setEditingMode'; readonly editingMode: EditingModeSetting }
   | { readonly kind: 'togglePreviewBesideEditor' }
   | { readonly kind: 'newDocument' }
   | { readonly kind: 'runEditorCommand'; readonly command: EditorMenuCommand }
+  | { readonly kind: 'pastePlainText' }
   | { readonly kind: 'revertDocument' }
   | { readonly kind: 'reloadActiveDocument' }
   | { readonly kind: 'reloadFromDisk'; readonly canonicalKey: string }
@@ -29,6 +33,12 @@ export type EditorRequest =
   | {
       readonly id: number;
       readonly canonicalKey: string;
+      readonly kind: 'insertPlainText';
+      readonly text: string;
+    }
+  | {
+      readonly id: number;
+      readonly canonicalKey: string;
       readonly kind: 'insertSnippet';
       readonly body: string;
     }
@@ -37,7 +47,13 @@ export type EditorRequest =
       readonly canonicalKey: string;
       readonly kind: 'insertPictureLinks';
       readonly links: readonly string[];
-      readonly point: { readonly x: number; readonly y: number };
+      readonly point?: { readonly x: number; readonly y: number };
+    }
+  | {
+      readonly id: number;
+      readonly canonicalKey: string;
+      readonly kind: 'revealLine';
+      readonly line: number;
     }
   | {
       readonly id: number;
@@ -45,4 +61,10 @@ export type EditorRequest =
       readonly kind: 'changeSection';
       readonly line: number;
       readonly action: SectionAction;
+    }
+  | {
+      readonly id: number;
+      readonly canonicalKey: string;
+      readonly kind: 'revealRange';
+      readonly range: EditorTextRange;
     };

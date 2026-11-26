@@ -28,21 +28,25 @@ describe('checkShortcutChange', () => {
     [['F6'], 'shortcuts.moveBetweenRegions'],
     [['ctrl', '1'], 'shortcuts.tabByNumber'],
     [['ctrl', 'V'], 'menu.edit.paste'],
+    [['ctrl', 'shift', 'V'], 'menu.edit.pastePlainText'],
   ])('refuses in-place keys such as %j', (combination, actionKey) => {
     expect(check(combination)).toEqual({ isAccepted: false, refusal: { reason: 'usedBy', actionKey } });
   });
 
   it.each([
     [['ctrl', 'B'], 'editor.action.bold'],
+    [['ctrl', 'shift', 'I'], 'editor.action.insertImage'],
+    [['ctrl', 'shift', 'M'], 'editor.action.displayMath'],
+    [['alt', '='], 'editor.action.inlineMath'],
     [['ctrl', 'shift', 'K'], 'shortcuts.editingText'],
   ])('refuses editor keys such as %j', (combination, actionKey) => {
     expect(check(combination)).toEqual({ isAccepted: false, refusal: { reason: 'usedBy', actionKey } });
   });
 
   it.each([
-    [['ctrl', 'shift', 'M'], 'shortcuts.planned.displayMath'],
-    [['ctrl', 'alt', 'W'], 'shortcuts.planned.switchWorkspace'],
-  ])('refuses keys kept for planned features such as %j', (combination, actionKey) => {
+    [['ctrl', 'F1'], 'shortcuts.planned.showToolbar'],
+    [['ctrl', 'alt', 'W'], 'workspaces.switch'],
+  ])('refuses keys kept for planned features or used by a command, such as %j', (combination, actionKey) => {
     expect(check(combination)).toEqual({ isAccepted: false, refusal: { reason: 'usedBy', actionKey } });
   });
 

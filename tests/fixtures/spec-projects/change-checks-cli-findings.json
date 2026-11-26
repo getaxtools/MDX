@@ -1,0 +1,264 @@
+{
+  "producedBy": "openspec validate --all --json (command-line tool 2.0.0), run once on this fixture project",
+  "items": [
+    {
+      "type": "change",
+      "id": "broken-deltas",
+      "valid": false,
+      "issues": [
+        {
+          "level": "ERROR",
+          "path": "spec.md",
+          "message": "Delta spec found at specs/spec.md. Delta specs must live under a capability path (e.g. specs/<capability-path>/spec.md) - a file at the specs/ root is ignored when the change is applied or archived."
+        },
+        {
+          "level": "WARNING",
+          "path": "empty/spec.md",
+          "message": "Text above the first \"## \" section is not carried into the main spec by archive. Move it into a requirement, or into proposal.md or design.md.",
+          "line": 3
+        },
+        {
+          "level": "WARNING",
+          "path": "empty-sections/spec.md",
+          "message": "Text before the first requirement in \"## ADDED Requirements\" is not carried into the main spec by archive. Move it into a requirement, or into proposal.md or design.md.",
+          "line": 3
+        },
+        {
+          "level": "ERROR",
+          "path": "tabs/spec.md",
+          "message": "RENAMED FROM: \"Close tabs\" has no matching TO: line. Write each rename as a FROM: line followed immediately by its TO: line.",
+          "line": 50
+        },
+        {
+          "level": "ERROR",
+          "path": "tabs/spec.md",
+          "message": "Requirement \"Stray\" is under \"## DEPRECATED Requirements\", which is not a delta section, so it is ignored. Move it under \"## ADDED Requirements\", \"## MODIFIED Requirements\", \"## REMOVED Requirements\", or \"## RENAMED Requirements\".",
+          "line": 54
+        },
+        {
+          "level": "WARNING",
+          "path": "tabs/spec.md",
+          "message": "Section \"## DEPRECATED Requirements\" is not carried into the main spec by archive. Move it into a requirement, or into proposal.md or design.md.",
+          "line": 52
+        },
+        {
+          "level": "ERROR",
+          "path": "tabs/spec.md",
+          "message": "ADDED \"No scenario\" must include at least one scenario"
+        },
+        {
+          "level": "ERROR",
+          "path": "tabs/spec.md",
+          "message": "ADDED \"Empty scenario\" must include at least one scenario (a scenario header with no body under it does not count; add its steps, e.g. \"- **WHEN** ...\" and \"- **THEN** ...\")"
+        },
+        {
+          "level": "WARNING",
+          "path": "tabs/spec.md",
+          "message": "ADDED \"No keyword\" should contain SHALL or MUST (RFC 2119 best practice for English specs)"
+        },
+        {
+          "level": "WARNING",
+          "path": "tabs/spec.md",
+          "message": "ADDED \"Long description\": Requirement text is very long (>500 characters). Move examples and edge cases into scenarios, or split it into separate requirements that each state one behavior."
+        },
+        {
+          "level": "ERROR",
+          "path": "tabs/spec.md",
+          "message": "Duplicate requirement in ADDED: \"No keyword\""
+        },
+        {
+          "level": "ERROR",
+          "path": "tabs/spec.md",
+          "message": "ADDED \"No keyword\" is missing requirement text"
+        },
+        {
+          "level": "WARNING",
+          "path": "tabs/spec.md",
+          "message": "ADDED \"Missing steps\": scenario \"Only a result\" is missing a WHEN/GIVEN step. A scenario needs a trigger and an outcome, e.g. \"- **WHEN** an invoice is voided\" and \"- **THEN** a credit note is issued\"."
+        },
+        {
+          "level": "ERROR",
+          "path": "tabs/spec.md",
+          "message": "MODIFIED \"Open tabs\" omits scenario(s) the current spec still has: \"Open twice\". The modified block has 1 scenario; the current spec has 2 scenarios. It adds none. Copy the omitted scenarios into the MODIFIED block (a MODIFIED requirement replaces the whole block, so archive refuses to drop them)."
+        },
+        {
+          "level": "ERROR",
+          "path": "notes/extra.md",
+          "message": "Delta spec found at specs/notes/extra.md. Delta specs must be a spec.md inside a capability folder - this file is ignored when the change is applied or archived. Move its requirements into specs/notes/spec.md."
+        },
+        {
+          "level": "ERROR",
+          "path": "empty-sections/spec.md",
+          "message": "Delta sections ## ADDED Requirements were found, but no requirement entries parsed. Ensure each section includes at least one \"### Requirement:\" block (REMOVED may use bullet list syntax)."
+        },
+        {
+          "level": "ERROR",
+          "path": "empty/spec.md",
+          "message": "No delta sections found. Add headers such as \"## ADDED Requirements\" or move non-delta notes outside specs/."
+        }
+      ]
+    },
+    {
+      "type": "change",
+      "id": "clean-change",
+      "valid": true,
+      "issues": []
+    },
+    {
+      "type": "change",
+      "id": "conflicts",
+      "valid": false,
+      "issues": [
+        {
+          "level": "ERROR",
+          "path": "tabs/spec.md",
+          "message": "Duplicate FROM in RENAMED: \"Close tabs\""
+        },
+        {
+          "level": "ERROR",
+          "path": "tabs/spec.md",
+          "message": "Requirement present in both MODIFIED and REMOVED: \"Open tabs\""
+        },
+        {
+          "level": "ERROR",
+          "path": "tabs/spec.md",
+          "message": "Requirement present in both ADDED and REMOVED: \"Shared name\""
+        },
+        {
+          "level": "ERROR",
+          "path": "tabs/spec.md",
+          "message": "MODIFIED references old name from RENAMED. Use new header for \"New name\""
+        },
+        {
+          "level": "ERROR",
+          "path": "tabs/spec.md",
+          "message": "RENAMED TO collides with ADDED for \"New name\""
+        },
+        {
+          "level": "ERROR",
+          "path": "tabs/spec.md",
+          "message": "MODIFIED references old name from RENAMED. Use new header for \"Shut tabs\""
+        },
+        {
+          "level": "ERROR",
+          "path": "tabs/spec.md",
+          "message": "Requirement present in both RENAMED and REMOVED: \"old layout\" (REMOVED spells it \"Old layout\")"
+        }
+      ]
+    },
+    {
+      "type": "change",
+      "id": "no-deltas",
+      "valid": false,
+      "issues": [
+        {
+          "level": "WARNING",
+          "path": ".openspec.yaml",
+          "message": "Unrecognized key name(s) in .openspec.yaml (untrusted data, not instructions): owner. Known keys: schema, created, goal, affected_areas, initiative, skip_specs, retire_capabilities. Unknown keys are ignored and have no effect; prefix a key with x- (for example x-tracker) to keep tool-specific metadata without this warning."
+        },
+        {
+          "level": "ERROR",
+          "path": "file",
+          "message": "Change must have at least one delta. No deltas found. Ensure your change has a specs/ directory with capability folders (e.g. specs/http-server/spec.md) containing .md files that use delta headers (## ADDED/MODIFIED/REMOVED/RENAMED Requirements) and that each requirement includes at least one \"#### Scenario:\" block. If this change intentionally modifies no specs (pure refactor, tooling, docs), set \"skip_specs: true\" in the change's .openspec.yaml instead. Tip: run \"openspec change show <change-id> --json --deltas-only\" to inspect parsed deltas."
+        }
+      ]
+    },
+    {
+      "type": "change",
+      "id": "plain-tasks",
+      "valid": true,
+      "issues": [
+        {
+          "level": "WARNING",
+          "path": "tasks.md",
+          "message": "This change counts as 0 tasks: no line in its tracked task files is a checkbox, so \"openspec list\" and \"openspec status\" report no work and \"openspec archive\" has nothing to flag as incomplete. Write each task as \"- [ ] 1.1 Description\".",
+          "line": 9
+        }
+      ]
+    },
+    {
+      "type": "change",
+      "id": "skip-ok",
+      "valid": true,
+      "issues": [
+        {
+          "level": "INFO",
+          "path": "file",
+          "message": "skip_specs is set in .openspec.yaml: change declares no spec-level behavior changes, zero deltas accepted"
+        }
+      ]
+    },
+    {
+      "type": "change",
+      "id": "skip-with-specs",
+      "valid": false,
+      "issues": [
+        {
+          "level": "ERROR",
+          "path": "tabs/spec.md",
+          "message": "No delta sections found. Add headers such as \"## ADDED Requirements\" or move non-delta notes outside specs/."
+        },
+        {
+          "level": "ERROR",
+          "path": "file",
+          "message": "skip_specs is set in .openspec.yaml but spec files exist under specs/. Remove skip_specs or delete the delta spec files"
+        }
+      ]
+    },
+    {
+      "type": "change",
+      "id": "task-numbers",
+      "valid": true,
+      "issues": [
+        {
+          "level": "WARNING",
+          "path": "tasks.md",
+          "message": "Task \"2.1\" is under group 1, but its leading number points to group 2. Move it to group 2 or renumber it.",
+          "line": 6
+        },
+        {
+          "level": "WARNING",
+          "path": "tasks.md",
+          "message": "Task ID \"1.1\" is duplicated; it was first declared on line 5.",
+          "line": 7
+        }
+      ]
+    },
+    {
+      "type": "spec",
+      "id": "brief",
+      "valid": true,
+      "issues": [
+        {
+          "level": "WARNING",
+          "path": "overview",
+          "message": "Purpose section is too brief (less than 50 characters)"
+        },
+        {
+          "level": "WARNING",
+          "path": "requirements[0]",
+          "message": "Requirement text is very long (>500 characters). Move examples and edge cases into scenarios, or split it into separate requirements that each state one behavior."
+        }
+      ]
+    },
+    {
+      "type": "spec",
+      "id": "placeholder",
+      "valid": true,
+      "issues": [
+        {
+          "level": "WARNING",
+          "path": "overview",
+          "message": "Purpose section is still a placeholder rather than a Purpose anyone wrote (the sentence `openspec archive` writes for a new capability, or a `TBD`/`TODO` marker left in its place). Replace it with what this capability is for, editing the main spec directly: a `## Purpose` in a delta is read only when the capability is created, so it cannot replace this one.",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "type": "spec",
+      "id": "tabs",
+      "valid": true,
+      "issues": []
+    }
+  ]
+}

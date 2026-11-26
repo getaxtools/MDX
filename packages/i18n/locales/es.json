@@ -206,7 +206,6 @@
   "document.openExternalLink.title": "¿Abrir el vínculo en el explorador?",
   "document.openExternalLink.body": "Se abrirá {url} en el explorador predeterminado.",
   "view.options.label": "Opciones de vista",
-  "view.zoomLevel": "Zoom {percent}%",
   "document.openExternalLink.open": "Abrir",
   "document.openExternalLink.cancel": "Cancelar",
   "shortcuts.column.action": "Acción",

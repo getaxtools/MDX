@@ -34,6 +34,22 @@ describe('keyboard shortcuts', () => {
     expect(actionsFor('')).toHaveLength(keyboardShortcutsWith().length);
   });
 
+  it('help follows the setting', () => {
+    const translator = createTranslator();
+    const rowsFor = (ctrlWheelAction: 'moveBetweenFiles' | 'zoom') =>
+      matchingShortcuts('ctrl+mouse', translator, keyboardShortcutsWith(undefined, ctrlWheelAction)).map(
+        (row) => [
+          translator.translate(row.actionKey),
+          row.combinations.map((combination) => describeCombination(combination, translator)),
+        ],
+      );
+
+    expect(rowsFor('moveBetweenFiles')).toEqual([
+      ['Move between files', ['Ctrl+↓', 'Ctrl+↑', 'Ctrl+Mouse wheel']],
+    ]);
+    expect(rowsFor('zoom')).toEqual([['Zoom in or out', ['Ctrl+Mouse wheel']]]);
+  });
+
   it('lists the changed shortcut', () => {
     const shortcuts = keyboardShortcutsWith(
       effectiveCommandShortcuts({ toggleControlWheel: ['ctrl', 'shift', 'J'] }),

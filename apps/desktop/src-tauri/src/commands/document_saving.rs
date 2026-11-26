@@ -45,6 +45,9 @@ fn save_edited_document(
     if !access.is_allowed(&location) || !access.was_opened(&location) {
         return Err(DocumentError::AccessDenied);
     }
+    if access.is_read_only(&location) {
+        return Err(DocumentError::AccessDenied);
+    }
     let path = location.path();
     if !is_markdown_path(&path) {
         return Err(DocumentError::NotMarkdown);
@@ -134,6 +137,17 @@ mod tests {
         assert_eq!(refused, Err(DocumentError::ChangedOnDisk));
         assert!(overwritten.is_ok());
         assert_eq!(fs::read_to_string(&path).unwrap(), "# Mine");
+    }
+
+    #[test]
+    fn refuses_a_note_in_a_folder_being_moved_and_leaves_it_alone() {
+        let (folder, path, access) = granted_document(b"# Old");
+        access.make_folder_read_only(folder.path());
+
+        let result = save_edited_document(&edited(&path, "# New", "utf-8"), &access);
+
+        assert_eq!(result, Err(DocumentError::AccessDenied));
+        assert_eq!(fs::read_to_string(&path).unwrap(), "# Old");
     }
 
     #[test]

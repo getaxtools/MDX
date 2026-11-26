@@ -36,6 +36,16 @@ describe('AboutDialog', () => {
     expect(dialog.textContent).toContain('New versions and the source code: github.com/getaxtools/MDX');
   });
 
+  it('says that MDX reads the spec folder layouts without being affiliated with their authors', () => {
+    renderAbout();
+
+    const dialog = screen.getByRole('dialog', { name: 'About MDX' });
+
+    expect(dialog.textContent).toContain(
+      'MDX reads these folder layouts. It is not affiliated with or endorsed by their authors.',
+    );
+  });
+
   it('lists the features of this version in named groups', () => {
     renderAbout();
 

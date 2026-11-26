@@ -1,0 +1,75 @@
+{
+  "producedBy": "openspec archive <change> --yes --json --no-validate (command-line tool 2.0.0), run once per change on a fresh copy of this fixture project",
+  "changes": {
+    "added-duplicate": {
+      "outcome": "refused",
+      "message": "tabs ADDED failed for header \"### Requirement: Open tabs\" - already exists"
+    },
+    "dropped-scenario": {
+      "outcome": "refused",
+      "message": "tabs MODIFIED failed for header \"### Requirement: Open tabs\" - current spec contains scenario(s) not present in the modified block: \"Open twice\". The modified block has 1 scenario; the current spec has 2 scenarios. It adds none. Refresh the change spec before archiving to avoid dropping scenarios."
+    },
+    "modified-new-capability": {
+      "outcome": "refused",
+      "message": "exports: target spec does not exist; only ADDED requirements are allowed for new specs. MODIFIED and RENAMED operations require an existing spec."
+    },
+    "modify-not-found": {
+      "outcome": "refused",
+      "message": "tabs MODIFIED failed for header \"### Requirement: Export data\" - not found"
+    },
+    "new-capability": {
+      "outcome": "applied",
+      "totals": {
+        "added": 1,
+        "modified": 0,
+        "removed": 0,
+        "renamed": 0
+      },
+      "warnings": [],
+      "specs": {
+        "pins": "# pins Specification\n\n## Purpose\nLets a user pin the tabs of the documents they come back to most often.\n\n## Requirements\n\n### Requirement: Pin tabs\nThe viewer SHALL let the user pin a tab.\n\n#### Scenario: Pin a tab\n- **WHEN** the user pins a tab\n- **THEN** it moves to the start\n"
+      }
+    },
+    "new-capability-no-purpose": {
+      "outcome": "applied",
+      "totals": {
+        "added": 1,
+        "modified": 0,
+        "removed": 0,
+        "renamed": 0
+      },
+      "warnings": [],
+      "specs": {
+        "badges": "# badges Specification\n\n## Purpose\nTBD - created by archiving change new-capability-no-purpose. Update Purpose after archive.\n\n## Requirements\n\n### Requirement: Show badges\nThe viewer SHALL show a badge on a tab with unsaved changes.\n\n#### Scenario: Unsaved changes\n- **WHEN** a document has unsaved changes\n- **THEN** its tab shows a badge\n"
+      }
+    },
+    "remove-missing": {
+      "outcome": "applied",
+      "totals": {
+        "added": 1,
+        "modified": 0,
+        "removed": 0,
+        "renamed": 0
+      },
+      "warnings": [
+        "tabs - REMOVED requirement \"Never existed\" is not in the current spec; treating it as already removed."
+      ],
+      "specs": {
+        "tabs": "# tabs Specification\n\n## Purpose\n\nLets a user keep several documents open at once in tabs and move between them quickly.\n\n## Requirements\n\n### Requirement: Open tabs\nThe viewer SHALL open each document in its own tab.\n\n#### Scenario: Open a file\n- **WHEN** the user opens a file\n- **THEN** it appears in a new tab\n\n#### Scenario: Open twice\n- **WHEN** the user opens a file that is already open\n- **THEN** its tab is selected\n\n### Requirement: Close tabs\nThe viewer SHALL close a tab with Ctrl+W.\n\n#### Scenario: Close the current tab\n- **WHEN** the user presses Ctrl+W\n- **THEN** the current tab closes\n\n### Requirement: Old layout\nThe viewer SHALL keep the old layout.\n\n#### Scenario: Old layout kept\n- **WHEN** the user opens the viewer\n- **THEN** the old layout shows\n\n### Requirement: Pin tabs\nThe viewer SHALL let the user pin a tab.\n\n#### Scenario: Pin a tab\n- **WHEN** the user pins a tab\n- **THEN** it moves to the start\n"
+      }
+    },
+    "rename-then-modify": {
+      "outcome": "applied",
+      "totals": {
+        "added": 1,
+        "modified": 1,
+        "removed": 1,
+        "renamed": 1
+      },
+      "warnings": [],
+      "specs": {
+        "tabs": "# tabs Specification\n\n## Purpose\n\nLets a user keep several documents open at once in tabs and move between them quickly.\n\n## Requirements\n\n### Requirement: Open tabs\nThe viewer SHALL open each document in its own tab.\n\n#### Scenario: Open a file\n- **WHEN** the user opens a file\n- **THEN** it appears in a new tab\n\n#### Scenario: Open twice\n- **WHEN** the user opens a file that is already open\n- **THEN** its tab is selected\n\n### Requirement: Shut tabs\nThe viewer SHALL close a tab with Ctrl+W or its close button.\n\n#### Scenario: Close the current tab\n- **WHEN** the user presses Ctrl+W\n- **THEN** the current tab closes\n\n### Requirement: Pin tabs\nThe viewer SHALL let the user pin a tab.\n\n#### Scenario: Pin a tab\n- **WHEN** the user pins a tab\n- **THEN** it moves to the start\n"
+      }
+    }
+  }
+}

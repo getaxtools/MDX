@@ -35,6 +35,36 @@ function renderPanel({
 }
 
 describe('FolderSearchPanel', () => {
+  it('takes the focus only for a new request, never when other things change', async () => {
+    const outside = document.body.appendChild(document.createElement('button'));
+    const view = render(FolderSearchPanel, {
+      translator: createTranslator(),
+      focusRequest: 1,
+      hasFolders: true,
+      onSearch: vi.fn(() => Promise.resolve(RESULTS)),
+      onOpenMatch: vi.fn(),
+      isNotesSearch: true,
+    });
+    const input = screen.getByRole('searchbox', { name: 'Search in folders' });
+    outside.focus();
+
+    await view.rerender({
+      notesIndexStatus: {
+        locationId: 'one',
+        indexed: 1,
+        toIndex: 2,
+        isBuilding: true,
+        wasRebuilt: false,
+        isWatched: true,
+      },
+    });
+    expect(document.activeElement).toBe(outside);
+
+    await view.rerender({ focusRequest: 2 });
+    expect(document.activeElement).toBe(input);
+    outside.remove();
+  });
+
   it('focuses the search box when asked', () => {
     const { input } = renderPanel();
 
@@ -104,5 +134,140 @@ describe('FolderSearchPanel', () => {
 
     expect(input.hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('status').textContent).toContain('Open a folder or add one to favourites');
+  });
+
+  describe('in a Notes workspace', () => {
+    function renderNotesPanel(results: FolderSearchResults, isBuilding = false) {
+      render(FolderSearchPanel, {
+        translator: createTranslator(),
+        focusRequest: 1,
+        hasFolders: true,
+        isNotesSearch: true,
+        notesIndexStatus: {
+          locationId: 'journal',
+          indexed: 500,
+          toIndex: 1200,
+          isBuilding,
+          wasRebuilt: false,
+          isWatched: true,
+        },
+        onSearch: () => Promise.resolve(results),
+        onOpenMatch: vi.fn(),
+      });
+      return screen.getByRole('searchbox', { name: 'Search in folders' });
+    }
+
+    it('explains filters and leaves out the case and whole-word options', () => {
+      renderNotesPanel(RESULTS);
+
+      expect(
+        screen.getByText('Search ignores case and accents. Add tag:name or path:folder to narrow it.'),
+      ).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Match Case' })).toBeNull();
+    });
+
+    it('shows indexing progress while the index is built', () => {
+      renderNotesPanel(RESULTS, true);
+
+      expect(screen.getByText('Indexing notes: 500 of 1,200…')).toBeTruthy();
+    });
+
+    it('shows the not-searched count of notes kept only online', async () => {
+      const input = renderNotesPanel({ ...RESULTS, notSearchedOnlineOnly: 3 });
+
+      await userEvent.type(input, 'setup{Enter}');
+
+      expect(await screen.findByText(/3 notes kept only online were not searched\./)).toBeTruthy();
+    });
+  });
+
+  it('a chosen tag fills the search box and lists the notes carrying it', async () => {
+    const onOpenMatch = vi.fn();
+    render(FolderSearchPanel, {
+      translator: createTranslator(),
+      focusRequest: 1,
+      hasFolders: true,
+      isNotesSearch: true,
+      requestedQuery: 'tag:work',
+      onSearch: () => Promise.resolve({ documents: [{ location: GUIDE, matches: [] }], isIncomplete: false }),
+      onOpenMatch,
+    });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Guide.md' }));
+
+    expect(screen.getByRole<HTMLInputElement>('searchbox', { name: 'Search in folders' }).value).toBe(
+      'tag:work',
+    );
+    expect(screen.getByText('1 note')).toBeTruthy();
+    expect(onOpenMatch).toHaveBeenCalledWith('C:\\Docs\\Guide.md', 'tag:work', {
+      isCaseSensitive: false,
+      isWholeWord: false,
+    });
+  });
+
+  describe('in a Spec viewer workspace', () => {
+    function renderSpecSearch() {
+      const onSearch = vi.fn(() => Promise.resolve(RESULTS));
+      render(FolderSearchPanel, {
+        translator: createTranslator(),
+        focusRequest: 1,
+        hasFolders: true,
+        onSearch,
+        onOpenMatch: vi.fn(),
+        isSpecSearch: true,
+      });
+      return { onSearch, input: screen.getByRole('searchbox', { name: 'Search in folders' }) };
+    }
+
+    it('searches every spec document but archived changes until a scope is chosen', async () => {
+      const { onSearch, input } = renderSpecSearch();
+
+      await userEvent.type(input, 'pin{Enter}');
+
+      expect(onSearch).toHaveBeenLastCalledWith(
+        'pin',
+        { isCaseSensitive: false, isWholeWord: false },
+        { scope: 'all', isArchiveIncluded: false },
+      );
+    });
+
+    it('searches again in each scope the user chooses', async () => {
+      const { onSearch, input } = renderSpecSearch();
+      await userEvent.type(input, 'pin{Enter}');
+      const scopes = screen.getByRole('combobox', { name: 'Search in' });
+
+      for (const [label, scope] of [
+        ['Specs', 'specs'],
+        ['Changes', 'changes'],
+        ['Tasks', 'tasks'],
+        ['Agent instructions', 'instructions'],
+        ['All spec documents', 'all'],
+      ] as const) {
+        await userEvent.selectOptions(scopes, label);
+        expect(onSearch).toHaveBeenLastCalledWith('pin', expect.anything(), {
+          scope,
+          isArchiveIncluded: false,
+        });
+      }
+    });
+
+    it('includes archived changes once the switch is on', async () => {
+      const { onSearch, input } = renderSpecSearch();
+      await userEvent.type(input, 'pin{Enter}');
+
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Include archived changes' }));
+
+      expect(onSearch).toHaveBeenLastCalledWith('pin', expect.anything(), {
+        scope: 'all',
+        isArchiveIncluded: true,
+      });
+    });
+
+    it('offers no scope outside a Spec viewer workspace', () => {
+      renderPanel();
+
+      expect(screen.queryByRole('combobox', { name: 'Search in' })).toBeNull();
+      expect(screen.queryByRole('checkbox', { name: 'Include archived changes' })).toBeNull();
+    });
   });
 });

@@ -1,8 +1,16 @@
-import { isUntitledLocation } from '@mdx/platform';
+import { hasFile } from '@mdx/platform';
 import type { DocumentLocation } from '@mdx/platform';
 import { ExplorerFolders } from '../explorer/ExplorerFolders';
+import type { IgnoreEntry } from '../prompt-injection/ignoreFindings';
+import { InjectionIgnoreList } from '../prompt-injection/InjectionIgnoreList';
+import {
+  NO_JUMP_LIST_REMOVALS,
+  parseJumpListRemovals,
+  type JumpListRemovals,
+} from '../workspaces/jumpListRemovals';
 import { FavouritesList, type Favourite, type FavouriteGroup } from '../favourites/FavouritesList';
 import { parseFavourites } from '../favourites/parseFavourites';
+import { isProtectedLocation, withoutProtectedLocations } from '../protected-notes/protectedLocations';
 import { RecentFilesList, type RecentFile } from '../recent-files/RecentFilesList';
 import { parseShortcutOverrides, type ShortcutOverrides } from '../shortcuts/parseShortcutOverrides';
 import { parseWordGoals, type WordGoals } from '../word-goals/wordGoals';
@@ -14,6 +22,7 @@ import {
   type LanguagePreference,
   type ViewSettings,
 } from '../view/ViewSettings';
+import type { WorkspaceOverrides } from '../view/viewSettingsScopes';
 import { WORKSPACE_KINDS, type WorkspaceKind } from '../workspace-kinds/workspaceKinds';
 import { WorkspaceKindsState, type SavedWorkspaceKinds } from '../workspace-kinds/WorkspaceKindsState';
 import { isRecord, parseLocation, validEntries } from './savedValues';
@@ -33,6 +42,12 @@ export interface PersistedAppState {
   readonly shortcutOverrides: ShortcutOverrides;
   readonly wordGoals: WordGoals;
   readonly snippetLibrary: SnippetLibrary;
+  /** Findings the user ignored in the prompt injection check, as rule ids and hashes. */
+  readonly injectionIgnoreEntries?: readonly IgnoreEntry[];
+  /** Workspaces whose Jump List entry the user removed, by id, with when. */
+  readonly jumpListRemovals?: JumpListRemovals;
+  /** Lets an older MDX name the version that wrote state it cannot read. */
+  readonly savedByAppVersion?: string;
 }
 
 export interface ViewerState {
@@ -45,28 +60,45 @@ export interface ViewerState {
   readonly shortcutOverrides: ShortcutOverrides;
   readonly wordGoals: WordGoals;
   readonly snippetLibrary: SnippetLibrary;
+  readonly injectionIgnoreList: InjectionIgnoreList;
+  /** Absent until the user removes a Jump List entry. */
+  readonly jumpListRemovals?: JumpListRemovals;
+  /** The shown workspace's own theme, reading width or typography; absent without workspaces. */
+  readonly workspaceOverrides?: WorkspaceOverrides;
+}
+
+/** Saved state written by a newer MDX; the desktop app keeps a copy of it before anything is saved. */
+export interface NewerSavedState {
+  readonly appVersion: string | undefined;
 }
 
 export interface RestoredAppState extends ViewerState {
   readonly wasReset: boolean;
+  readonly newerSavedState: NewerSavedState | undefined;
 }
 
-export function toPersistedAppState({
-  tabStrip,
-  recentFiles,
-  favourites,
-  explorerFolders,
-  viewSettings,
-  workspaceKinds,
-  shortcutOverrides,
-  wordGoals,
-  snippetLibrary,
-}: ViewerState): PersistedAppState {
+export function toPersistedAppState(
+  {
+    tabStrip,
+    recentFiles,
+    favourites,
+    explorerFolders,
+    viewSettings,
+    workspaceKinds,
+    shortcutOverrides,
+    wordGoals,
+    snippetLibrary,
+    injectionIgnoreList,
+    jumpListRemovals = NO_JUMP_LIST_REMOVALS,
+  }: ViewerState,
+  appVersion?: string,
+): PersistedAppState {
   return {
+    ...(appVersion === undefined ? {} : { savedByAppVersion: appVersion }),
     schemaVersion: APP_STATE_SCHEMA_VERSION,
-    tabs: withoutUntitledTabs(tabStrip.toSnapshot()),
-    recentFiles: recentFiles.entries(),
-    favourites: favourites.favourites(),
+    tabs: withFileTabsOnly(tabStrip.toSnapshot()),
+    recentFiles: withoutProtectedLocations(recentFiles.entries(), (file) => file.location),
+    favourites: withoutProtectedLocations(favourites.favourites(), (favourite) => favourite.location),
     favouriteGroups: favourites.groups(),
     explorerFolders: explorerFolders.folders(),
     view: viewSettings,
@@ -74,12 +106,17 @@ export function toPersistedAppState({
     shortcutOverrides,
     wordGoals,
     snippetLibrary,
+    ...(injectionIgnoreList.isEmpty() ? {} : { injectionIgnoreEntries: injectionIgnoreList.toSaved() }),
+    ...(Object.keys(jumpListRemovals).length === 0 ? {} : { jumpListRemovals }),
   };
 }
 
-/** Documents that were never saved exist only in memory, so they cannot be reopened later. */
-function withoutUntitledTabs({ tabs, activeKey }: TabStripSnapshot): TabStripSnapshot {
-  const savedTabs = tabs.filter((tab) => !isUntitledLocation(tab.location));
+/**
+ * Unsaved documents and views of the app exist only in memory, and protected notes are never kept,
+ * so none of them is reopened later.
+ */
+function withFileTabsOnly({ tabs, activeKey }: TabStripSnapshot): TabStripSnapshot {
+  const savedTabs = tabs.filter((tab) => hasFile(tab.location) && !isProtectedLocation(tab.location));
   const isActiveTabSaved = savedTabs.some((tab) => tab.location.canonicalKey === activeKey);
   return activeKey !== undefined && isActiveTabSaved ? { tabs: savedTabs, activeKey } : { tabs: savedTabs };
 }
@@ -97,7 +134,7 @@ export function restoreAppState(
 ): RestoredAppState {
   if (saved === undefined || saved === null) return emptyAppState({ wasReset: false, kindRegistry });
   if (!isRecord(saved) || saved.schemaVersion !== APP_STATE_SCHEMA_VERSION)
-    return emptyAppState({ wasReset: true, kindRegistry });
+    return emptyAppState({ wasReset: true, kindRegistry, newerSavedState: newerSavedStateOf(saved) });
   const savedTabs = isRecord(saved.tabs) ? saved.tabs : {};
   const activeKey = typeof savedTabs.activeKey === 'string' ? { activeKey: savedTabs.activeKey } : {};
   return {
@@ -110,16 +147,28 @@ export function restoreAppState(
     shortcutOverrides: parseShortcutOverrides(saved.shortcutOverrides),
     wordGoals: parseWordGoals(saved.wordGoals),
     snippetLibrary: parseSnippetLibrary(saved.snippetLibrary),
+    injectionIgnoreList: InjectionIgnoreList.fromSaved(saved.injectionIgnoreEntries),
+    jumpListRemovals: parseJumpListRemovals(saved.jumpListRemovals),
     wasReset: false,
+    newerSavedState: undefined,
   };
+}
+
+function newerSavedStateOf(saved: unknown): NewerSavedState | undefined {
+  if (!isRecord(saved) || typeof saved.schemaVersion !== 'number') return undefined;
+  if (saved.schemaVersion <= APP_STATE_SCHEMA_VERSION) return undefined;
+  const appVersion = typeof saved.savedByAppVersion === 'string' ? saved.savedByAppVersion : undefined;
+  return { appVersion };
 }
 
 function emptyAppState({
   wasReset,
   kindRegistry,
+  newerSavedState,
 }: {
   wasReset: boolean;
   kindRegistry: readonly WorkspaceKind[];
+  newerSavedState?: NewerSavedState | undefined;
 }): RestoredAppState {
   return {
     tabStrip: TabStrip.empty(),
@@ -131,7 +180,10 @@ function emptyAppState({
     shortcutOverrides: {},
     wordGoals: {},
     snippetLibrary: EMPTY_SNIPPET_LIBRARY,
+    injectionIgnoreList: InjectionIgnoreList.empty(),
+    jumpListRemovals: NO_JUMP_LIST_REMOVALS,
     wasReset,
+    newerSavedState,
   };
 }
 

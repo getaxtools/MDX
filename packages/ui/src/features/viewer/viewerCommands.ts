@@ -1,10 +1,11 @@
-import { READING_WIDTHS, THEME_PREFERENCES, TYPOGRAPHIES } from '@mdx/core';
+import { READING_WIDTHS, THEME_PREFERENCES, TYPOGRAPHIES, EDITING_MODES } from '@mdx/core';
 import { DETECT_ENCODING_ITEM, isReopenEncoding } from '../encodings/reopenEncodings';
 import type { ExportFormat, TextSearchOptions } from '@mdx/platform';
 import type { WorkspaceKindCommand } from '../control-wheel/workspaceKindCommands';
 import type { EditingCommand } from '../editing/editingCommands';
 import type { ExplorerActionCommand, RemoveExplorerFolderCommand } from '../explorer/explorerCommands';
 import type { FavouriteCommand, FavouritesFileCommand } from '../favourites/favouriteCommands';
+import type { FileArcCommand } from '../file-arc/fileArcCommands';
 import type { PathCommand } from '../file-paths/pathCommands';
 import type { FolderTreeCommand } from '../folder-tree/folderTreeCommands';
 import type { NavigationCommand } from '../navigation/DocumentNavigation';
@@ -12,7 +13,16 @@ import type { LocateRecentFileCommand, RecentFileCommand } from '../recent-files
 import type { ShortcutOverrideCommand } from '../shortcuts/shortcutOverrideCommands';
 import type { SnippetCommand } from '../snippets/snippetCommands';
 import type { TabCommand } from '../tabs/tabCommands';
+import type { WorkspaceCommand } from '../workspaces/workspaceCommands';
+import type { NotesLocationCommand } from '../notes-location/NotesLocationActions';
+import type { NotesMoveCommand } from '../notes-location/NotesMoveActions';
+import type { NotesCommand } from '../notes/NotesActions';
+import type { NotesLinkCommand } from '../notes/NotesIndexActions';
+import type { PropertyCommand } from '../document-view/propertyCommands';
+import type { SpecViewerCommand } from '../spec-viewer/specViewerCommands';
 import type { ViewCommand } from '../view/viewCommands';
+import type { InjectionCheckCommand } from '../prompt-injection/injectionCheckCommands';
+import type { ProtectedNotesCommand } from '../protected-notes/protectedNotesCommands';
 
 export type ViewerCommand =
   | TabCommand
@@ -30,9 +40,23 @@ export type ViewerCommand =
   | WorkspaceKindCommand
   | ShortcutOverrideCommand
   | SnippetCommand
+  | WorkspaceCommand
+  | NotesLocationCommand
+  | NotesMoveCommand
+  | NotesCommand
+  | NotesLinkCommand
+  | ProtectedNotesCommand
+  | PropertyCommand
+  | SpecViewerCommand
+  | InjectionCheckCommand
+  | FileArcCommand
   | { readonly kind: 'toggleFullScreen' }
+  | { readonly kind: 'openLanguageSettings' }
+  | { readonly kind: 'openNewWindow' }
   | { readonly kind: 'toggleControlWheel' }
   | { readonly kind: 'showWorkspaceKindSettings' }
+  | { readonly kind: 'showWorkspaceKindsPage' }
+  | { readonly kind: 'closeWorkspaceKindsPage' }
   | { readonly kind: 'showWordGoal' }
   | { readonly kind: 'setWordGoal'; readonly goal: number }
   | { readonly kind: 'clearWordGoal' }
@@ -46,6 +70,7 @@ export type ViewerCommand =
   | { readonly kind: 'showSettings' }
   | { readonly kind: 'confirmClearAllData' }
   | { readonly kind: 'clearAllData' }
+  | { readonly kind: 'confirmProtectedCopy' }
   | { readonly kind: 'showFind' }
   | { readonly kind: 'showFolderSearch' }
   | {
@@ -104,11 +129,13 @@ const COMMANDS_BY_MENU_ITEM: Readonly<Record<string, ViewerCommand>> = {
   showKeyboardShortcuts: { kind: 'showKeyboardShortcuts' },
   showCommandPalette: { kind: 'showCommandPalette' },
   toggleEditing: { kind: 'toggleEditing' },
+  toggleEditingMode: { kind: 'toggleEditingMode' },
   togglePreviewBesideEditor: { kind: 'togglePreviewBesideEditor' },
   newDocument: { kind: 'newDocument' },
   goBack: { kind: 'goBack' },
   goForward: { kind: 'goForward' },
   toggleFullScreen: { kind: 'toggleFullScreen' },
+  openNewWindow: { kind: 'openNewWindow' },
   toggleControlWheel: { kind: 'toggleControlWheel' },
   revertDocument: { kind: 'revertDocument' },
   reloadActiveDocument: { kind: 'reloadActiveDocument' },
@@ -116,12 +143,23 @@ const COMMANDS_BY_MENU_ITEM: Readonly<Record<string, ViewerCommand>> = {
   redo: { kind: 'runEditorCommand', command: 'redo' },
   showReplace: { kind: 'runEditorCommand', command: 'replace' },
   goToLine: { kind: 'runEditorCommand', command: 'goToLine' },
+  insertEquation: { kind: 'runEditorCommand', command: 'insertEquation' },
+  pastePlainText: { kind: 'pastePlainText' },
   showAbout: { kind: 'showAbout' },
   showSettings: { kind: 'showSettings' },
+  showNewWorkspace: { kind: 'showNewWorkspace' },
+  showWorkspaceSwitcher: { kind: 'showWorkspaceSwitcher' },
+  openWorkspaceFile: { kind: 'openWorkspaceFile' },
+  exportWorkspace: { kind: 'exportWorkspace' },
+  showRenameWorkspace: { kind: 'showRenameWorkspace' },
+  confirmDeleteWorkspace: { kind: 'confirmDeleteWorkspace' },
+  checkForPromptInjection: { kind: 'checkForPromptInjection' },
+  toggleHiddenCharacters: { kind: 'toggleHiddenCharacters' },
 };
 
 const RECENT_FILE_MENU_ITEM = /^openRecent\.(\d{1,2})$/;
 const REOPEN_WITH_ENCODING_PREFIX = 'reopenWithEncoding.';
+const OPEN_RECENT_WORKSPACE_PREFIX = 'openRecentWorkspace.';
 
 export function commandForMenuItem(menuItemId: string): ViewerCommand | undefined {
   const theme = THEME_PREFERENCES.find((preference) => menuItemId === `theme.${preference}`);
@@ -130,9 +168,13 @@ export function commandForMenuItem(menuItemId: string): ViewerCommand | undefine
   if (readingWidth) return { kind: 'setReadingWidth', readingWidth };
   const typography = TYPOGRAPHIES.find((preset) => menuItemId === `typography.${preset}`);
   if (typography) return { kind: 'setTypography', typography };
+  const editingMode = EDITING_MODES.find((mode) => menuItemId === `editingMode.${mode}`);
+  if (editingMode) return { kind: 'setEditingMode', editingMode };
   if (menuItemId.startsWith(REOPEN_WITH_ENCODING_PREFIX)) {
     return reopenCommandFor(menuItemId.slice(REOPEN_WITH_ENCODING_PREFIX.length));
   }
+  if (menuItemId.startsWith(OPEN_RECENT_WORKSPACE_PREFIX))
+    return { kind: 'switchWorkspace', workspaceId: menuItemId.slice(OPEN_RECENT_WORKSPACE_PREFIX.length) };
   const recentFileIndex = RECENT_FILE_MENU_ITEM.exec(menuItemId)?.[1];
   if (recentFileIndex !== undefined) return { kind: 'openRecentFileAt', index: Number(recentFileIndex) };
   return Object.hasOwn(COMMANDS_BY_MENU_ITEM, menuItemId) ? COMMANDS_BY_MENU_ITEM[menuItemId] : undefined;

@@ -24,6 +24,26 @@ describe('createSourceEditor', () => {
     document.body.innerHTML = '';
   });
 
+  it('offers wiki-link suggestions next to the insert menu, and keeps them when the menu is turned off', () => {
+    const parent = document.createElement('div');
+    document.body.append(parent);
+    const wikiLinks = { notes: vi.fn(() => Promise.resolve([])), headings: vi.fn(() => Promise.resolve([])) };
+
+    editor = createSourceEditor({
+      parent,
+      text: '',
+      label: 'Source of Plan.md',
+      phrases: {},
+      onChange: vi.fn(),
+      slashMenu: { isInRichText: true, isInSource: true },
+      wikiLinks,
+    });
+    editor.setSlashMenuSettings({ isInRichText: false, isInSource: false });
+    editor.setSlashMenuSettings({ isInRichText: true, isInSource: true });
+
+    expect(editor.text()).toBe('');
+  });
+
   it('shows the text in a labelled text box', () => {
     const { parent, editor: opened } = openEditor();
 
@@ -49,6 +69,60 @@ describe('createSourceEditor', () => {
     textBox.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', ctrlKey: true, bubbles: true }));
     textBox.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
+    expect(opened.text()).toBe('- one\n- ');
+  });
+
+  it('Ctrl+` makes inline code on a German layout', () => {
+    const { parent, editor: opened } = openEditor('word');
+    const textBox = parent.querySelector('[contenteditable="true"]') ?? parent;
+    textBox.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true }));
+
+    const deadKey = new KeyboardEvent('keydown', {
+      key: 'Dead',
+      code: 'Backquote',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    textBox.dispatchEvent(deadKey);
+
+    expect(opened.text()).toBe('`word`');
+    expect(deadKey.defaultPrevented).toBe(true);
+  });
+
+  it('leaves Ctrl+E to the app for switching to the preview', () => {
+    const { parent, editor: opened } = openEditor('word');
+    const textBox = parent.querySelector('[contenteditable="true"]') ?? parent;
+    textBox.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true }));
+
+    const preview = new KeyboardEvent('keydown', {
+      key: 'e',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    textBox.dispatchEvent(preview);
+
+    expect(opened.text()).toBe('word');
+    expect(preview.defaultPrevented).toBe(false);
+  });
+
+  it('refuses Enter and formatting while read-only, and takes them again afterwards', () => {
+    const { parent, onChange, editor: opened } = openEditor('- one');
+    const textBox = parent.querySelector('[contenteditable="true"]') ?? parent;
+    const press = (key: string, ctrlKey = false) =>
+      textBox.dispatchEvent(new KeyboardEvent('keydown', { key, ctrlKey, bubbles: true }));
+    press('End', true);
+
+    opened.setReadOnly(true);
+    press('Enter');
+    press('b', true);
+
+    expect(opened.text()).toBe('- one');
+    expect(onChange).not.toHaveBeenCalled();
+    expect(textBox.getAttribute('aria-readonly')).toBe('true');
+    opened.setReadOnly(false);
+    press('Enter');
     expect(opened.text()).toBe('- one\n- ');
   });
 
@@ -129,6 +203,76 @@ describe('createSourceEditor', () => {
 
     expect(opened.text()).toBe('# Guide\n\ntext\n\nUsage\n');
     expect(parent.contains(document.activeElement)).toBe(true);
+  });
+
+  it('selects a range it reveals, such as a finding, and focuses the editor', () => {
+    const parent = document.createElement('div');
+    document.body.append(parent);
+    const onSelectedTextChange = vi.fn();
+    editor = createSourceEditor({
+      parent,
+      text: ['first', 'second line', 'third'].join('\n'),
+      label: 'Source of Guide.md',
+      phrases: {},
+      onChange: vi.fn(),
+      onSelectedTextChange,
+    });
+
+    editor.revealRange({ from: { line: 1, column: 7 }, to: { line: 1, column: 11 } });
+
+    expect(onSelectedTextChange).toHaveBeenLastCalledWith('line');
+    expect(parent.contains(document.activeElement)).toBe(true);
+  });
+
+  it('keeps a revealed range inside the text when its columns run past the end of a line', () => {
+    const parent = document.createElement('div');
+    document.body.append(parent);
+    const onSelectedTextChange = vi.fn();
+    editor = createSourceEditor({
+      parent,
+      text: ['one', 'two'].join('\n'),
+      label: 'Source of Guide.md',
+      phrases: {},
+      onChange: vi.fn(),
+      onSelectedTextChange,
+    });
+
+    editor.revealRange({ from: { line: 0, column: 1 }, to: { line: 9, column: 40 } });
+
+    expect(onSelectedTextChange).toHaveBeenLastCalledWith(['ne', 'two'].join('\n'));
+  });
+
+  it('draws hidden characters as chips on request, and stops, without changing the text', () => {
+    const parent = document.createElement('div');
+    document.body.append(parent);
+    const text = ['a', 'b'].join('\u200D');
+    editor = createSourceEditor({
+      parent,
+      text,
+      label: 'Source of Guide.md',
+      phrases: {},
+      onChange: vi.fn(),
+      findHiddenCharacters: (lineText) =>
+        lineText.includes('\u200D')
+          ? [{ from: 1, to: 2, name: 'ZERO WIDTH JOINER', abbreviation: 'ZWJ', isInSequence: false }]
+          : [],
+    });
+
+    editor.setHiddenCharactersShown(true);
+    const chipName = parent.querySelector('.cm-hidden-character')?.getAttribute('aria-label');
+    editor.setHiddenCharactersShown(false);
+
+    expect(chipName).toBe('zero width joiner');
+    expect(parent.querySelector('.cm-hidden-character')).toBeNull();
+    expect(editor.text()).toBe(text);
+  });
+
+  it('underlines marked ranges, such as findings', () => {
+    const { parent, editor: opened } = openEditor(['one', 'two three'].join('\n'));
+
+    opened.markRanges([{ from: { line: 1, column: 4 }, to: { line: 1, column: 9 } }]);
+
+    expect(parent.querySelector('.cm-marked-range')?.textContent).toBe('three');
   });
 
   it('opens the search panel in the user language', () => {

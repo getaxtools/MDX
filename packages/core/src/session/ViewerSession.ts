@@ -1,5 +1,10 @@
+import { NO_JUMP_LIST_REMOVALS, type JumpListRemovals } from '../workspaces/jumpListRemovals';
 import {
   DocumentOpenError,
+  hasFile,
+  isProtectedNoteIn,
+  isProtectedNoteLocation,
+  isViewLocation,
   untitledLocation,
   type AppStatePort,
   type DocumentFilePort,
@@ -7,19 +12,44 @@ import {
   type OpenedDocument,
   type PathStatus,
   type SaveSource,
+  type StoredWorkspace,
+  type WorkspaceListName,
+  type WorkspaceStorePort,
 } from '@mdx/platform';
 import { withDocumentLineBreaks } from '../documents/lineEndings';
 import { ExplorerFolders } from '../explorer/ExplorerFolders';
 import { FavouritesList } from '../favourites/FavouritesList';
+import { locationAfterNoteMove, type MovedNote } from '../notes/noteMoves';
+import { OpenProtectedNotes, type ProtectedNoteSaver } from '../protected-notes/OpenProtectedNotes';
 import { RecentFilesList } from '../recent-files/RecentFilesList';
 import type { ShortcutOverrides } from '../shortcuts/parseShortcutOverrides';
 import type { WordGoals } from '../word-goals/wordGoals';
 import { EMPTY_SNIPPET_LIBRARY, type SnippetLibrary } from '../snippets/snippetLibrary';
+import { InjectionIgnoreList } from '../prompt-injection/InjectionIgnoreList';
 import { TabStrip } from '../tabs/TabStrip';
 import { DEFAULT_VIEW_SETTINGS, type ViewSettings } from '../view/ViewSettings';
-import { WORKSPACE_KINDS, type WorkspaceKind } from '../workspace-kinds/workspaceKinds';
+import {
+  changeShownSettings,
+  setOverride,
+  withOverrides,
+  type WorkspaceOverrideField,
+} from '../view/viewSettingsScopes';
+import {
+  DEFAULT_WORKSPACE_KIND_ID,
+  WORKSPACE_KINDS,
+  type WorkspaceKind,
+} from '../workspace-kinds/workspaceKinds';
 import { WorkspaceKindsState } from '../workspace-kinds/WorkspaceKindsState';
-import { restoreAppState, toPersistedAppState, type ViewerState } from './persistedAppState';
+import type { NewerSavedState, ViewerState } from './persistedAppState';
+import { DEFAULT_WORKSPACE_ID, MAIN_WINDOW_ID } from '../workspaces/storedViewerState';
+import { LegacyStateStorage, type ViewerStateStorage } from '../workspaces/ViewerStateStorage';
+import type {
+  NewWorkspace,
+  WorkspaceChange,
+  WorkspaceRegistry,
+  WorkspaceRemoval,
+} from '../workspaces/WorkspaceRegistry';
+import { WorkspaceStateStorage } from '../workspaces/WorkspaceStateStorage';
 
 export interface ViewerSessionDependencies {
   readonly documentFiles: DocumentFilePort;
@@ -27,6 +57,26 @@ export interface ViewerSessionDependencies {
   readonly now: () => number;
   /** The workspace kinds this build offers; the UI test build also offers planned ones. */
   readonly kindRegistry?: readonly WorkspaceKind[];
+  /** Written with the saved state, so an older version can name the one that saved it. */
+  readonly appVersion?: string;
+  /** Keeps the state in workspaces; without it the earlier single state file is used. */
+  readonly workspaceStore?: WorkspaceStorePort;
+  /** Ids for new workspaces; random UUIDs unless a test needs fixed ones. */
+  readonly createId?: () => string;
+  /** Names this window's tabs and layout in the store; each window keeps its own. */
+  readonly windowId?: string;
+}
+
+/** What the user enters for a new workspace; the session adds the id and the time. */
+export type WorkspaceRequest = Omit<NewWorkspace, 'id' | 'nowMs'>;
+
+/** Lists a new workspace starts with, such as the folders and favourites of a workspace file. */
+export type InitialWorkspaceLists = Partial<Readonly<Record<WorkspaceListName, unknown>>>;
+
+export interface RestoreOutcome {
+  readonly wasReset: boolean;
+  readonly newerSavedState: NewerSavedState | undefined;
+  readonly hasEarlierVersionChanges: boolean;
 }
 
 export type { ViewerState } from './persistedAppState';
@@ -44,49 +94,101 @@ function emptyState(kindRegistry: readonly WorkspaceKind[]): ViewerState {
     shortcutOverrides: {},
     wordGoals: {},
     snippetLibrary: EMPTY_SNIPPET_LIBRARY,
+    injectionIgnoreList: InjectionIgnoreList.empty(),
+    jumpListRemovals: NO_JUMP_LIST_REMOVALS,
   };
+}
+
+function workspaceStorageFor(
+  { appState, workspaceStore, now, appVersion, windowId }: ViewerSessionDependencies,
+  kindRegistry: readonly WorkspaceKind[],
+): WorkspaceStateStorage | undefined {
+  if (!workspaceStore) return undefined;
+  return new WorkspaceStateStorage({
+    workspaceStore,
+    appState,
+    kindRegistry,
+    windowId: windowId ?? MAIN_WINDOW_ID,
+    now,
+    appVersion,
+  });
+}
+
+function viewerStateOf(restored: ViewerState): ViewerState {
+  return {
+    tabStrip: restored.tabStrip,
+    recentFiles: restored.recentFiles,
+    favourites: restored.favourites,
+    explorerFolders: restored.explorerFolders,
+    viewSettings: restored.viewSettings,
+    workspaceKinds: restored.workspaceKinds,
+    shortcutOverrides: restored.shortcutOverrides,
+    wordGoals: restored.wordGoals,
+    snippetLibrary: restored.snippetLibrary,
+    injectionIgnoreList: restored.injectionIgnoreList,
+    ...(restored.jumpListRemovals ? { jumpListRemovals: restored.jumpListRemovals } : {}),
+    ...(restored.workspaceOverrides ? { workspaceOverrides: restored.workspaceOverrides } : {}),
+  };
+}
+
+/** The state as the window shows it: the shown workspace's overrides on top of the app settings. */
+function shownStateOf(state: ViewerState): ViewerState {
+  const overrides = state.workspaceOverrides;
+  if (!overrides || Object.keys(overrides).length === 0) return state;
+  return { ...state, viewSettings: withOverrides(state.viewSettings, overrides) };
 }
 
 export class ViewerSession {
   private state: ViewerState;
   private readonly openedDocuments = new Map<string, OpenedDocument>();
   private readonly untitledDocuments = new Map<string, OpenedDocument>();
+  private readonly protectedNotes = new OpenProtectedNotes();
   /** Encodings the user chose with Reopen with Encoding, kept for live reload. */
   private readonly chosenEncodings = new Map<string, string>();
   private untitledCount = 0;
   private readonly listeners = new Set<ViewerStateListener>();
 
   private readonly kindRegistry: readonly WorkspaceKind[];
+  private readonly storage: ViewerStateStorage;
+  private readonly workspaceStorage: WorkspaceStateStorage | undefined;
+  /** The shown state of the last state asked for, so it keeps its identity between changes. */
+  private shownState: { readonly source: ViewerState; readonly shown: ViewerState } | undefined;
 
   constructor(private readonly dependencies: ViewerSessionDependencies) {
     this.kindRegistry = dependencies.kindRegistry ?? WORKSPACE_KINDS;
     this.state = emptyState(this.kindRegistry);
+    this.workspaceStorage = workspaceStorageFor(dependencies, this.kindRegistry);
+    this.storage =
+      this.workspaceStorage ??
+      new LegacyStateStorage({
+        appState: dependencies.appState,
+        kindRegistry: this.kindRegistry,
+        appVersion: dependencies.appVersion,
+      });
   }
 
+  /** What the window shows; view settings already include the shown workspace's overrides. */
   currentState(): ViewerState {
-    return this.state;
+    if (this.shownState?.source !== this.state) {
+      this.shownState = { source: this.state, shown: shownStateOf(this.state) };
+    }
+    return this.shownState.shown;
   }
 
-  async restore(): Promise<{ wasReset: boolean }> {
-    const restored = restoreAppState(await this.dependencies.appState.load(), this.kindRegistry);
+  /** Shows the preferred workspace when it exists, such as the one a new window was opened on. */
+  async restore(preferredWorkspaceId?: string): Promise<RestoreOutcome> {
+    const restored = await this.storage.restore(preferredWorkspaceId);
     this.openedDocuments.clear();
-    this.replaceState({
-      tabStrip: restored.tabStrip,
-      recentFiles: restored.recentFiles,
-      favourites: restored.favourites,
-      explorerFolders: restored.explorerFolders,
-      viewSettings: restored.viewSettings,
-      workspaceKinds: restored.workspaceKinds,
-      shortcutOverrides: restored.shortcutOverrides,
-      wordGoals: restored.wordGoals,
-      snippetLibrary: restored.snippetLibrary,
-    });
-    return { wasReset: restored.wasReset };
+    this.protectedNotes.clear();
+    this.replaceState(viewerStateOf(restored));
+    const { wasReset, newerSavedState, hasEarlierVersionChanges } = restored;
+    return { wasReset, newerSavedState, hasEarlierVersionChanges };
   }
 
   /** Forgets every tab, recent file, favourite, opened folder, setting and kind choice, as on a first start. */
   clearAllData(): void {
     this.openedDocuments.clear();
+    this.protectedNotes.clear();
     this.untitledDocuments.clear();
     this.chosenEncodings.clear();
     this.untitledCount = 0;
@@ -94,7 +196,130 @@ export class ViewerSession {
   }
 
   async save(): Promise<void> {
-    await this.dependencies.appState.save(toPersistedAppState(this.state));
+    await this.storage.save(this.state);
+  }
+
+  /** Removes stored workspaces, values and backup copies; the next save writes the current state again. */
+  async clearStoredData(): Promise<void> {
+    try {
+      await this.storage.clearAll();
+    } finally {
+      this.replaceState(this.state);
+    }
+  }
+
+  /** The workspace registry, or undefined while the earlier state file stands in for the store. */
+  workspaces(): WorkspaceRegistry | undefined {
+    return this.workspaceStorage?.hasWorkspaces() ? this.workspaceStorage.workspaces() : undefined;
+  }
+
+  shownWorkspace(): StoredWorkspace | undefined {
+    return this.workspaces() ? this.workspaceStorage?.shownWorkspace() : undefined;
+  }
+
+  /** Creates a workspace of an enabled kind and shows it in this window. */
+  async createWorkspace(
+    request: WorkspaceRequest,
+    initialLists: InitialWorkspaceLists = {},
+  ): Promise<WorkspaceChange | undefined> {
+    const storage = this.workspaceStorage;
+    const registry = this.workspaces();
+    if (!storage || !registry) return undefined;
+    const id = this.dependencies.createId?.() ?? crypto.randomUUID();
+    const change = registry.create(
+      { ...request, id, nowMs: this.dependencies.now() },
+      this.state.workspaceKinds,
+    );
+    if (change.outcome !== 'changed') return change;
+    await storage.saveWorkspace(change.registry, change.workspace);
+    await storage.saveInitialLists(change.workspace.id, initialLists);
+    await this.switchWorkspace(change.workspace.id);
+    return change;
+  }
+
+  async renameWorkspace(workspaceId: string, name: string): Promise<WorkspaceChange | undefined> {
+    const registry = this.workspaces();
+    if (!this.workspaceStorage || !registry) return undefined;
+    const change = registry.rename(workspaceId, name);
+    if (change.outcome === 'changed')
+      await this.workspaceStorage.saveWorkspace(change.registry, change.workspace);
+    this.replaceState(this.state);
+    return change;
+  }
+
+  async updateWorkspaceKindData(workspaceId: string, kindData: unknown): Promise<void> {
+    const change = this.workspaces()?.setKindData(workspaceId, kindData);
+    if (!this.workspaceStorage || change?.outcome !== 'changed') return;
+    await this.workspaceStorage.saveWorkspace(change.registry, change.workspace);
+    this.replaceState(this.state);
+  }
+
+  /**
+   * A shown workspace is replaced by the Markdown viewer workspace shown most recently, once it is
+   * deleted. The store may refuse, such as while another window shows it; nothing changes then.
+   */
+  async deleteWorkspace(workspaceId: string): Promise<WorkspaceRemoval | undefined> {
+    const storage = this.workspaceStorage;
+    const registry = this.workspaces();
+    if (!storage || !registry) return undefined;
+    const removal = registry.remove(workspaceId);
+    if (removal.outcome !== 'removed') return removal;
+    const wasShown = this.shownWorkspace()?.id === workspaceId;
+    if (wasShown) await this.save();
+    const fallback = removal.registry.lastShownOfKind(DEFAULT_WORKSPACE_KIND_ID);
+    await storage.deleteWorkspace(removal.registry, workspaceId);
+    if (wasShown && fallback) await this.switchWorkspace(fallback.id, { shouldSaveCurrent: false });
+    this.replaceState(this.state);
+    return removal;
+  }
+
+  /**
+   * Takes one list of the shown workspace as another window saved it, keeping this window's tabs. A
+   * change to that list this window has not saved yet wins: its save reaches the other windows in turn.
+   * Nothing changes when the window shows another workspace by the time the list is read.
+   */
+  async reloadWorkspaceList(workspaceId: string, listName: WorkspaceListName): Promise<void> {
+    const storage = this.workspaceStorage;
+    if (!storage) return;
+    const mayReload = () =>
+      this.shownWorkspace()?.id === workspaceId && storage.isListSaved(listName, this.state);
+    if (!mayReload()) return;
+    const value = await storage.loadList(workspaceId, listName);
+    if (!mayReload()) return;
+    this.replaceState(storage.withLoadedList(listName, value, this.state));
+  }
+
+  /**
+   * Another window deleted a workspace: the registry is read again, and a window showing it moves to
+   * the Markdown viewer workspace shown last. True when this window had to move.
+   */
+  async leaveDeletedWorkspace(workspaceId: string): Promise<boolean> {
+    const storage = this.workspaceStorage;
+    if (!storage || !this.workspaces()) return false;
+    const wasShown = this.shownWorkspace()?.id === workspaceId;
+    await storage.reloadRegistry();
+    if (!wasShown) {
+      this.replaceState(this.state);
+      return false;
+    }
+    const fallback = storage.workspaces().lastShownOfKind(DEFAULT_WORKSPACE_KIND_ID);
+    await this.switchWorkspace(fallback?.id ?? DEFAULT_WORKSPACE_ID, { shouldSaveCurrent: false });
+    return true;
+  }
+
+  /** Shows another workspace's tabs, lists and layout; the caller has dealt with unsaved edits. */
+  async switchWorkspace(workspaceId: string, { shouldSaveCurrent = true } = {}): Promise<void> {
+    if (!this.workspaceStorage || !this.workspaces()?.find(workspaceId)) return;
+    const restored = await this.workspaceStorage.switchTo(workspaceId, this.state, { shouldSaveCurrent });
+    this.openedDocuments.clear();
+    this.untitledDocuments.clear();
+    this.protectedNotes.clear();
+    this.untitledCount = 0;
+    const kindId = this.shownWorkspace()?.kindId ?? DEFAULT_WORKSPACE_KIND_ID;
+    const workspaceKinds = restored.workspaceKinds.isEnabled(kindId)
+      ? restored.workspaceKinds.switchKind(kindId)
+      : restored.workspaceKinds;
+    this.replaceState({ ...viewerStateOf(restored), workspaceKinds });
   }
 
   /**
@@ -110,6 +335,29 @@ export class ViewerSession {
       recentFiles: this.state.recentFiles.add(document.location, this.dependencies.now()),
     });
     return document;
+  }
+
+  /** Opens or focuses a tab that shows a view of the app; it reads nothing and stays out of recent files. */
+  openView(location: DocumentLocation): void {
+    this.replaceState({ ...this.state, tabStrip: this.state.tabStrip.openOrFocus(location) });
+  }
+
+  /**
+   * Opens a note of an unlocked protected section in a tab, from text its section decrypted; it stays
+   * out of recent files and is saved only through `saveText`.
+   */
+  openProtectedNote(document: OpenedDocument, saveText: ProtectedNoteSaver): void {
+    this.protectedNotes.add(document, saveText);
+    this.replaceState({ ...this.state, tabStrip: this.state.tabStrip.openOrFocus(document.location) });
+  }
+
+  /** Closes the tabs of a protected section's notes and forgets their text, as when it locks. */
+  closeProtectedNotesOf(locationKey: string): void {
+    const closing = this.state.tabStrip.tabs().filter((tab) => isProtectedNoteIn(tab.location, locationKey));
+    if (closing.length === 0) return;
+    this.updateTabs((tabStrip) =>
+      closing.reduce((remaining, tab) => remaining.close(tab.location.canonicalKey), tabStrip),
+    );
   }
 
   /** Opens text that has no file yet, such as a converted table, in a new tab named by `nameFor`. */
@@ -137,6 +385,7 @@ export class ViewerSession {
       .tabs()
       .find((candidate) => candidate.location.canonicalKey === canonicalKey);
     if (!tab) return undefined;
+    if (isProtectedNoteLocation(tab.location)) throw new DocumentOpenError('unreadable', canonicalKey);
     const source = this.saveSourceFor(tab.location, editedText);
     const savedPath = await this.dependencies.documentFiles.saveAs(source);
     if (savedPath === undefined) return undefined;
@@ -160,6 +409,11 @@ export class ViewerSession {
     editedText: string,
     { shouldOverwriteChangesOnDisk = false } = {},
   ): Promise<void> {
+    if (this.protectedNotes.has(canonicalKey)) {
+      await this.protectedNotes.save(canonicalKey, editedText);
+      this.replaceState({ ...this.state });
+      return;
+    }
     const document = this.openedDocuments.get(canonicalKey);
     if (!document) throw new DocumentOpenError('unreadable', canonicalKey);
     if (document.hasDecodingErrors === true) {
@@ -182,7 +436,9 @@ export class ViewerSession {
   async loadActiveDocument(): Promise<OpenedDocument | undefined> {
     const activeTab = this.state.tabStrip.activeTab();
     if (!activeTab) return undefined;
+    if (isViewLocation(activeTab.location)) return undefined;
     const { canonicalKey, displayPath } = activeTab.location;
+    if (isProtectedNoteLocation(activeTab.location)) return this.protectedNotes.document(canonicalKey);
     return (
       this.untitledDocuments.get(canonicalKey) ??
       this.openedDocuments.get(canonicalKey) ??
@@ -194,7 +450,7 @@ export class ViewerSession {
   async reloadDocuments(displayPaths: readonly string[]): Promise<void> {
     const changedTabs = this.state.tabStrip
       .tabs()
-      .filter((tab) => displayPaths.includes(tab.location.displayPath));
+      .filter((tab) => hasFile(tab.location) && displayPaths.includes(tab.location.displayPath));
     if (changedTabs.length === 0) return;
     for (const { location } of changedTabs) {
       try {
@@ -217,7 +473,7 @@ export class ViewerSession {
     const tab = this.state.tabStrip
       .tabs()
       .find((candidate) => candidate.location.canonicalKey === canonicalKey);
-    if (!tab) return;
+    if (!tab || !hasFile(tab.location)) return;
     const document = await this.dependencies.documentFiles.open(tab.location.displayPath, encoding);
     if (encoding === undefined) this.chosenEncodings.delete(canonicalKey);
     else this.chosenEncodings.set(canonicalKey, encoding);
@@ -227,7 +483,11 @@ export class ViewerSession {
 
   /** An open document as last read or saved, including documents that have no file yet. */
   openedDocument(canonicalKey: string): OpenedDocument | undefined {
-    return this.openedDocuments.get(canonicalKey) ?? this.untitledDocuments.get(canonicalKey);
+    return (
+      this.openedDocuments.get(canonicalKey) ??
+      this.untitledDocuments.get(canonicalKey) ??
+      this.protectedNotes.document(canonicalKey)
+    );
   }
 
   updateTabs(change: (tabStrip: TabStrip) => TabStrip): void {
@@ -235,7 +495,26 @@ export class ViewerSession {
     for (const canonicalKey of this.openedDocuments.keys()) {
       if (!tabStrip.isOpen(canonicalKey)) this.openedDocuments.delete(canonicalKey);
     }
+    this.protectedNotes.keepOnly((canonicalKey) => tabStrip.isOpen(canonicalKey));
     this.replaceState({ ...this.state, tabStrip });
+  }
+
+  /** After a note was renamed or moved, its tabs, child notes' tabs and recent files point at the new place. */
+  followMovedNote(move: MovedNote): void {
+    let { tabStrip, recentFiles } = this.state;
+    for (const tab of tabStrip.tabs()) {
+      const moved = locationAfterNoteMove(tab.location, move);
+      if (!moved) continue;
+      tabStrip = tabStrip.replace(tab.location.canonicalKey, moved);
+      const document = this.openedDocuments.get(tab.location.canonicalKey);
+      this.openedDocuments.delete(tab.location.canonicalKey);
+      if (document) this.openedDocuments.set(moved.canonicalKey, { ...document, location: moved });
+    }
+    for (const recentFile of recentFiles.entries()) {
+      const moved = locationAfterNoteMove(recentFile.location, move);
+      if (moved) recentFiles = recentFiles.relocate(recentFile.location.canonicalKey, moved);
+    }
+    this.replaceState({ ...this.state, tabStrip, recentFiles });
   }
 
   updateRecentFiles(change: (recentFiles: RecentFilesList) => RecentFilesList): void {
@@ -254,8 +533,28 @@ export class ViewerSession {
     return this.dependencies.documentFiles.checkPathStatuses(locations);
   }
 
+  readModifiedTime(path: string): Promise<number | undefined> {
+    return this.dependencies.documentFiles.readModifiedTime(path);
+  }
+
+  /** Changes the settings the window shows; a field the workspace overrides changes its override. */
   updateViewSettings(change: (viewSettings: ViewSettings) => ViewSettings): void {
-    this.replaceState({ ...this.state, viewSettings: change(this.state.viewSettings) });
+    const { appSettings, overrides } = changeShownSettings(
+      this.state.viewSettings,
+      this.state.workspaceOverrides ?? {},
+      change,
+    );
+    this.replaceState({ ...this.state, viewSettings: appSettings, workspaceOverrides: overrides });
+  }
+
+  /** Gives the shown workspace its own value for a field, or lets it follow the app setting again. */
+  setWorkspaceOverride(field: WorkspaceOverrideField, isOverridden: boolean): void {
+    if (!this.workspaces()) return;
+    const overrides = setOverride(this.state.viewSettings, this.state.workspaceOverrides ?? {}, {
+      field,
+      isOverridden,
+    });
+    this.replaceState({ ...this.state, workspaceOverrides: overrides });
   }
 
   updateWorkspaceKinds(change: (workspaceKinds: WorkspaceKindsState) => WorkspaceKindsState): void {
@@ -268,6 +567,18 @@ export class ViewerSession {
 
   updateWordGoals(change: (wordGoals: WordGoals) => WordGoals): void {
     this.replaceState({ ...this.state, wordGoals: change(this.state.wordGoals) });
+  }
+
+  updateInjectionIgnoreList(change: (ignoreList: InjectionIgnoreList) => InjectionIgnoreList): void {
+    const changed = change(this.state.injectionIgnoreList);
+    if (changed !== this.state.injectionIgnoreList)
+      this.replaceState({ ...this.state, injectionIgnoreList: changed });
+  }
+
+  updateJumpListRemovals(change: (removals: JumpListRemovals) => JumpListRemovals): void {
+    const current = this.state.jumpListRemovals ?? NO_JUMP_LIST_REMOVALS;
+    const changed = change(current);
+    if (changed !== current) this.replaceState({ ...this.state, jumpListRemovals: changed });
   }
 
   updateSnippetLibrary(change: (snippetLibrary: SnippetLibrary) => SnippetLibrary): void {
@@ -303,6 +614,7 @@ export class ViewerSession {
 
   private replaceState(state: ViewerState): void {
     this.state = state;
-    for (const listener of this.listeners) listener(state);
+    const shown = this.currentState();
+    for (const listener of this.listeners) listener(shown);
   }
 }

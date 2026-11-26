@@ -1,0 +1,7 @@
+Energy is \(E = mc^2\).
+
+The area of a circle is
+\[
+A = \pi r^2
+\]
+for a radius \( r \).

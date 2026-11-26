@@ -1,0 +1,261 @@
+import type { SpecProjectLink, SpecProjectManifest } from '@mdx/platform';
+import { isAgentInstructionFile } from '../agent-files/agentInstructionLocations';
+import {
+  detectSpecProjects,
+  type DetectedSpecProject,
+  type SpecLayoutKind,
+} from '../detection/detectSpecProjects';
+import { ProjectFiles } from '../detection/ProjectFiles';
+import { countTaskProgress, type TaskProgress } from '../tasks/countTaskProgress';
+import {
+  featureDocumentsToRead,
+  featureNumberedPartsOf,
+  type FeatureSummary,
+  type ProjectReport,
+} from './featureSummaries';
+import {
+  folderLayoutDocumentsToRead,
+  folderLayoutPartsOf,
+  type DecisionRecordSummary,
+  type FolderSpecSummary,
+} from './folderSpecSummaries';
+import { CHANGE_METADATA_FILE, readChangeMetadata } from '../change-based/readChangeMetadata';
+
+/** A document of a project, by its path relative to the scanned root. */
+export interface ProjectDocument {
+  readonly name: string;
+  readonly path: string;
+}
+
+export interface ChangeDocuments {
+  readonly proposal?: string | undefined;
+  readonly design?: string | undefined;
+  readonly tasks?: string | undefined;
+  /** The spec deltas, named by their capability path. */
+  readonly deltas: readonly ProjectDocument[];
+}
+
+export interface ChangeSummary {
+  readonly name: string;
+  /** The change folder, relative to the scanned root. */
+  readonly folder: string;
+  /** For an archived change, the `YYYY-MM-DD` prefix of its folder. */
+  readonly archivedOn?: string | undefined;
+  readonly documents: ChangeDocuments;
+  /** Undefined until its tasks document has been read, or when it has none. */
+  readonly progress?: TaskProgress | undefined;
+  /** The creation day its metadata gives, as `YYYY-MM-DD`. */
+  readonly created?: string | undefined;
+  readonly schema?: string | undefined;
+  /** True when the change declares that it has no spec deltas. */
+  readonly isSkippingSpecs?: boolean | undefined;
+  /** Markdown documents in the change folder other than its proposal, design, tasks and deltas. */
+  readonly otherDocuments?: readonly ProjectDocument[] | undefined;
+}
+
+export interface SpecProjectSummary {
+  readonly name: string;
+  /** The project folder relative to the scanned root; empty for the root itself. */
+  readonly folder: string;
+  readonly layouts: readonly SpecLayoutKind[];
+  /** Named when the specs live in a separate planning store the user can add as another root. */
+  readonly planningStore?: string | undefined;
+  readonly capabilities: readonly ProjectDocument[];
+  readonly activeChanges: readonly ChangeSummary[];
+  /** Newest first. */
+  readonly archivedChanges: readonly ChangeSummary[];
+  readonly agentInstructions: readonly ProjectDocument[];
+  readonly linkedFolders: readonly SpecProjectLink[];
+  /** For a feature-numbered project: its features in number then time order. */
+  readonly features: readonly FeatureSummary[];
+  readonly constitution?: string | undefined;
+  /** Other documents under the marker folder, such as bug reports and assessments. */
+  readonly reports: readonly ProjectReport[];
+  /** The specs of a requirements, design and tasks folder. */
+  readonly folderSpecs: readonly FolderSpecSummary[];
+  readonly decisionRecords: readonly DecisionRecordSummary[];
+}
+
+const CHANGE_BASED_FOLDER = 'openspec';
+const ARCHIVE_FOLDER = 'archive';
+const SPEC_FILE = 'spec.md';
+const ARCHIVED_CHANGE = /^(\d{4}-\d{2}-\d{2})-(.+)$/;
+const MARKDOWN_FILE = /\.(?:md|markdown|mdc)$/i;
+
+function joined(folder: string, path: string): string {
+  return folder === '' ? path : `${folder}/${path}`;
+}
+
+function capabilitiesOf(files: ProjectFiles, projectFolder: string): ProjectDocument[] {
+  const specsFolder = `${CHANGE_BASED_FOLDER}/specs`;
+  return files
+    .filesBelow(specsFolder)
+    .filter((path) => path.endsWith(`/${SPEC_FILE}`))
+    .map((path) => ({
+      name: path.slice(specsFolder.length + 1, -SPEC_FILE.length - 1),
+      path: joined(projectFolder, path),
+    }))
+    .sort((first, second) => first.name.localeCompare(second.name));
+}
+
+function documentsOfChange(
+  files: ProjectFiles,
+  changeFolder: string,
+  projectFolder: string,
+): ChangeDocuments {
+  const pathIfPresent = (name: string) => {
+    const path = `${changeFolder}/${name}`;
+    return files.hasFile(path) ? joined(projectFolder, path) : undefined;
+  };
+  const deltasFolder = `${changeFolder}/specs`;
+  const deltas = files
+    .filesBelow(deltasFolder)
+    .filter((path) => path.endsWith(`/${SPEC_FILE}`))
+    .map((path) => ({
+      name: path.slice(deltasFolder.length + 1, -SPEC_FILE.length - 1),
+      path: joined(projectFolder, path),
+    }));
+  return {
+    proposal: pathIfPresent('proposal.md'),
+    design: pathIfPresent('design.md'),
+    tasks: pathIfPresent('tasks.md'),
+    deltas,
+  };
+}
+
+interface ChangeReading {
+  readonly files: ProjectFiles;
+  readonly projectFolder: string;
+  readonly taskTexts: ReadonlyMap<string, string>;
+}
+
+function changeOf(reading: ChangeReading, changesFolder: string, folderName: string): ChangeSummary {
+  const changeFolder = `${changesFolder}/${folderName}`;
+  const documents = documentsOfChange(reading.files, changeFolder, reading.projectFolder);
+  const tasksText = documents.tasks === undefined ? undefined : reading.taskTexts.get(documents.tasks);
+  const archived = ARCHIVED_CHANGE.exec(folderName);
+  const metadata = readChangeMetadata(reading.files.textOf(`${changeFolder}/${CHANGE_METADATA_FILE}`));
+  return {
+    name: archived?.[2] ?? folderName,
+    folder: joined(reading.projectFolder, changeFolder),
+    archivedOn: archived?.[1],
+    documents,
+    progress: tasksText === undefined ? undefined : countTaskProgress(tasksText),
+    created: metadata.created,
+    schema: metadata.schema,
+    isSkippingSpecs: metadata.isSkippingSpecs,
+    otherDocuments: otherDocumentsOf(reading, changeFolder, documents),
+  };
+}
+
+function otherDocumentsOf(
+  reading: ChangeReading,
+  changeFolder: string,
+  documents: ChangeDocuments,
+): ProjectDocument[] {
+  const known = new Set([
+    documents.proposal,
+    documents.design,
+    documents.tasks,
+    ...documents.deltas.map((delta) => delta.path),
+  ]);
+  return reading.files
+    .filesBelow(changeFolder)
+    .map((path) => joined(reading.projectFolder, path))
+    .filter((path) => MARKDOWN_FILE.test(path) && !known.has(path))
+    .map((path) => ({ name: path.slice(joined(reading.projectFolder, changeFolder).length + 1), path }));
+}
+
+function changesOf(reading: ChangeReading): Pick<SpecProjectSummary, 'activeChanges' | 'archivedChanges'> {
+  const changesFolder = `${CHANGE_BASED_FOLDER}/changes`;
+  const archiveFolder = `${changesFolder}/${ARCHIVE_FOLDER}`;
+  const activeChanges = reading.files
+    .subfolderNamesOf(changesFolder)
+    .filter((name) => name.toLowerCase() !== ARCHIVE_FOLDER)
+    .map((name) => changeOf(reading, changesFolder, name));
+  const archivedChanges = reading.files
+    .subfolderNamesOf(archiveFolder)
+    .map((name) => changeOf(reading, archiveFolder, name))
+    .sort(
+      (first, second) =>
+        (second.archivedOn ?? '').localeCompare(first.archivedOn ?? '') ||
+        first.name.localeCompare(second.name),
+    );
+  return { activeChanges, archivedChanges };
+}
+
+function agentInstructionsOf(files: ProjectFiles, projectFolder: string): ProjectDocument[] {
+  return files.files
+    .map((file) => file.path)
+    .filter((path) => MARKDOWN_FILE.test(path) && isAgentInstructionFile(path))
+    .map((path) => ({ name: path.split('/').at(-1) ?? path, path: joined(projectFolder, path) }))
+    .sort((first, second) => first.path.localeCompare(second.path));
+}
+
+function linkedFoldersOf(manifest: SpecProjectManifest, projectFolder: string): SpecProjectLink[] {
+  const prefix = projectFolder === '' ? '' : `${projectFolder.toLowerCase()}/`;
+  return manifest.links.filter((link) => link.path.toLowerCase().startsWith(prefix));
+}
+
+/**
+ * The spec projects of a scanned root as the sidebar and dashboard show them. `taskTexts` holds the tasks and
+ * feature documents read so far, by path relative to the root; one not read yet adds no progress or status.
+ */
+export function specProjectsOverview(
+  manifest: SpecProjectManifest,
+  taskTexts: ReadonlyMap<string, string> = new Map(),
+): SpecProjectSummary[] {
+  const projects = detectSpecProjects(manifest).map((project) => summaryOf(manifest, project, taskTexts));
+  const hasRootProject = projects.some((project) => project.folder === '');
+  if (hasRootProject || manifest.links.length === 0) return projects;
+  // A root whose spec folder is a link not followed yet still shows, so the user sees the link.
+  const linkedRoot = summaryOf(
+    manifest,
+    { folder: '', name: manifest.root.fileName, layouts: [] },
+    taskTexts,
+  );
+  return [linkedRoot, ...projects];
+}
+
+function summaryOf(
+  manifest: SpecProjectManifest,
+  project: DetectedSpecProject,
+  taskTexts: ReadonlyMap<string, string>,
+): SpecProjectSummary {
+  const files = ProjectFiles.of(manifest, project.folder);
+  const changeBased = project.layouts.find((layout) => layout.kind === 'changeBased');
+  const hasChanges = changeBased !== undefined && changeBased.planningStore === undefined;
+  const reading: ChangeReading = { files, projectFolder: project.folder, taskTexts };
+  return {
+    name: project.name,
+    folder: project.folder,
+    layouts: project.layouts.map((layout) => layout.kind),
+    planningStore: changeBased?.planningStore,
+    capabilities: hasChanges ? capabilitiesOf(files, project.folder) : [],
+    ...(hasChanges ? changesOf(reading) : { activeChanges: [], archivedChanges: [] }),
+    agentInstructions: agentInstructionsOf(files, project.folder),
+    linkedFolders: linkedFoldersOf(manifest, project.folder),
+    ...featureNumberedPartsOf({ manifest, project, files, documentTexts: taskTexts }),
+    ...folderLayoutPartsOf(project, files, taskTexts),
+  };
+}
+
+/** The documents the overview needs read: the tasks of active changes and the documents of features. */
+export function activeTaskDocumentsOf(projects: readonly SpecProjectSummary[]): string[] {
+  return projects.flatMap((project) => [
+    ...project.activeChanges.flatMap((change) => change.documents.tasks ?? []),
+    ...featureDocumentsToRead(project.features),
+    ...folderLayoutDocumentsToRead(project),
+  ]);
+}
+
+export type ChangeStatus = 'noTasks' | 'notStarted' | 'inProgress' | 'tasksComplete' | 'archived';
+
+/** Where a change stands by its tasks; a change with all its tasks done is ready to archive. */
+export function changeStatusOf(change: ChangeSummary): ChangeStatus {
+  if (change.archivedOn !== undefined) return 'archived';
+  const { progress } = change;
+  if (progress === undefined || progress.total === 0) return 'noTasks';
+  if (progress.done === 0) return 'notStarted';
+  return progress.done === progress.total ? 'tasksComplete' : 'inProgress';
+}

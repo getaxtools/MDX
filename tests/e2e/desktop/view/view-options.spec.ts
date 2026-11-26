@@ -64,7 +64,7 @@ describe('view options', () => {
   it('moves focus from the activity bar to the Explorer, the tabs and the document with F6', async () => {
     const focusedRegion = () =>
       app.browser.execute(() => {
-        const region = document.activeElement?.closest('[data-focus-region]');
+        const region = document.activeElement?.closest('[role="tablist"], [data-focus-region]');
         return region?.getAttribute('role') ?? region?.getAttribute('aria-label') ?? '';
       });
 

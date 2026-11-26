@@ -82,6 +82,26 @@ describe('treeKeyboard', () => {
     expect(row('Docs').tabIndex).toBe(-1);
   });
 
+  it('Right and Left use a row’s own toggle when its click opens something else', async () => {
+    const { row, onClick } = renderTree([{ name: 'Projects', level: 1, isExpanded: false }]);
+    const toggle = document.createElement('span');
+    toggle.dataset.treeToggle = '';
+    const onToggle = vi.fn();
+    toggle.addEventListener('click', (event) => {
+      event.stopPropagation();
+      onToggle();
+    });
+    row('Projects').append(toggle);
+    row('Projects').focus();
+
+    await userEvent.keyboard('{ArrowRight}');
+    row('Projects').setAttribute('aria-expanded', 'true');
+    await userEvent.keyboard('{ArrowLeft}');
+
+    expect(onToggle).toHaveBeenCalledTimes(2);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
   it('expands a collapsed folder with Right and enters an expanded one', async () => {
     const { row, onClick } = renderTree();
     row('Notes').focus();

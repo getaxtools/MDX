@@ -206,7 +206,6 @@
   "document.openExternalLink.title": "ನಿಮ್ಮ ಬ್ರೌಸರ್‌ನಲ್ಲಿ ಲಿಂಕ್ ತೆರೆಯಬೇಕೇ?",
   "document.openExternalLink.body": "ಇದು {url} ಅನ್ನು ನಿಮ್ಮ ಡಿಫಾಲ್ಟ್ ಬ್ರೌಸರ್‌ನಲ್ಲಿ ತೆರೆಯುತ್ತದೆ.",
   "view.options.label": "ವೀಕ್ಷಣೆ ಆಯ್ಕೆಗಳು",
-  "view.zoomLevel": "ಜೂಮ್ {percent}%",
   "document.openExternalLink.open": "ತೆರೆಯಿರಿ",
   "document.openExternalLink.cancel": "ರದ್ದುಮಾಡಿ",
   "shortcuts.column.action": "ಕ್ರಿಯೆ",

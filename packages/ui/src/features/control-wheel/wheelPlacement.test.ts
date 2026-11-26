@@ -13,7 +13,12 @@ const LARGE_WINDOW: WheelPlacementRequest = {
 
 describe('control wheel placement', () => {
   it('docks at the bottom right in left-to-right layouts', () => {
-    expect(wheelPlacement(LARGE_WINDOW)).toEqual({ centerX: 1084, centerY: 660, diameterPx: 200 });
+    expect(wheelPlacement(LARGE_WINDOW)).toEqual({
+      centerX: 1084,
+      centerY: 660,
+      diameterPx: 200,
+      captionSide: 'above',
+    });
   });
 
   it('docks at the bottom left in right-to-left layouts', () => {
@@ -38,7 +43,19 @@ describe('control wheel placement', () => {
     const placement = wheelPlacement({ ...LARGE_WINDOW, pointer: { x: 5, y: 5 } });
 
     expect(placement.centerX).toBe(116);
-    expect(placement.centerY).toBe(148);
+    expect(placement.centerY).toBe(116);
+  });
+
+  it('puts the caption above the ring when the wheel is docked low', () => {
+    expect(wheelPlacement(LARGE_WINDOW).captionSide).toBe('above');
+  });
+
+  it('puts the caption below the ring when the wheel opens near the top, and keeps room for it', () => {
+    const nearTop = wheelPlacement({ ...LARGE_WINDOW, pointer: { x: 600, y: 90 } });
+    const nearBottom = wheelPlacement({ ...LARGE_WINDOW, pointer: { x: 600, y: 790 } });
+
+    expect(nearTop).toMatchObject({ captionSide: 'below', centerY: 116 });
+    expect(nearBottom).toMatchObject({ captionSide: 'above', centerY: 800 - 16 - 24 - 100 });
   });
 
   it('opens in the dock corner when the pointer position is not known', () => {

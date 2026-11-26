@@ -78,6 +78,15 @@ describe('WorkspaceKindsState', () => {
       expect(changed.activeKindId()).toBe('markdownViewer');
     });
 
+    it('knows the last enabled kind', () => {
+      const onlyMarkdownViewer = WorkspaceKindsState.initial(ALL_BUILT);
+      const twoEnabled = withEnabled(['markdownViewer', 'notes'], 'markdownViewer');
+
+      expect(onlyMarkdownViewer.isLastEnabled('markdownViewer')).toBe(true);
+      expect(onlyMarkdownViewer.isLastEnabled('notes')).toBe(false);
+      expect(twoEnabled.isLastEnabled('markdownViewer')).toBe(false);
+    });
+
     it('switches to the next enabled kind when the active kind is turned off', () => {
       const state = withEnabled(['markdownViewer', 'notes', 'specViewer'], 'notes');
 

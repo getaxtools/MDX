@@ -1,14 +1,26 @@
 <script lang="ts">
-  import type { ViewSettings } from '@mdx/core';
+  import {
+    WORKSPACE_OVERRIDE_FIELDS,
+    type ViewSettings,
+    type WorkspaceOverrideField,
+    type WorkspaceOverrides,
+  } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
   import Dialog from '../../components/Dialog.svelte';
   import { COMMAND_SHORTCUTS, type CommandShortcut } from '../shortcuts/commandShortcuts';
   import type { DesktopPlatform, ViewerCommand } from '../viewer/viewerCommands';
   import ShortcutSetting from './ShortcutSetting.svelte';
   import SnippetsSection from '../snippets/SnippetsSection.svelte';
-  import { EMPTY_SNIPPET_LIBRARY, type SnippetLibrary } from '@mdx/core';
+  import {
+    DEFAULT_NOTES_SETTINGS,
+    EMPTY_SNIPPET_LIBRARY,
+    type NotesSettings,
+    type SnippetLibrary,
+  } from '@mdx/core';
+  import NotesSettingsSection from '../notes/NotesSettingsSection.svelte';
   import {
     SETTING_SECTIONS,
+    descriptionKeyOf,
     matchesQuery,
     matchingSettings,
     type ChoiceSetting,
@@ -23,6 +35,11 @@
     shortcuts?: readonly CommandShortcut[];
     platform?: DesktopPlatform;
     snippetLibrary?: SnippetLibrary;
+    /** The shown workspace and the settings it overrides; absent without workspaces. */
+    workspace?: { readonly name: string; readonly overrides: WorkspaceOverrides } | undefined;
+    /** The folder of the shown Notes workspace; absent for other kinds. */
+    notesFolder?: string | undefined;
+    notesSettings?: NotesSettings | undefined;
     translator: Translator;
     onCommand: (command: ViewerCommand) => void;
     onClose: () => void;
@@ -34,6 +51,9 @@
     shortcuts = COMMAND_SHORTCUTS,
     platform = 'windows',
     snippetLibrary = EMPTY_SNIPPET_LIBRARY,
+    workspace,
+    notesFolder,
+    notesSettings,
     translator,
     onCommand,
     onClose,
@@ -60,6 +80,17 @@
       ),
     ),
   );
+  const isNotesShown = $derived(
+    notesFolder !== undefined &&
+      matchesQuery(
+        query,
+        [
+          translator.translate('settings.section.notes'),
+          translator.translate('settings.notes.description'),
+          notesFolder,
+        ].join(' '),
+      ),
+  );
   const privacyDescription = $derived(
     translator.translate('settings.privacy.description', { path: dataFolder }),
   );
@@ -79,6 +110,18 @@
     if (command) onCommand(command);
   }
 
+  function overrideFieldOf(setting: SettingDefinition): WorkspaceOverrideField | undefined {
+    return WORKSPACE_OVERRIDE_FIELDS.find((field) => field === setting.id);
+  }
+
+  function chooseScope(field: WorkspaceOverrideField, event: Event & { currentTarget: HTMLSelectElement }) {
+    onCommand({
+      kind: 'setWorkspaceOverride',
+      field,
+      isOverridden: event.currentTarget.value === 'workspace',
+    });
+  }
+
   function controlId(setting: SettingDefinition): string {
     return `setting-${setting.id}`;
   }
@@ -86,7 +129,9 @@
 
 <Dialog
   title={translator.translate('settings.title')}
-  closeLabel={translator.translate('about.close')}
+  closeLabel={translator.translate('dialog.close.label')}
+  closeTooltip={translator.translate('dialog.close.tooltip')}
+  isInformational
   {onClose}
 >
   <input
@@ -118,6 +163,23 @@
                   <option value={choice.value}>{choice.label}</option>
                 {/each}
               </select>
+              {@const overrideField = overrideFieldOf(setting)}
+              {#if workspace && overrideField}
+                <label class="scope-label" for="{controlId(setting)}-scope"
+                  >{translator.translate('settings.scope.label')}</label
+                >
+                <select
+                  id="{controlId(setting)}-scope"
+                  class="scope"
+                  value={overrideField in workspace.overrides ? 'workspace' : 'app'}
+                  onchange={(event) => chooseScope(overrideField, event)}
+                >
+                  <option value="app">{translator.translate('settings.scope.allWorkspaces')}</option>
+                  <option value="workspace"
+                    >{translator.translate('settings.scope.thisWorkspace', { name: workspace.name })}</option
+                  >
+                </select>
+              {/if}
             {:else if setting.kind === 'action'}
               <span class="label" id="{controlId(setting)}-label"
                 >{translator.translate(setting.labelKey)}</span
@@ -143,7 +205,7 @@
               </label>
             {/if}
             <p id="{controlId(setting)}-description" class="description">
-              {translator.translate(setting.descriptionKey)}
+              {translator.translate(descriptionKeyOf(setting, settings))}
             </p>
           </div>
         {/if}
@@ -152,6 +214,16 @@
   {/each}
   {#if isSnippetsShown}
     <SnippetsSection library={snippetLibrary} {translator} {onCommand} />
+  {/if}
+  {#if isNotesShown && notesFolder !== undefined}
+    <NotesSettingsSection
+      folder={notesFolder}
+      settings={notesSettings ?? DEFAULT_NOTES_SETTINGS}
+      isDeletionConfirmed={settings.isNoteDeletionConfirmed}
+      isLinkUpdateConfirmed={settings.isNoteLinkUpdateConfirmed}
+      {translator}
+      {onCommand}
+    />
   {/if}
   {#if isPrivacyShown}
     <section aria-labelledby="settings-section-privacy">

@@ -1,3 +1,4 @@
+import { DEFAULT_VIEW_SETTINGS, ZOOM_LEVELS_PERCENT, zoomIn } from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
 import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
@@ -62,18 +63,97 @@ describe('StatusBar', () => {
     expect(statusBar.textContent).toContain('Untitled-1.md (not saved)');
   });
 
-  it('shows only the zoom level when no document is open', () => {
-    const { statusBar } = renderStatusBar(undefined);
+  describe('zoom stepper', () => {
+    function renderAtZoom(zoomPercent: number) {
+      const onZoomIn = vi.fn();
+      const onZoomOut = vi.fn();
+      const onResetZoom = vi.fn();
+      const { rerender } = render(StatusBar, {
+        document: savedDocument,
+        zoomPercent,
+        isSourceView: false,
+        translator: createTranslator(),
+        onResetZoom,
+        onZoomIn,
+        onZoomOut,
+      });
+      return { onZoomIn, onZoomOut, onResetZoom, rerender };
+    }
 
-    expect(statusBar.textContent.replace(/\s+/g, ' ').trim()).toBe('125%');
-  });
+    it('step through levels', async () => {
+      let zoomPercent = 100;
+      const { onZoomIn, rerender } = renderAtZoom(zoomPercent);
+      onZoomIn.mockImplementation(() => {
+        zoomPercent = zoomIn({ ...DEFAULT_VIEW_SETTINGS, zoomPercent }).zoomPercent;
+        void rerender({ zoomPercent });
+      });
 
-  it('resets the zoom when the zoom level is clicked', async () => {
-    const { onResetZoom } = renderStatusBar(savedDocument);
+      await userEvent.click(screen.getByRole('button', { name: 'Zoom In' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Zoom In' }));
 
-    await userEvent.click(screen.getByRole('button', { name: 'Zoom 125% - reset to 100%' }));
+      expect(zoomPercent).toBe(125);
+      expect(screen.getByRole('button', { name: 'Zoom 125%, reset' }).textContent.trim()).toBe('125%');
+    });
 
-    expect(onResetZoom).toHaveBeenCalledOnce();
+    it('ends of the range: zoom in is disabled at the highest level', () => {
+      renderAtZoom(ZOOM_LEVELS_PERCENT.at(-1) ?? 0);
+
+      expect(screen.getByRole('button', { name: 'Zoom In' }).hasAttribute('disabled')).toBe(true);
+      expect(screen.getByRole('button', { name: 'Zoom Out' }).hasAttribute('disabled')).toBe(false);
+    });
+
+    it('zoom out is disabled at the lowest level', () => {
+      renderAtZoom(ZOOM_LEVELS_PERCENT[0] ?? 0);
+
+      expect(screen.getByRole('button', { name: 'Zoom Out' }).hasAttribute('disabled')).toBe(true);
+      expect(screen.getByRole('button', { name: 'Zoom In' }).hasAttribute('disabled')).toBe(false);
+    });
+
+    it('reset from the value: activating the value resets to 100%', async () => {
+      const { onResetZoom } = renderAtZoom(150);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Zoom 150%, reset' }));
+
+      expect(onResetZoom).toHaveBeenCalledOnce();
+    });
+
+    it('zooms in and out from its buttons', async () => {
+      const { onZoomIn, onZoomOut } = renderAtZoom(100);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Zoom In' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Zoom Out' }));
+
+      expect(onZoomIn).toHaveBeenCalledOnce();
+      expect(onZoomOut).toHaveBeenCalledOnce();
+    });
+
+    it('keeps focus in the stepper when a step reaches the end of the range', async () => {
+      const { onZoomIn, onZoomOut, rerender } = renderAtZoom(250);
+      onZoomIn.mockImplementation(() => void rerender({ zoomPercent: 300 }));
+      onZoomOut.mockImplementation(() => void rerender({ zoomPercent: 50 }));
+
+      await userEvent.click(screen.getByRole('button', { name: 'Zoom In' }));
+      const focusedAtHighest = globalThis.document.activeElement;
+      await userEvent.click(screen.getByRole('button', { name: 'Zoom Out' }));
+
+      expect(focusedAtHighest).toBe(screen.getByRole('button', { name: 'Zoom Out' }));
+      expect(globalThis.document.activeElement).toBe(screen.getByRole('button', { name: 'Zoom In' }));
+    });
+
+    it('names the shortcuts in its tooltips', () => {
+      renderAtZoom(100);
+
+      expect(screen.getByRole('button', { name: 'Zoom Out' }).title).toBe('Zoom Out (Ctrl+-)');
+      expect(screen.getByRole('button', { name: 'Zoom 100%, reset' }).title).toBe('Reset Zoom (Ctrl+0)');
+      expect(screen.getByRole('button', { name: 'Zoom In' }).title).toBe('Zoom In (Ctrl++)');
+    });
+
+    it('no document: the stepper is hidden without a document', () => {
+      const { statusBar } = renderStatusBar(undefined);
+
+      expect(screen.queryByRole('button', { name: /zoom/i })).toBeNull();
+      expect(statusBar.textContent.trim()).toBe('');
+    });
   });
 
   it('reopens the document with an encoding chosen from the encoding menu', async () => {
@@ -124,6 +204,12 @@ describe('StatusBar', () => {
       expect(button.title).toBe('Show Control Wheel (Ctrl+Shift+Space)');
     });
 
+    it("shows the active kind's colour", () => {
+      const button = renderWithWheelButton();
+
+      expect(button.style.getPropertyValue('--kind-colour')).toBe('var(--color-kind-markdown-viewer)');
+    });
+
     it('opens the wheel', async () => {
       const onShowControlWheel = vi.fn();
       const button = renderWithWheelButton(onShowControlWheel);
@@ -145,6 +231,30 @@ describe('StatusBar', () => {
     });
 
     expect(screen.getByRole('status').textContent.trim()).toBe('3 cursors');
+  });
+
+  it('shows that protected notes are unlocked, with a Lock button', async () => {
+    const onLockProtectedNotes = vi.fn();
+    render(StatusBar, {
+      document: savedDocument,
+      zoomPercent: 100,
+      isSourceView: false,
+      translator: createTranslator(),
+      onResetZoom: vi.fn(),
+      isProtectedSectionUnlocked: true,
+      onLockProtectedNotes,
+    });
+
+    expect(screen.getByRole('contentinfo').textContent).toContain('Protected notes unlocked');
+    await userEvent.click(screen.getByRole('button', { name: 'Lock Protected Notes' }));
+
+    expect(onLockProtectedNotes).toHaveBeenCalledOnce();
+  });
+
+  it('shows no Lock button while no protected section is unlocked', () => {
+    renderStatusBar(savedDocument);
+
+    expect(screen.queryByRole('button', { name: 'Lock Protected Notes' })).toBeNull();
   });
 
   it('says nothing about cursors with one', () => {
@@ -169,5 +279,41 @@ describe('StatusBar', () => {
     expect(screen.getByRole('progressbar', { name: 'Word goal' }).getAttribute('aria-valuenow')).toBe('100');
     expect(words.title).toBe('35 words added this session');
     expect(screen.getByRole('status').textContent.trim()).toBe('Word goal reached.');
+  });
+
+  it('shows the prompt injection badge only once the shown document was checked, and opens the panel', async () => {
+    const onShowInjectionCheck = vi.fn();
+    render(StatusBar, {
+      document: savedDocument,
+      zoomPercent: 100,
+      isSourceView: false,
+      translator: createTranslator(),
+      onResetZoom: vi.fn(),
+      injectionCheck: {
+        documentKey: savedDocument.canonicalKey,
+        status: 'checked',
+        result: {
+          rulesetVersion: '1.0.0',
+          findings: [],
+          isAgentFile: true,
+          ignoredCount: 0,
+          isPartial: false,
+        },
+        ignoredFindings: [],
+        isCharactersOnly: false,
+        findingRanges: [],
+      },
+      onShowInjectionCheck,
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /^No findings/ }));
+
+    expect(onShowInjectionCheck).toHaveBeenCalledOnce();
+  });
+
+  it('shows no prompt injection badge before a check', () => {
+    renderStatusBar(savedDocument);
+
+    expect(screen.queryByRole('button', { name: /findings/ })).toBeNull();
   });
 });

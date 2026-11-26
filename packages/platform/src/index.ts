@@ -1,4 +1,14 @@
-export type { AppStatePort } from './AppStatePort';
+export { AppStateRefusedError, type AppStatePort } from './AppStatePort';
+export type { ProtectedShellPort, ShellEvent, ShellEventListener } from './ProtectedShellPort';
+export { InMemoryProtectedShell, type FakeClipboard } from './fakes/InMemoryProtectedShell';
+export type {
+  AppWindowsPort,
+  WindowStateReport,
+  WorkspaceIdListener,
+  WorkspaceListChangeListener,
+  WorkspaceToShow,
+} from './AppWindowsPort';
+export { InMemoryAppWindows } from './fakes/InMemoryAppWindows';
 export type {
   DocumentFilePort,
   EditedDocumentSave,
@@ -9,7 +19,13 @@ export type {
 } from './DocumentFilePort';
 export {
   isSameDocument,
+  hasFile,
   isUntitledLocation,
+  isViewLocation,
+  isProtectedNoteLocation,
+  isProtectedNoteIn,
+  protectedNoteLocation,
+  viewLocation,
   untitledLocation,
   type DocumentLocation,
 } from './DocumentLocation';
@@ -18,15 +34,22 @@ export type { DocumentRequestListener, DocumentRequestsPort } from './DocumentRe
 export { InMemoryAppState } from './fakes/InMemoryAppState';
 export { InMemoryDocumentFiles } from './fakes/InMemoryDocumentFiles';
 export { InMemoryDocumentRequests } from './fakes/InMemoryDocumentRequests';
-export type { AppMenuPort, MenuCommandListener, ViewMenuState } from './AppMenuPort';
+export type {
+  AppMenuPort,
+  MenuCommandListener,
+  RecentWorkspaceMenuEntry,
+  ViewMenuState,
+} from './AppMenuPort';
 export { InMemoryAppMenu } from './fakes/InMemoryAppMenu';
+export type { JumpListOutcome, JumpListPort, JumpListUpdate, JumpListWorkspace } from './JumpListPort';
+export { InMemoryJumpList } from './fakes/InMemoryJumpList';
 export { InMemoryDocumentExport, type ExportedDocument } from './fakes/InMemoryDocumentExport';
 export type { DocumentExportPort, ExportFormat } from './DocumentExportPort';
 export type { DocumentsChangedListener, DocumentWatcherPort } from './DocumentWatcherPort';
 export { InMemoryDocumentWatcher } from './fakes/InMemoryDocumentWatcher';
 export type { DocumentResourcesPort } from './DocumentResourcesPort';
 export type { DocumentPrinterPort } from './DocumentPrinterPort';
-export type { DocumentLinksPort } from './DocumentLinksPort';
+export type { DocumentLinksPort, InspectedLink } from './DocumentLinksPort';
 export { InMemoryDocumentLinks } from './fakes/InMemoryDocumentLinks';
 export type {
   DocumentMatches,
@@ -43,5 +66,136 @@ export { InMemoryFavouritesFile } from './fakes/InMemoryFavouritesFile';
 export { InMemoryFolders, type InMemoryFolderContents } from './fakes/InMemoryFolders';
 export type { DesktopShellPort } from './DesktopShellPort';
 export { InMemoryDesktopShell } from './fakes/InMemoryDesktopShell';
-export type { AttachmentPort, AttachmentTarget, ImagesDrop, ImagesDropListener } from './AttachmentPort';
+export type {
+  AttachmentPort,
+  AttachmentTarget,
+  ChosenPicture,
+  ImagesDrop,
+  ImagesDropListener,
+} from './AttachmentPort';
 export { InMemoryAttachments, type SavedAttachmentRecord } from './fakes/InMemoryAttachments';
+export {
+  UnknownWorkspaceError,
+  WorkspaceShownElsewhereError,
+  WORKSPACE_LIST_NAMES,
+  type LegacyStateImport,
+  type StoredWorkspace,
+  type StoredWorkspaceContents,
+  type WorkspaceListName,
+  type WorkspaceStorePort,
+} from './WorkspaceStorePort';
+export { InMemoryWorkspaceStore } from './fakes/InMemoryWorkspaceStore';
+export type { WorkspaceFileContents, WorkspaceFileListener, WorkspaceFilePort } from './WorkspaceFilePort';
+export { InMemoryWorkspaceFiles } from './fakes/InMemoryWorkspaceFiles';
+export type {
+  KnownFolders,
+  LocationAvailability,
+  NotesFolderInspection,
+  NotesLocationPort,
+  PreparedNotesLocation,
+} from './NotesLocationPort';
+export { InMemoryNotesLocations } from './fakes/InMemoryNotesLocations';
+export {
+  NotesMoveError,
+  type KeptFiles,
+  type NotesMovePlan,
+  type NotesMovePort,
+  type NotesMoveProblem,
+  type NotesMoveProblemCode,
+  type NotesMoveProgress,
+  type NotesMoveRequest,
+  type NotesMoveState,
+  type OldCopyRemoval,
+  type OldNotesCopy,
+  type UnfinishedNotesMove,
+} from './NotesMovePort';
+export { InMemoryNotesMoves } from './fakes/InMemoryNotesMoves';
+export { InMemoryNoteFiles } from './fakes/InMemoryNoteFiles';
+export { EMPTY_IMPORT_REPORT, InMemoryNoteTransfer } from './fakes/InMemoryNoteTransfer';
+export { InMemoryNotesIndex } from './fakes/InMemoryNotesIndex';
+export type {
+  Backlink,
+  NoteChange,
+  NoteChanges,
+  NoteHeading,
+  NoteSuggestion,
+  TagCount,
+  NoteSearchHit,
+  NoteSearchResults,
+  NotesIndexPort,
+  ShownNotesIndex,
+  NotesIndexStatus,
+} from './NotesIndexPort';
+export type {
+  AppliedLinkUpdates,
+  ChangedLine,
+  LinkEdit,
+  LinkUpdatePlan,
+  LinkUpdatesToApply,
+  NoteLinkEdits,
+  NoteLinkUpdates,
+  NoteMoveInLocation,
+  NotUpdatedNote,
+  NotUpdatedReason,
+} from './NoteLinkUpdates';
+export type {
+  NoteCreation,
+  NoteDeletion,
+  NoteFilesPort,
+  NoteInFolder,
+  NoteMove,
+  NoteRename,
+  NoteRestore,
+  NoteTrashEntry,
+} from './NoteFilesPort';
+export {
+  MAX_SCANNED_SPEC_FILES,
+  type WatchedSpecProject,
+  type ProjectDocuments,
+  type SpecProjectsChangedListener,
+  type SpecProjectFile,
+  type SpecProjectLink,
+  type SpecProjectManifest,
+  type SpecProjectPort,
+} from './SpecProjectPort';
+export { InMemorySpecProjects, type InMemorySpecProject } from './fakes/InMemorySpecProjects';
+export type {
+  ExportedNotes,
+  ExportFolderChoice,
+  NotesExportOutcome,
+  NotesExportRequest,
+  NotesExportSummary,
+  NotesImportProgress,
+  NotesImportReport,
+  NotesImportRequest,
+  NoteTransferPort,
+  RenamedImportFile,
+  ReportedSyntax,
+  UnsupportedSyntaxKind,
+} from './NoteTransferPort';
+export {
+  isProtectedNotesFailure,
+  PROTECTED_NOTES_FAILURES,
+  ProtectedNotesError,
+  type AddedProtectedAttachment,
+  type MoveInResult,
+  type NewProtectedNote,
+  type PasswordChange,
+  type PasswordChangeResult,
+  type ProtectedNoteEdit,
+  type ProtectedNotesFailure,
+  type ProtectedNotesLockedListener,
+  type ProtectedNotesLockRequestListener,
+  type ProtectedNoteState,
+  type ProtectedNoteSummary,
+  type ProtectedNoteText,
+  type ProtectedNotesPort,
+  type ProtectedFolderWarning,
+  type ProtectedMoveIn,
+  type ProtectedMoveOut,
+  type ProtectedStatus,
+  type ReencryptionFinish,
+  type ReencryptionProgress,
+  type UnlockResult,
+} from './ProtectedNotesPort';
+export { InMemoryProtectedNotes } from './fakes/InMemoryProtectedNotes';

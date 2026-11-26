@@ -1,3 +1,4 @@
+import type { CtrlWheelAction } from '@mdx/core';
 import { EDITOR_SHORTCUTS } from '@mdx/editor/shortcuts';
 import type { MessageKey, Translator } from '@mdx/i18n';
 import { COMMAND_SHORTCUTS, type CommandShortcut } from '../shortcuts/commandShortcuts';
@@ -11,9 +12,9 @@ export interface KeyboardShortcut {
 export const SHORTCUTS_HANDLED_IN_PLACE: readonly KeyboardShortcut[] = [
   { combinations: [['ctrl', 'C']], actionKey: 'menu.edit.copy' },
   { combinations: [['ctrl', 'A']], actionKey: 'menu.edit.selectAll' },
+  { combinations: [['ctrl', 'shift', 'V']], actionKey: 'menu.edit.pastePlainText' },
   { combinations: [['ctrl', '1–9']], actionKey: 'shortcuts.tabByNumber' },
   { combinations: [['F3'], ['shift', 'F3']], actionKey: 'shortcuts.findNext' },
-  { combinations: [['ctrl', 'wheel']], actionKey: 'shortcuts.zoomWithWheel' },
   { combinations: [['F2']], actionKey: 'shortcuts.renameFavourite' },
   {
     combinations: [
@@ -45,15 +46,35 @@ export const EDITOR_FORMATTING_SHORTCUTS: readonly KeyboardShortcut[] = EDITOR_S
   ({ action, combination }) => ({ combinations: [combination], actionKey: `editor.action.${action}` }),
 );
 
-/** Every shortcut the Help list shows, with the keys each command has now. */
+const CTRL_WITH_WHEEL: KeyCombination = ['ctrl', 'wheel'];
+const MOVE_BETWEEN_FILES: MessageKey = 'shortcuts.moveBetweenFiles';
+
+/**
+ * Every shortcut the Help list shows, with the keys each command has now, one row per action.
+ * Ctrl with the mouse wheel is listed with what the setting makes it do.
+ */
 export function keyboardShortcutsWith(
   commandShortcuts: readonly CommandShortcut[] = COMMAND_SHORTCUTS,
+  ctrlWheelAction: CtrlWheelAction = 'moveBetweenFiles',
 ): readonly KeyboardShortcut[] {
-  return [
-    ...commandShortcuts.map(({ combinations, actionKey }) => ({ combinations, actionKey })),
-    ...SHORTCUTS_HANDLED_IN_PLACE,
-    ...EDITOR_FORMATTING_SHORTCUTS,
-  ];
+  const commandRows = rowPerAction(commandShortcuts).map((row) =>
+    ctrlWheelAction === 'moveBetweenFiles' && row.actionKey === MOVE_BETWEEN_FILES
+      ? { ...row, combinations: [...row.combinations, CTRL_WITH_WHEEL] }
+      : row,
+  );
+  const wheelZoomRows: KeyboardShortcut[] =
+    ctrlWheelAction === 'zoom'
+      ? [{ combinations: [CTRL_WITH_WHEEL], actionKey: 'shortcuts.zoomWithWheel' }]
+      : [];
+  return [...commandRows, ...wheelZoomRows, ...SHORTCUTS_HANDLED_IN_PLACE, ...EDITOR_FORMATTING_SHORTCUTS];
+}
+
+/** Commands that share an action, such as the two directions of the file arc, share a row. */
+function rowPerAction(commandShortcuts: readonly CommandShortcut[]): KeyboardShortcut[] {
+  const rows = new Map<MessageKey, KeyCombination[]>();
+  for (const { actionKey, combinations } of commandShortcuts)
+    rows.set(actionKey, [...(rows.get(actionKey) ?? []), ...combinations]);
+  return [...rows].map(([actionKey, combinations]) => ({ actionKey, combinations }));
 }
 
 /** The shortcuts whose action or keys contain the query, such as "save" or "ctrl+s". */

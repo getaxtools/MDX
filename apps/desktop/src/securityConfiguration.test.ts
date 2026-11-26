@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 interface TauriConfiguration {
@@ -56,16 +56,47 @@ describe('content security policy', () => {
 });
 
 describe('main window capability', () => {
-  it('grants only event listening and closing the window', () => {
+  it('grants only event listening and closing the window, to the windows the app opens', () => {
     const capability = JSON.parse(
       readFileSync(join(TAURI_FOLDER, 'capabilities', 'main-window.json'), 'utf8'),
     ) as Capability;
 
-    expect(capability.windows).toEqual(['main']);
+    expect(capability.windows).toEqual(['main', 'window-*']);
     expect(capability.permissions).toEqual([
       'core:event:allow-listen',
       'core:event:allow-unlisten',
       'core:window:allow-destroy',
     ]);
+  });
+});
+
+const REPOSITORY_FOLDER = join(import.meta.dirname, '..', '..', '..');
+const REMOTE_DEBUGGING = /remote-debugging|devtools/i;
+const SOURCE_FILE = /\.(rs|ts|svelte|json|toml)$/;
+const NEVER_SCANNED = new Set(['node_modules', 'target', 'gen', 'dist', 'generated']);
+
+function sourceFilesBelow(folder: string): string[] {
+  return readdirSync(folder, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(folder, entry.name);
+    if (entry.isDirectory()) return NEVER_SCANNED.has(entry.name) ? [] : sourceFilesBelow(path);
+    return SOURCE_FILE.test(entry.name) && !entry.name.includes('.test.') ? [path] : [];
+  });
+}
+
+describe('DevTools stay closed outside UI tests', () => {
+  it('neither Tauri configuration nor the Tauri features open DevTools or a debugging port', () => {
+    for (const file of ['tauri.conf.json', 'tauri.ui-test.conf.json', 'Cargo.toml']) {
+      expect(readFileSync(join(TAURI_FOLDER, file), 'utf8'), file).not.toMatch(REMOTE_DEBUGGING);
+    }
+  });
+
+  it('no app source names a debugging port; only the UI-test support code does', () => {
+    const appFolders = [join(TAURI_FOLDER, 'src'), import.meta.dirname, join(REPOSITORY_FOLDER, 'packages')];
+    const naming = appFolders
+      .flatMap((folder) => sourceFilesBelow(folder))
+      .filter((path) => REMOTE_DEBUGGING.test(readFileSync(path, 'utf8')))
+      .map((path) => relative(REPOSITORY_FOLDER, path));
+
+    expect(naming).toEqual([]);
   });
 });

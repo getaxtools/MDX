@@ -5,6 +5,15 @@
   import FavouritesSection from '../favourites/FavouritesSection.svelte';
   import RecentFilesSection from '../recent-files/RecentFilesSection.svelte';
   import type { ViewerCommand } from '../viewer/viewerCommands';
+  import NotesSection from '../notes/NotesSection.svelte';
+  import NoteTagsSection from '../notes/NoteTagsSection.svelte';
+  import type { NotesView } from '../notes/NotesActions';
+  import ProtectedNotesSection from '../protected-notes/ProtectedNotesSection.svelte';
+  import type { ProtectedNotesView } from '../protected-notes/ProtectedNotesActions';
+  import SpecProjectsSection from '../spec-viewer/SpecProjectsSection.svelte';
+  import type { SpecProjectsView } from '../spec-viewer/SpecViewerActions';
+  import { FolderTreeState } from '../folder-tree/FolderTreeState';
+  import { NoteTreeMemory } from '../notes/NoteTreeMemory';
   import ExplorerFoldersSection from './ExplorerFoldersSection.svelte';
   import SectionResizer from './SectionResizer.svelte';
 
@@ -25,6 +34,19 @@
     folderRevisions?: ReadonlyMap<string, number>;
     onShowFolder?: (folderPath: string) => () => void;
     activeDocumentKey?: string | undefined;
+    /** In a Notes workspace, the note tree takes the place of Folders. */
+    notes?: NotesView | undefined;
+    /** The protected section of the shown Notes workspace, under its note tree. */
+    protectedNotes?: ProtectedNotesView | undefined;
+    /** In a Spec viewer workspace, its spec projects take the place of Folders. */
+    specProjects?: SpecProjectsView | undefined;
+    isNoteDeletionConfirmed?: boolean;
+    onNotesCommand?: (command: ViewerCommand) => Promise<void>;
+    onListNoteFolder?: (folderPath: string) => Promise<FolderListing>;
+    /** What the Folders section has expanded and read, kept while the side bar is hidden. */
+    folderTreeState?: FolderTreeState;
+    /** What the note tree has expanded and listed, kept while the side bar is hidden. */
+    noteTreeMemory?: NoteTreeMemory;
   }
 
   const {
@@ -44,6 +66,17 @@
     folderRevisions = new Map(),
     onShowFolder = () => () => undefined,
     activeDocumentKey,
+    notes,
+    protectedNotes,
+    specProjects,
+    isNoteDeletionConfirmed = true,
+    onNotesCommand = (command) => {
+      onCommand(command);
+      return Promise.resolve();
+    },
+    onListNoteFolder = onListFolder,
+    folderTreeState = new FolderTreeState(),
+    noteTreeMemory = new NoteTreeMemory(),
   }: Props = $props();
 
   const favouriteKeys = $derived(new Set(favourites.map((favourite) => favourite.location.canonicalKey)));
@@ -56,6 +89,8 @@
   const SECTION_TITLE_KEYS = {
     favourites: 'favourites.sidebar.title',
     folders: 'explorer.folders.title',
+    protectedNotes: 'protectedNotes.section.title',
+    tags: 'notes.tags.title',
     recentFiles: 'recentFiles.title',
   } as const;
   const sectionSlots: Partial<Record<ExplorerSection, HTMLDivElement>> = $state({});
@@ -113,23 +148,88 @@
   <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a snippet is not a value -->
   {@render divider('favourites')}
   <div class="section-slot" style:height={heightOf('folders')} bind:this={sectionSlots.folders}>
-    <ExplorerFoldersSection
-      folders={explorerFolders}
-      {activeDocumentKey}
-      {favouriteKeys}
-      {pathStatuses}
-      {translator}
-      isExpanded={isExpanded('folders')}
-      onToggleExpanded={() => toggle('folders')}
-      {folderRevisions}
-      {onListFolder}
-      {onShowFolder}
-      {onOpenDocument}
-      {onCommand}
-    />
+    {#if notes}
+      <NotesSection
+        locationPath={notes.locationPath}
+        revision={notes.revision}
+        isDeletionConfirmed={isNoteDeletionConfirmed}
+        {translator}
+        isExpanded={isExpanded('folders')}
+        onToggleExpanded={() => toggle('folders')}
+        {folderRevisions}
+        {activeDocumentKey}
+        onListFolder={onListNoteFolder}
+        {onShowFolder}
+        {onOpenDocument}
+        onCommand={onNotesCommand}
+        memory={noteTreeMemory}
+      />
+    {:else if specProjects}
+      <SpecProjectsSection
+        roots={specProjects.roots}
+        unreadableFolders={specProjects.unreadableFolders}
+        {translator}
+        isExpanded={isExpanded('folders')}
+        onToggleExpanded={() => toggle('folders')}
+        {onOpenDocument}
+        onOpenDashboard={(rootKey: string, folder: string) =>
+          onCommand({ kind: 'openSpecDashboard', rootKey, folder })}
+        onOpenChange={(rootKey: string, changeFolder: string) =>
+          onCommand({ kind: 'openSpecChange', rootKey, changeFolder })}
+        onOpenFeature={(rootKey: string, featureFolder: string) =>
+          onCommand({ kind: 'openSpecFeature', rootKey, featureFolder })}
+        onFollowLink={(rootKey: string, linkPath: string) =>
+          onCommand({ kind: 'followSpecLink', rootKey, linkPath })}
+        onRefresh={() => onCommand({ kind: 'refreshSpecProjects' })}
+        onCheckForInjection={() => onCommand({ kind: 'checkSpecProjects' })}
+        injectionFindings={specProjects.injectionFindings}
+        {activeDocumentKey}
+      />
+    {:else}
+      <ExplorerFoldersSection
+        folders={explorerFolders}
+        {activeDocumentKey}
+        {favouriteKeys}
+        {pathStatuses}
+        {translator}
+        isExpanded={isExpanded('folders')}
+        onToggleExpanded={() => toggle('folders')}
+        {folderRevisions}
+        {onListFolder}
+        {onShowFolder}
+        {onOpenDocument}
+        {onCommand}
+        treeState={folderTreeState}
+      />
+    {/if}
   </div>
   <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a snippet is not a value -->
   {@render divider('folders')}
+  {#if notes && protectedNotes}
+    <div class="section-slot">
+      <ProtectedNotesSection
+        view={protectedNotes}
+        {translator}
+        isExpanded={isExpanded('protectedNotes')}
+        onToggleExpanded={() => toggle('protectedNotes')}
+        {activeDocumentKey}
+        onCommand={(command: ViewerCommand) => void onNotesCommand(command)}
+      />
+    </div>
+    <div class="section-divider" aria-hidden="true"></div>
+  {/if}
+  {#if notes}
+    <div class="section-slot">
+      <NoteTagsSection
+        tags={notes.tags}
+        {translator}
+        isExpanded={isExpanded('tags')}
+        onToggleExpanded={() => toggle('tags')}
+        onCommand={(command: ViewerCommand) => void onNotesCommand(command)}
+      />
+    </div>
+    <div class="section-divider" aria-hidden="true"></div>
+  {/if}
   <div class="section-slot">
     <RecentFilesSection
       {recentFiles}
@@ -190,7 +290,7 @@
     box-sizing: border-box;
     padding: 0 var(--space-2);
     border: 0;
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-xsmall);
     background: none;
     color: var(--color-text);
     font: inherit;
@@ -221,7 +321,7 @@
   }
 
   .sidebar :global(li > [role='treeitem'].unavailable) {
-    color: var(--color-text-tertiary);
+    color: var(--color-text-secondary);
     font-style: italic;
   }
 

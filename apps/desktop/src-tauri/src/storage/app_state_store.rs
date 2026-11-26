@@ -4,9 +4,14 @@ use std::path::{Path, PathBuf};
 
 pub const MAX_APP_STATE_BYTES: usize = 5 * 1024 * 1024;
 
+/// The schema version the core writes (`APP_STATE_SCHEMA_VERSION`); a higher one came from a newer MDX.
+const KNOWN_SCHEMA_VERSION: u64 = 1;
+
 const STATE_FILE_NAME: &str = "app-state.json";
-const PENDING_FILE_NAME: &str = "app-state.json.pending";
+const PENDING_SUFFIX: &str = ".pending";
 const CORRUPT_BACKUP_FILE_NAME: &str = "app-state.corrupt.json";
+const NEWER_VERSION_BACKUP_FILE_NAME: &str = "app-state.newer-version.json";
+const BEFORE_WORKSPACES_BACKUP_FILE_NAME: &str = "app-state.before-workspaces.json";
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum AppStateError {
@@ -46,8 +51,13 @@ impl AppStateStore {
             Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
             Err(error) => return Err(error.into()),
         };
-        if !is_json(&saved) {
-            fs::write(self.folder.join(CORRUPT_BACKUP_FILE_NAME), &saved)?;
+        match serde_json::from_str::<serde_json::Value>(&saved) {
+            Err(_) => fs::write(self.folder.join(CORRUPT_BACKUP_FILE_NAME), &saved)?,
+            Ok(state) => {
+                if let Some(version) = newer_schema_version(&state) {
+                    self.keep_newer_version_copy(&saved, version)?;
+                }
+            }
         }
         Ok(Some(saved))
     }
@@ -59,18 +69,79 @@ impl AppStateStore {
         if !is_json(state_json) {
             return Err(AppStateError::InvalidJson);
         }
+        self.write_atomically(STATE_FILE_NAME, state_json)
+    }
+
+    /// Clear All Data also forgets the copies kept of state this version could not use, including one
+    /// a crash left half written, and a backup that cannot be removed does not keep the others.
+    pub fn remove_backups(&self) -> Result<(), AppStateError> {
+        let mut first_failure = None;
+        for file_name in [
+            CORRUPT_BACKUP_FILE_NAME,
+            NEWER_VERSION_BACKUP_FILE_NAME,
+            BEFORE_WORKSPACES_BACKUP_FILE_NAME,
+        ] {
+            for path in [
+                self.folder.join(file_name),
+                self.folder.join(format!("{file_name}{PENDING_SUFFIX}")),
+            ] {
+                match fs::remove_file(path) {
+                    Err(error) if error.kind() != io::ErrorKind::NotFound => {
+                        first_failure.get_or_insert(error);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        first_failure.map_or(Ok(()), |error| Err(error.into()))
+    }
+
+    /// A one-time copy of the state as it was before workspaces, kept until Clear All Data.
+    pub fn keep_copy_before_workspaces(&self) -> Result<(), AppStateError> {
+        let backup_path = self.folder.join(BEFORE_WORKSPACES_BACKUP_FILE_NAME);
+        if backup_path.exists() {
+            return Ok(());
+        }
+        match fs::read_to_string(self.folder.join(STATE_FILE_NAME)) {
+            Ok(saved) => self.write_atomically(BEFORE_WORKSPACES_BACKUP_FILE_NAME, &saved),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    /// Runs before the first save, so going back to an older MDX never loses what a newer one saved.
+    fn keep_newer_version_copy(&self, saved: &str, version: u64) -> Result<(), AppStateError> {
+        let kept_version = fs::read_to_string(self.folder.join(NEWER_VERSION_BACKUP_FILE_NAME))
+            .ok()
+            .and_then(|kept| serde_json::from_str::<serde_json::Value>(&kept).ok())
+            .and_then(|kept| schema_version_of(&kept));
+        if kept_version.is_some_and(|kept_version| kept_version > version) {
+            return Ok(());
+        }
+        self.write_atomically(NEWER_VERSION_BACKUP_FILE_NAME, saved)
+    }
+
+    fn write_atomically(&self, file_name: &str, contents: &str) -> Result<(), AppStateError> {
         fs::create_dir_all(&self.folder)?;
-        let pending_path = self.folder.join(PENDING_FILE_NAME);
+        let pending_path = self.folder.join(format!("{file_name}{PENDING_SUFFIX}"));
         let mut pending_file = File::create(&pending_path)?;
-        pending_file.write_all(state_json.as_bytes())?;
+        pending_file.write_all(contents.as_bytes())?;
         pending_file.sync_all()?;
-        fs::rename(&pending_path, self.folder.join(STATE_FILE_NAME))?;
+        fs::rename(&pending_path, self.folder.join(file_name))?;
         Ok(())
     }
 }
 
 fn is_json(text: &str) -> bool {
     serde_json::from_str::<serde_json::Value>(text).is_ok()
+}
+
+fn schema_version_of(state: &serde_json::Value) -> Option<u64> {
+    state.get("schemaVersion")?.as_u64()
+}
+
+fn newer_schema_version(state: &serde_json::Value) -> Option<u64> {
+    schema_version_of(state).filter(|version| *version > KNOWN_SCHEMA_VERSION)
 }
 
 #[cfg(test)]
@@ -103,7 +174,12 @@ mod tests {
         store.save(r#"{"version":"new"}"#).unwrap();
 
         assert_eq!(store.load(), Ok(Some(r#"{"version":"new"}"#.to_owned())));
-        assert!(!folder.path().join(PENDING_FILE_NAME).exists());
+        assert!(
+            !folder
+                .path()
+                .join(format!("{STATE_FILE_NAME}{PENDING_SUFFIX}"))
+                .exists()
+        );
     }
 
     #[test]
@@ -127,6 +203,140 @@ mod tests {
         assert_eq!(
             fs::read_to_string(folder.path().join(CORRUPT_BACKUP_FILE_NAME)).unwrap(),
             "{ broken"
+        );
+    }
+
+    #[test]
+    fn copies_newer_state_before_it_can_be_overwritten() {
+        let folder = tempfile::tempdir().unwrap();
+        let store = AppStateStore::new(folder.path());
+        let newer = r#"{"schemaVersion":2,"workspaces":[]}"#;
+        fs::write(folder.path().join(STATE_FILE_NAME), newer).unwrap();
+
+        assert_eq!(store.load(), Ok(Some(newer.to_owned())));
+        store.save(r#"{"schemaVersion":1}"#).unwrap();
+
+        let kept = fs::read_to_string(folder.path().join(NEWER_VERSION_BACKUP_FILE_NAME)).unwrap();
+        assert_eq!(kept, newer);
+        assert!(
+            !folder
+                .path()
+                .join(format!("{NEWER_VERSION_BACKUP_FILE_NAME}{PENDING_SUFFIX}"))
+                .exists()
+        );
+    }
+
+    #[test]
+    fn keeps_a_copy_from_an_even_newer_version() {
+        let folder = tempfile::tempdir().unwrap();
+        let newest = r#"{"schemaVersion":3}"#;
+        fs::write(folder.path().join(NEWER_VERSION_BACKUP_FILE_NAME), newest).unwrap();
+        fs::write(
+            folder.path().join(STATE_FILE_NAME),
+            r#"{"schemaVersion":2}"#,
+        )
+        .unwrap();
+
+        AppStateStore::new(folder.path()).load().unwrap();
+
+        let kept = fs::read_to_string(folder.path().join(NEWER_VERSION_BACKUP_FILE_NAME)).unwrap();
+        assert_eq!(kept, newest);
+    }
+
+    #[test]
+    fn makes_no_copy_of_state_this_version_can_read() {
+        let folder = tempfile::tempdir().unwrap();
+        fs::write(
+            folder.path().join(STATE_FILE_NAME),
+            r#"{"schemaVersion":1}"#,
+        )
+        .unwrap();
+
+        AppStateStore::new(folder.path()).load().unwrap();
+
+        assert!(!folder.path().join(NEWER_VERSION_BACKUP_FILE_NAME).exists());
+    }
+
+    #[test]
+    fn the_copy_before_workspaces_is_written_once_and_leaves_the_state_file_unchanged() {
+        let folder = tempfile::tempdir().unwrap();
+        let store = AppStateStore::new(folder.path());
+        let earlier = br#"{"schemaVersion":1,"favourites":[]}"#;
+        fs::write(folder.path().join(STATE_FILE_NAME), earlier).unwrap();
+
+        store.keep_copy_before_workspaces().unwrap();
+        store.save(r#"{"schemaVersion":1,"changed":true}"#).unwrap();
+        store.keep_copy_before_workspaces().unwrap();
+
+        let backup = fs::read(folder.path().join(BEFORE_WORKSPACES_BACKUP_FILE_NAME)).unwrap();
+        assert_eq!(backup, earlier);
+    }
+
+    #[test]
+    fn the_earlier_file_is_byte_for_byte_unchanged_by_the_copy() {
+        let folder = tempfile::tempdir().unwrap();
+        let earlier = "{\r\n  \"schemaVersion\": 1\r\n}";
+        fs::write(folder.path().join(STATE_FILE_NAME), earlier).unwrap();
+
+        AppStateStore::new(folder.path())
+            .keep_copy_before_workspaces()
+            .unwrap();
+
+        assert_eq!(
+            fs::read_to_string(folder.path().join(STATE_FILE_NAME)).unwrap(),
+            earlier
+        );
+    }
+
+    #[test]
+    fn removes_the_backups_and_tolerates_missing_ones() {
+        let folder = tempfile::tempdir().unwrap();
+        let store = AppStateStore::new(folder.path());
+        fs::write(folder.path().join(NEWER_VERSION_BACKUP_FILE_NAME), "{}").unwrap();
+
+        store.remove_backups().unwrap();
+        store.remove_backups().unwrap();
+
+        assert!(!folder.path().join(NEWER_VERSION_BACKUP_FILE_NAME).exists());
+        assert!(!folder.path().join(CORRUPT_BACKUP_FILE_NAME).exists());
+    }
+
+    #[test]
+    fn removes_backups_left_half_written_by_a_crash() {
+        let folder = tempfile::tempdir().unwrap();
+        let half_written: Vec<_> = [
+            CORRUPT_BACKUP_FILE_NAME,
+            NEWER_VERSION_BACKUP_FILE_NAME,
+            BEFORE_WORKSPACES_BACKUP_FILE_NAME,
+        ]
+        .iter()
+        .map(|file_name| folder.path().join(format!("{file_name}{PENDING_SUFFIX}")))
+        .collect();
+        for path in &half_written {
+            fs::write(path, r#"{"schemaVersion":1,"favou"#).unwrap();
+        }
+
+        AppStateStore::new(folder.path()).remove_backups().unwrap();
+
+        assert!(half_written.iter().all(|path| !path.exists()));
+    }
+
+    #[test]
+    fn the_other_backups_are_removed_when_one_cannot_be_removed() {
+        let folder = tempfile::tempdir().unwrap();
+        fs::create_dir(folder.path().join(CORRUPT_BACKUP_FILE_NAME)).unwrap();
+        fs::write(folder.path().join(NEWER_VERSION_BACKUP_FILE_NAME), "{}").unwrap();
+        fs::write(folder.path().join(BEFORE_WORKSPACES_BACKUP_FILE_NAME), "{}").unwrap();
+
+        let result = AppStateStore::new(folder.path()).remove_backups();
+
+        assert!(matches!(result, Err(AppStateError::Storage(_))));
+        assert!(!folder.path().join(NEWER_VERSION_BACKUP_FILE_NAME).exists());
+        assert!(
+            !folder
+                .path()
+                .join(BEFORE_WORKSPACES_BACKUP_FILE_NAME)
+                .exists()
         );
     }
 

@@ -105,4 +105,29 @@ mod tests {
 
         assert_eq!(decode_document_bytes(&bytes).text, text);
     }
+
+    #[test]
+    fn decoding_then_encoding_each_byte_exact_fixture_gives_the_same_bytes() {
+        let fixtures = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../tests/fixtures/byte-exact");
+        let mut checked = 0;
+
+        for entry in std::fs::read_dir(&fixtures).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|extension| extension != "md") {
+                continue;
+            }
+            let bytes = std::fs::read(&path).unwrap();
+            let decoded = decode_document_bytes(&bytes);
+            let encoding = Encoding::for_label(decoded.encoding.as_bytes()).unwrap();
+
+            let encoded =
+                encode_document_text(&decoded.text, encoding, decoded.has_byte_order_mark);
+
+            assert_eq!(encoded, Ok(bytes), "{}", path.display());
+            checked += 1;
+        }
+
+        assert!(checked > 0, "no fixtures in {}", fixtures.display());
+    }
 }

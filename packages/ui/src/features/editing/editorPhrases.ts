@@ -1,11 +1,14 @@
 import {
+  BLOCK_HANDLE_PHRASE,
   BLOCK_KIND_PHRASES,
   BLOCK_MOVE_PHRASES,
-  BUILT_IN_SLASH_ITEMS,
+  CALLOUT_TYPE_PHRASE,
+  FORMULA_PASTE_PHRASES,
+  SLASH_ITEM_TEXTS,
   SLASH_MENU_SECTION,
   SNIPPETS_SECTION,
   type BlockKind,
-} from '@mdx/editor';
+} from '@mdx/editor/plain';
 import type { MessageKey, Translator } from '@mdx/i18n';
 
 /** CodeMirror's own English words, mapped to the app's message keys. */
@@ -31,6 +34,10 @@ const PHRASE_KEYS: Readonly<Record<string, MessageKey>> = {
   [BLOCK_MOVE_PHRASES.movedDown]: 'editor.block.movedDown',
   [BLOCK_MOVE_PHRASES.first]: 'editor.block.first',
   [BLOCK_MOVE_PHRASES.last]: 'editor.block.last',
+  [BLOCK_HANDLE_PHRASE]: 'editor.block.handle',
+  [CALLOUT_TYPE_PHRASE]: 'editor.richText.calloutType',
+  [FORMULA_PASTE_PHRASES.notice]: 'editor.formulaPaste.notice',
+  [FORMULA_PASTE_PHRASES.pasteAsText]: 'editor.formulaPaste.pasteAsText',
   ...blockKindPhraseKeys(),
   [SLASH_MENU_SECTION]: 'editor.slash.section.blocks',
   [SNIPPETS_SECTION]: 'editor.slash.section.snippets',
@@ -38,7 +45,7 @@ const PHRASE_KEYS: Readonly<Record<string, MessageKey>> = {
 };
 
 function slashItemPhraseKeys(): Record<string, MessageKey> {
-  const entries = BUILT_IN_SLASH_ITEMS.flatMap(({ id, name, description }) => [
+  const entries = SLASH_ITEM_TEXTS.flatMap(({ id, name, description }) => [
     [name, `editor.slash.item.${id}.name`],
     [description, `editor.slash.item.${id}.description`],
   ]);

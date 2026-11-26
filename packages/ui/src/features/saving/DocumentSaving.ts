@@ -1,5 +1,11 @@
 import { renameWordGoal, type ViewerSession } from '@mdx/core';
-import { DocumentOpenError, isUntitledLocation, type DocumentLocation } from '@mdx/platform';
+import {
+  DocumentOpenError,
+  isProtectedNoteLocation,
+  isUntitledLocation,
+  isViewLocation,
+  type DocumentLocation,
+} from '@mdx/platform';
 import type { DocumentEditing } from '../editing/DocumentEditing';
 import { applyTabCommand, type TabCommand } from '../tabs/tabCommands';
 
@@ -55,9 +61,11 @@ export class DocumentSaving {
     if (location && this.isUnsaved(location)) await this.save(location);
   }
 
+  /** A protected note is never saved as a plain file this way. */
   async saveActiveAs(): Promise<void> {
     const location = this.session.currentState().tabStrip.activeTab()?.location;
-    if (location) await this.saveAs(location);
+    if (location && !isViewLocation(location) && !isProtectedNoteLocation(location))
+      await this.saveAs(location);
   }
 
   async saveAll(): Promise<void> {
@@ -70,6 +78,14 @@ export class DocumentSaving {
   async overwriteChangesOnDisk(canonicalKey: string): Promise<void> {
     const location = this.openLocation(canonicalKey);
     if (location) await this.saveEdited(location, { shouldOverwriteChangesOnDisk: true });
+  }
+
+  /**
+   * Saves a document's unsaved changes over its file the way Save does; false when they were not saved,
+   * and then they stay unsaved so a conflict is answered as for typed text.
+   */
+  async saveUnsavedChanges(location: DocumentLocation): Promise<boolean> {
+    return (await this.saveEdited(location)) !== undefined;
   }
 
   runTabCommand(command: TabCommand): void {

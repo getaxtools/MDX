@@ -1,0 +1,278 @@
+import type { LineEnding } from './DocumentFilePort';
+import type { DocumentLocation } from './DocumentLocation';
+
+/** Why a protected section operation failed; never more than a code. */
+export const PROTECTED_NOTES_FAILURES = [
+  'wrongPassword',
+  'unlockFailed',
+  'notEnoughMemory',
+  'tampered',
+  'vaultMissing',
+  'locked',
+  'notSetUp',
+  'alreadySetUp',
+  'notRemembered',
+  'passwordTooShort',
+  'unsupportedVersion',
+  'tooLarge',
+  'unavailable',
+  'notFound',
+  'invalidRequest',
+  'accessDenied',
+  'reencryptionPending',
+  'reencryptionUnverifiable',
+  'plainNoteChanged',
+] as const;
+
+export type ProtectedNotesFailure = (typeof PROTECTED_NOTES_FAILURES)[number];
+
+export function isProtectedNotesFailure(code: unknown): code is ProtectedNotesFailure {
+  return typeof code === 'string' && (PROTECTED_NOTES_FAILURES as readonly string[]).includes(code);
+}
+
+export class ProtectedNotesError extends Error {
+  constructor(readonly failure: ProtectedNotesFailure) {
+    super(`The protected notes operation failed: ${failure}`);
+    this.name = 'ProtectedNotesError';
+  }
+}
+
+export interface ProtectedStatus {
+  readonly isSetUp: boolean;
+  readonly isUnlocked: boolean;
+  /** The section has a slot for this PC; whether its key is still stored shows on unlock. */
+  readonly canUnlockOnThisPc: boolean;
+  /** A re-encryption is not finished; once unlocked, `continueReencryption` carries it on. */
+  readonly isReencrypting: boolean;
+}
+
+export interface PasswordChange {
+  readonly currentPassword: string;
+  readonly newPassword: string;
+  /**
+   * Seals every note again with a new key, for when the old password may be known: the old
+   * password and recovery key then open nothing, and a new recovery key is given once.
+   */
+  readonly shouldReencrypt: boolean;
+}
+
+export interface PasswordChangeResult {
+  /**
+   * With a re-encryption, the new recovery key to show once. The user confirms they kept it; if
+   * not, `newRecoveryKey` replaces it, as the old one no longer opens anything.
+   */
+  readonly recoveryKey?: string;
+}
+
+export interface ReencryptionFinish {
+  readonly discardCount?: number;
+  readonly acknowledgeUnverifiable?: boolean;
+}
+
+export interface ReencryptionProgress {
+  /** Files still to seal again; none once the re-encryption is over. */
+  readonly remaining: number;
+  /** Files that were damaged already and are left as they were. */
+  readonly damaged: number;
+  /**
+   * Files the old key is kept for until the user decides with `finishReencryption`, after which
+   * they no longer open: a note changed since the re-encryption started, gone or cut short, or a
+   * file that opens with the old key but was not there, such as an older copy a sync tool put back.
+   * When `isUnverifiable`, every file whose header names the old key.
+   */
+  readonly heldBack: number;
+  /**
+   * Which files are notes cannot be told: the manifest that records them is lost, or the old key's
+   * slot does not open. The window asks the user to restore `manifest.mdxp` or `vault.json` from
+   * the folder's history first; finishing anyway leaves `heldBack` files unreadable.
+   */
+  readonly isUnverifiable: boolean;
+}
+
+export type ProtectedNoteState = 'current' | 'olderCopy' | 'newerThanManifest' | 'unlisted' | 'missing';
+
+export interface ProtectedNoteSummary {
+  /** 32 hexadecimal characters. */
+  readonly noteId: string;
+  readonly title: string;
+  /** The folder inside the section, with `/` between parts; empty at its top. */
+  readonly folder: string;
+  readonly kind: 'note' | 'attachment' | 'draft' | 'manifest';
+  readonly modifiedMs: number;
+  readonly state: ProtectedNoteState;
+}
+
+export interface ProtectedNoteText {
+  readonly text: string;
+  readonly encoding: string;
+  readonly hasByteOrderMark: boolean;
+  readonly hasDecodingErrors: boolean;
+  readonly lineEnding: LineEnding;
+  readonly revision: number;
+  /** An older copy replaced the note's file, as a sync tool restoring an old version would. */
+  readonly isOlderCopy: boolean;
+}
+
+export interface ProtectedNoteEdit {
+  readonly noteId: string;
+  readonly text: string;
+  readonly encoding: string;
+  readonly hasByteOrderMark: boolean;
+}
+
+/**
+ * `olderNotes`: the section's manifest is older than this PC last saw, as when an older copy of the
+ * folder was put back. `changedVault`: its password or unlock methods were changed on another PC or
+ * restored from a backup, which can bring back an old password. `checkUnavailable`: what this PC saw
+ * before could not be read. The user may keep the folder as it is with `acceptFolder`, or lock.
+ */
+export type ProtectedFolderWarning = 'olderNotes' | 'changedVault' | 'checkUnavailable';
+
+export interface UnlockResult {
+  readonly folderWarning?: ProtectedFolderWarning;
+}
+
+export interface NewProtectedNote {
+  readonly title: string;
+  readonly folder: string;
+}
+
+/** A plain note of the notes location to bring into its protected section. */
+export interface ProtectedMoveIn {
+  /** The plain note's path; a note with child notes is refused. */
+  readonly notePath: string;
+  /** The folder inside the section, with `/` between parts; empty at its top. */
+  readonly intoFolder: string;
+  /**
+   * The user confirmed that the plain note is deleted for good and that copies made before, in sync
+   * history, backups or the Recycle Bin, are not touched; without it the move is refused.
+   */
+  readonly isConfirmed: boolean;
+}
+
+export interface MoveInResult {
+  readonly noteId: string;
+  /** The plain note could not be deleted, so it is still there; the window says so. */
+  readonly isPlainCopyKept: boolean;
+}
+
+/** A protected note to write out as a plain note, after the user confirmed it will not be protected. */
+export interface ProtectedMoveOut {
+  readonly noteId: string;
+  /** A folder of the notes location, by its path. */
+  readonly intoFolder: string;
+  readonly isConfirmed: boolean;
+}
+
+/** A picture sealed in the section's `Attachments` folder, by its id and the file name it is listed by. */
+export interface AddedProtectedAttachment {
+  readonly noteId: string;
+  readonly fileName: string;
+}
+
+export type ProtectedNotesLockedListener = (locationKeys: readonly string[]) => void;
+
+/**
+ * Saves this window's unsaved edits of the notes of these sections, by their notes locations'
+ * canonical keys, before they lock; resolves to whether everything was saved.
+ */
+export type ProtectedNotesLockRequestListener = (locationKeys: readonly string[]) => Promise<boolean>;
+
+/**
+ * The protected section of a Notes workspace, by its notes location. Keys stay in the app's native
+ * layer: the window sends a password only to set up or unlock, gets the recovery key once at set-up,
+ * and never receives a key.
+ */
+export interface ProtectedNotesPort {
+  status(location: string): Promise<ProtectedStatus>;
+  /** Sets up a section with a password of at least 10 characters; resolves to the recovery key to show once. */
+  setUp(location: string, password: string): Promise<{ readonly recoveryKey: string }>;
+  unlock(location: string, password: string, shouldRemember: boolean): Promise<UnlockResult>;
+  /** Unlocks with the recovery key and replaces the password with a new one. */
+  unlockWithRecoveryKey(
+    location: string,
+    recovery: { readonly recoveryKey: string; readonly newPassword: string },
+  ): Promise<UnlockResult>;
+  unlockOnThisPc(location: string): Promise<UnlockResult>;
+  /**
+   * Changes the password after the current one is confirmed; other PCs need the new one. With
+   * `shouldReencrypt`, call `continueReencryption` until nothing remains.
+   */
+  changePassword(location: string, change: PasswordChange): Promise<PasswordChangeResult>;
+  /** Seals the next few files again; resolves to how many remain. Resumes after a restart once unlocked. */
+  continueReencryption(location: string): Promise<ReencryptionProgress>;
+  /**
+   * Ends a re-encryption that holds files back, after the password is confirmed; those files no
+   * longer open. `discardCount` is the `heldBack` the last step reported, so nothing is dropped
+   * unseen. When the step reported `isUnverifiable`, the window first tells the user to restore
+   * `manifest.mdxp` or `vault.json` from history and passes `acknowledgeUnverifiable` only if they
+   * finish anyway, even with nothing held back. Refused with `reencryptionUnverifiable` otherwise.
+   */
+  finishReencryption(location: string, password: string, finish: ReencryptionFinish): Promise<void>;
+  /** A new recovery key in place of the old one, after the password is confirmed; resolves to it, to show once. */
+  newRecoveryKey(location: string, password: string): Promise<{ readonly recoveryKey: string }>;
+  /** Keeps the folder as it is after a folder warning; this PC remembers it as seen. */
+  acceptFolder(location: string): Promise<void>;
+  forgetThisPc(location: string): Promise<void>;
+  /**
+   * Asks every window to save its unsaved edits of the section's notes, waiting a few seconds at most,
+   * before the user locks it; resolves to whether all of them were saved.
+   */
+  saveBeforeLock(location: string): Promise<boolean>;
+  lock(location: string): Promise<void>;
+  /** Locks every section once every window has saved what it could, as on sleep or quit. */
+  lockAll(): Promise<void>;
+  list(location: string): Promise<ProtectedNoteSummary[]>;
+  /** Resolves to the new note's id. */
+  create(location: string, note: NewProtectedNote): Promise<string>;
+  open(location: string, noteId: string): Promise<ProtectedNoteText>;
+  /** Resolves to the note's new revision. */
+  save(location: string, edit: ProtectedNoteEdit): Promise<number>;
+  /**
+   * Brings a plain note into the section. The plain note is deleted for good, not sent to the
+   * Recycle Bin, and only once its protected copy has been read back and opens to the same bytes
+   * and the plain note, read again with writers kept out, still holds them; otherwise the move is
+   * undone and refused with `plainNoteChanged`. Refused with `invalidRequest` while a folder warning
+   * waits. The window closes any tab of the plain note first.
+   */
+  moveIn(location: string, move: ProtectedMoveIn): Promise<MoveInResult>;
+  /**
+   * Writes a protected note out as a new plain note, never over another, and then removes it from
+   * the section; resolves to the plain note.
+   */
+  moveOut(location: string, move: ProtectedMoveOut): Promise<DocumentLocation>;
+  /**
+   * Seals pasted picture bytes as an attachment of the section, named after `name` with the
+   * extension the bytes show; nothing is written outside the section.
+   */
+  addPastedAttachment(
+    location: string,
+    picture: { readonly name: string; readonly bytes: Uint8Array },
+  ): Promise<AddedProtectedAttachment>;
+  /** Seals a picture the user dropped on this window as an attachment of the section. */
+  addDroppedAttachment(location: string, path: string): Promise<AddedProtectedAttachment>;
+  /**
+   * An attachment's bytes, to show from memory while the section is unlocked; the window lets go of
+   * them when it locks. A note's id is refused with `notFound`.
+   */
+  openAttachment(location: string, noteId: string): Promise<Uint8Array>;
+  /**
+   * Backs the section up as it is, still encrypted, into a new folder inside one the user picks in
+   * the app's dialog; resolves to that folder, or `undefined` when the user cancelled. Works while
+   * locked too.
+   */
+  backUp(location: string): Promise<string | undefined>;
+  /**
+   * Restores a backup folder the user picks where this notes location has no section; resolves to
+   * whether it was restored. The section is then locked, and unlocks with the password or recovery
+   * key it had when it was backed up.
+   */
+  restore(location: string): Promise<boolean>;
+  /**
+   * Tells the listener which sections locked, in any window, by their notes locations' canonical keys,
+   * so every window closes their notes; returns how to stop listening.
+   */
+  onLocked(listener: ProtectedNotesLockedListener): () => void;
+  /** Hears that sections are about to lock, so this window saves its edits of them first; returns how to stop. */
+  onLockRequested(listener: ProtectedNotesLockRequestListener): () => void;
+}

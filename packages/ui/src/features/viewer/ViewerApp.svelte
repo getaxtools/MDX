@@ -12,32 +12,92 @@
     type RecentFile,
     type ResizablePanel,
     type RingPoint,
+    type WorkspaceKindId,
+    notesLocationOf,
+    noteNameOf,
+    notesSettingsOf,
+    type SpecSearchFilter,
   } from '@mdx/core';
-  import type { SectionAction, SourceEditor } from '@mdx/editor';
-  import type { Translator } from '@mdx/i18n';
+  import type {
+    FormattingState,
+    FormulaEditRequest,
+    FormulaKind,
+    FormulaTarget,
+    FormulaWriteOutcome,
+    SectionAction,
+    SourceEditor,
+    ToolboxAction,
+    WrittenLink,
+  } from '@mdx/editor';
+  import type { MessageKey, Translator } from '@mdx/i18n';
   import type { CodeHighlighter, OutlineEntry, RichBlockRenderer } from '@mdx/renderer';
+  import { tick, untrack } from 'svelte';
   import CommandPalette from '../command-palette/CommandPalette.svelte';
   import { paletteCommands } from '../command-palette/paletteCommands';
   import ExplorerSidebar from '../explorer/ExplorerSidebar.svelte';
+  import FileArcHost from '../file-arc/FileArcHost.svelte';
+  import {
+    fileArcDirectionOf,
+    isFileArcCommand,
+    isOverlayOpenIn,
+    type FileArcCommand,
+    type FileArcControls,
+  } from '../file-arc/fileArcCommands';
+  import { fileArcListOf, fileArcWordingOf } from '../file-arc/viewerFileArc';
+  import { FolderTreeState } from '../folder-tree/FolderTreeState';
+  import { NoteTreeMemory } from '../notes/NoteTreeMemory';
   import FolderSearchPanel from '../folder-search/FolderSearchPanel.svelte';
   import EditingLayout from '../editing/EditingLayout.svelte';
   import type { ScrollSync } from '../editing/ScrollSync';
   import SourceEditorPane from '../editing/SourceEditorPane.svelte';
+  import FormattingToolbar from '../editing/FormattingToolbar.svelte';
+  import EquationEditorHost from '../equation/EquationEditorHost.svelte';
+  import { isRefusalOfTheSource } from '../equation/formulaProblemText';
+  import type { RenderedFormula } from '../document-view/renderedFormulaAt';
+  import { openLinkFromEditor } from '../editing/editorLinks';
+  import { createRichTextRendering } from '../editing/richTextRendering';
+  import { editorSpellCheckOf } from '../editing/editorSpellCheck';
+  import { isSpellingMenuWanted } from '../editing/spellingMenu';
   import PanelResizer from '../../components/PanelResizer.svelte';
   import SettingsDialog from '../settings/SettingsDialog.svelte';
   import StartPage from '../start-page/StartPage.svelte';
+  import SpecDashboard from '../spec-viewer/SpecDashboard.svelte';
+  import { shownDashboardOf } from '../spec-viewer/specDashboard';
+  import SpecChangePage from '../spec-viewer/SpecChangePage.svelte';
+  import { shownChangePageOf } from '../spec-viewer/specChangePage';
+  import SpecPreviewPage from '../spec-viewer/SpecPreviewPage.svelte';
+  import SpecFeaturePage from '../spec-viewer/SpecFeaturePage.svelte';
+  import { shownFeaturePageOf } from '../spec-viewer/specFeaturePage';
   import AboutDialog from '../about/AboutDialog.svelte';
   import type { AppInfo } from '../about/AppInfo';
   import type { ThirdPartyLicensesLoader } from '../about/ThirdPartyLicenses';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
   import type { DocumentLink } from '../document-view/DocumentLink';
   import DocumentView from '../document-view/DocumentView.svelte';
-  import { isUntitledLocation, type TextSearchOptions } from '@mdx/platform';
+  import { propertyFieldsStateOf } from '../document-view/PropertyEditing';
+  import { isUntitledLocation, type DocumentLocation, type TextSearchOptions } from '@mdx/platform';
   import KeyboardShortcutsDialog from '../help/KeyboardShortcutsDialog.svelte';
   import WordGoalDialog from '../word-goals/WordGoalDialog.svelte';
+  import WorkspaceDialogs from '../workspaces/WorkspaceDialogs.svelte';
+  import { isWorkspaceDialog } from '../workspaces/WorkspaceActions';
+  import WorkspaceKindsPage from '../workspaces/WorkspaceKindsPage.svelte';
+  import WorkspaceButton from '../workspaces/WorkspaceButton.svelte';
+  import { isWorkspaceKindCommand } from '../control-wheel/workspaceKindCommands';
+  import NotesLocationMissing from '../notes-location/NotesLocationMissing.svelte';
+  import NotesMoveDialog from '../notes-location/NotesMoveDialog.svelte';
+  import NoteTrashDialog from '../notes/NoteTrashDialog.svelte';
+  import ProtectedSetUpDialog from '../protected-notes/ProtectedSetUpDialog.svelte';
+  import NoteBacklinks from '../notes/NoteBacklinks.svelte';
+  import NoteFromTemplateDialog from '../notes/NoteFromTemplateDialog.svelte';
+  import NoteLinkUpdatesDialog from '../notes/NoteLinkUpdatesDialog.svelte';
+  import NoteImportDialog from '../notes/NoteImportDialog.svelte';
+  import NoteExportDialog from '../notes/NoteExportDialog.svelte';
+  import { workspaceNameOf } from '../workspaces/workspaceCommands';
+  import { recentWorkspaceLinks } from '../workspaces/recentWorkspaceLinks';
   import { SessionWordCounts } from '../word-goals/SessionWordCounts';
   import PasteTableDialog from '../table-paste/PasteTableDialog.svelte';
   import OutlinePanel from '../outline/OutlinePanel.svelte';
+  import PromptInjectionPanel from '../prompt-injection/PromptInjectionPanel.svelte';
   import type { HeadingRequest } from '../outline/HeadingRequest';
   import { headingIdAtLine } from '../outline/headingIdAtLine';
   import TabStripView from '../tabs/TabStripView.svelte';
@@ -47,7 +107,8 @@
   import StatusBar from '../view/StatusBar.svelte';
   import DocumentToolbar from '../view/DocumentToolbar.svelte';
   import NoticeBar from './NoticeBar.svelte';
-  import { moveFocusBetweenRegions } from './focusRegions';
+  import { focusRegionOf, moveFocusBetweenRegions } from './focusRegions';
+  import SidebarToggleButton from '../view/SidebarToggleButton.svelte';
   import { COMMAND_SHORTCUTS, commandForShortcut, shortcutLabelFor } from '../shortcuts/commandShortcuts';
   import { effectiveCommandShortcuts } from '../shortcuts/effectiveCommandShortcuts';
   import type { ControlWheelButton } from '../view/ControlWheelButton';
@@ -77,7 +138,22 @@
   // Raw, not deep state: a deep proxy gives the same document a new identity on every
   // snapshot, and the document view treats that as a newly opened document.
   let snapshot: ViewerSnapshot | undefined = $state.raw();
-  $effect(() => controller.subscribe((latest) => (snapshot = latest)));
+  /** A closed wheel stays in the page while it fades out, and opening it again during the fade reuses it. */
+  let isControlWheelFading = $state(false);
+  $effect(() => controller.subscribe(receiveSnapshot));
+
+  function isControlWheelShownIn(shown: ViewerSnapshot | undefined): boolean {
+    return shown?.openDialog === 'controlWheel' || shown?.openDialog === 'workspaceKindSettings';
+  }
+
+  // The first snapshot arrives while the effect above runs, so reads here must not subscribe it again.
+  function receiveSnapshot(latest: ViewerSnapshot) {
+    untrack(() => {
+      if (isControlWheelShownIn(latest)) isControlWheelFading = false;
+      else if (isControlWheelShownIn(snapshot)) isControlWheelFading = true;
+      snapshot = latest;
+    });
+  }
 
   $effect(() => {
     if (snapshot) applyTheme(globalThis.document.documentElement, snapshot.viewer.viewSettings.theme);
@@ -87,15 +163,15 @@
     snapshot ? effectiveCommandShortcuts(snapshot.viewer.shortcutOverrides) : COMMAND_SHORTCUTS,
   );
   const isWheelOpenedAtPointer = $derived(snapshot?.viewer.viewSettings.isWheelOpenedAtPointer ?? false);
-  const isControlWheelOpen = $derived(
-    snapshot?.openDialog === 'controlWheel' || snapshot?.openDialog === 'workspaceKindSettings',
+  const isControlWheelOpen = $derived(isControlWheelShownIn(snapshot));
+  const controlWheelShortcut = $derived(
+    shortcutLabelFor({ kind: 'toggleControlWheel' }, translator, shortcuts),
   );
   const controlWheelButton: ControlWheelButton | undefined = $derived.by(() => {
     if (!snapshot?.viewer.viewSettings.isWheelButtonInStatusBar) return undefined;
-    const shortcut = shortcutLabelFor({ kind: 'toggleControlWheel' }, translator, shortcuts);
     return {
       activeKindId: snapshot.viewer.workspaceKinds.activeKindId(),
-      ...(shortcut ? { shortcut } : {}),
+      ...(controlWheelShortcut ? { shortcut: controlWheelShortcut } : {}),
       onShowControlWheel: () => void controller.execute({ kind: 'toggleControlWheel' }),
     };
   });
@@ -115,14 +191,31 @@
     };
   });
 
-  const isMarkdownViewerActive = $derived(
+  /** Documents show in the Markdown viewer, in a Notes workspace whose notes folder is there and in a Spec viewer one. */
+  const isReadingDocuments = $derived(
     (snapshot?.viewer.workspaceKinds.activeKindId() ?? DEFAULT_WORKSPACE_KIND_ID) ===
-      DEFAULT_WORKSPACE_KIND_ID,
+      DEFAULT_WORKSPACE_KIND_ID ||
+      snapshot?.notes !== undefined ||
+      snapshot?.specProjects !== undefined,
   );
   const activeTab = $derived(snapshot?.viewer.tabStrip.activeTab());
+  const shownWorkspace = $derived(snapshot?.workspaces?.registry.find(snapshot.workspaces.shownWorkspaceId));
+  const shownWorkspaceKindId = $derived(
+    (shownWorkspace?.kindId ?? DEFAULT_WORKSPACE_KIND_ID) as WorkspaceKindId,
+  );
   const activeKey = $derived(activeTab?.location.canonicalKey);
+  const shownDashboard = $derived(shownDashboardOf(snapshot?.specProjects, activeTab?.location));
+  const shownChangePage = $derived(shownChangePageOf(snapshot?.specProjects, activeTab?.location));
+  const shownFeaturePage = $derived(shownFeaturePageOf(snapshot?.specProjects, activeTab?.location));
+  const shownPreview = $derived(
+    activeTab ? snapshot?.specPreviews?.get(activeTab.location.canonicalKey) : undefined,
+  );
   let headingRequest: HeadingRequest | undefined = $state();
   let cursorCount = $state(1);
+  let isCaretInLink = $state(false);
+  let editorFormatting: FormattingState | undefined = $state();
+  /** The formula the equation editor is open on, in the document being edited. */
+  let equationEditing: { request: FormulaEditRequest; canonicalKey: string } | undefined = $state();
   let selectedWords = $state(0);
   const sessionWordCounts = new SessionWordCounts();
   const activeWordGoal = $derived(
@@ -139,6 +232,12 @@
       : 0,
   );
   let shownEditor: SourceEditor | undefined;
+  /** A heading chosen while the editor was still starting, revealed once it is ready. */
+  let pendingEditorLine: number | undefined;
+  /** Formatting toolbar presses made while the editor was still starting, run once it is ready. */
+  let pendingToolboxActions: ToolboxAction[] = [];
+  /** Edit Formula chosen in the preview, waiting for the editor it opened. */
+  let pendingFormulaEdit: RenderedFormula | undefined;
   /** Kept with its document, so another tab never shows the section of the previous one. */
   let currentHeading: { readonly documentKey?: string; readonly id?: string } = $state({});
   const currentHeadingId = $derived(currentHeading.documentKey === activeKey ? currentHeading.id : undefined);
@@ -158,12 +257,62 @@
       : undefined,
   );
   const isActiveUntitled = $derived(activeTab ? isUntitledLocation(activeTab.location) : false);
+  /** Shown by the setting, and in a document whose finding was just revealed. */
+  const isShowingHiddenCharacters = $derived(
+    (snapshot?.viewer.viewSettings.isShowingHiddenCharacters ?? false) ||
+      snapshot?.isRevealingFinding === true,
+  );
   const isActiveFavourite = $derived(
     activeTab ? (snapshot?.viewer.favourites.isFavourite(activeTab.location.canonicalKey) ?? false) : false,
   );
 
   /** Widths while a splitter is dragged; the settings keep the width once the drag ends. */
   let draggedPanelWidths: Partial<Record<ResizablePanel, number | undefined>> = $state({});
+
+  /** Hiding from the keyboard puts the focus in the document, not on the window. */
+  async function hideSidebar(isFromKeyboard: boolean) {
+    await controller.execute({ kind: 'hideSidebar' });
+    if (!isFromKeyboard) return;
+    await tick();
+    focusDocument();
+  }
+
+  async function closeKindsPage() {
+    await controller.execute({ kind: 'closeWorkspaceKindsPage' });
+    await tick();
+    focusDocument();
+  }
+
+  /** The page announces what is done on it, so its kind commands do not show the app's notice. */
+  function runKindsPageCommand(command: ViewerCommand) {
+    if (isWorkspaceKindCommand(command)) void controller.runWorkspaceKindsPageCommand(command);
+    else void controller.execute(command);
+  }
+
+  /** Esc leaves the kinds page from anywhere, unless a dialog, a menu or the palette takes it first. */
+  function isKindsPageEscape(event: KeyboardEvent): boolean {
+    return (
+      event.key === 'Escape' &&
+      !event.isComposing &&
+      snapshot?.isWorkspaceKindsPageShown === true &&
+      !isOverlayOpenIn(globalThis.document)
+    );
+  }
+
+  /** While editing, the first tab stop may be the preview splitter, and an editor still loading takes focus once ready. */
+  function focusDocument() {
+    const readingArea = globalThis.document.querySelector('.reading-area');
+    if (readingArea?.querySelector('.editing-layout')) {
+      shownEditor?.focus();
+      return;
+    }
+    focusRegionOf(readingArea);
+  }
+
+  /** Kept here rather than in the tree, so the arc lists the tree as it was while the side bar is hidden. */
+  const sideBarTrees = { folders: new FolderTreeState(), notes: new NoteTreeMemory() };
+  let fileArcControls: FileArcControls | undefined;
+  const fileArcWording = $derived(snapshot ? fileArcWordingOf(snapshot) : undefined);
 
   function shownPanelWidth(panel: ResizablePanel): number {
     const dragged = draggedPanelWidths[panel];
@@ -190,21 +339,66 @@
   function attachEditor(sync: ScrollSync, sourceEditor: SourceEditor | undefined) {
     shownEditor = sourceEditor;
     sync.attachEditor(sourceEditor);
+    if (sourceEditor && pendingEditorLine !== undefined) sourceEditor.revealLine(pendingEditorLine);
+    pendingEditorLine = undefined;
+    if (sourceEditor && pendingFormulaEdit)
+      sourceEditor.editFormulaInOrder(pendingFormulaEdit.index, pendingFormulaEdit.source);
+    pendingFormulaEdit = undefined;
+    for (const action of pendingToolboxActions.splice(0)) sourceEditor?.runFormatting(action);
+  }
+
+  function runToolboxAction(action: ToolboxAction) {
+    if (shownEditor) shownEditor.runFormatting(action);
+    else pendingToolboxActions.push(action);
+  }
+
+  /** Edit Formula in the preview opens the document for editing, then the equation editor on that formula. */
+  function editPreviewFormula(formula: RenderedFormula) {
+    if (shownEditor && editedDocument) {
+      shownEditor.editFormulaInOrder(formula.index, formula.source);
+      return;
+    }
+    pendingFormulaEdit = formula;
+    void controller.execute({ kind: 'toggleEditing' });
+  }
+
+  /** The equation editor stays open on a source the editor refused, so the user can correct it. */
+  function insertFormula(
+    target: FormulaTarget,
+    formula: { readonly tex: string; readonly kind: FormulaKind },
+  ): FormulaWriteOutcome {
+    const outcome = shownEditor?.insertFormula(target, formula) ?? 'textChanged';
+    if (!isRefusalOfTheSource(outcome)) equationEditing = undefined;
+    return outcome;
+  }
+
+  function cancelEquation() {
+    equationEditing = undefined;
+    shownEditor?.focus();
   }
 
   /** While editing the caret moves to the heading; otherwise the shown document scrolls to it. */
   function goToHeading(entry: OutlineEntry) {
     showCurrentHeading(entry.id);
-    if (editedDocument && shownEditor) {
-      shownEditor.revealLine(entry.line);
+    if (editedDocument) {
+      if (shownEditor) shownEditor.revealLine(entry.line);
+      else pendingEditorLine = entry.line;
       return;
     }
     headingRequest = { entry, number: (headingRequest?.number ?? 0) + 1 };
   }
 
-  // The webview's own menu offers browser actions such as Back and Refresh that make no sense in the app.
+  function openEditorLink(link: WrittenLink) {
+    openLinkFromEditor(link, editedDocument?.outline ?? [], {
+      openLink: (link) => void controller.openLink(link),
+      goToHeading,
+    });
+  }
+
+  // The webview's own menu offers browser actions such as Back and Refresh that make no sense in the
+  // app; in spell-checked editor text it offers spelling suggestions instead.
   function preventBrowserContextMenu(event: MouseEvent) {
-    event.preventDefault();
+    if (!isSpellingMenuWanted(event)) event.preventDefault();
   }
 
   type ControlWheelComponent = typeof import('../control-wheel/ControlWheel.svelte').default;
@@ -235,6 +429,11 @@
 
   function handleKeydown(event: KeyboardEvent) {
     if (event.defaultPrevented) return;
+    if (isKindsPageEscape(event)) {
+      event.preventDefault();
+      void closeKindsPage();
+      return;
+    }
     if (isRegionKey(event)) {
       const direction = event.shiftKey ? -1 : 1;
       if (moveFocusBetweenRegions(globalThis.document, direction, globalThis.document.activeElement))
@@ -243,19 +442,57 @@
     }
     const command = commandForShortcut(event, platform, shortcuts);
     if (!command) return;
+    if (isFileArcCommand(command)) {
+      stepFileArc(event, command);
+      return;
+    }
     event.preventDefault();
     void controller.execute(command);
   }
+
+  /**
+   * WebView2 prints by itself on Ctrl+P and Ctrl+Shift+P unless the page stops the key, which would
+   * print a protected note past its warning. So those keys are taken here first, in the capture
+   * phase, before any part of the page can stop them, and run what they are bound to in the app.
+   */
+  function takeBrowserPrintKeys(event: KeyboardEvent) {
+    const isPrintKey = (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'p';
+    if (!isPrintKey) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const command = commandForShortcut(event, platform, shortcuts);
+    if (command) void controller.execute(command);
+  }
+
+  /** The arc keys do nothing while a dialog, a menu, the palette or the control wheel is open. */
+  function stepFileArc(event: KeyboardEvent, command: FileArcCommand) {
+    if (snapshot?.openDialog !== undefined || isOverlayOpenIn(globalThis.document)) return;
+    if (fileArcControls?.step(fileArcDirectionOf(command))) event.preventDefault();
+  }
 </script>
 
+{#snippet backlinksFooter()}
+  {#if snapshot?.noteBacklinks && snapshot.activeDocument}
+    <NoteBacklinks
+      backlinks={snapshot.noteBacklinks.backlinks}
+      noteName={noteNameOf(snapshot.activeDocument.fileName)}
+      {translator}
+      onCommand={(command: ViewerCommand) => void controller.execute(command)}
+    />
+  {/if}
+{/snippet}
+
 <svelte:window
+  onkeydowncapture={takeBrowserPrintKeys}
   onkeydown={handleKeydown}
   onmouseup={handleMouseUp}
   oncontextmenu={preventBrowserContextMenu}
+  onfocus={() => void controller.windowFocused()}
 />
 
 {#if snapshot}
   {@const viewSettings = snapshot.viewer.viewSettings}
+  {@const listedSnapshot = snapshot}
   <div class="app-shell">
     <div
       class="viewer"
@@ -270,43 +507,95 @@
         {translator}
         onCommand={(command: ViewerCommand) => void controller.execute(command)}
       />
-      {#if viewSettings.isSidebarVisible && viewSettings.sidebarView === 'search'}
-        <FolderSearchPanel
-          {translator}
-          focusRequest={snapshot.folderSearchFocusRequest}
-          hasFolders={controller.hasSearchableFolders()}
-          onSearch={(query: string, options: TextSearchOptions) => controller.searchFolders(query, options)}
-          onOpenMatch={(path: string, query: string, options: TextSearchOptions) =>
-            void controller.execute({ kind: 'openSearchMatch', path, query, options })}
-        />
-      {:else if viewSettings.isSidebarVisible && viewSettings.sidebarView === 'outline'}
-        <OutlinePanel
-          outline={activeTab ? snapshot.activeDocument?.outline : undefined}
-          {currentHeadingId}
-          {translator}
-          onSelectHeading={goToHeading}
-          onChangeSection={(entry: OutlineEntry, action: SectionAction) =>
-            void controller.execute({ kind: 'changeOutlineSection', line: entry.line, action })}
-        />
-      {:else if viewSettings.isSidebarVisible}
-        <ExplorerSidebar
-          favourites={snapshot.viewer.favourites.favourites()}
-          favouriteGroups={snapshot.viewer.favourites.groups()}
-          explorerFolders={snapshot.viewer.explorerFolders.folders()}
-          collapsedSections={viewSettings.collapsedExplorerSections}
-          sectionHeights={viewSettings.explorerSectionHeights}
-          activeDocumentKey={activeTab?.location.canonicalKey}
-          recentFiles={snapshot.viewer.recentFiles.entries()}
-          pathStatuses={snapshot.pathStatuses}
-          onCommand={(command: ViewerCommand) => void controller.execute(command)}
-          onListFolder={(folderPath: string) => controller.listFolderContents(folderPath)}
-          folderRevisions={snapshot.folderRevisions}
-          onShowFolder={(folderPath: string) => controller.showFolder(folderPath)}
-          onOpenDocument={(documentPath: string) => void controller.openDocuments([documentPath])}
-          {translator}
-          onOpenFavourite={(favourite: Favourite) => void controller.openFavourite(favourite)}
-          onOpenRecentFile={(recentFile: RecentFile) => void controller.openRecentFile(recentFile)}
-        />
+      {#if viewSettings.isSidebarVisible}
+        <div class="sidebar-column">
+          {#if shownWorkspace}
+            <WorkspaceButton
+              name={workspaceNameOf(shownWorkspace, translator)}
+              kindId={shownWorkspaceKindId}
+              icon={shownWorkspace.icon}
+              colour={shownWorkspace.colour}
+              shortcutLabel={shortcutLabelFor({ kind: 'showWorkspaceSwitcher' }, translator, shortcuts)}
+              {translator}
+              onSwitch={() => void controller.execute({ kind: 'showWorkspaceSwitcher' })}
+            >
+              {#snippet actions()}
+                <SidebarToggleButton
+                  action="hide"
+                  {translator}
+                  onToggle={(isFromKeyboard: boolean) => void hideSidebar(isFromKeyboard)}
+                />
+              {/snippet}
+            </WorkspaceButton>
+          {:else}
+            <div class="sidebar-header">
+              <SidebarToggleButton
+                action="hide"
+                {translator}
+                onToggle={(isFromKeyboard: boolean) => void hideSidebar(isFromKeyboard)}
+              />
+            </div>
+          {/if}
+          {#if viewSettings.sidebarView === 'search'}
+            <FolderSearchPanel
+              {translator}
+              focusRequest={snapshot.folderSearchFocusRequest}
+              hasFolders={controller.hasSearchableFolders()}
+              onSearch={(query: string, options: TextSearchOptions, specFilter?: SpecSearchFilter) =>
+                controller.searchFolders(query, options, specFilter)}
+              onOpenMatch={(path: string, query: string, options: TextSearchOptions) =>
+                void controller.execute({ kind: 'openSearchMatch', path, query, options })}
+              isNotesSearch={snapshot.notes !== undefined}
+              isSpecSearch={snapshot.specProjects !== undefined}
+              requestedQuery={snapshot.folderSearchQuery}
+              notesIndexStatus={snapshot.notes?.indexStatus}
+            />
+          {:else if viewSettings.sidebarView === 'promptInjection'}
+            <PromptInjectionPanel
+              hasDocument={activeTab !== undefined && snapshot.activeDocument !== undefined}
+              check={snapshot.injectionCheck}
+              isShowingHiddenCharacters={viewSettings.isShowingHiddenCharacters}
+              {translator}
+              onCommand={(command: ViewerCommand) => void controller.execute(command)}
+            />
+          {:else if viewSettings.sidebarView === 'outline'}
+            <OutlinePanel
+              outline={activeTab ? snapshot.activeDocument?.outline : undefined}
+              {currentHeadingId}
+              {translator}
+              onSelectHeading={goToHeading}
+              onChangeSection={(entry: OutlineEntry, action: SectionAction) =>
+                void controller.execute({ kind: 'changeOutlineSection', line: entry.line, action })}
+            />
+          {:else}
+            <ExplorerSidebar
+              favourites={snapshot.viewer.favourites.favourites()}
+              favouriteGroups={snapshot.viewer.favourites.groups()}
+              explorerFolders={snapshot.viewer.explorerFolders.folders()}
+              collapsedSections={viewSettings.collapsedExplorerSections}
+              sectionHeights={viewSettings.explorerSectionHeights}
+              activeDocumentKey={activeTab?.location.canonicalKey}
+              recentFiles={snapshot.viewer.recentFiles.entries()}
+              pathStatuses={snapshot.pathStatuses}
+              onCommand={(command: ViewerCommand) => void controller.execute(command)}
+              onListFolder={(folderPath: string) => controller.listFolderContents(folderPath)}
+              notes={snapshot.notes}
+              protectedNotes={snapshot.protectedNotes}
+              specProjects={snapshot.specProjects}
+              isNoteDeletionConfirmed={viewSettings.isNoteDeletionConfirmed}
+              onNotesCommand={(command: ViewerCommand) => controller.execute(command)}
+              onListNoteFolder={(folderPath: string) => controller.listNoteFolder(folderPath)}
+              folderRevisions={snapshot.folderRevisions}
+              onShowFolder={(folderPath: string) => controller.showFolder(folderPath)}
+              onOpenDocument={(documentPath: string) => void controller.openDocuments([documentPath])}
+              {translator}
+              onOpenFavourite={(favourite: Favourite) => void controller.openFavourite(favourite)}
+              onOpenRecentFile={(recentFile: RecentFile) => void controller.openRecentFile(recentFile)}
+              folderTreeState={sideBarTrees.folders}
+              noteTreeMemory={sideBarTrees.notes}
+            />
+          {/if}
+        </div>
       {/if}
       {#if viewSettings.isSidebarVisible}
         <PanelResizer
@@ -321,39 +610,63 @@
         />
       {/if}
       <div class="workspace">
-        <TabStripView
-          tabs={snapshot.viewer.tabStrip.tabs()}
-          activeKey={activeTab?.location.canonicalKey}
-          pathStatuses={snapshot.pathStatuses}
-          unsavedKeys={snapshot.unsavedDocumentKeys}
-          {translator}
-          onActivate={(canonicalKey: string) => controller.activateTab(canonicalKey)}
-          onCommand={(command: ViewerCommand) => void controller.execute(command)}
-        />
-        <div class="document-header">
-          {#if viewSettings.isBreadcrumbsVisible && activeTab && snapshot.activeDocument}
-            <Breadcrumbs
-              displayPath={snapshot.activeDocument.displayPath}
-              fileName={snapshot.activeDocument.fileName}
-              hasFolder={!snapshot.activeDocument.isUntitled}
-              outline={snapshot.activeDocument.outline}
-              {currentHeadingId}
-              {translator}
-              onRevealInExplorer={() =>
-                void controller.execute({ kind: 'showSidebarView', sidebarView: 'explorer' })}
-              onSelectHeading={goToHeading}
-            />
-          {/if}
-          <DocumentToolbar
-            {viewSettings}
-            hasDocument={snapshot.activeDocument !== undefined}
-            canBeFavourite={activeTab !== undefined && !isActiveUntitled}
-            isFavourite={isActiveFavourite}
-            isEditing={snapshot.isActiveDocumentEditing ?? false}
+        {#if !snapshot.isWorkspaceKindsPageShown}
+          <TabStripView
+            tabs={snapshot.viewer.tabStrip.tabs()}
+            activeKey={activeTab?.location.canonicalKey}
+            pathStatuses={snapshot.pathStatuses}
+            unsavedKeys={snapshot.unsavedDocumentKeys}
             {translator}
+            onActivate={(canonicalKey: string) => controller.activateTab(canonicalKey)}
             onCommand={(command: ViewerCommand) => void controller.execute(command)}
+            onShowSidebar={viewSettings.isSidebarVisible
+              ? undefined
+              : () => void controller.execute({ kind: 'showSidebar' })}
           />
-        </div>
+          <div class="document-header">
+            {#if viewSettings.isBreadcrumbsVisible && activeTab && snapshot.activeDocument}
+              <Breadcrumbs
+                displayPath={snapshot.activeDocument.displayPath}
+                fileName={snapshot.activeDocument.fileName}
+                hasFolder={!snapshot.activeDocument.isUntitled}
+                outline={snapshot.activeDocument.outline}
+                {currentHeadingId}
+                {translator}
+                onRevealInExplorer={() =>
+                  void controller.execute({ kind: 'showSidebarView', sidebarView: 'explorer' })}
+                onSelectHeading={goToHeading}
+              />
+            {/if}
+            <DocumentToolbar
+              {viewSettings}
+              hasDocument={snapshot.activeDocument !== undefined}
+              canBeFavourite={activeTab !== undefined && !isActiveUntitled}
+              isFavourite={isActiveFavourite}
+              isEditing={snapshot.isActiveDocumentEditing ?? false}
+              {translator}
+              onCommand={(command: ViewerCommand) => void controller.execute(command)}
+            />
+            {#if editedDocument}
+              <FormattingToolbar
+                formatting={editorFormatting}
+                editingMode={snapshot.editingMode ?? 'source'}
+                {translator}
+                onRun={runToolboxAction}
+                onToggleEditingMode={() => void controller.execute({ kind: 'toggleEditingMode' })}
+                onReturnToEditor={() => shownEditor?.focus()}
+              />
+            {/if}
+          </div>
+        {/if}
+        <span class="mode-announcement" role="status">
+          {#key snapshot.editingModeAnnouncement?.number}
+            {snapshot.editingModeAnnouncement
+              ? translator.translate('editing.modeAnnouncement', {
+                  mode: snapshot.editingModeAnnouncement.mode,
+                })
+              : ''}
+          {/key}
+        </span>
         <NoticeBar
           message={snapshot.notice}
           actions={snapshot.noticeActions}
@@ -362,14 +675,79 @@
           onDismiss={() => controller.dismissNotice()}
         />
         <div class="reading-area" data-focus-region>
-          {#if !activeTab || !isMarkdownViewerActive}
+          {#if snapshot.isWorkspaceKindsPageShown}
+            <WorkspaceKindsPage
+              kinds={snapshot.viewer.workspaceKinds}
+              {controlWheelShortcut}
+              {translator}
+              onCommand={runKindsPageCommand}
+              onClose={() => void closeKindsPage()}
+            />
+          {:else if snapshot.missingNotesLocation !== undefined}
+            <NotesLocationMissing
+              path={snapshot.missingNotesLocation}
+              {translator}
+              onCommand={(command: ViewerCommand) => void controller.execute(command)}
+            />
+          {:else if !activeTab || !isReadingDocuments}
             <StartPage
               recentFiles={snapshot.viewer.recentFiles.entries()}
               activeKindId={snapshot.viewer.workspaceKinds.activeKindId()}
+              notesWorkspaceName={snapshot.notes && shownWorkspace
+                ? workspaceNameOf(shownWorkspace, translator)
+                : undefined}
+              recentWorkspaces={snapshot.workspaces
+                ? recentWorkspaceLinks(snapshot.workspaces, snapshot.viewer.workspaceKinds, translator)
+                : []}
+              canCreateWorkspace={snapshot.workspaces?.registry.lastShownOfKind(
+                snapshot.viewer.workspaceKinds.activeKindId(),
+              ) === undefined && snapshot.workspaces !== undefined}
               {translator}
               onCommand={(command: ViewerCommand) => void controller.execute(command)}
               onOpenRecentFile={(recentFile: RecentFile) => void controller.openRecentFile(recentFile)}
             />
+          {:else if shownDashboard}
+            <SpecDashboard
+              dashboard={shownDashboard}
+              {translator}
+              onOpenChange={(changeFolder: string) =>
+                void controller.execute({
+                  kind: 'openSpecChange',
+                  rootKey: shownDashboard.scanned.root.canonicalKey,
+                  changeFolder,
+                })}
+              onOpenFeature={(featureFolder: string) =>
+                void controller.execute({
+                  kind: 'openSpecFeature',
+                  rootKey: shownDashboard.scanned.root.canonicalKey,
+                  featureFolder,
+                })}
+            />
+          {:else if shownChangePage}
+            <SpecChangePage
+              page={shownChangePage}
+              {translator}
+              onOpenDocument={(documentPath: string) => void controller.openDocuments([documentPath])}
+              onOpenFinding={(documentPath: string, line: number | undefined) =>
+                void controller.execute({ kind: 'openSpecFinding', documentPath, line })}
+              onOpenPreview={(capability: string) =>
+                void controller.execute({
+                  kind: 'openSpecPreview',
+                  rootKey: shownChangePage.scanned.root.canonicalKey,
+                  changeFolder: shownChangePage.change.folder,
+                  capability,
+                })}
+            />
+          {:else if shownFeaturePage}
+            <SpecFeaturePage
+              page={shownFeaturePage}
+              {translator}
+              onOpenDocument={(documentPath: string) => void controller.openDocuments([documentPath])}
+              onOpenFinding={(documentPath: string, line: number | undefined) =>
+                void controller.execute({ kind: 'openSpecFinding', documentPath, line })}
+            />
+          {:else if shownPreview}
+            <SpecPreviewPage preview={shownPreview} {translator} />
           {:else if editedDocument}
             {#key editedDocument.canonicalKey}
               <EditingLayout
@@ -392,13 +770,41 @@
                     fileName={editedDocument.fileName}
                     text={editedDocument.source}
                     zoomPercent={viewSettings.zoomPercent}
+                    typography={viewSettings.typography}
+                    richTextRendering={createRichTextRendering({
+                      documentKey: editedDocument.canonicalKey,
+                      keepsRendersPrivate: controller.isProtectedDocument(editedDocument),
+                      renderMarkdown: (markdown: string) =>
+                        controller.renderDocumentBlock(editedDocument.canonicalKey, markdown),
+                      richBlocks,
+                      translator,
+                    })}
                     scrollRatio={editedDocument.scrollRatio}
                     {translator}
                     editorRequest={snapshot?.editorRequest}
-                    isSlashMenuEnabled={viewSettings.isSlashMenuInSource}
+                    editingMode={snapshot?.editingMode ?? 'source'}
+                    slashMenu={{
+                      isInRichText: viewSettings.isSlashMenuInRichText,
+                      isInSource: viewSettings.isSlashMenuInSource,
+                    }}
+                    spellCheck={editorSpellCheckOf(
+                      viewSettings,
+                      controller.isProtectedDocument(editedDocument),
+                    )}
+                    {isShowingHiddenCharacters}
+                    markedRanges={snapshot?.injectionCheck?.findingRanges ?? []}
                     onPastePicture={(bytes: Uint8Array) => controller.pastePicture(bytes)}
                     onCursorCountChange={(count: number) => (cursorCount = count)}
+                    onOpenLink={openEditorLink}
+                    onCaretInLinkChange={(isInLink: boolean) => (isCaretInLink = isInLink)}
+                    onFormattingChange={(formatting: FormattingState) => (editorFormatting = formatting)}
+                    onEditFormula={(request: FormulaEditRequest) =>
+                      (equationEditing = { request, canonicalKey: editedDocument.canonicalKey })}
+                    onChoosePictures={() => void controller.addPictureFiles()}
                     snippets={snapshot ? availableSnippets(snapshot.viewer.snippetLibrary) : []}
+                    wikiLinks={activeTab ? controller.wikiLinkSuggesterFor(activeTab.location) : undefined}
+                    embedResolver={activeTab ? controller.embedResolverFor(activeTab.location) : undefined}
+                    isReadOnly={snapshot?.isActiveDocumentReadOnly ?? false}
                     onSelectedTextChange={(selectedText: string) =>
                       (selectedWords = selectedText === '' ? 0 : measureDocument(selectedText).words)}
                     onReady={(sourceEditor: SourceEditor | undefined) => attachEditor(sync, sourceEditor)}
@@ -417,12 +823,22 @@
                     {richBlocks}
                     {translator}
                     shouldRestoreScroll={false}
+                    {isShowingHiddenCharacters}
                     copyAsHtmlRequest={snapshot?.copyAsHtmlRequest}
                     onOpenLink={(link: DocumentLink) => void controller.openLink(link)}
                     onCommand={(command: ViewerCommand) => void controller.execute(command)}
+                    onEditFormula={editPreviewFormula}
+                    onMoveWithWheel={(event: WheelEvent) => fileArcControls?.moveWithWheel(event) ?? false}
                     isOutlineVisible={false}
                     isFavourite={isActiveFavourite}
                     canBeFavourite={!isActiveUntitled}
+                    propertyFieldsState={snapshot
+                      ? propertyFieldsStateOf(
+                          editedDocument.canonicalKey,
+                          snapshot.unsavedDocumentKeys,
+                          snapshot.propertySavingKey,
+                        )
+                      : 'editable'}
                   />
                 {/snippet}
               </EditingLayout>
@@ -439,7 +855,13 @@
               findQuery={snapshot.findQuery}
               copyAsHtmlRequest={snapshot.copyAsHtmlRequest}
               exportRequest={snapshot.exportRequest}
+              printRequest={snapshot.printRequest}
+              onPrint={() => controller.printShownDocument()}
               {headingRequest}
+              linkedHeadingRequest={snapshot.linkedHeadingRequest}
+              sourceRangeRequest={snapshot.sourceRangeRequest}
+              {isShowingHiddenCharacters}
+              footer={snapshot.noteBacklinks ? backlinksFooter : undefined}
               locale={translator.locale}
               isSourceView={snapshot.isSourceView ?? false}
               onCloseFind={() => controller.closeFind()}
@@ -448,11 +870,30 @@
               onScroll={(scrollRatio: number) => controller.rememberScrollPosition(scrollRatio)}
               onCurrentHeadingChange={showCurrentHeading}
               onCommand={(command: ViewerCommand) => void controller.execute(command)}
+              onEditFormula={editPreviewFormula}
+              onMoveWithWheel={(event: WheelEvent) => fileArcControls?.moveWithWheel(event) ?? false}
               isOutlineVisible={isSidebarViewShown(viewSettings, 'outline')}
               isFavourite={isActiveFavourite}
               canBeFavourite={!isActiveUntitled}
+              propertyFieldsState={propertyFieldsStateOf(
+                activeTab.location.canonicalKey,
+                snapshot.unsavedDocumentKeys,
+                snapshot.propertySavingKey,
+              )}
             />
           {/if}
+          <FileArcHost
+            onControls={(controls: FileArcControls) => (fileArcControls = controls)}
+            wording={fileArcWording}
+            kindId={shownWorkspaceKindId}
+            ctrlWheelAction={viewSettings.ctrlWheelAction}
+            list={() => fileArcListOf(listedSnapshot, sideBarTrees)}
+            {translator}
+            onOpen={(location: DocumentLocation) => controller.openDocuments([location.displayPath])}
+            onNotice={(key: MessageKey) => controller.showNotice(key)}
+            onFocusDocument={focusDocument}
+            readModifiedTime={(path: string) => controller.readModifiedTime(path)}
+          />
         </div>
       </div>
     </div>
@@ -471,8 +912,17 @@
         wordGoal={activeWordGoal}
         {wordsThisSession}
         selectedWords={editedDocument ? selectedWords : 0}
+        statusMessage={snapshot.notesMoveStatus}
+        isProtectedSectionUnlocked={snapshot.protectedNotes?.state === 'unlocked'}
+        onLockProtectedNotes={() => void controller.execute({ kind: 'lockProtectedNotes' })}
         onShowWordGoal={() => void controller.execute({ kind: 'showWordGoal' })}
+        injectionCheck={snapshot.injectionCheck}
+        onShowInjectionCheck={() =>
+          void controller.execute({ kind: 'showSidebarView', sidebarView: 'promptInjection' })}
         onResetZoom={() => void controller.execute({ kind: 'resetZoom' })}
+        onZoomIn={() => void controller.execute({ kind: 'zoomIn' })}
+        onZoomOut={() => void controller.execute({ kind: 'zoomOut' })}
+        {shortcuts}
         onReopenWithEncoding={(encoding: string | undefined) =>
           void controller.execute(
             encoding === undefined
@@ -482,14 +932,38 @@
       />
     {/if}
   </div>
+  <EquationEditorHost
+    request={equationEditing && equationEditing.canonicalKey === editedDocument?.canonicalKey
+      ? equationEditing.request
+      : undefined}
+    {translator}
+    previewFormula={(tex: string, isDisplay: boolean) =>
+      richBlocks?.previewFormula(tex, isDisplay) ?? Promise.resolve({ kind: 'unavailable' })}
+    onInsert={insertFormula}
+    onCancel={cancelEquation}
+  />
   {#if snapshot.externalLinkRequest !== undefined}
     <ConfirmDialog
+      {translator}
       title={translator.translate('document.openExternalLink.title')}
       message={translator.translate('document.openExternalLink.body', { url: snapshot.externalLinkRequest })}
       confirmLabel={translator.translate('document.openExternalLink.open')}
       cancelLabel={translator.translate('document.openExternalLink.cancel')}
       onConfirm={() => controller.answerExternalLink(true)}
       onCancel={() => controller.answerExternalLink(false)}
+    />
+  {/if}
+  {#if snapshot.outsideLinkRequest !== undefined}
+    <ConfirmDialog
+      {translator}
+      title={translator.translate('specViewer.outsideLink.title')}
+      message={translator.translate('specViewer.outsideLink.body', {
+        path: snapshot.outsideLinkRequest.targetPath,
+      })}
+      confirmLabel={translator.translate('specViewer.outsideLink.open')}
+      cancelLabel={translator.translate('specViewer.outsideLink.cancel')}
+      onConfirm={() => void controller.answerOutsideLink(true)}
+      onCancel={() => void controller.answerOutsideLink(false)}
     />
   {/if}
   {#if snapshot.openDialog === 'about'}
@@ -501,8 +975,68 @@
       onCommand={(command: ViewerCommand) => void controller.execute(command)}
       onClose={() => controller.closeDialog()}
     />
+  {:else if isWorkspaceDialog(snapshot.openDialog) && snapshot.workspaces}
+    <WorkspaceDialogs
+      dialog={snapshot.openDialog}
+      workspaces={snapshot.workspaces}
+      kinds={snapshot.viewer.workspaceKinds}
+      {translator}
+      onCommand={(command: ViewerCommand) => void controller.execute(command)}
+      onClose={() => controller.closeDialog()}
+      onPickFolder={() => controller.pickNotesFolder()}
+      onInspectNotesFolder={(path: string) => controller.inspectNotesFolder(path)}
+    />
+  {:else if snapshot.openDialog === 'noteTrash' && snapshot.notes?.trash}
+    <NoteTrashDialog
+      entries={snapshot.notes.trash}
+      {translator}
+      onCommand={(command: ViewerCommand) => void controller.execute(command)}
+      onClose={() => controller.closeDialog()}
+    />
+  {:else if snapshot.openDialog === 'protectedSetUp' && snapshot.protectedNotes}
+    <ProtectedSetUpDialog
+      recoveryKey={snapshot.protectedNotes.recoveryKey}
+      isRecoveryKeyCovered={snapshot.protectedNotes.isRecoveryKeyCovered ?? false}
+      problem={snapshot.protectedNotes.setUpProblem}
+      isBusy={snapshot.protectedNotes.isBusy}
+      {translator}
+      onCommand={(command: ViewerCommand) => void controller.execute(command)}
+      onClose={() => controller.closeDialog()}
+    />
+  {:else if snapshot.openDialog === 'noteFromTemplate' && snapshot.notes?.templates}
+    <NoteFromTemplateDialog
+      templates={snapshot.notes.templates}
+      templatesFolder={notesSettingsOf(shownWorkspace).templatesFolder}
+      {translator}
+      onCommand={(command: ViewerCommand) => void controller.execute(command)}
+      onClose={() => controller.closeDialog()}
+    />
+  {:else if snapshot.openDialog === 'noteLinkUpdates' && snapshot.notes?.linkUpdates}
+    <NoteLinkUpdatesDialog
+      preview={snapshot.notes.linkUpdates}
+      {translator}
+      onCommand={(command: ViewerCommand) => void controller.execute(command)}
+      onClose={() => void controller.execute({ kind: 'skipNoteLinkUpdates' })}
+    />
+  {:else if snapshot.openDialog === 'noteImport' && snapshot.notes?.noteImport}
+    <NoteImportDialog
+      view={snapshot.notes.noteImport}
+      {translator}
+      onCommand={(command: ViewerCommand) => void controller.execute(command)}
+    />
+  {:else if snapshot.openDialog === 'noteExport' && snapshot.notes?.noteExport}
+    <NoteExportDialog
+      view={snapshot.notes.noteExport}
+      {translator}
+      onCommand={(command: ViewerCommand) => void controller.execute(command)}
+    />
   {:else if snapshot.openDialog === 'keyboardShortcuts'}
-    <KeyboardShortcutsDialog {translator} {shortcuts} onClose={() => controller.closeDialog()} />
+    <KeyboardShortcutsDialog
+      {translator}
+      {shortcuts}
+      ctrlWheelAction={viewSettings.ctrlWheelAction}
+      onClose={() => controller.closeDialog()}
+    />
   {:else if snapshot.openDialog === 'pasteTable'}
     <PasteTableDialog
       {translator}
@@ -520,6 +1054,14 @@
       {translator}
       onCommand={(command: ViewerCommand) => void controller.execute(command)}
       onClose={() => controller.closeDialog()}
+      notesFolder={shownWorkspace ? notesLocationOf(shownWorkspace)?.path : undefined}
+      notesSettings={shownWorkspace ? notesSettingsOf(shownWorkspace) : undefined}
+      workspace={shownWorkspace
+        ? {
+            name: workspaceNameOf(shownWorkspace, translator),
+            overrides: snapshot.viewer.workspaceOverrides ?? {},
+          }
+        : undefined}
     />
   {:else if snapshot.openDialog === 'commandPalette'}
     <CommandPalette
@@ -528,6 +1070,10 @@
         shortcuts,
         workspaceKinds: snapshot.viewer.workspaceKinds,
         snippets: availableSnippets(snapshot.viewer.snippetLibrary),
+        isNotesWorkspace: snapshot.notes !== undefined,
+        isCaretInLink: editedDocument ? isCaretInLink : false,
+        hasDocument: snapshot.activeDocument !== undefined,
+        ...(snapshot.workspaces ? { workspaces: snapshot.workspaces } : {}),
       })}
       loadDocuments={() => controller.quickOpenDocuments()}
       onRunCommand={(command: ViewerCommand) => void controller.execute(command)}
@@ -535,21 +1081,64 @@
       onClose={() => controller.closeDialog()}
     />
   {/if}
-  {#if isControlWheelOpen}
+  {#if isControlWheelOpen || isControlWheelFading}
     {#await loadControlWheel() then ControlWheel}
       <ControlWheel
         kinds={snapshot.viewer.workspaceKinds}
         dock={snapshot.viewer.viewSettings.wheelDock}
         pointer={lastPointer.position}
         shouldShowKindSettings={snapshot.openDialog === 'workspaceKindSettings'}
+        isClosing={!isControlWheelOpen}
         {translator}
         onCommand={(command: ViewerCommand) => void controller.execute(command)}
         onClose={() => controller.closeDialog()}
+        onClosed={() => (isControlWheelFading = false)}
       />
     {/await}
   {/if}
+  {#if snapshot.protectedNotes?.isAskingToLock}
+    <ConfirmDialog
+      {translator}
+      title={translator.translate('protectedNotes.lock.unsavedTitle')}
+      message={translator.translate('protectedNotes.lock.unsavedMessage')}
+      confirmLabel={translator.translate('protectedNotes.lock.lockAnyway')}
+      cancelLabel={translator.translate('protectedNotes.lock.cancel')}
+      onConfirm={() => void controller.execute({ kind: 'confirmProtectedLock' })}
+      onCancel={() => void controller.execute({ kind: 'cancelProtectedLock' })}
+    />
+  {/if}
+  {#if snapshot.notesMoveDialog}
+    <NotesMoveDialog
+      dialog={snapshot.notesMoveDialog}
+      {translator}
+      onCommand={(command: ViewerCommand) => void controller.execute(command)}
+    />
+  {/if}
+  {#if snapshot.openDialog === 'protectedPrintWarning'}
+    <ConfirmDialog
+      {translator}
+      title={translator.translate('protectedNotes.copyWarning.print.title')}
+      message={translator.translate('protectedNotes.copyWarning.print.message')}
+      confirmLabel={translator.translate('protectedNotes.copyWarning.print.confirm')}
+      cancelLabel={translator.translate('protectedNotes.copyWarning.cancel')}
+      onConfirm={() => void controller.execute({ kind: 'confirmProtectedCopy' })}
+      onCancel={() => controller.closeDialog()}
+    />
+  {/if}
+  {#if snapshot.openDialog === 'protectedExportWarning'}
+    <ConfirmDialog
+      {translator}
+      title={translator.translate('protectedNotes.copyWarning.export.title')}
+      message={translator.translate('protectedNotes.copyWarning.export.message')}
+      confirmLabel={translator.translate('protectedNotes.copyWarning.export.confirm')}
+      cancelLabel={translator.translate('protectedNotes.copyWarning.cancel')}
+      onConfirm={() => void controller.execute({ kind: 'confirmProtectedCopy' })}
+      onCancel={() => controller.closeDialog()}
+    />
+  {/if}
   {#if snapshot.openDialog === 'clearAllData'}
     <ConfirmDialog
+      {translator}
       title={translator.translate('privacy.clearAllData.title')}
       message={translator.translate('privacy.clearAllData.message')}
       confirmLabel={translator.translate('privacy.clearAllData.confirm')}
@@ -561,6 +1150,7 @@
   {#if snapshot.unsavedChanges}
     {@const fileNames = snapshot.unsavedChanges.fileNames}
     <ConfirmDialog
+      {translator}
       title={translator.translate('saving.unsavedDialog.title')}
       message={translator.translate('saving.unsavedDialog.message', {
         count: fileNames.length,
@@ -579,6 +1169,16 @@
 {/if}
 
 <style>
+  /* Heard by screen readers, not shown: the editor itself shows the mode. */
+  .mode-announcement {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
   .app-shell {
     display: grid;
     grid-template-rows: 1fr auto;
@@ -591,6 +1191,27 @@
   .viewer {
     display: grid;
     grid-template-columns: auto var(--explorer-width) auto 1fr;
+    min-height: 0;
+  }
+
+  .sidebar-header {
+    display: flex;
+    justify-content: flex-end;
+    padding: var(--space-1) var(--space-2);
+    border-block-end: 1px solid var(--color-border);
+    border-inline-end: 1px solid var(--color-border);
+    background: var(--color-surface);
+  }
+
+  .sidebar-column {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .sidebar-column > :global(:last-child) {
+    flex: 1;
     min-height: 0;
   }
 
@@ -618,6 +1239,7 @@
   }
 
   .reading-area {
+    position: relative;
     display: flex;
     flex: 1;
     min-height: 0;

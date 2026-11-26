@@ -206,7 +206,6 @@
   "document.openExternalLink.title": "要在浏览器中打开链接吗？",
   "document.openExternalLink.body": "这将在默认浏览器中打开 {url}。",
   "view.options.label": "视图选项",
-  "view.zoomLevel": "缩放 {percent}%",
   "document.openExternalLink.open": "打开",
   "document.openExternalLink.cancel": "取消",
   "shortcuts.column.action": "操作",

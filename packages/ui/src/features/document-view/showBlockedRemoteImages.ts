@@ -3,7 +3,7 @@ import type { Translator } from '@mdx/i18n';
 export const BLOCKED_REMOTE_IMAGE_CLASS = 'blocked-remote-image';
 
 /** Shows a note where the renderer left out a remote image, so the reader knows why it is missing. */
-export function showBlockedRemoteImages(article: HTMLElement, translator: Translator): void {
+export function showBlockedRemoteImages(article: ParentNode, translator: Translator): void {
   for (const note of article.querySelectorAll(`.${BLOCKED_REMOTE_IMAGE_CLASS}`)) note.remove();
   for (const image of article.querySelectorAll<HTMLImageElement>('img[data-mdx-blocked-src]')) {
     image.after(blockedImageNote(image, translator));

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { applyViewCommand, isViewCommand } from '../view/viewCommands';
 import {
   SETTING_DEFINITIONS,
+  descriptionKeyOf,
   matchesQuery,
   matchingSettings,
   type SettingDefinition,
@@ -26,7 +27,7 @@ describe('setting definitions', () => {
 
   it('turns every choice into a view command that applies it', () => {
     for (const setting of SETTING_DEFINITIONS) {
-      if (setting.kind !== 'choice') continue;
+      if (setting.kind !== 'choice' || setting.id === 'editingMode') continue;
       for (const choice of setting.choices(translator)) {
         const command = setting.commandFor(choice.value);
         if (!command || !isViewCommand(command)) throw new Error(`${setting.id} ${choice.value}`);
@@ -34,6 +35,17 @@ describe('setting definitions', () => {
         expect(setting.valueIn(applyViewCommand(DEFAULT_VIEW_SETTINGS, command))).toBe(choice.value);
       }
     }
+  });
+
+  it('the editing mode choice asks for the mode, which a document too large for Rich text may refuse', () => {
+    const editingMode = settingWithId('editingMode');
+    if (editingMode.kind !== 'choice') throw new Error('editingMode');
+
+    expect(editingMode.choices(translator).map((choice) => editingMode.commandFor(choice.value))).toEqual([
+      { kind: 'setEditingMode', editingMode: 'richText' },
+      { kind: 'setEditingMode', editingMode: 'source' },
+    ]);
+    expect(editingMode.valueIn(DEFAULT_VIEW_SETTINGS)).toBe('richText');
   });
 
   it('ignores a choice that does not exist', () => {
@@ -138,5 +150,45 @@ describe('matchingSettings', () => {
 
   it('ignores accents when searching', () => {
     expect(idsFor('thème')).toEqual(['theme']);
+  });
+});
+
+describe('the Ctrl with the mouse wheel setting', () => {
+  it('the setting offers moves between files and zooms', () => {
+    const setting = settingWithId('ctrlWheel');
+    if (setting.kind !== 'choice') throw new Error('not a choice');
+
+    expect(setting.choices(translator).map((choice) => choice.label)).toEqual([
+      'Moves between files',
+      'Zooms',
+    ]);
+    expect(setting.valueIn(DEFAULT_VIEW_SETTINGS)).toBe('moveBetweenFiles');
+    expect(setting.commandFor('zoom')).toEqual({ kind: 'setCtrlWheelAction', ctrlWheelAction: 'zoom' });
+    expect(setting.commandFor('scroll')).toBeUndefined();
+  });
+
+  it('the zoom description names the wheel only while it zooms', () => {
+    const zoom = settingWithId('zoom');
+    const descriptionWith = (ctrlWheelAction: 'moveBetweenFiles' | 'zoom') =>
+      translator.translate(descriptionKeyOf(zoom, { ...DEFAULT_VIEW_SETTINGS, ctrlWheelAction }));
+
+    expect(descriptionWith('moveBetweenFiles')).not.toContain('wheel');
+    expect(descriptionWith('zoom')).toContain('mouse wheel');
+  });
+});
+
+describe('the spelling settings', () => {
+  it('offers check spelling for each mode and a button to the language settings', () => {
+    const richText = settingWithId('spellCheckInRichText');
+    const source = settingWithId('spellCheckInSource');
+    const languages = settingWithId('spellingLanguages');
+
+    expect([richText.section, source.section, languages.section]).toEqual(['editing', 'editing', 'editing']);
+    if (richText.kind !== 'toggle' || source.kind !== 'toggle' || languages.kind !== 'action')
+      throw new Error('unexpected kinds');
+    expect(richText.isOnIn(DEFAULT_VIEW_SETTINGS)).toBe(true);
+    expect(source.isOnIn(DEFAULT_VIEW_SETTINGS)).toBe(false);
+    expect(languages.command).toEqual({ kind: 'openLanguageSettings' });
+    expect(translator.translate(languages.buttonLabelKey)).toBe('Open Language Settings');
   });
 });

@@ -1,7 +1,13 @@
-import { listen } from '@tauri-apps/api/event';
-import type { AttachmentPort, AttachmentTarget, ImagesDropListener, ImagesDrop } from '@mdx/platform';
+import type {
+  AttachmentPort,
+  AttachmentTarget,
+  ChosenPicture,
+  ImagesDropListener,
+  ImagesDrop,
+} from '@mdx/platform';
 import { documentOpenErrorOf } from './documentOpenErrorOf';
-import { IMAGES_DROPPED_EVENT, tauriCommands } from './tauriCommands';
+import { IMAGES_DROPPED_EVENT, tauriCommands, type ChosenPictureReply } from './tauriCommands';
+import { listenInThisWindow } from './windowEvents';
 
 export class TauriAttachments implements AttachmentPort {
   async saveDroppedImage(target: AttachmentTarget, path: string): Promise<string> {
@@ -33,8 +39,21 @@ export class TauriAttachments implements AttachmentPort {
     }
   }
 
-  onImagesDropped(listener: ImagesDropListener): () => void {
-    const stopListening = listen<ImagesDrop>(IMAGES_DROPPED_EVENT, (event) => listener(event.payload));
-    return () => void stopListening.then((unlisten) => unlisten());
+  async addPictureFiles(target: AttachmentTarget, filterName: string): Promise<readonly ChosenPicture[]> {
+    try {
+      const replies = await tauriCommands.addPictureFiles({ ...target, filterName });
+      return replies.map(chosenPictureOf);
+    } catch (error) {
+      throw documentOpenErrorOf(error, target.documentPath);
+    }
   }
+
+  onImagesDropped(listener: ImagesDropListener): () => void {
+    return listenInThisWindow<ImagesDrop>(IMAGES_DROPPED_EVENT, (event) => listener(event.payload));
+  }
+}
+
+function chosenPictureOf(reply: ChosenPictureReply): ChosenPicture {
+  if (reply.kind === 'saved') return reply;
+  return { ...reply, reason: documentOpenErrorOf(reply.reason, reply.fileName).failure };
 }

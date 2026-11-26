@@ -1,0 +1,5 @@
+In a right triangle,
+
+{\displaystyle a^{2}+b^{2}=c^{2}}
+
+where {\displaystyle c} is the hypotenuse.

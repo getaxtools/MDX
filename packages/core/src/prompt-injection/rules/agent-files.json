@@ -1,0 +1,52 @@
+{
+  "agentPathPatterns": [
+    "(^|/)(agents|claude|claude\\.local|gemini|skill)\\.md$",
+    "(^|/)\\.(cursorrules|windsurfrules|clinerules)$",
+    "(^|/)\\.github/copilot-instructions\\.md$",
+    "(^|/)\\.github/instructions/(.+/)?[^/]+\\.instructions\\.md$",
+    "(^|/)\\.github/prompts/[^/]+\\.prompt\\.md$",
+    "(^|/)\\.github/agents(/|$)",
+    "(^|/)\\.cursor/rules(/|$)",
+    "(^|/)\\.windsurf/rules(/|$)",
+    "(^|/)\\.clinerules(/|$)",
+    "(^|/)\\.roo/rules[^/]*(/|$)",
+    "(^|/)\\.claude(/|$)",
+    "(^|/)\\.kiro/(steering|specs)(/|$)",
+    "(^|/)openspec(/|$)",
+    "(^|/)\\.specify(/|$)",
+    "(^|/)specs/\\d{3}-[^/]+(/|$)"
+  ],
+  "externalImportPatterns": ["(?:^|[\\s(])@(?:~[\\\\/]|/(?!/)|[A-Za-z]:[\\\\/]|\\\\\\\\)[^\\s)]+"],
+  "broadGrantPatterns": [
+    "\\bbypassPermissions\\b",
+    "[\"']?autoApprove[\"']?\\s*[:=]\\s*true\\b",
+    "[\"']?dangerouslySkipPermissions[\"']?\\s*[:=]\\s*true\\b",
+    "[\"']allow[\"']\\s*:\\s*\\[[^\\]]*[\"'](?:Bash|PowerShell|Shell)(?:\\(\\s*\\*?\\s*\\))?[\"']"
+  ],
+  "shellToolNames": ["bash", "powershell", "pwsh", "shell", "terminal", "cmd"],
+  "riskyGrantCommands": [
+    "*",
+    "curl",
+    "wget",
+    "sh",
+    "bash",
+    "zsh",
+    "python",
+    "python3",
+    "node",
+    "iex",
+    "powershell",
+    "pwsh",
+    "rm",
+    "sudo",
+    "eval",
+    "npx"
+  ],
+  "selfPropagationPatterns": [
+    "\\b(?:add|append|write|copy|insert|put|save|paste|include|inject)\\b[^.\\n]{0,60}? (?:to|into|in) (?:the |every |each |all |your )?(?:agents\\.md|claude\\.md|gemini\\.md|skill\\.md|\\.cursorrules|\\.windsurfrules|\\.clinerules|copilot-instructions\\.md|\\.cursor/rules|\\.github/instructions|\\.git/hooks|~/\\.bashrc|~/\\.zshrc|~/\\.profile|~/\\.bash_profile|\\.bashrc|\\.zshrc|\\$profile|powershell profile)",
+    "\\bcore\\.hookspath\\b",
+    "\\.git/hooks/",
+    "\\bdo the same (?:in|for|with|to) (?:other|every|all|each|any) (?:repositories|repos|projects|codebases)\\b",
+    "\\b(?:spread|propagate|copy) (?:these|this|the) (?:instructions|rules) (?:to|into) (?:other|every|all|each)\\b"
+  ]
+}

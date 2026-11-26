@@ -19,8 +19,8 @@ export function attachmentFolderFor(kinds: readonly WorkspaceKind[], kindId: str
 /** Every kind in its fixed order; later kinds are added at the end. */
 export const WORKSPACE_KINDS: readonly WorkspaceKind[] = [
   { id: 'markdownViewer', availability: 'built' },
-  { id: 'notes', availability: 'planned' },
-  { id: 'specViewer', availability: 'planned' },
+  { id: 'notes', availability: 'built' },
+  { id: 'specViewer', availability: 'built' },
 ];
 
 /** The UI test build may choose planned kinds, so their switching can be tested before they are built. */

@@ -1,11 +1,6 @@
 import { withUnixLineBreaks, type ViewerSession } from '@mdx/core';
-import {
-  changeSectionInText,
-  type EditorMenuCommand,
-  type SectionAction,
-  type SectionRefusal,
-} from '@mdx/editor';
-import { isUntitledLocation, type DocumentLocation } from '@mdx/platform';
+import type { EditorMenuCommand, EditorTextRange, SectionAction, SectionRefusal } from '@mdx/editor';
+import { hasFile, type DocumentLocation } from '@mdx/platform';
 import type { DocumentEditing } from './DocumentEditing';
 import type { EditorRequest } from './editingCommands';
 
@@ -35,8 +30,13 @@ export class EditingActions {
   }
 
   isActiveDocumentEditing(): boolean {
+    return this.activeEditingDocumentKey() !== undefined;
+  }
+
+  /** The canonical key of the active document while it is being edited. */
+  activeEditingDocumentKey(): string | undefined {
     const key = this.activeLocation()?.canonicalKey;
-    return key !== undefined && this.editing.isEditing(key);
+    return key !== undefined && this.editing.isEditing(key) ? key : undefined;
   }
 
   /** Opens the active document in the editor unless it is already there. */
@@ -45,6 +45,30 @@ export class EditingActions {
     if (!location || this.editing.isEditing(location.canonicalKey)) return;
     this.editing.toggleEditing(location.canonicalKey);
     this.callbacks.onChange();
+  }
+
+  /** Opens the active document in the editor with the caret on its first line, where front matter is. */
+  editActiveDocumentFromStart(): void {
+    const location = this.activeLocation();
+    if (!location) return;
+    const { canonicalKey } = location;
+    if (this.editing.isEditing(canonicalKey)) {
+      this.requests.set(canonicalKey, {
+        id: this.nextRequestId(),
+        canonicalKey,
+        kind: 'revealLine',
+        line: 0,
+      });
+    } else {
+      this.session.updateTabs((tabStrip) => tabStrip.updateScrollRatio(canonicalKey, 0));
+      this.editing.toggleEditing(canonicalKey);
+    }
+    this.callbacks.onChange();
+  }
+
+  /** Shows a document's current text in its open editor, after it was changed outside the editor. */
+  showCurrentTextInEditor(canonicalKey: string): void {
+    if (this.editing.isEditing(canonicalKey)) this.replaceEditorText(canonicalKey);
   }
 
   toggleActiveDocument(): void {
@@ -78,9 +102,11 @@ export class EditingActions {
    * Moves, promotes or demotes a section chosen in the outline. An open editor makes the change itself,
    * so it can be undone there; otherwise the document opens in the editor with the change unsaved.
    */
-  changeOutlineSection(line: number, action: SectionAction): SectionRefusal | undefined {
+  async changeOutlineSection(line: number, action: SectionAction): Promise<SectionRefusal | undefined> {
     const location = this.activeLocation();
     if (!location) return undefined;
+    // The editor's code loads on first use, not at start; moving a section is such a use.
+    const { changeSectionInText } = await import('@mdx/editor');
     const { canonicalKey } = location;
     const savedText = withUnixLineBreaks(this.session.openedDocument(canonicalKey)?.text ?? '');
     const change = changeSectionInText(this.editing.editedTextOf(canonicalKey) ?? savedText, line, action);
@@ -106,19 +132,53 @@ export class EditingActions {
     this.callbacks.onChange();
   }
 
-  /** Asks the active document's editor to add picture links near a point. */
-  insertPictureLinks(links: readonly string[], point: { readonly x: number; readonly y: number }): void {
+  /**
+   * Asks a document's editor to add picture links near a point, or at the caret without one; false,
+   * adding nothing, once that document is no longer the active one being edited.
+   */
+  insertPictureLinks(
+    links: readonly string[],
+    {
+      canonicalKey,
+      point,
+    }: { readonly canonicalKey: string; readonly point?: { readonly x: number; readonly y: number } },
+  ): boolean {
     const location = this.activeLocation();
-    if (!location || !this.editing.isEditing(location.canonicalKey)) return;
-    const { canonicalKey } = location;
+    if (location?.canonicalKey !== canonicalKey || !this.editing.isEditing(canonicalKey)) return false;
     this.requests.set(canonicalKey, {
       id: this.nextRequestId(),
       canonicalKey,
       kind: 'insertPictureLinks',
       links,
-      point,
+      ...(point ? { point } : {}),
     });
     this.callbacks.onChange();
+    return true;
+  }
+
+  /** Asks the active document's editor to select a range, such as a prompt injection finding. */
+  revealRange(range: EditorTextRange): void {
+    const location = this.activeLocation();
+    if (!location || !this.editing.isEditing(location.canonicalKey)) return;
+    const { canonicalKey } = location;
+    this.requests.set(canonicalKey, { id: this.nextRequestId(), canonicalKey, kind: 'revealRange', range });
+    this.callbacks.onChange();
+  }
+
+  /**
+   * Asks a document's editor to insert text at the selection, only while that document is still the
+   * active one being edited; false otherwise.
+   */
+  insertPlainText(canonicalKey: string, text: string): boolean {
+    if (this.activeEditingDocumentKey() !== canonicalKey) return false;
+    this.requests.set(canonicalKey, {
+      id: this.nextRequestId(),
+      canonicalKey,
+      kind: 'insertPlainText',
+      text,
+    });
+    this.callbacks.onChange();
+    return true;
   }
 
   revertActiveDocument(): Promise<void> {
@@ -131,7 +191,7 @@ export class EditingActions {
     const location = this.session.openedDocument(canonicalKey)?.location;
     if (!location) return;
     this.editing.discardChanges(canonicalKey);
-    if (!isUntitledLocation(location)) await this.session.reloadDocuments([location.displayPath]);
+    if (hasFile(location)) await this.session.reloadDocuments([location.displayPath]);
     this.replaceEditorText(canonicalKey);
   }
 
@@ -166,7 +226,9 @@ export class EditingActions {
   }
 
   private replaceEditorText(canonicalKey: string): void {
-    const text = withUnixLineBreaks(this.session.openedDocument(canonicalKey)?.text ?? '');
+    const text =
+      this.editing.editedTextOf(canonicalKey) ??
+      withUnixLineBreaks(this.session.openedDocument(canonicalKey)?.text ?? '');
     this.requests.set(canonicalKey, { id: this.nextRequestId(), canonicalKey, kind: 'replaceText', text });
     this.callbacks.onChange();
   }

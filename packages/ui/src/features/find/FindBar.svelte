@@ -166,7 +166,7 @@
     box-sizing: border-box;
     padding: 0 var(--space-2);
     border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-medium);
     background: var(--color-background);
     color: var(--color-text);
     font: inherit;
@@ -181,7 +181,7 @@
   button {
     padding: var(--space-1) var(--space-2);
     border: 0;
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-medium);
     background: none;
     color: var(--color-text);
     font: inherit;

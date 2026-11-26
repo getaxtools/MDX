@@ -27,6 +27,18 @@ export const editorTheme = EditorView.theme({
     backgroundColor: 'var(--color-notice-background)',
     outline: '1px solid var(--color-notice-border)',
   },
+  '&.cm-editor .cm-tooltip': {
+    backgroundColor: 'var(--color-surface-raised)',
+    color: 'var(--color-text)',
+    border: '1px solid var(--color-border-strong)',
+    borderRadius: 'var(--radius-medium)',
+  },
+  // As specific as CodeMirror's own light-theme rules, which use a grey too faint for white text.
+  '&.cm-editor .cm-tooltip.cm-tooltip-autocomplete ul li[aria-selected]': {
+    backgroundColor: 'var(--color-surface-selected)',
+    color: 'var(--color-text)',
+  },
+  '&.cm-editor .cm-tooltip .cm-completionDetail': { color: 'var(--color-text-secondary)' },
 });
 
 export const markdownHighlightStyle = HighlightStyle.define([

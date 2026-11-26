@@ -4,18 +4,29 @@ export interface ViewMenuState {
   readonly theme: string;
   readonly readingWidth: string;
   readonly typography: string;
+  readonly editingMode: string;
   readonly isSidebarVisible: boolean;
   readonly isOutlineVisible: boolean;
   readonly isStatusBarVisible: boolean;
   readonly isSourceView: boolean;
   readonly isPreviewBesideEditor: boolean;
+  readonly isShowingHiddenCharacters: boolean;
+}
+
+/** A workspace offered under File > Open Recent > Workspaces. */
+export interface RecentWorkspaceMenuEntry {
+  readonly id: string;
+  readonly name: string;
 }
 
 export interface AppMenuPort {
   onMenuCommand(listener: MenuCommandListener): () => void;
   showViewState(state: ViewMenuState): Promise<void>;
-  /** Lists recent documents, newest first, under File > Open Recent. */
-  showRecentFiles(displayPaths: readonly string[]): Promise<void>;
+  /** Lists recent documents, newest first, under File > Open Recent, then other recent workspaces. */
+  showRecentFiles(
+    displayPaths: readonly string[],
+    workspaces?: readonly RecentWorkspaceMenuEntry[],
+  ): Promise<void>;
   /** Shows these keys next to menu items, by item id; an empty text shows no keys. */
   showShortcuts(shortcutTexts: Readonly<Record<string, string>>): Promise<void>;
   /** Builds the menu again with these labels, keyed like the message catalog. */

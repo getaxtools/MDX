@@ -1,6 +1,13 @@
 <script lang="ts">
+  import {
+    DEFAULT_SPEC_SEARCH_FILTER,
+    SPEC_SEARCH_SCOPES,
+    type SpecSearchFilter,
+    type SpecSearchScope,
+  } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
-  import type { FolderSearchResults, LineMatch, TextSearchOptions } from '@mdx/platform';
+  import type { FolderSearchResults, LineMatch, NotesIndexStatus, TextSearchOptions } from '@mdx/platform';
+  import { untrack } from 'svelte';
   import { previewParts } from './previewParts';
 
   interface Props {
@@ -8,11 +15,33 @@
     /** Goes up each time the search box should get the keyboard focus. */
     focusRequest?: number | undefined;
     hasFolders: boolean;
-    onSearch: (query: string, options: TextSearchOptions) => Promise<FolderSearchResults>;
+    /** `specFilter` is given only in a Spec viewer workspace. */
+    onSearch: (
+      query: string,
+      options: TextSearchOptions,
+      specFilter?: SpecSearchFilter,
+    ) => Promise<FolderSearchResults>;
     onOpenMatch: (path: string, query: string, options: TextSearchOptions) => void;
+    /** A Notes workspace searches its index, which ignores case and accents and takes filters. */
+    isNotesSearch?: boolean;
+    /** A Spec viewer workspace searches the documents of its spec projects, limited to a scope. */
+    isSpecSearch?: boolean;
+    notesIndexStatus?: NotesIndexStatus | undefined;
+    /** Put in the search box and searched when the box next gets the focus, such as `tag:work`. */
+    requestedQuery?: string | undefined;
   }
 
-  const { translator, focusRequest, hasFolders, onSearch, onOpenMatch }: Props = $props();
+  const {
+    translator,
+    focusRequest,
+    hasFolders,
+    onSearch,
+    onOpenMatch,
+    isNotesSearch = false,
+    isSpecSearch = false,
+    notesIndexStatus,
+    requestedQuery,
+  }: Props = $props();
 
   const TYPING_PAUSE_MS = 300;
 
@@ -25,13 +54,23 @@
   let query = $state('');
   let isCaseSensitive = $state(false);
   let isWholeWord = $state(false);
+  let specScope = $state<SpecSearchScope>(DEFAULT_SPEC_SEARCH_FILTER.scope);
+  let isArchiveIncluded = $state(DEFAULT_SPEC_SEARCH_FILTER.isArchiveIncluded);
   let searchState = $state.raw<SearchState>({ kind: 'idle' });
   let input: HTMLInputElement | undefined = $state();
   let latestSearch = 0;
   let pendingSearch: ReturnType<typeof globalThis.setTimeout> | undefined;
+  let handledFocusRequest: number | undefined;
 
+  // The effect also runs when the props are passed again unchanged, which must not take the focus.
   $effect(() => {
-    if (focusRequest === undefined) return;
+    if (focusRequest === undefined || focusRequest === handledFocusRequest) return;
+    handledFocusRequest = focusRequest;
+    const wanted = untrack(() => requestedQuery);
+    if (wanted !== undefined) {
+      query = wanted;
+      void search();
+    }
     input?.focus();
     input?.select();
   });
@@ -60,7 +99,9 @@
     }
     searchState = { kind: 'searching' };
     try {
-      const results = await onSearch(searchedQuery, options);
+      const results = await (isSpecSearch
+        ? onSearch(searchedQuery, options, { scope: specScope, isArchiveIncluded })
+        : onSearch(searchedQuery, options));
       if (searchNumber === latestSearch) searchState = { kind: 'done', results, query: searchedQuery };
     } catch {
       if (searchNumber === latestSearch) searchState = { kind: 'failed' };
@@ -106,30 +147,64 @@
       oninput={scheduleSearch}
       onkeydown={handleInputKeydown}
     />
-    <button
-      class="option"
-      aria-pressed={isCaseSensitive}
-      aria-label={translator.translate('find.matchCase')}
-      title={translator.translate('find.matchCase')}
-      disabled={!hasFolders}
-      onclick={toggleCaseSensitive}
-      ><span class="symbol" aria-hidden="true" data-symbol={translator.translate('find.matchCase.symbol')}
-      ></span></button
-    >
-    <button
-      class="option"
-      aria-pressed={isWholeWord}
-      aria-label={translator.translate('find.wholeWord')}
-      title={translator.translate('find.wholeWord')}
-      disabled={!hasFolders}
-      onclick={toggleWholeWord}
-      ><span
-        class="symbol whole-word"
-        aria-hidden="true"
-        data-symbol={translator.translate('find.wholeWord.symbol')}
-      ></span></button
-    >
+    {#if !isNotesSearch}
+      <button
+        class="option"
+        aria-pressed={isCaseSensitive}
+        aria-label={translator.translate('find.matchCase')}
+        title={translator.translate('find.matchCase')}
+        disabled={!hasFolders}
+        onclick={toggleCaseSensitive}
+        ><span class="symbol" aria-hidden="true" data-symbol={translator.translate('find.matchCase.symbol')}
+        ></span></button
+      >
+      <button
+        class="option"
+        aria-pressed={isWholeWord}
+        aria-label={translator.translate('find.wholeWord')}
+        title={translator.translate('find.wholeWord')}
+        disabled={!hasFolders}
+        onclick={toggleWholeWord}
+        ><span
+          class="symbol whole-word"
+          aria-hidden="true"
+          data-symbol={translator.translate('find.wholeWord.symbol')}
+        ></span></button
+      >
+    {/if}
   </div>
+  {#if isSpecSearch}
+    <div class="spec-filter">
+      <label>
+        {translator.translate('specViewer.search.scope.label')}
+        <select bind:value={specScope} disabled={!hasFolders} onchange={() => void search()}>
+          {#each SPEC_SEARCH_SCOPES as scope (scope)}
+            <option value={scope}>{translator.translate(`specViewer.search.scope.${scope}`)}</option>
+          {/each}
+        </select>
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          bind:checked={isArchiveIncluded}
+          disabled={!hasFolders}
+          onchange={() => void search()}
+        />
+        {translator.translate('specViewer.search.archive')}
+      </label>
+    </div>
+  {/if}
+  {#if isNotesSearch}
+    <p class="hint">{translator.translate('notes.search.hint')}</p>
+    {#if notesIndexStatus?.isBuilding}
+      <p class="hint" role="status">
+        {translator.translate('notes.search.indexing', {
+          indexed: notesIndexStatus.indexed,
+          total: notesIndexStatus.toIndex,
+        })}
+      </p>
+    {/if}
+  {/if}
   <p class="status" role="status">
     {#if !hasFolders}
       {translator.translate('folderSearch.noFolders')}
@@ -137,6 +212,8 @@
       {translator.translate('folderSearch.searching')}
     {:else if searchState.kind === 'failed'}
       {translator.translate('folderSearch.failed')}
+    {:else if searchState.kind === 'done' && matchCount === 0 && searchState.results.documents.length > 0}
+      {translator.translate('notes.search.noteCount', { count: searchState.results.documents.length })}
     {:else if searchState.kind === 'done' && matchCount === 0}
       {translator.translate('folderSearch.noResults')}
     {:else if searchState.kind === 'done'}
@@ -148,8 +225,25 @@
         {translator.translate('folderSearch.incomplete')}
       {/if}
     {/if}
+    {#if searchState.kind === 'done' && (searchState.results.notSearchedOnlineOnly ?? 0) > 0}
+      {translator.translate('notes.search.onlineOnly', {
+        count: searchState.results.notSearchedOnlineOnly ?? 0,
+      })}
+    {/if}
   </p>
-  {#if searchState.kind === 'done' && matchCount > 0}
+  {#if searchState.kind === 'done' && matchCount === 0 && searchState.results.documents.length > 0}
+    <ul class="results" aria-label={translator.translate('folderSearch.results.label')}>
+      {#each searchState.results.documents as document (document.location.canonicalKey)}
+        <li>
+          <button
+            class="match"
+            title={document.location.displayPath}
+            onclick={() => openMatch(document.location.displayPath)}>{document.location.fileName}</button
+          >
+        </li>
+      {/each}
+    </ul>
+  {:else if searchState.kind === 'done' && matchCount > 0}
     <ul class="results" aria-label={translator.translate('folderSearch.results.label')}>
       {#each searchState.results.documents as document (document.location.canonicalKey)}
         <li>
@@ -190,6 +284,21 @@
     font-weight: 600;
   }
 
+  .hint {
+    margin: var(--space-1) 0 0;
+    color: var(--color-text-secondary);
+    font-size: var(--text-size-small);
+  }
+
+  .spec-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
+    margin-top: var(--space-2);
+    color: var(--color-text-secondary);
+    font-size: var(--text-size-small);
+  }
+
   .search-row {
     display: flex;
     gap: var(--space-1);
@@ -202,7 +311,7 @@
     box-sizing: border-box;
     padding: 0 var(--space-2);
     border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-medium);
     background: var(--color-background);
     color: var(--color-text);
     font: inherit;
@@ -219,7 +328,7 @@
   .option {
     padding: var(--space-1) var(--space-2);
     border: 0;
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-xsmall);
     background: none;
     color: var(--color-text);
     font: inherit;
@@ -269,7 +378,7 @@
     padding: var(--space-1) var(--space-2);
     padding-inline-start: var(--space-4);
     border: 0;
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-xsmall);
     background: none;
     color: var(--color-text);
     font: inherit;

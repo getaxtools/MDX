@@ -25,6 +25,6 @@ describe('scripts inside a document', () => {
     expect(await mainWindow.documentText()).toContain('Text after the scripts.');
     expect(await mainWindow.renderedElements('script')).toHaveLength(0);
     expect(await mainWindow.renderedElements('[onerror]')).toHaveLength(0);
-    expect(await mainWindow.windowTitle()).toBe('MDX - Markdown Explorer');
+    expect(await mainWindow.windowTitle()).toBe('script-in-document.md - Default - MDX');
   });
 });

@@ -15,6 +15,11 @@ export type ShortcutKeyEvent = Pick<
 
 export const COMMAND_SHORTCUTS: readonly CommandShortcut[] = [
   { command: { kind: 'newDocument' }, combinations: [['ctrl', 'N']], actionKey: 'menu.file.newDocument' },
+  {
+    command: { kind: 'openNewWindow' },
+    combinations: [['ctrl', 'shift', 'N']],
+    actionKey: 'menu.file.newWindow',
+  },
   { command: { kind: 'openDocuments' }, combinations: [['ctrl', 'O']], actionKey: 'menu.file.open' },
   { command: { kind: 'saveDocument' }, combinations: [['ctrl', 'S']], actionKey: 'menu.file.save' },
   {
@@ -110,8 +115,13 @@ export const COMMAND_SHORTCUTS: readonly CommandShortcut[] = [
   },
   {
     command: { kind: 'toggleEditing' },
-    combinations: [['ctrl', '/']],
+    combinations: [['ctrl', 'E']],
     actionKey: 'menu.view.toggleEditing',
+  },
+  {
+    command: { kind: 'toggleEditingMode' },
+    combinations: [['ctrl', '/']],
+    actionKey: 'menu.view.toggleEditingMode',
   },
   {
     command: { kind: 'togglePreviewBesideEditor' },
@@ -123,6 +133,16 @@ export const COMMAND_SHORTCUTS: readonly CommandShortcut[] = [
     combinations: [['ctrl', 'shift', 'P']],
     actionKey: 'menu.view.commandPalette',
   },
+  {
+    command: { kind: 'stepFileArcForward' },
+    combinations: [['ctrl', 'ArrowDown']],
+    actionKey: 'shortcuts.moveBetweenFiles',
+  },
+  {
+    command: { kind: 'stepFileArcBack' },
+    combinations: [['ctrl', 'ArrowUp']],
+    actionKey: 'shortcuts.moveBetweenFiles',
+  },
   { command: { kind: 'goBack' }, combinations: [['alt', 'ArrowLeft']], actionKey: 'menu.view.goBack' },
   { command: { kind: 'goForward' }, combinations: [['alt', 'ArrowRight']], actionKey: 'menu.view.goForward' },
   { command: { kind: 'toggleFullScreen' }, combinations: [['F11']], actionKey: 'menu.view.fullScreen' },
@@ -130,6 +150,16 @@ export const COMMAND_SHORTCUTS: readonly CommandShortcut[] = [
     command: { kind: 'toggleControlWheel' },
     combinations: [['ctrl', 'shift', 'Space']],
     actionKey: 'controlWheel.show',
+  },
+  {
+    command: { kind: 'showWorkspaceSwitcher' },
+    combinations: [['ctrl', 'alt', 'W']],
+    actionKey: 'workspaces.switch',
+  },
+  {
+    command: { kind: 'lockProtectedNotes' },
+    combinations: [['ctrl', 'alt', 'L']],
+    actionKey: 'protectedNotes.lock.command',
   },
   {
     command: { kind: 'showKeyboardShortcuts' },

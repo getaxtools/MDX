@@ -1,6 +1,6 @@
 import { showExplorerSection, type ViewerSession } from '@mdx/core';
 import {
-  isUntitledLocation,
+  hasFile,
   type DocumentLocation,
   type FolderListing,
   type FolderPort,
@@ -56,7 +56,7 @@ export class ExplorerFolderActions {
     );
     const folderPaths = this.searchedFolderPaths();
     const inFolders = folderPaths.length === 0 ? [] : await this.findDocuments(folderPaths);
-    return withoutDuplicates([...known, ...inFolders].filter((location) => !isUntitledLocation(location)));
+    return withoutDuplicates([...known, ...inFolders].filter((location) => hasFile(location)));
   }
 
   /** Whether there is any opened or favourite folder to search in. */

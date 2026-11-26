@@ -1,8 +1,8 @@
-import { ensureSyntaxTree, type syntaxTree } from '@codemirror/language';
+import { ensureSyntaxTree } from '@codemirror/language';
 import type { EditorState } from '@codemirror/state';
+import type { SyntaxNode } from '../syntax/syntaxNode';
 
 // @lezer/common is not a direct dependency, so the node type comes from the tree CodeMirror returns.
-type SyntaxNode = ReturnType<ReturnType<typeof syntaxTree>['resolveInner']>;
 
 export interface TableCell {
   readonly row: number;
@@ -48,7 +48,8 @@ function enclosingTable(start: SyntaxNode): SyntaxNode | undefined {
   return undefined;
 }
 
-function tableOf(state: EditorState, table: SyntaxNode): MarkdownTable {
+/** The cells and rows of a `Table` syntax node. */
+export function tableOf(state: EditorState, table: SyntaxNode): MarkdownTable {
   const rowNodes = childrenOf(table).filter(
     (child) => child.name === 'TableHeader' || child.name === 'TableRow',
   );

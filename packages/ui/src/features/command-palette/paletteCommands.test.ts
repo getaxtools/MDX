@@ -1,6 +1,7 @@
-import { WorkspaceKindsState, type WorkspaceKind } from '@mdx/core';
+import { WORKSPACE_KINDS, WorkspaceKindsState, type WorkspaceKind } from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
 import { describe, expect, it } from 'vitest';
+import { COMMAND_SHORTCUTS } from '../shortcuts/commandShortcuts';
 import { effectiveCommandShortcuts } from '../shortcuts/effectiveCommandShortcuts';
 import { paletteCommands } from './paletteCommands';
 
@@ -32,6 +33,10 @@ describe('paletteCommands', () => {
     });
   });
 
+  it('leaves out the file arc keys, which need Ctrl held', () => {
+    expect(labels).not.toContain('Move between files');
+  });
+
   it('includes commands that have no shortcut', () => {
     expect(commands).toContainEqual({ command: { kind: 'openFolder' }, label: 'Open Folder…' });
   });
@@ -44,6 +49,17 @@ describe('paletteCommands', () => {
 
   it('offers Settings, Copy as HTML and Clear All Data', () => {
     expect(labels).toEqual(expect.arrayContaining(['Settings…', 'Copy as HTML', 'Clear All Data…']));
+  });
+
+  it('offers Open Link only with the caret in a link', () => {
+    const shortcuts = effectiveCommandShortcuts({});
+    const workspaceKinds = WorkspaceKindsState.initial(WORKSPACE_KINDS);
+    const openLink = { command: { kind: 'runEditorCommand', command: 'openLink' }, label: 'Open Link' };
+
+    expect(paletteCommands(createTranslator(), { shortcuts, workspaceKinds })).not.toContainEqual(openLink);
+    expect(
+      paletteCommands(createTranslator(), { shortcuts, workspaceKinds, isCaretInLink: true }),
+    ).toContainEqual(openLink);
   });
 
   it('leaves out the command palette itself', () => {
@@ -86,6 +102,22 @@ describe('paletteCommands', () => {
     expect(kindSwitchesIn(['markdownViewer', 'notes'], 'notes')).toEqual(['Workspace Kind: Markdown viewer']);
   });
 
+  it('offers every enabled kind of this version, Spec viewer included, in the fixed order', () => {
+    const workspaceKinds = WorkspaceKindsState.fromSaved(
+      { enabledKindIds: ['specViewer', 'notes', 'markdownViewer'], activeKindId: 'markdownViewer' },
+      WORKSPACE_KINDS,
+    );
+
+    const offered = paletteCommands(createTranslator(), {
+      shortcuts: effectiveCommandShortcuts({}),
+      workspaceKinds,
+    })
+      .filter(({ command }) => command.kind === 'switchWorkspaceKind')
+      .map(({ label }) => label);
+
+    expect(offered).toEqual(['Workspace Kind: Notes', 'Workspace Kind: Spec viewer']);
+  });
+
   it('never offers a planned or disabled kind', () => {
     expect(kindSwitchesIn(['markdownViewer', 'specViewer'], 'markdownViewer')).toEqual([]);
     expect(kindSwitchesIn(['markdownViewer'], 'markdownViewer')).toEqual([]);
@@ -106,5 +138,60 @@ describe('paletteCommands', () => {
       label: 'Insert Snippet: Sign-off',
     });
     expect(withSnippets.map(({ label }) => label)).toContain('Insert Snippet: Date');
+  });
+
+  it('offers today’s note, templates and the trash only in a Notes workspace', () => {
+    const translator = createTranslator();
+    const kinds = paletteCommands(translator).map((entry) => entry.command.kind);
+    const inNotes = paletteCommands(translator, {
+      shortcuts: COMMAND_SHORTCUTS,
+      workspaceKinds: WorkspaceKindsState.initial(WORKSPACE_KINDS),
+      isNotesWorkspace: true,
+    });
+
+    expect(kinds).not.toContain('openTodaysNote');
+    expect(inNotes.map((entry) => entry.label)).toEqual(
+      expect.arrayContaining([
+        "Open Today's Note",
+        'New Note from Template…',
+        'Show Trash',
+        'Import Notes from a Folder…',
+        'Export All Notes…',
+      ]),
+    );
+  });
+
+  it('offers Lock Protected Notes, with its shortcut, only in a Notes workspace', () => {
+    const translator = createTranslator();
+    const outside = paletteCommands(translator).map((entry) => entry.command.kind);
+    const inNotes = paletteCommands(translator, {
+      shortcuts: COMMAND_SHORTCUTS,
+      workspaceKinds: WorkspaceKindsState.initial(WORKSPACE_KINDS),
+      isNotesWorkspace: true,
+    });
+
+    expect(outside).not.toContain('lockProtectedNotes');
+    expect(inNotes).toContainEqual({
+      command: { kind: 'lockProtectedNotes' },
+      label: 'Lock Protected Notes',
+      shortcut: 'Ctrl+Alt+L',
+    });
+  });
+
+  it('offers Check for Prompt Injection only while a document is shown', () => {
+    const translator = createTranslator();
+    const context = {
+      shortcuts: COMMAND_SHORTCUTS,
+      workspaceKinds: WorkspaceKindsState.initial(WORKSPACE_KINDS),
+    };
+
+    const withoutDocument = paletteCommands(translator, context).map((entry) => entry.command.kind);
+    const withDocument = paletteCommands(translator, { ...context, hasDocument: true });
+
+    expect(withoutDocument).not.toContain('checkForPromptInjection');
+    expect(withDocument).toContainEqual({
+      command: { kind: 'checkForPromptInjection' },
+      label: 'Check for Prompt Injection',
+    });
   });
 });

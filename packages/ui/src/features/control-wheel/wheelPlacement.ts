@@ -12,15 +12,19 @@ export interface WheelPlacementRequest {
   readonly rootFontSizePx: number;
   /** Space kept free under the wheel, such as the status bar. */
   readonly bottomInsetPx: number;
-  /** Space kept free above the wheel for its caption. */
+  /** Space kept free above or below the wheel for its caption. */
   readonly captionHeightPx: number;
   readonly pointer?: { readonly x: number; readonly y: number } | undefined;
 }
+
+/** The caption goes on the side away from the nearest top or bottom window edge. */
+export type CaptionSide = 'above' | 'below';
 
 export interface WheelPlacement {
   readonly centerX: number;
   readonly centerY: number;
   readonly diameterPx: number;
+  readonly captionSide: CaptionSide;
 }
 
 /** Where the wheel opens: its dock corner, or the pointer when known, always fully inside the window. */
@@ -29,17 +33,27 @@ export function wheelPlacement(request: WheelPlacementRequest): WheelPlacement {
   const radius = diameterPx / 2;
   const minX = WHEEL_EDGE_MARGIN_PX + radius;
   const maxX = request.windowWidthPx - WHEEL_EDGE_MARGIN_PX - radius;
-  const minY = WHEEL_EDGE_MARGIN_PX + request.captionHeightPx + radius;
-  const maxY = request.windowHeightPx - WHEEL_EDGE_MARGIN_PX - request.bottomInsetPx - radius;
+  const captionSide = captionSideFor(request);
+  const captionAbovePx = captionSide === 'above' ? request.captionHeightPx : 0;
+  const captionBelowPx = captionSide === 'below' ? request.captionHeightPx : 0;
+  const minY = WHEEL_EDGE_MARGIN_PX + captionAbovePx + radius;
+  const maxY =
+    request.windowHeightPx - WHEEL_EDGE_MARGIN_PX - request.bottomInsetPx - captionBelowPx - radius;
   if (request.pointer) {
     return {
       centerX: clamp(request.pointer.x, minX, maxX),
       centerY: clamp(request.pointer.y, minY, maxY),
       diameterPx,
+      captionSide,
     };
   }
   const isRightCorner = (request.dock === 'bottomInlineEnd') === (request.direction === 1);
-  return { centerX: isRightCorner ? maxX : minX, centerY: Math.max(maxY, minY), diameterPx };
+  return { centerX: isRightCorner ? maxX : minX, centerY: Math.max(maxY, minY), diameterPx, captionSide };
+}
+
+function captionSideFor(request: WheelPlacementRequest): CaptionSide {
+  const isNearTop = request.pointer !== undefined && request.pointer.y < request.windowHeightPx / 2;
+  return isNearTop ? 'below' : 'above';
 }
 
 function wheelDiameter(request: WheelPlacementRequest): number {

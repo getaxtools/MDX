@@ -42,14 +42,43 @@ export class MainWindowPage {
   /** Presses a shortcut such as `Ctrl+Shift+Tab` in the focused part of the window. */
   async pressShortcut(shortcut: string): Promise<void> {
     // The embedded driver drops modifier state for special keys such as Tab, so dispatch the same
-    // synthetic events it would send, with the modifiers set.
-    await this.browser.execute((keyboardEvent) => {
+    // synthetic events it would send, with the modifiers set. The editor tells Ctrl+Shift+letter keys
+    // by their key code, which a synthetic event can only be given by redefining it.
+    await this.browser.execute(
+      (keyboardEvent, keyCode) => {
+        const target = document.activeElement ?? document.body;
+        for (const type of ['keydown', 'keyup']) {
+          const event = new KeyboardEvent(type, { ...keyboardEvent, bubbles: true, cancelable: true });
+          if (keyCode !== 0) Object.defineProperty(event, 'keyCode', { get: () => keyCode });
+          target.dispatchEvent(event);
+        }
+      },
+      keyboardEventFor(shortcut),
+      letterKeyCodeOf(shortcut),
+    );
+  }
+
+  /**
+   * Pastes clipboard data into the focused editor. The driver's Ctrl+V is a synthetic key press,
+   * which never reads the clipboard, so the paste event the browser would fire is sent instead.
+   */
+  async pasteIntoFocusedEditor(data: Readonly<Record<string, string>>): Promise<void> {
+    await this.browser.execute((clipboardData) => {
+      const transfer = new DataTransfer();
+      for (const [type, value] of Object.entries(clipboardData)) transfer.setData(type, value);
       const target = document.activeElement ?? document.body;
       target.dispatchEvent(
-        new KeyboardEvent('keydown', { ...keyboardEvent, bubbles: true, cancelable: true }),
+        new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }),
       );
-      target.dispatchEvent(new KeyboardEvent('keyup', { ...keyboardEvent, bubbles: true, cancelable: true }));
-    }, keyboardEventFor(shortcut));
+    }, data);
+  }
+
+  /** Types into the focused text field the way an input method inserts text. */
+  async typeInFocusedField(text: string): Promise<void> {
+    await this.browser.execute((typedText) => {
+      // eslint-disable-next-line @typescript-eslint/no-deprecated -- still the only way to insert text as an input method does
+      document.execCommand('insertText', false, typedText);
+    }, text);
   }
 
   /** The rendered heading, looked up again on every try because opening documents re-renders it. */
@@ -77,6 +106,14 @@ export class MainWindowPage {
           .catch(() => '')) === expectedHeading,
       { timeout: 10_000, timeoutMsg: `The document heading never became "${expectedHeading}"` },
     );
+  }
+
+  async waitForBacklinksHeading(expectedHeading: string, timeoutMs: number): Promise<void> {
+    const headingText = async () => this.browser.$('.backlinks > h2').getText();
+    await this.browser.waitUntil(async () => (await headingText()) === expectedHeading, {
+      timeout: timeoutMs,
+      timeoutMsg: `The backlinks heading never became "${expectedHeading}"`,
+    });
   }
 
   async documentText(): Promise<string> {
@@ -147,9 +184,28 @@ export class MainWindowPage {
     );
   }
 
+  /** Opens the editor in Source, which the editing specs written before Rich text expect. */
   async startEditing(): Promise<void> {
-    await this.pressShortcut('Ctrl+/');
+    await this.openEditor();
+    if (await this.isEditorInRichText()) await this.switchEditingMode();
+  }
+
+  /** Opens the editor in the mode of the setting, Rich text on a new installation. */
+  async openEditor(): Promise<void> {
+    await this.pressShortcut('Ctrl+E');
     await this.browser.$('[role="textbox"][aria-label^="Source of"]').waitForDisplayed();
+  }
+
+  /** Ctrl+/ between Rich text and Source, waiting for the editor to show the other mode. */
+  async switchEditingMode(): Promise<void> {
+    const wasRichText = await this.isEditorInRichText();
+    await this.pressShortcut('Ctrl+/');
+    await this.browser.waitUntil(async () => (await this.isEditorInRichText()) !== wasRichText);
+  }
+
+  /** The editor marks Rich text with a class only; the mode has no role or accessible name of its own. */
+  async isEditorInRichText(): Promise<boolean> {
+    return this.browser.$('.cm-editor.cm-rich-text').isExisting();
   }
 
   /**
@@ -240,10 +296,8 @@ export class MainWindowPage {
   }
 
   async clickNoticeAction(labelKey: MessageKey): Promise<void> {
-    await this.browser
-      .$('[aria-live="polite"]')
-      .$(`button=${translator.translate(labelKey)}`)
-      .click();
+    const label = translator.translate(labelKey);
+    await this.browser.$(`.//*[@aria-live="polite"]//button[normalize-space(.)="${label}"]`).click();
   }
 
   async statusBarText(): Promise<string> {
@@ -304,6 +358,22 @@ export class MainWindowPage {
     }));
   }
 
+  /**
+   * Searches in the side bar's Search view and gives the names of the documents found, read only
+   * once that search has finished: a read while it runs finds the list empty.
+   */
+  async searchedDocumentNames(query: string): Promise<string[]> {
+    const input = this.browser.$('input[type="search"][aria-label="Search in folders"]');
+    if ((await input.getValue()) !== query) await input.setValue(query);
+    await this.pressKeyOn(input, 'Enter');
+    const status = this.browser.$('.folder-search .status');
+    const searching = translator.translate('folderSearch.searching');
+    await this.browser.waitUntil(async () => !(await status.getText()).includes(searching), {
+      timeoutMsg: `The search for "${query}" never finished`,
+    });
+    return this.browser.$$('.folder-search .results .document').map((document) => document.getText());
+  }
+
   /** Presses a key on one element, whatever has the focus. */
   async pressKeyOn(element: ChainablePromiseElement, key: string): Promise<void> {
     await this.browser.execute(
@@ -314,6 +384,29 @@ export class MainWindowPage {
       },
       await element.getElement(),
       key,
+    );
+  }
+
+  /**
+   * Presses and releases the mouse on the middle of an element, as a pointer does. The embedded
+   * driver's click sends no press and then focuses the element itself, which hides what a control
+   * does on the press, such as keeping the editor's focus or placing its caret.
+   */
+  async pressWithPointer(element: ChainablePromiseElement): Promise<void> {
+    await this.browser.execute(
+      (target) => {
+        const bounds = target.getBoundingClientRect();
+        const pointer = {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          clientX: bounds.left + bounds.width / 2,
+          clientY: bounds.top + bounds.height / 2,
+        };
+        for (const type of ['mousedown', 'mouseup', 'click'])
+          target.dispatchEvent(new MouseEvent(type, pointer));
+      },
+      await element.getElement(),
     );
   }
 
@@ -453,15 +546,43 @@ export class MainWindowPage {
     return this.browser.$('[role="toolbar"]').$(`button[aria-label="${translator.translate(labelKey)}"]`);
   }
 
+  async hasSidebarSection(titleKey: MessageKey): Promise<boolean> {
+    return (await this.sidebarSectionsTitled(titleKey)).length > 0;
+  }
+
+  /**
+   * Waits until New Workspace has looked into the Notes folder, checks that it asks about files exactly
+   * when the folder holds some, and agrees when it does.
+   */
+  async confirmNotesFolder({ holdsFiles }: { readonly holdsFiles: boolean }): Promise<void> {
+    const step = this.browser.$('[role="dialog"] [role="group"][aria-labelledby="notes-location-label"]');
+    await step.waitForDisplayed();
+    await this.browser.waitUntil(async () => (await step.getAttribute('aria-busy')) !== 'true');
+    const agreement = step.$(
+      `.//label[normalize-space(.)="${translator.translate('workspaces.notes.useExistingFiles')}"]/input`,
+    );
+    const isAsked = await agreement.isExisting();
+    if (isAsked !== holdsFiles)
+      throw new Error(
+        holdsFiles
+          ? 'New Workspace did not ask about the files in the Notes folder'
+          : 'New Workspace asked about files in a Notes folder without any',
+      );
+    if (holdsFiles) await agreement.click();
+  }
+
   private async sidebarSection(titleKey: MessageKey) {
-    const title = translator.translate(titleKey);
-    const sections = await this.browser
-      .$(`nav[aria-label="${translator.translate('sidebar.label')}"]`)
-      .$$('section')
-      .filter(async (section) => String(await section.$('h2').getProperty('textContent')).trim() === title);
-    const [section] = sections;
-    if (!section) throw new Error(`The sidebar has no ${title} section`);
+    const [section] = await this.sidebarSectionsTitled(titleKey);
+    if (!section) throw new Error(`The sidebar has no ${translator.translate(titleKey)} section`);
     return section;
+  }
+
+  private sidebarSectionsTitled(titleKey: MessageKey) {
+    const title = translator.translate(titleKey);
+    return this.browser
+      .$(`nav[aria-label="${translator.translate('sidebar.label')}"]`)
+      .$$(`.//h2[normalize-space(.)="${title}"]/ancestor::section[1]`)
+      .getElements();
   }
 
   private async sidebarEntryNames(titleKey: MessageKey): Promise<string[]> {
@@ -484,6 +605,12 @@ function keyboardEventFor(shortcut: string): KeyboardEventInit {
     shiftKey: hasShift,
     altKey: parts.includes('Alt'),
   };
+}
+
+/** The key code of a letter key, as the browser reports it whatever the case; 0 for other keys. */
+function letterKeyCodeOf(shortcut: string): number {
+  const key = shortcut.split('+').at(-1) ?? '';
+  return /^[a-z]$/i.test(key) ? key.toUpperCase().charCodeAt(0) : 0;
 }
 
 /** `KeyboardEvent.key` is a space character for the space bar and lower case for unshifted letters. */

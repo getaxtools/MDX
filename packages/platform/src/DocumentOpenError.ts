@@ -9,7 +9,12 @@ export type DocumentOpenFailure =
   | 'changedOnDisk'
   | 'cannotEncode'
   | 'lossyDecoding'
-  | 'notAnImage';
+  | 'notAnImage'
+  | 'nameTaken'
+  | 'invalidName'
+  | 'sourceOverlapsLocation'
+  | 'destinationOverlapsLocation'
+  | 'importRunning';
 
 const DOCUMENT_OPEN_FAILURES: readonly string[] = [
   'notFound',
@@ -23,6 +28,11 @@ const DOCUMENT_OPEN_FAILURES: readonly string[] = [
   'cannotEncode',
   'lossyDecoding',
   'notAnImage',
+  'nameTaken',
+  'invalidName',
+  'sourceOverlapsLocation',
+  'destinationOverlapsLocation',
+  'importRunning',
 ];
 
 export function isDocumentOpenFailure(value: unknown): value is DocumentOpenFailure {

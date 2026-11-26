@@ -1,89 +1,49 @@
 <script lang="ts">
+  import type { Translator } from '@mdx/i18n';
+  import Dialog from './Dialog.svelte';
+
   interface Props {
     title: string;
     message: string;
     confirmLabel: string;
     cancelLabel: string;
+    translator: Translator;
     onConfirm: () => void;
     onCancel: () => void;
     /** A third choice between confirming and cancelling, such as Don't Save. */
     alternative?: { readonly label: string; readonly onChoose: () => void } | undefined;
   }
 
-  const { title, message, confirmLabel, cancelLabel, onConfirm, onCancel, alternative }: Props = $props();
-
-  let cancelButton: HTMLButtonElement | undefined = $state();
-
-  $effect(() => cancelButton?.focus());
-
-  function handleKeydown(event: KeyboardEvent) {
-    if (event.key !== 'Escape') return;
-    event.stopPropagation();
-    onCancel();
-  }
+  const { title, message, confirmLabel, cancelLabel, translator, onConfirm, onCancel, alternative }: Props =
+    $props();
 </script>
 
-<div class="backdrop">
-  <div
-    class="dialog"
-    role="alertdialog"
-    aria-modal="true"
-    aria-labelledby="confirm-title"
-    aria-describedby="confirm-message"
-    tabindex="-1"
-    onkeydown={handleKeydown}
-  >
-    <h2 id="confirm-title">{title}</h2>
-    <p id="confirm-message">{message}</p>
-    <div class="actions">
-      <button class="primary" onclick={onConfirm}>{confirmLabel}</button>
-      {#if alternative}
-        <button onclick={alternative.onChoose}>{alternative.label}</button>
-      {/if}
-      <button bind:this={cancelButton} onclick={onCancel}>{cancelLabel}</button>
-    </div>
-  </div>
-</div>
+{#snippet alternativeChoice()}
+  {#if alternative}
+    <button type="button" onclick={alternative.onChoose}>{alternative.label}</button>
+  {/if}
+{/snippet}
+
+<Dialog
+  {title}
+  closeLabel={translator.translate('dialog.close.label')}
+  closeTooltip={translator.translate('dialog.close.tooltip')}
+  {cancelLabel}
+  primary={{ label: confirmLabel, onActivate: onConfirm }}
+  shouldStartOnCancel
+  isAlert
+  footer={alternative ? alternativeChoice : undefined}
+  onClose={onCancel}
+>
+  <p>{message}</p>
+</Dialog>
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 20;
-    display: grid;
-    place-items: center;
-    background: var(--color-overlay);
-  }
-
-  .dialog {
-    animation: rise-in var(--motion-fast) var(--easing-standard);
-    max-width: 30rem;
-    padding: var(--space-5);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-xlarge);
-    background: var(--color-surface-raised);
-    box-shadow: var(--shadow-medium);
-    color: var(--color-text);
-    font-size: var(--text-size-body);
-    line-height: 1.5;
-    overflow-wrap: anywhere;
-  }
-
-  h2 {
-    margin: 0 0 var(--space-2);
-    font-size: 1rem;
-    font-weight: 600;
-  }
-
   p {
-    margin: 0 0 var(--space-5);
+    max-width: 30rem;
+    margin: 0;
     color: var(--color-text-secondary);
-  }
-
-  .actions {
-    display: flex;
-    gap: var(--space-2);
-    justify-content: flex-end;
+    overflow-wrap: anywhere;
   }
 
   button {
@@ -98,29 +58,11 @@
     transition: background-color var(--motion-fast) ease-out;
   }
 
-  button:hover:not(:disabled) {
+  button:hover {
     background: var(--color-surface-hover);
-  }
-
-  .primary:not(:disabled) {
-    border-color: transparent;
-    background: var(--color-accent);
-    color: var(--color-accent-text);
-  }
-
-  .primary:hover:not(:disabled) {
-    background: var(--color-accent-hover);
   }
 
   button:focus-visible {
     outline: 2px solid var(--color-focus);
-    outline-offset: 2px;
-  }
-
-  @keyframes rise-in {
-    from {
-      opacity: 0;
-      transform: scale(0.98);
-    }
   }
 </style>

@@ -1,3 +1,5 @@
+import { removeHiddenCharacterMarkers } from '../prompt-injection/hiddenCharacterMarkers';
+
 /** The selected part of the rendered document, or all of it, as HTML without the app's own markup. */
 export function documentClipboardHtml(article: HTMLElement, selection: Selection | null): string {
   const container = article.ownerDocument.createElement('div');
@@ -41,6 +43,7 @@ function cloneDeep(node: Node): Node {
 const APP_CONTROLS_SELECTOR = 'button, .copy-code, .blocked-remote-image';
 
 function removeAppMarkup(container: HTMLElement): void {
+  removeHiddenCharacterMarkers(container);
   for (const control of container.querySelectorAll(APP_CONTROLS_SELECTOR)) control.remove();
   for (const comment of commentsIn(container)) comment.remove();
   for (const element of container.querySelectorAll('*')) {

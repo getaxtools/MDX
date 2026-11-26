@@ -21,6 +21,109 @@ function renderSettings(settings: ViewSettings = DEFAULT_VIEW_SETTINGS) {
 }
 
 describe('SettingsDialog', () => {
+  describe('Notes', () => {
+    it('path and actions have accessible names', async () => {
+      const onCommand = vi.fn();
+      render(SettingsDialog, {
+        settings: DEFAULT_VIEW_SETTINGS,
+        dataFolder: DATA_FOLDER,
+        notesFolder: 'C:\\Users\\Ana\\Documents\\MDX Notes',
+        translator: createTranslator(),
+        onCommand,
+        onClose: vi.fn(),
+      });
+
+      const section = screen.getByRole('region', { name: 'Notes' });
+      const open = within(section).getByRole('button', { name: 'Open in File Explorer' });
+      await userEvent.click(open);
+
+      expect(open.getAttribute('aria-describedby')).toContain('settings-notes-folder');
+      expect(section.textContent).toContain('C:\\Users\\Ana\\Documents\\MDX Notes');
+      expect(onCommand).toHaveBeenCalledWith({
+        kind: 'revealInFileManager',
+        path: 'C:\\Users\\Ana\\Documents\\MDX Notes',
+      });
+    });
+
+    it('Change Location is reached by keyboard after Open in File Explorer', async () => {
+      const onCommand = vi.fn();
+      render(SettingsDialog, {
+        settings: DEFAULT_VIEW_SETTINGS,
+        dataFolder: DATA_FOLDER,
+        notesFolder: 'C:\\Users\\Ana\\Documents\\MDX Notes',
+        translator: createTranslator(),
+        onCommand,
+        onClose: vi.fn(),
+      });
+      const section = screen.getByRole('region', { name: 'Notes' });
+      within(section).getByRole('button', { name: 'Open in File Explorer' }).focus();
+
+      await userEvent.tab();
+      await userEvent.keyboard('{Enter}');
+
+      expect(document.activeElement?.textContent.trim()).toBe('Change Location…');
+      expect(onCommand).toHaveBeenCalledWith({ kind: 'changeNotesLocation' });
+    });
+
+    it('has no Notes section outside a Notes workspace', () => {
+      renderSettings();
+
+      expect(screen.queryByRole('region', { name: 'Notes' })).toBeNull();
+    });
+  });
+
+  describe('per-workspace scope', () => {
+    function renderWithWorkspace(overrides: Record<string, string>) {
+      const onCommand = vi.fn();
+      render(SettingsDialog, {
+        settings: DEFAULT_VIEW_SETTINGS,
+        dataFolder: DATA_FOLDER,
+        workspace: { name: 'Reading', overrides },
+        translator: createTranslator(),
+        onCommand,
+        onClose: vi.fn(),
+      });
+      return { onCommand };
+    }
+
+    it('offers a scope for theme, reading width and typography only', () => {
+      renderWithWorkspace({});
+
+      const scopes = screen.getAllByRole('combobox', { name: 'Applies to' });
+
+      expect(scopes).toHaveLength(3);
+      expect(screen.getAllByRole('option', { name: 'Only Reading' })).toHaveLength(3);
+    });
+
+    it('shows which settings the workspace overrides', () => {
+      renderWithWorkspace({ theme: 'dark' });
+
+      const [themeScope, ...others] = screen.getAllByRole('combobox', { name: 'Applies to' });
+
+      expect((themeScope as HTMLSelectElement).value).toBe('workspace');
+      expect(others.map((scope) => (scope as HTMLSelectElement).value)).toEqual(['app', 'app']);
+    });
+
+    it('choosing This workspace starts an override, and All workspaces clears it', async () => {
+      const { onCommand } = renderWithWorkspace({ theme: 'dark' });
+      const [themeScope] = screen.getAllByRole('combobox', { name: 'Applies to' });
+
+      await userEvent.selectOptions(themeScope as HTMLSelectElement, 'app');
+
+      expect(onCommand).toHaveBeenCalledWith({
+        kind: 'setWorkspaceOverride',
+        field: 'theme',
+        isOverridden: false,
+      });
+    });
+
+    it('offers no scope without workspaces', () => {
+      renderSettings();
+
+      expect(screen.queryByRole('combobox', { name: 'Applies to' })).toBeNull();
+    });
+  });
+
   it('opens with the search box focused', () => {
     renderSettings();
 
@@ -128,11 +231,50 @@ describe('SettingsDialog', () => {
     );
   });
 
+  it('the zoom description follows the setting', () => {
+    renderSettings({ ...DEFAULT_VIEW_SETTINGS, ctrlWheelAction: 'zoom' });
+    const zoomDescription = () => globalThis.document.getElementById('setting-zoom-description')?.textContent;
+    expect(zoomDescription()).toContain('Ctrl with the mouse wheel');
+
+    const keyboard = within(screen.getByRole('region', { name: 'Keyboard' }));
+    const wheel = keyboard.getByRole<HTMLSelectElement>('combobox', { name: 'Ctrl with the mouse wheel' });
+
+    expect(wheel.value).toBe('zoom');
+  });
+
+  it('the zoom description leaves the wheel out while it moves between files', () => {
+    renderSettings();
+
+    expect(globalThis.document.getElementById('setting-zoom-description')?.textContent).not.toContain(
+      'wheel',
+    );
+  });
+
   it('closes with Escape', async () => {
     const { onClose } = renderSettings();
 
     await userEvent.keyboard('{Escape}');
 
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('opens in the shared frame with only the header close, since every setting applies at once', async () => {
+    const { onClose } = renderSettings();
+    const close = screen.getByRole('button', { name: 'Close' });
+
+    await userEvent.click(close);
+
+    expect(close.title).toBe('Close (Esc)');
+    expect(close.closest('header')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('enter in the search box closes nothing', async () => {
+    const { onClose } = renderSettings();
+
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search settings' }), 'theme{Enter}');
+
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

@@ -66,6 +66,11 @@ export class WorkspaceKindsState {
     return this.enabledIds.some((enabledId) => enabledId === kindId);
   }
 
+  /** The last enabled kind stays on, so the window always shows a kind. */
+  isLastEnabled(kindId: string): boolean {
+    return this.enabledIds.length === 1 && this.isEnabled(kindId);
+  }
+
   enableKind(kindId: string): KindToggleResult {
     if (!isBuiltKind(this.registry, kindId)) return { state: this, outcome: 'refusedUnavailable' };
     if (this.isEnabled(kindId)) return { state: this, outcome: 'unchanged' };
@@ -77,7 +82,7 @@ export class WorkspaceKindsState {
 
   disableKind(kindId: string): KindToggleResult {
     if (!this.isEnabled(kindId)) return { state: this, outcome: 'unchanged' };
-    if (this.enabledIds.length === 1) return { state: this, outcome: 'refusedLastEnabled' };
+    if (this.isLastEnabled(kindId)) return { state: this, outcome: 'refusedLastEnabled' };
     const enabledIds = this.enabledIds.filter((id) => id !== kindId);
     if (kindId !== this.activeId) {
       return {

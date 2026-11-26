@@ -1,3 +1,4 @@
+import { InjectionIgnoreList } from '../prompt-injection/InjectionIgnoreList';
 import { EMPTY_SNIPPET_LIBRARY } from '../snippets/snippetLibrary';
 import { InMemoryDocumentFiles, untitledLocation } from '@mdx/platform';
 import { describe, expect, it } from 'vitest';
@@ -33,6 +34,7 @@ function emptyViewerState() {
     shortcutOverrides: {},
     wordGoals: {},
     snippetLibrary: EMPTY_SNIPPET_LIBRARY,
+    injectionIgnoreList: InjectionIgnoreList.empty(),
   };
 }
 
@@ -135,6 +137,33 @@ describe('persisted app state', () => {
     expect(restored.favourites.favourites()).toEqual([]);
   });
 
+  it('an unknown newer version starts empty and reports the version that saved it', () => {
+    const restored = restoreAppState({ schemaVersion: 2, savedByAppVersion: '2.1.0', recentFiles: [] });
+
+    expect(restored.wasReset).toBe(true);
+    expect(restored.newerSavedState).toEqual({ appVersion: '2.1.0' });
+    expect(restored.tabStrip.tabs()).toEqual([]);
+  });
+
+  it('reports a newer version without a name when it did not record one', () => {
+    expect(restoreAppState({ schemaVersion: 2 }).newerSavedState).toEqual({ appVersion: undefined });
+  });
+
+  it.each([
+    ['corrupt text', 'garbage'],
+    ['an older schema version', { schemaVersion: 0 }],
+    ['a readable state', { schemaVersion: 1 }],
+  ])('does not call %s newer', (_description, saved) => {
+    expect(restoreAppState(saved).newerSavedState).toBeUndefined();
+  });
+
+  it('records the app version that saved the state', () => {
+    const state = restoreAppState(undefined);
+
+    expect(toPersistedAppState(state, '0.9.0').savedByAppVersion).toBe('0.9.0');
+    expect(toPersistedAppState(state)).not.toHaveProperty('savedByAppVersion');
+  });
+
   it('drops individual invalid entries and keeps the valid ones', () => {
     const valid = { location: location('a.md'), isPinned: false, scrollRatio: 0 };
     const saved = {
@@ -223,6 +252,90 @@ describe('persisted app state', () => {
       expect(restored.tabStrip.tabs()).toHaveLength(2);
       expect(restored.workspaceKinds.enabledKindIds()).toEqual(['markdownViewer']);
       expect(restored.shortcutOverrides).toEqual({});
+    });
+  });
+});
+
+/** Saved data with three tabs, two favourites and five recent files, and the given kind choices. */
+function savedDataWithKinds(workspaceKinds: unknown): Record<string, unknown> {
+  const paths = ['a.md', 'b.md', 'c.md', 'd.md', 'e.md'];
+  const state = {
+    ...emptyViewerState(),
+    tabStrip: paths.slice(0, 3).reduce((tabs, path) => tabs.openOrFocus(location(path)), TabStrip.empty()),
+    recentFiles: paths.reduce(
+      (recent, path, index) => recent.add(location(path), index + 1),
+      RecentFilesList.empty(),
+    ),
+    favourites: FavouritesList.empty().add(location('a.md'), 'file').add(location('b.md'), 'file'),
+  };
+  const saved = JSON.parse(JSON.stringify(toPersistedAppState(state))) as Record<string, unknown>;
+  return workspaceKinds === undefined ? withoutFields(saved, KIND_FIELDS) : { ...saved, workspaceKinds };
+}
+
+function restoredCounts(saved: Record<string, unknown>) {
+  const restored = restoreAppState(saved);
+  return {
+    tabs: restored.tabStrip.tabs().length,
+    favourites: restored.favourites.favourites().length,
+    recentFiles: restored.recentFiles.entries().length,
+    enabledKindIds: restored.workspaceKinds.enabledKindIds(),
+    activeKindId: restored.workspaceKinds.activeKindId(),
+    wasReset: restored.wasReset,
+  };
+}
+
+describe('workspace kinds in saved data', () => {
+  it('an unknown kind is ignored and the tabs, favourites and recent files are restored', () => {
+    const saved = savedDataWithKinds({
+      enabledKindIds: ['markdownViewer', 'calendar'],
+      activeKindId: 'markdownViewer',
+    });
+
+    expect(restoredCounts(saved)).toEqual({
+      tabs: 3,
+      favourites: 2,
+      recentFiles: 5,
+      enabledKindIds: ['markdownViewer'],
+      activeKindId: 'markdownViewer',
+      wasReset: false,
+    });
+  });
+
+  it('an active kind that is not enabled is replaced by Markdown viewer', () => {
+    const saved = savedDataWithKinds({ enabledKindIds: ['markdownViewer'], activeKindId: 'notes' });
+
+    expect(restoredCounts(saved).activeKindId).toBe('markdownViewer');
+  });
+
+  it('data without kind choices keeps its three tabs, two favourites and five recent files', () => {
+    expect(restoredCounts(savedDataWithKinds(undefined))).toEqual({
+      tabs: 3,
+      favourites: 2,
+      recentFiles: 5,
+      enabledKindIds: ['markdownViewer'],
+      activeKindId: 'markdownViewer',
+      wasReset: false,
+    });
+  });
+
+  it('an earlier version still restores the three tabs and two favourites saved with Notes enabled', () => {
+    const saved = savedDataWithKinds({ enabledKindIds: ['markdownViewer', 'notes'], activeKindId: 'notes' });
+
+    const earlier = restoredCounts(withoutKindFields(saved));
+
+    expect(saved.schemaVersion).toBe(APP_STATE_SCHEMA_VERSION);
+    expect(earlier).toMatchObject({ tabs: 3, favourites: 2, wasReset: false });
+  });
+
+  it('all three kinds come back enabled with Spec viewer active', () => {
+    const saved = savedDataWithKinds({
+      enabledKindIds: ['specViewer', 'markdownViewer', 'notes'],
+      activeKindId: 'specViewer',
+    });
+
+    expect(restoredCounts(saved)).toMatchObject({
+      enabledKindIds: ['markdownViewer', 'notes', 'specViewer'],
+      activeKindId: 'specViewer',
     });
   });
 });

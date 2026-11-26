@@ -206,7 +206,6 @@
   "document.openExternalLink.title": "Открыть ссылку в браузере?",
   "document.openExternalLink.body": "Ссылка {url} будет открыта в браузере по умолчанию.",
   "view.options.label": "Параметры вида",
-  "view.zoomLevel": "Масштаб {percent}%",
   "document.openExternalLink.open": "Открыть",
   "document.openExternalLink.cancel": "Отмена",
   "shortcuts.column.action": "Действие",

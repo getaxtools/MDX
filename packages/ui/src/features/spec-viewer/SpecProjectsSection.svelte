@@ -1,0 +1,285 @@
+<script lang="ts">
+  import type { Translator } from '@mdx/i18n';
+  import { SvelteSet } from 'svelte/reactivity';
+  import ExplorerSectionHeader from '../explorer/ExplorerSectionHeader.svelte';
+  import TreeChevron from '../folder-tree/TreeChevron.svelte';
+  import { activateWithKeyboard, treeKeyboard } from '../folder-tree/treeKeyboard';
+  import { severityLabelOf } from '../prompt-injection/findingPresentation';
+  import type { ProjectFileSummary } from '../prompt-injection/InjectionChecker';
+  import SeverityIcon from '../prompt-injection/SeverityIcon.svelte';
+  import { specProjectTree, type ScannedSpecRoot, type SpecTreeNode } from './specProjectTree';
+
+  interface Props {
+    /** Undefined while the workspace's folders are being scanned. */
+    roots: readonly ScannedSpecRoot[] | undefined;
+    /** Folders of the workspace that could not be scanned, by their shown path. */
+    unreadableFolders?: readonly string[];
+    translator: Translator;
+    isExpanded: boolean;
+    onToggleExpanded: () => void;
+    onOpenDocument: (documentPath: string) => void;
+    onOpenDashboard?: (rootKey: string, folder: string) => void;
+    onOpenChange?: (rootKey: string, changeFolder: string) => void;
+    onOpenFeature?: (rootKey: string, featureFolder: string) => void;
+    onFollowLink?: (rootKey: string, linkPath: string) => void;
+    onRefresh?: () => void;
+    onCheckForInjection?: () => void;
+    /** Prompt injection findings of checked documents that have any, by their full path. */
+    injectionFindings?: ReadonlyMap<string, ProjectFileSummary> | undefined;
+    activeDocumentKey?: string | undefined;
+  }
+
+  const {
+    roots,
+    unreadableFolders = [],
+    translator,
+    isExpanded,
+    onToggleExpanded,
+    onOpenDocument,
+    onOpenDashboard = () => undefined,
+    onOpenChange = () => undefined,
+    onOpenFeature = () => undefined,
+    onFollowLink = () => undefined,
+    onRefresh = () => undefined,
+    onCheckForInjection = () => undefined,
+    injectionFindings,
+    activeDocumentKey,
+  }: Props = $props();
+
+  const HEADING_ID = 'spec-projects-heading';
+  const tree = $derived(specProjectTree(roots ?? [], translator));
+  const partlyReadRoots = $derived((roots ?? []).filter((scanned) => scanned.isIncomplete));
+  const storeNotices = $derived(
+    (roots ?? []).flatMap((scanned) =>
+      scanned.projects.flatMap((project) =>
+        project.planningStore === undefined ? [] : [{ folder: project.name, name: project.planningStore }],
+      ),
+    ),
+  );
+  const toggledRows = new SvelteSet<string>();
+
+  function isOpen(node: SpecTreeNode): boolean {
+    return node.isInitiallyExpanded !== toggledRows.has(node.id);
+  }
+
+  function toggleRow(node: SpecTreeNode) {
+    if (toggledRows.has(node.id)) toggledRows.delete(node.id);
+    else toggledRows.add(node.id);
+  }
+
+  function chooseRow(node: SpecTreeNode) {
+    if (node.dashboard) onOpenDashboard(node.dashboard.rootKey, node.dashboard.folder);
+    else if (node.changePage) onOpenChange(node.changePage.rootKey, node.changePage.changeFolder);
+    else if (node.featurePage) onOpenFeature(node.featurePage.rootKey, node.featurePage.featureFolder);
+    else if (node.linkToFollow) onFollowLink(node.linkToFollow.rootKey, node.linkToFollow.linkPath);
+    else if (node.documentPath !== undefined) onOpenDocument(node.documentPath);
+    else if (node.children.length > 0) toggleRow(node);
+  }
+
+  function findingsOf(node: SpecTreeNode): ProjectFileSummary | undefined {
+    return node.documentPath === undefined ? undefined : injectionFindings?.get(node.documentPath);
+  }
+
+  /** A row with findings says so after its name, as the badge shows it after the label. */
+  function accessibleNameOf(node: SpecTreeNode): string {
+    const findings = findingsOf(node);
+    if (!findings?.highestSeverity) return node.accessibleName;
+    const description = translator.translate('specViewer.injection.findings', {
+      count: findings.findingCount,
+      severity: severityLabelOf(findings.highestSeverity, translator),
+    });
+    return `${node.accessibleName}, ${description}`;
+  }
+
+  function isActive(node: SpecTreeNode): boolean {
+    return (
+      node.documentPath?.toLowerCase() === activeDocumentKey?.toLowerCase() && activeDocumentKey !== undefined
+    );
+  }
+</script>
+
+{#snippet rows(nodes: readonly SpecTreeNode[], level: number)}
+  {#each nodes as node (node.id)}
+    {@const hasChildren = node.children.length > 0}
+    {@const isNodeOpen = isOpen(node)}
+    {@const findings = findingsOf(node)}
+    <li role="none">
+      <div
+        role="treeitem"
+        tabindex="-1"
+        class:selected={isActive(node)}
+        class:unavailable={node.isUnavailable}
+        aria-level={level}
+        aria-selected={isActive(node)}
+        aria-expanded={hasChildren ? isNodeOpen : undefined}
+        aria-label={accessibleNameOf(node)}
+        onclick={() => chooseRow(node)}
+        onkeydown={activateWithKeyboard}
+      >
+        {#if hasChildren}
+          <span
+            class="toggle"
+            data-tree-toggle
+            aria-hidden="true"
+            onclick={(event) => {
+              event.stopPropagation();
+              toggleRow(node);
+            }}
+          >
+            <TreeChevron isExpanded={isNodeOpen} />
+          </span>
+        {:else}
+          <span class="chevron-space" aria-hidden="true"></span>
+        {/if}
+        <span class="name" aria-hidden="true">{node.label}</span>
+        {#if node.detail}<span class="detail" aria-hidden="true">{node.detail}</span>{/if}
+        {#if findings?.highestSeverity}
+          <span class="finding-badge" aria-hidden="true">
+            <SeverityIcon severity={findings.highestSeverity} />
+            {translator.translate('promptInjection.badge.count', { count: findings.findingCount })}
+          </span>
+        {/if}
+      </div>
+      {#if hasChildren && isNodeOpen}
+        <ul class="nested" role="group">
+          <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a snippet is not a value -->
+          {@render rows(node.children, level + 1)}
+        </ul>
+      {/if}
+    </li>
+  {/each}
+{/snippet}
+
+<section aria-labelledby={HEADING_ID}>
+  <ExplorerSectionHeader
+    section="folders"
+    headingId={HEADING_ID}
+    title={translator.translate('specViewer.sidebar.title')}
+    {isExpanded}
+    onToggle={onToggleExpanded}
+  >
+    {#snippet actions()}
+      <button
+        class="refresh"
+        aria-label={translator.translate('specViewer.sidebar.refresh')}
+        title={translator.translate('specViewer.sidebar.refresh')}
+        onclick={onRefresh}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.05-4.95M19 4.5v4h-4" /></svg>
+      </button>
+      <button
+        class="refresh"
+        aria-label={translator.translate('specViewer.injection.check')}
+        title={translator.translate('specViewer.injection.check')}
+        onclick={onCheckForInjection}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"
+          ><path d="M12 3l7 3v5c0 4.5-3 8.4-7 10-4-1.6-7-5.5-7-10V6z" /></svg
+        >
+      </button>
+    {/snippet}
+  </ExplorerSectionHeader>
+  {#if isExpanded}
+    {#each partlyReadRoots as scanned (scanned.root.canonicalKey)}
+      <p class="notice" role="status">
+        {translator.translate('specViewer.sidebar.partlyRead', { folder: scanned.root.displayPath })}
+      </p>
+    {/each}
+    {#each unreadableFolders as folder (folder)}
+      <p class="notice">{translator.translate('specViewer.sidebar.unreadable', { folder })}</p>
+    {/each}
+    {#each storeNotices as notice (notice.folder)}
+      <p class="notice">{translator.translate('specViewer.sidebar.planningStore', notice)}</p>
+    {/each}
+    {#if roots === undefined}
+      <p class="empty-state">{translator.translate('specViewer.sidebar.loading')}</p>
+    {:else if tree.length === 0}
+      <p class="empty-state">{translator.translate('specViewer.sidebar.empty')}</p>
+    {:else}
+      <ul role="tree" aria-labelledby={HEADING_ID} use:treeKeyboard>
+        <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a snippet is not a value -->
+        {@render rows(tree, 1)}
+      </ul>
+    {/if}
+  {/if}
+</section>
+
+<style>
+  .finding-badge {
+    display: inline-flex;
+    flex: none;
+    gap: var(--space-1);
+    align-items: center;
+    margin-inline-start: auto;
+    padding-inline-start: var(--space-2);
+    color: var(--color-text-secondary);
+    font-size: var(--text-size-small);
+  }
+
+  .refresh {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    min-height: 24px;
+    margin-inline-end: var(--space-1);
+    padding: var(--space-1);
+    border: 0;
+    border-radius: var(--radius-xsmall);
+    background: none;
+    color: var(--color-text-secondary);
+  }
+
+  .refresh:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+  }
+
+  .refresh:focus-visible {
+    outline: 2px solid var(--color-focus);
+  }
+
+  .refresh svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .nested {
+    margin-inline-start: calc(var(--space-2) + 8px) !important;
+    padding-inline-start: var(--space-1) !important;
+    border-inline-start: 1px solid var(--color-border);
+  }
+
+  .toggle {
+    display: inline-flex;
+    flex: none;
+  }
+
+  .chevron-space {
+    flex: none;
+    width: 16px;
+  }
+
+  .name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .detail {
+    flex: none;
+    color: var(--color-text-secondary);
+    font-size: var(--text-size-small);
+  }
+
+  .notice {
+    margin: 0 var(--space-2) var(--space-1);
+    font-size: var(--text-size-small);
+    color: var(--color-text-secondary);
+  }
+</style>

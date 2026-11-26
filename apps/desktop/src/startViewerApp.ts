@@ -1,11 +1,12 @@
-import { ViewerSession, workspaceKindsFor, type WorkspaceKind } from '@mdx/core';
+import { ViewerSession, isProtectedLocation, workspaceKindsFor } from '@mdx/core';
 import { DEFAULT_LOCALE, type Translator } from '@mdx/i18n';
 import { createCodeHighlighter, createMarkdownRenderer, createRichBlockRenderer } from '@mdx/renderer';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { ViewerApp, ViewerController, translatedAlertTitles } from '@mdx/ui';
+import { ViewerApp, ViewerController, translatedAlertTitles, type AppInfo } from '@mdx/ui';
 import type { DisplayLanguage, StartupProgress } from '@mdx/ui/startup';
 import { mount } from 'svelte';
 import { TauriAppMenu } from './ports/TauriAppMenu';
+import { TauriAppWindows } from './ports/TauriAppWindows';
 import { TauriAttachments } from './ports/TauriAttachments';
 import type { TauriAppState } from './ports/TauriAppState';
 import { TauriDocumentFiles } from './ports/TauriDocumentFiles';
@@ -16,8 +17,18 @@ import { TauriDesktopShell } from './ports/TauriDesktopShell';
 import { TauriDocumentExport } from './ports/TauriDocumentExport';
 import { TauriDocumentWatcher } from './ports/TauriDocumentWatcher';
 import { TauriFavouritesFile } from './ports/TauriFavouritesFile';
+import { TauriJumpList } from './ports/TauriJumpList';
 import { TauriFolderWatcher } from './ports/TauriFolderWatcher';
 import { TauriFolders } from './ports/TauriFolders';
+import { TauriNoteFiles } from './ports/TauriNoteFiles';
+import { TauriNoteTransfer } from './ports/TauriNoteTransfer';
+import { TauriSpecProjects } from './ports/TauriSpecProjects';
+import { TauriNotesIndex } from './ports/TauriNotesIndex';
+import { TauriNotesLocations } from './ports/TauriNotesLocations';
+import { TauriNotesMoves } from './ports/TauriNotesMoves';
+import { TauriProtectedNotes } from './ports/TauriProtectedNotes';
+import { TauriWorkspaceFiles } from './ports/TauriWorkspaceFiles';
+import { TauriWorkspaceStore } from './ports/TauriWorkspaceStore';
 import { WebViewPrinter } from './ports/WebViewPrinter';
 import { tauriCommands } from './ports/tauriCommands';
 import { loadThirdPartyLicenses } from './loadThirdPartyLicenses';
@@ -41,10 +52,7 @@ export async function startViewerApp({
   const menu = new TauriAppMenu();
   if (locale !== DEFAULT_LOCALE) await menu.showLabels(messages);
   const appInfo = await tauriCommands.getAppInfo();
-  const kindRegistry = workspaceKindsFor({
-    allowsPlannedKindPreview: appInfo.allowsPlannedKindPreview ?? false,
-  });
-  const controller = createViewerController({ appState, menu, translator, kindRegistry });
+  const controller = createViewerController({ appState, menu, translator, appInfo });
   mount(ViewerApp, {
     target: appElement,
     props: {
@@ -71,26 +79,24 @@ interface ViewerControllerSources {
   readonly appState: TauriAppState;
   readonly menu: TauriAppMenu;
   readonly translator: Translator;
-  readonly kindRegistry: readonly WorkspaceKind[];
+  readonly appInfo: AppInfo;
 }
 
 function createViewerController({
   appState,
   menu,
   translator,
-  kindRegistry,
+  appInfo,
 }: ViewerControllerSources): ViewerController {
+  const appWindows = new TauriAppWindows();
   return new ViewerController({
-    session: new ViewerSession({
-      documentFiles: new TauriDocumentFiles(),
-      appState,
-      now: () => Date.now(),
-      kindRegistry,
-    }),
+    session: createViewerSession(appState, appInfo, appWindows.windowId),
+    appWindows,
     requests: new TauriDocumentRequests(),
     renderer: createMarkdownRenderer({ window, alertTitles: translatedAlertTitles(translator) }),
     translator,
     menu,
+    jumpList: new TauriJumpList(),
     watcher: new TauriDocumentWatcher(),
     resources: new TauriDocumentResources(),
     printer: new WebViewPrinter(),
@@ -101,18 +107,53 @@ function createViewerController({
     desktopShell: new TauriDesktopShell(),
     documentExport: new TauriDocumentExport(),
     attachments: new TauriAttachments(),
+    workspaceFiles: new TauriWorkspaceFiles(),
+    notesLocations: new TauriNotesLocations(),
+    notesMoves: new TauriNotesMoves(),
+    noteFiles: new TauriNoteFiles(),
+    noteTransfer: new TauriNoteTransfer(),
+    specProjects: new TauriSpecProjects(),
+    notesIndex: new TauriNotesIndex(),
+    protectedNotes: new TauriProtectedNotes(),
+    protectedDocuments: { isProtected: isProtectedLocation },
+  });
+}
+
+function createViewerSession(appState: TauriAppState, appInfo: AppInfo, windowId: string): ViewerSession {
+  return new ViewerSession({
+    documentFiles: new TauriDocumentFiles(),
+    appState,
+    now: () => Date.now(),
+    kindRegistry: workspaceKindsFor({
+      allowsPlannedKindPreview: appInfo.allowsPlannedKindPreview ?? false,
+    }),
+    appVersion: appInfo.version,
+    workspaceStore: new TauriWorkspaceStore(),
+    windowId,
   });
 }
 
 function saveOrAskBeforeClosing(controller: ViewerController): void {
   const appWindow = getCurrentWindow();
   void appWindow.onCloseRequested(async (event) => {
+    if (controller.isCopyingNotes()) {
+      event.preventDefault();
+      if (!(await controller.confirmClosingDuringNotesMove())) return;
+      if (!(await controller.confirmClosingWindow())) return;
+      await controller.saveNow();
+      await appWindow.destroy();
+      return;
+    }
     if (!controller.hasUnsavedDocuments()) {
       await controller.saveNow();
       return;
     }
     event.preventDefault();
-    if (!(await controller.confirmClosingWindow())) return;
+    if (!(await controller.confirmClosingWindow())) {
+      // Exit may have asked every window to close; this one stays, so later closes count again.
+      await tauriCommands.closeCancelled();
+      return;
+    }
     await controller.saveNow();
     await appWindow.destroy();
   });

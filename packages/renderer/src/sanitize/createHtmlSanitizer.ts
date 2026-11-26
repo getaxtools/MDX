@@ -117,7 +117,8 @@ function classifyLinks(fragment: DocumentFragment): void {
   }
 }
 
-function linkKindOf(href: string): LinkKind | undefined {
+/** How the preview treats a link's address; undefined for an address it refuses to open. */
+export function linkKindOf(href: string): LinkKind | undefined {
   if (EXTERNAL_LINK.test(href)) return 'external';
   if (href.startsWith('#')) return 'anchor';
   if (REMOTE_URL.test(href) || HAS_SCHEME.test(href)) return undefined;

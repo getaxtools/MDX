@@ -1,9 +1,12 @@
 import {
+  AUTOMATIC_INJECTION_CHECKS,
+  CTRL_WHEEL_ACTIONS,
   isSidebarViewShown,
   KIND_SWITCHERS,
   READING_WIDTHS,
   THEME_PREFERENCES,
   TYPOGRAPHIES,
+  EDITING_MODES,
   ZOOM_LEVELS_PERCENT,
   type ReadingWidth,
   type ThemePreference,
@@ -14,13 +17,15 @@ import {
 import { SUPPORTED_LOCALES, directionOf, isKnownLocale, type MessageKey, type Translator } from '@mdx/i18n';
 import type { ViewerCommand } from '../viewer/viewerCommands';
 
-export type SettingSection = 'appearance' | 'language' | 'layout' | 'editing' | 'workspaceKinds' | 'keyboard';
+export type SettingSection =
+  'appearance' | 'language' | 'layout' | 'editing' | 'promptInjection' | 'workspaceKinds' | 'keyboard';
 
 export const SETTING_SECTIONS: readonly SettingSection[] = [
   'appearance',
   'language',
   'layout',
   'editing',
+  'promptInjection',
   'workspaceKinds',
   'keyboard',
 ];
@@ -35,6 +40,8 @@ interface SettingBase {
   readonly section: SettingSection;
   readonly labelKey: MessageKey;
   readonly descriptionKey: MessageKey;
+  /** A description that changes with another setting; `descriptionKey` is the one searched. */
+  readonly descriptionKeyIn?: (settings: ViewSettings) => MessageKey;
 }
 
 export interface ChoiceSetting extends SettingBase {
@@ -130,6 +137,10 @@ const zoomSetting: ChoiceSetting = {
   section: 'appearance',
   labelKey: 'settings.zoom.label',
   descriptionKey: 'settings.zoom.description',
+  descriptionKeyIn: (settings) =>
+    settings.ctrlWheelAction === 'zoom'
+      ? 'settings.zoom.description'
+      : 'settings.zoom.descriptionWithoutWheel',
   choices: (translator) =>
     ZOOM_LEVELS_PERCENT.map((percent) => ({
       value: String(percent),
@@ -233,7 +244,26 @@ const WORKSPACE_KIND_SETTINGS: readonly SettingDefinition[] = [
   },
 ];
 
+const editingModeSetting: ChoiceSetting = {
+  id: 'editingMode',
+  kind: 'choice',
+  section: 'editing',
+  labelKey: 'menu.view.editingMode',
+  descriptionKey: 'settings.editingMode.description',
+  choices: (translator) =>
+    EDITING_MODES.map((editingMode) => ({
+      value: editingMode,
+      label: translator.translate(`menu.view.editingMode.${editingMode}`),
+    })),
+  valueIn: (settings) => settings.editingMode,
+  commandFor: (value) => {
+    const editingMode = EDITING_MODES.find((mode) => mode === value);
+    return editingMode ? { kind: 'setEditingMode', editingMode } : undefined;
+  },
+};
+
 const EDITING_SETTINGS: readonly SettingDefinition[] = [
+  editingModeSetting,
   {
     id: 'slashMenuInRichText',
     kind: 'toggle',
@@ -252,9 +282,95 @@ const EDITING_SETTINGS: readonly SettingDefinition[] = [
     isOnIn: (settings) => settings.isSlashMenuInSource,
     toggleCommand: { kind: 'toggleSlashMenuInSource' },
   },
+  {
+    id: 'spellCheckInRichText',
+    kind: 'toggle',
+    section: 'editing',
+    labelKey: 'settings.spellCheckInRichText.label',
+    descriptionKey: 'settings.spellCheckInRichText.description',
+    isOnIn: (settings) => settings.isSpellCheckedInRichText,
+    toggleCommand: { kind: 'toggleSpellCheckInRichText' },
+  },
+  {
+    id: 'spellCheckInSource',
+    kind: 'toggle',
+    section: 'editing',
+    labelKey: 'settings.spellCheckInSource.label',
+    descriptionKey: 'settings.spellCheckInSource.description',
+    isOnIn: (settings) => settings.isSpellCheckedInSource,
+    toggleCommand: { kind: 'toggleSpellCheckInSource' },
+  },
+  {
+    id: 'spellingLanguages',
+    kind: 'action',
+    section: 'editing',
+    labelKey: 'settings.spellingLanguages.label',
+    descriptionKey: 'settings.spellingLanguages.description',
+    buttonLabelKey: 'settings.spellingLanguages.button',
+    command: { kind: 'openLanguageSettings' },
+  },
 ];
 
+const automaticInjectionCheckSetting: ChoiceSetting = {
+  id: 'automaticInjectionCheck',
+  kind: 'choice',
+  section: 'promptInjection',
+  labelKey: 'promptInjection.settings.automatic.label',
+  descriptionKey: 'promptInjection.settings.automatic.description',
+  choices: (translator) =>
+    AUTOMATIC_INJECTION_CHECKS.map((check) => ({
+      value: check,
+      label: translator.translate(`promptInjection.settings.automatic.${check}`),
+    })),
+  valueIn: (settings) => settings.automaticInjectionCheck,
+  commandFor: (value) => {
+    const check = AUTOMATIC_INJECTION_CHECKS.find((choice) => choice === value);
+    return check ? { kind: 'setAutomaticInjectionCheck', check } : undefined;
+  },
+};
+
+const PROMPT_INJECTION_SETTINGS: readonly SettingDefinition[] = [
+  automaticInjectionCheckSetting,
+  {
+    id: 'hiddenCharacters',
+    kind: 'toggle',
+    section: 'promptInjection',
+    labelKey: 'promptInjection.hiddenCharacters.panelToggle',
+    descriptionKey: 'promptInjection.settings.hiddenCharacters.description',
+    isOnIn: (settings) => settings.isShowingHiddenCharacters,
+    toggleCommand: { kind: 'toggleHiddenCharacters' },
+  },
+  {
+    id: 'resetIgnoredFindings',
+    kind: 'action',
+    section: 'promptInjection',
+    labelKey: 'promptInjection.settings.resetIgnored.label',
+    descriptionKey: 'promptInjection.settings.resetIgnored.description',
+    buttonLabelKey: 'promptInjection.settings.resetIgnored.button',
+    command: { kind: 'resetInjectionIgnoreList' },
+  },
+];
+
+const ctrlWheelSetting: ChoiceSetting = {
+  id: 'ctrlWheel',
+  kind: 'choice',
+  section: 'keyboard',
+  labelKey: 'settings.ctrlWheel.label',
+  descriptionKey: 'settings.ctrlWheel.description',
+  choices: (translator) =>
+    CTRL_WHEEL_ACTIONS.map((action) => ({
+      value: action,
+      label: translator.translate(`settings.ctrlWheel.${action}`),
+    })),
+  valueIn: (settings) => settings.ctrlWheelAction,
+  commandFor: (value) => {
+    const ctrlWheelAction = CTRL_WHEEL_ACTIONS.find((action) => action === value);
+    return ctrlWheelAction ? { kind: 'setCtrlWheelAction', ctrlWheelAction } : undefined;
+  },
+};
+
 const KEYBOARD_SETTINGS: readonly SettingDefinition[] = [
+  ctrlWheelSetting,
   {
     id: 'controlWheelShortcut',
     kind: 'shortcut',
@@ -326,6 +442,7 @@ export const SETTING_DEFINITIONS: readonly SettingDefinition[] = [
     (settings) => settings.isPreviewBesideEditor,
   ),
   ...EDITING_SETTINGS,
+  ...PROMPT_INJECTION_SETTINGS,
   ...WORKSPACE_KIND_SETTINGS,
   ...KEYBOARD_SETTINGS,
 ];
@@ -340,6 +457,11 @@ export function matchesQuery(query: string, text: string): boolean {
   const words = foldForSearch(query).split(/\s+/u).filter(Boolean);
   const searchable = foldForSearch(text);
   return words.every((word) => searchable.includes(word));
+}
+
+/** The description shown now, which may follow another setting. */
+export function descriptionKeyOf(setting: SettingDefinition, settings: ViewSettings): MessageKey {
+  return setting.descriptionKeyIn?.(settings) ?? setting.descriptionKey;
 }
 
 function searchableTextOf(setting: SettingDefinition, translator: Translator): string {

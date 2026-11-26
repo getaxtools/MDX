@@ -3,6 +3,7 @@ import type { RichBlockRenderer } from '@mdx/renderer';
 import { createTranslator } from '@mdx/i18n';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
+import type { SourceRangeRequest } from '../viewer/ViewerController';
 import DocumentView from './DocumentView.svelte';
 
 interface ViewOptions {
@@ -13,6 +14,9 @@ interface ViewOptions {
   readonly isSourceView?: boolean;
   readonly richBlocks?: RichBlockRenderer;
   readonly copyAsHtmlRequest?: number;
+  readonly sourceRangeRequest?: SourceRangeRequest;
+  readonly onPrint?: () => void;
+  readonly onMoveWithWheel?: (event: WheelEvent) => boolean;
 }
 
 function renderDocument(
@@ -25,6 +29,9 @@ function renderDocument(
     isSourceView = false,
     richBlocks,
     copyAsHtmlRequest,
+    sourceRangeRequest,
+    onPrint = () => undefined,
+    onMoveWithWheel,
   }: ViewOptions = {},
 ) {
   const onOpenLink = vi.fn();
@@ -57,6 +64,9 @@ function renderDocument(
     isSourceView,
     onCommand,
     richBlocks,
+    sourceRangeRequest,
+    onPrint,
+    ...(onMoveWithWheel ? { onMoveWithWheel } : {}),
   });
   return { onOpenLink, onCommand, rerender: view.rerender };
 }
@@ -123,6 +133,33 @@ describe('DocumentView', () => {
 
     expect(scrollIntoView).toHaveBeenCalledOnce();
     expect(document.activeElement?.textContent).toBe('Install');
+  });
+
+  it('shows the heading a link from another note points to, once that note is shown', async () => {
+    const { rerender } = renderDocument('<h2 id="mdx-next-steps">Next Steps</h2>');
+    const scrollIntoView = vi.fn();
+    screen.getByRole('heading', { name: 'Next Steps' }).scrollIntoView = scrollIntoView;
+
+    await rerender({ linkedHeadingRequest: { canonicalKey: 'other.md', fragment: 'next-steps', number: 1 } });
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    await rerender({ linkedHeadingRequest: { canonicalKey: 'a.md', fragment: 'next-steps', number: 2 } });
+
+    expect(scrollIntoView).toHaveBeenCalledOnce();
+  });
+
+  it('a link to a note that does not exist yet can be reached and chosen from the keyboard', async () => {
+    const { onOpenLink } = renderDocument(
+      '<p><span class="wiki-link wiki-link-unresolved" title="Budget">Budget<span class="visually-hidden"> (no note yet)</span></span></p>',
+    );
+
+    const link = screen.getByRole('link', { name: /^Budget\s*\(no note yet\)$/ });
+    link.focus();
+    await fireEvent.keyDown(link, { key: 'Enter' });
+    await fireEvent.click(link);
+
+    expect(link.tabIndex).toBe(0);
+    expect(onOpenLink).toHaveBeenCalledTimes(2);
+    expect(onOpenLink).toHaveBeenCalledWith({ kind: 'unresolvedNote', href: 'Budget' });
   });
 
   it('ignores clicks outside links', async () => {
@@ -229,7 +266,9 @@ describe('DocumentView', () => {
     const { onCommand, rerender } = renderDocument('<h1>Guide</h1>');
 
     await rerender({ exportRequest: { format: 'html', number: 1 } });
+    await vi.waitFor(() => expect(onCommand).toHaveBeenCalledOnce());
     await rerender({ exportRequest: { format: 'plainText', number: 2 } });
+    await vi.waitFor(() => expect(onCommand).toHaveBeenCalledTimes(2));
 
     const [[htmlExport], [textExport]] = onCommand.mock.calls as [
       [{ contents: string }],
@@ -261,10 +300,35 @@ describe('DocumentView', () => {
     expect(onCommand.mock.calls).toEqual([[{ kind: 'zoomIn' }], [{ kind: 'zoomOut' }]]);
   });
 
+  it('lets Ctrl and the wheel move between files instead of zooming when the arc takes it', async () => {
+    const onMoveWithWheel = vi.fn(() => true);
+    const { onCommand } = renderDocument('<p>Text</p>', { onMoveWithWheel });
+
+    const isScrolling = await fireEvent.wheel(screen.getByRole('main'), { deltaY: 100, ctrlKey: true });
+
+    expect(onMoveWithWheel).toHaveBeenCalledOnce();
+    expect(onCommand).not.toHaveBeenCalled();
+    expect(isScrolling).toBe(false);
+  });
+
+  it('zooms when the arc does not take the wheel', async () => {
+    const { onCommand } = renderDocument('<p>Text</p>', { onMoveWithWheel: () => false });
+
+    await fireEvent.wheel(screen.getByRole('main'), { deltaY: -100, ctrlKey: true });
+
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'zoomIn' });
+  });
+
   it('typesets the math in the rendered document', async () => {
     const renderInto = vi.fn<RichBlockRenderer['renderInto']>(() => Promise.resolve());
 
-    renderDocument('<p><span class="mdx-math-inline">x</span></p>', { richBlocks: { renderInto } });
+    renderDocument('<p><span class="mdx-math-inline">x</span></p>', {
+      richBlocks: {
+        renderInto,
+        typesetMath: () => Promise.resolve(undefined),
+        previewFormula: () => Promise.resolve({ kind: 'unavailable' }),
+      },
+    });
 
     await vi.waitFor(() => expect(renderInto).toHaveBeenCalled());
     expect(renderInto.mock.calls[0]?.[0].getAttribute('aria-label')).toBe('a.md');
@@ -273,8 +337,92 @@ describe('DocumentView', () => {
   it('leaves math as source in source view', () => {
     const renderInto = vi.fn(() => Promise.resolve());
 
-    renderDocument('<p>x</p>', { richBlocks: { renderInto }, isSourceView: true });
+    renderDocument('<p>x</p>', {
+      richBlocks: {
+        renderInto,
+        typesetMath: () => Promise.resolve(undefined),
+        previewFormula: () => Promise.resolve({ kind: 'unavailable' }),
+      },
+      isSourceView: true,
+    });
 
     expect(renderInto).not.toHaveBeenCalled();
+  });
+
+  it('outlines a range asked for in the source view, such as a finding', () => {
+    const highlights = new Map<string, { readonly ranges: Range[] }>();
+    vi.stubGlobal('CSS', { highlights });
+    vi.stubGlobal(
+      'Highlight',
+      class {
+        readonly ranges: Range[];
+        constructor(...ranges: Range[]) {
+          this.ranges = ranges;
+        }
+      },
+    );
+
+    renderDocument('<h1>Source</h1>', {
+      isSourceView: true,
+      sourceRangeRequest: { canonicalKey: 'a.md', from: 2, to: 8, line: 0, number: 1 },
+    });
+
+    expect(highlights.get('mdx-source-range')?.ranges[0]?.toString()).toBe('Source');
+    vi.unstubAllGlobals();
+  });
+
+  it('prints only once the math has been typeset', async () => {
+    const typesetting: { finish?: () => void } = {};
+    const renderInto = vi.fn<RichBlockRenderer['renderInto']>(
+      () =>
+        new Promise<void>((resolve) => {
+          typesetting.finish = resolve;
+        }),
+    );
+    const onPrint = vi.fn();
+    const { rerender } = renderDocument('<p><span class="mdx-math-inline">x</span></p>', {
+      richBlocks: {
+        renderInto,
+        typesetMath: () => Promise.resolve(undefined),
+        previewFormula: () => Promise.resolve({ kind: 'unavailable' }),
+      },
+      onPrint,
+    });
+    await vi.waitFor(() => expect(renderInto).toHaveBeenCalled());
+
+    await rerender({ printRequest: 1 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const wasPrintedEarly = onPrint.mock.calls.length > 0;
+    typesetting.finish?.();
+
+    await vi.waitFor(() => expect(onPrint).toHaveBeenCalledOnce());
+    expect(wasPrintedEarly).toBe(false);
+  });
+
+  it('prints after a few seconds even when the typesetting never finishes', async () => {
+    const renderInto = vi.fn<RichBlockRenderer['renderInto']>(() => new Promise<void>(() => undefined));
+    const onPrint = vi.fn();
+    const { rerender } = renderDocument('<p><span class="mdx-math-inline">x</span></p>', {
+      richBlocks: {
+        renderInto,
+        typesetMath: () => Promise.resolve(undefined),
+        previewFormula: () => Promise.resolve({ kind: 'unavailable' }),
+      },
+      onPrint,
+    });
+    await vi.waitFor(() => expect(renderInto).toHaveBeenCalled());
+    vi.useFakeTimers();
+    try {
+      await rerender({ printRequest: 1 });
+      await vi.advanceTimersByTimeAsync(4_000);
+      const wasPrintedEarly = onPrint.mock.calls.length > 0;
+
+      await vi.advanceTimersByTimeAsync(1_500);
+
+      expect(wasPrintedEarly).toBe(false);
+      expect(onPrint).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -1,5 +1,5 @@
 use std::fs::{self, DirEntry};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -12,6 +12,64 @@ use crate::documents::{
 };
 
 const MAX_LISTED_ENTRIES_PER_KIND: usize = 1_000;
+
+/// UI tests answer the folder picker with this folder, since WebDriver cannot reach the native dialog.
+#[cfg(debug_assertions)]
+const PICKED_FOLDER_OVERRIDE_VARIABLE: &str = "MDX_PICKED_FOLDER";
+
+/// Asks the user for a folder; `None` when they cancel.
+pub(crate) fn pick_folder_in_dialog(app: &AppHandle) -> Result<Option<PathBuf>, DocumentError> {
+    #[cfg(debug_assertions)]
+    if let Some(answer) = ui_test_folder_picks::next_answer() {
+        return Ok(answer);
+    }
+    #[cfg(debug_assertions)]
+    if let Some(folder) = std::env::var_os(PICKED_FOLDER_OVERRIDE_VARIABLE) {
+        return Ok(Some(folder.into()));
+    }
+    let Some(picked) = app.dialog().file().blocking_pick_folder() else {
+        return Ok(None);
+    };
+    picked
+        .into_path()
+        .map(Some)
+        .map_err(|_| DocumentError::InvalidRequest)
+}
+
+/// UI tests cannot reach the system folder picker, so debug builds answer it with the folders in
+/// `MDX_UI_TEST_PICKED_FOLDERS`, separated by `;`, one per pick, and then as if the user cancelled.
+#[cfg(debug_assertions)]
+mod ui_test_folder_picks {
+    use std::collections::VecDeque;
+    use std::path::PathBuf;
+    use std::sync::{Mutex, OnceLock, PoisonError};
+
+    const PICKED_FOLDERS_VARIABLE: &str = "MDX_UI_TEST_PICKED_FOLDERS";
+
+    /// `None` when the variable is not set, so the real picker opens.
+    pub fn next_answer() -> Option<Option<PathBuf>> {
+        static ANSWERS: OnceLock<Option<Mutex<VecDeque<PathBuf>>>> = OnceLock::new();
+        let answers = ANSWERS
+            .get_or_init(|| {
+                std::env::var(PICKED_FOLDERS_VARIABLE).ok().map(|folders| {
+                    Mutex::new(
+                        folders
+                            .split(';')
+                            .filter(|folder| !folder.is_empty())
+                            .map(PathBuf::from)
+                            .collect(),
+                    )
+                })
+            })
+            .as_ref()?;
+        Some(
+            answers
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .pop_front(),
+        )
+    }
+}
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize)]
 pub struct FolderListing {
@@ -27,12 +85,9 @@ pub async fn pick_folder(
 ) -> Result<Option<DocumentLocation>, DocumentError> {
     let access = Arc::clone(&access);
     tauri::async_runtime::spawn_blocking(move || {
-        let Some(picked) = app.dialog().file().blocking_pick_folder() else {
+        let Some(folder) = pick_folder_in_dialog(&app)? else {
             return Ok(None);
         };
-        let folder = picked
-            .into_path()
-            .map_err(|_| DocumentError::InvalidRequest)?;
         access.grant_folder(&folder)?;
         locate_document(&folder).map(Some)
     })

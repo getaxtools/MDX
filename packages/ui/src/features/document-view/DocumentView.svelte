@@ -12,13 +12,18 @@
   import type { HeadingRequest } from '../outline/HeadingRequest';
   import type { DocumentLink } from './DocumentLink';
   import PropertiesPanel from './PropertiesPanel.svelte';
-  import { untrack } from 'svelte';
+  import type { PropertyFieldsState } from './PropertyEditing';
+  import { renderedFormulaAt, type RenderedFormula } from './renderedFormulaAt';
+  import { tick, untrack, type Snippet } from 'svelte';
   import type { ExportFormat } from '@mdx/platform';
   import { standaloneDocumentHtml } from '../document-export/standaloneDocumentHtml';
-  import type { ExportRequest } from '../viewer/ViewerController';
+  import type { ExportRequest, LinkedHeadingRequest, SourceRangeRequest } from '../viewer/ViewerController';
+  import { keepSourceRangeOutlined } from './outlineSourceRange';
+  import { keepHiddenCharactersMarked } from '../prompt-injection/hiddenCharacterMarkers';
   import { documentClipboardHtml, documentExportHtml, documentPlainText } from './documentClipboardHtml';
   import { enhanceCodeBlocks } from './enhanceCodeBlocks';
   import { findLinkedHeading } from './findLinkedHeading';
+  import { makeUnresolvedNoteLinksFocusable } from './unresolvedNoteLinks';
   import { revealHeading } from './scrollToHeading';
   import { showBlockedRemoteImages } from './showBlockedRemoteImages';
   import { headingIdInSourceView, scrollSourceLineToTop } from './sourceViewLines';
@@ -42,8 +47,18 @@
     copyAsHtmlRequest?: number | undefined;
     /** Asks for an exported copy of the document; the request it starts with is ignored. */
     exportRequest?: ExportRequest | undefined;
+    /** Goes up each time the document should be printed; the value it starts with is ignored. */
+    printRequest?: number | undefined;
+    /** Prints the window once the document has finished drawing. */
+    onPrint?: () => void;
     /** A heading chosen in the outline; the request it starts with is ignored. */
     headingRequest?: HeadingRequest | undefined;
+    /** A heading a link from another document points to; the request it starts with is ignored. */
+    linkedHeadingRequest?: LinkedHeadingRequest | undefined;
+    /** A range to outline in the source view, such as a prompt injection finding. */
+    sourceRangeRequest?: SourceRangeRequest | undefined;
+    /** Invisible and direction characters are drawn as labelled markers. */
+    isShowingHiddenCharacters?: boolean;
     locale?: string;
     isSourceView?: boolean;
     onCloseFind?: () => void;
@@ -51,11 +66,19 @@
     onScroll?: (scrollRatio: number) => void;
     onCurrentHeadingChange?: (headingId: string | undefined) => void;
     onCommand?: (command: ViewerCommand) => void;
+    /** Edit Formula on a rendered formula; the menu offers it only when this is given. */
+    onEditFormula?: ((formula: RenderedFormula) => void) | undefined;
+    /** Ctrl with the mouse wheel: true when it moved between files, false to zoom as before. */
+    onMoveWithWheel?: (event: WheelEvent) => boolean;
     isOutlineVisible?: boolean;
     isFavourite?: boolean;
     canBeFavourite?: boolean;
     /** False for a preview beside the editor, which follows the editor instead of the tab's position. */
     shouldRestoreScroll?: boolean;
+    /** Shown below the document, such as the notes linking to a note. */
+    footer?: Snippet | undefined;
+    /** Whether the properties fields take changes now; see `PropertyFieldsState`. */
+    propertyFieldsState?: PropertyFieldsState;
   }
 
   const {
@@ -70,7 +93,12 @@
     findQuery,
     copyAsHtmlRequest,
     exportRequest,
+    printRequest,
+    onPrint = () => undefined,
     headingRequest,
+    linkedHeadingRequest,
+    sourceRangeRequest,
+    isShowingHiddenCharacters = false,
     locale = 'en',
     isSourceView = false,
     onCloseFind = () => undefined,
@@ -78,13 +106,19 @@
     onScroll = () => undefined,
     onCurrentHeadingChange = () => undefined,
     onCommand = () => undefined,
+    onEditFormula,
+    onMoveWithWheel = () => false,
     isOutlineVisible = true,
     isFavourite = false,
     canBeFavourite = true,
     shouldRestoreScroll = true,
+    footer,
+    propertyFieldsState = 'editable',
   }: Props = $props();
 
   const SCROLL_REPORT_DELAY_MS = 250;
+  /** Printing and exporting go ahead after this long, even if a picture or a font is still loading. */
+  const RENDERING_WAIT_LIMIT_MS = 5_000;
   let documentArea: HTMLElement | undefined = $state();
   let restoredDocument: RenderedActiveDocument | undefined;
   let pendingScrollReport: ReturnType<typeof globalThis.setTimeout> | undefined;
@@ -100,13 +134,13 @@
     const area = documentArea;
     if (!area) return;
     // Registered by hand because a passive wheel listener cannot stop the page from scrolling.
-    const zoomWithWheel = (event: WheelEvent) => {
+    const routeCtrlWheel = (event: WheelEvent) => {
       if (!event.ctrlKey || event.deltaY === 0) return;
       event.preventDefault();
-      onCommand({ kind: event.deltaY < 0 ? 'zoomIn' : 'zoomOut' });
+      if (!onMoveWithWheel(event)) onCommand({ kind: event.deltaY < 0 ? 'zoomIn' : 'zoomOut' });
     };
-    area.addEventListener('wheel', zoomWithWheel, { passive: false });
-    return () => area.removeEventListener('wheel', zoomWithWheel);
+    area.addEventListener('wheel', routeCtrlWheel, { passive: false });
+    return () => area.removeEventListener('wheel', routeCtrlWheel);
   });
 
   function reportScroll() {
@@ -135,6 +169,44 @@
     goToHeading(request.entry);
   });
 
+  let handledLinkedHeading = untrack(() => linkedHeadingRequest);
+
+  $effect(() => {
+    const request = linkedHeadingRequest;
+    const article = articleElement;
+    if (!request || request === handledLinkedHeading || !article) return;
+    if (document?.canonicalKey !== request.canonicalKey || !document.html || isSourceView) return;
+    handledLinkedHeading = request;
+    const heading = findLinkedHeading(article, request.fragment);
+    if (heading) revealHeading(heading);
+  });
+
+  $effect(() => {
+    const article = articleElement;
+    if (!document?.html || !article || isSourceView) return;
+    makeUnresolvedNoteLinksFocusable(article);
+  });
+
+  $effect(() => {
+    const article = articleElement;
+    if (!document || !article || !isShowingHiddenCharacters) return;
+    return keepHiddenCharactersMarked(article);
+  });
+
+  let scrolledSourceRange = untrack(() => sourceRangeRequest?.number);
+
+  $effect(() => {
+    const request = sourceRangeRequest;
+    const area = documentArea;
+    const sourceView = isSourceView ? articleElement?.querySelector('pre') : undefined;
+    if (!request || !area || !sourceView || document?.canonicalKey !== request.canonicalKey) return;
+    if (request.number !== scrolledSourceRange) {
+      scrolledSourceRange = request.number;
+      untrack(() => scrollSourceLineToTop(area, sourceView, request.line));
+    }
+    return keepSourceRangeOutlined(sourceView, request);
+  });
+
   function goToHeading(entry: OutlineEntry) {
     const area = documentArea;
     const article = articleElement;
@@ -152,7 +224,7 @@
     const article = articleElement;
     if (!document?.html || !article || (isSourceView && !document.source)) return;
     let isStillShown = true;
-    void enhanceCodeBlocks(article, {
+    pendingCodeBlocks = enhanceCodeBlocks(article, {
       highlighter: codeHighlighter,
       translator,
       isStillShown: () => isStillShown,
@@ -171,18 +243,60 @@
     const article = articleElement;
     if (!document?.html || !article || isSourceView || !richBlocks) return;
     let isStillShown = true;
-    void richBlocks.renderInto(article, { isStillShown: () => isStillShown });
+    pendingRichBlocks = richBlocks.renderInto(article, { isStillShown: () => isStillShown });
     return () => (isStillShown = false);
   });
 
   let handledCopyRequest = untrack(() => copyAsHtmlRequest);
   let handledExportRequest = untrack(() => exportRequest);
+  let handledPrintRequest = untrack(() => printRequest);
+  /** The latest highlighting and typesetting, which printing and exporting wait for. */
+  let pendingCodeBlocks: Promise<unknown> = Promise.resolve();
+  let pendingRichBlocks: Promise<unknown> = Promise.resolve();
+
+  /**
+   * Waits until the shown document has drawn: the new HTML is in place, code is highlighted, math is
+   * typeset, fonts are loaded and pictures are decoded. A picture that fails to load does not hold it up,
+   * and the wait ends after a few seconds whatever is still loading.
+   */
+  async function renderingSettled(): Promise<void> {
+    let stopWaiting: ReturnType<typeof globalThis.setTimeout> | undefined;
+    const waitLimit = new Promise<void>((resolve) => {
+      stopWaiting = globalThis.setTimeout(resolve, RENDERING_WAIT_LIMIT_MS);
+    });
+    await Promise.race([renderingDrawn(), waitLimit]);
+    globalThis.clearTimeout(stopWaiting);
+  }
+
+  async function renderingDrawn(): Promise<void> {
+    await tick();
+    await Promise.allSettled([pendingCodeBlocks, pendingRichBlocks]);
+    // Some engines, and the test DOM, lack the font and decode APIs; waiting then simply ends.
+    await Promise.resolve()
+      .then(() => globalThis.document.fonts.ready)
+      .catch(() => undefined);
+    const pictures = [...(articleElement?.querySelectorAll('img') ?? [])];
+    await Promise.all(
+      pictures.map((picture) =>
+        Promise.resolve()
+          .then(() => picture.decode())
+          .catch(() => undefined),
+      ),
+    );
+  }
+
+  $effect(() => {
+    const request = printRequest;
+    if (request === undefined || request === handledPrintRequest) return;
+    handledPrintRequest = request;
+    void renderingSettled().then(() => onPrint());
+  });
 
   $effect(() => {
     const request = exportRequest;
     if (request === undefined || request === handledExportRequest) return;
     handledExportRequest = request;
-    exportDocument(request.format);
+    void renderingSettled().then(() => exportDocument(request.format));
   });
 
   function exportDocument(format: ExportFormat) {
@@ -220,8 +334,14 @@
   };
 
   let articleElement: HTMLElement | undefined = $state();
-  let menuRequest: { readonly x: number; readonly y: number; readonly selectedText: string } | undefined =
-    $state();
+  let menuRequest:
+    | {
+        readonly x: number;
+        readonly y: number;
+        readonly selectedText: string;
+        readonly formula: RenderedFormula | undefined;
+      }
+    | undefined = $state();
 
   const menuItems = $derived(
     documentContextMenuItems(
@@ -231,6 +351,7 @@
         isOutlineVisible,
         isFavourite,
         canBeFavourite,
+        isOnFormula: onEditFormula !== undefined && menuRequest?.formula !== undefined,
       },
       translator,
     ),
@@ -241,10 +362,15 @@
     menuRequest = {
       ...contextMenuPosition(event),
       selectedText: globalThis.getSelection()?.toString() ?? '',
+      formula: isSourceView ? undefined : renderedFormulaAt(event.target, articleElement),
     };
   }
 
   function chooseMenuItem(itemId: DocumentMenuItemId) {
+    if (itemId === 'editFormula') {
+      editMenuFormula();
+      return;
+    }
     const command = commandForDocumentMenuItem(itemId);
     if (command) onCommand(command);
     if (itemId === 'copyAsHtml') copyAsHtml();
@@ -254,8 +380,13 @@
       globalThis.getSelection()?.selectAllChildren(articleElement);
   }
 
+  function editMenuFormula() {
+    if (menuRequest?.formula) onEditFormula?.(menuRequest.formula);
+  }
+
   function handleClick(event: MouseEvent) {
     if (!(event.target instanceof Element)) return;
+    if (openUnresolvedNoteLink(event.target)) return;
     const link = event.target.closest('a');
     if (!link) return;
     // The webview must never navigate away from the app, so every link is handled here.
@@ -268,6 +399,18 @@
     const kind = link.dataset.mdxLink;
     const href = link.getAttribute('href');
     if (href && (kind === 'document' || kind === 'external')) onOpenLink({ kind, href });
+  }
+  /** A wiki-link to a note that does not exist yet offers to create it. */
+  function openUnresolvedNoteLink(target: Element): boolean {
+    const unresolved = target.closest<HTMLElement>('.wiki-link-unresolved');
+    if (!unresolved) return false;
+    onOpenLink({ kind: 'unresolvedNote', href: unresolved.title });
+    return true;
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Enter' || !(event.target instanceof Element)) return;
+    if (openUnresolvedNoteLink(event.target)) event.preventDefault();
   }
 </script>
 
@@ -291,10 +434,17 @@
     />
   {/if}
   {#if document?.frontMatter !== undefined}
-    <PropertiesPanel frontMatter={document.frontMatter} {translator} />
+    <PropertiesPanel
+      frontMatter={document.frontMatter}
+      canonicalKey={document.canonicalKey}
+      editability={document.propertiesEditability}
+      fieldsState={propertyFieldsState}
+      {translator}
+      {onCommand}
+    />
   {/if}
   {#if document}
-    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <article
       bind:this={articleElement}
       class="rendered-document"
@@ -302,6 +452,7 @@
       aria-label={document.fileName}
       style:zoom={zoomPercent / PERCENT}
       onclick={handleClick}
+      onkeydown={handleKeydown}
       oncontextmenu={openMenu}
     >
       {#if isSourceView}
@@ -311,6 +462,8 @@
         {@html document.html}
       {/if}
     </article>
+    <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a snippet is not a value -->
+    {@render footer?.()}
   {:else}
     <p class="empty-state">{translator.translate('document.emptyState')}</p>
   {/if}

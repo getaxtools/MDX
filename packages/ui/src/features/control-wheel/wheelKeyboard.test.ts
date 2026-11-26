@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { wheelKeyAction, type WheelKeyContext } from './wheelKeyboard';
+import { isKeyboardMovement, wheelKeyAction, type WheelKeyContext } from './wheelKeyboard';
 
 const THREE_SEGMENTS: WheelKeyContext = { segmentCount: 3, focusedIndex: 0, direction: 1 };
 
@@ -63,5 +63,15 @@ describe('control wheel keyboard', () => {
   it('leaves combinations with Ctrl, Alt or the Windows key to other shortcuts', () => {
     expect(press('2', {}, { ctrlKey: true })).toEqual({ action: 'none' });
     expect(press('ArrowDown', {}, { altKey: true })).toEqual({ action: 'none' });
+  });
+
+  it('counts moving round the wheel as keyboard use, but not choosing or closing', () => {
+    const moves = ['ArrowDown', 'ArrowLeft', 'Home', 'End', 'Tab'].map((key) =>
+      isKeyboardMovement(press(key)),
+    );
+    const others = ['2', 'Enter', ' ', 'Escape', 'x'].map((key) => isKeyboardMovement(press(key)));
+
+    expect(moves).toEqual([true, true, true, true, true]);
+    expect(others).toEqual([false, false, false, false, false]);
   });
 });

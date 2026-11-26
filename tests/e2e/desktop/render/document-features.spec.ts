@@ -1,8 +1,9 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MainWindowPage } from '../../pages/MainWindowPage';
 import { DesktopApp } from '../../support/DesktopApp';
 import { TestWorkspace } from '../../support/TestWorkspace';
+import { WindowsClipboard } from '../../support/WindowsClipboard';
 
 /** A 1×1 transparent PNG. */
 const PIXEL_PNG = Buffer.from(
@@ -14,6 +15,15 @@ describe('document features', () => {
   let workspace: TestWorkspace;
   let app: DesktopApp;
   let mainWindow: MainWindowPage;
+  let clipboard: WindowsClipboard;
+
+  beforeAll(() => {
+    clipboard = WindowsClipboard.save();
+  });
+
+  afterAll(() => {
+    clipboard.restore();
+  });
 
   beforeEach(() => {
     workspace = TestWorkspace.create();
@@ -45,9 +55,15 @@ describe('document features', () => {
     await open('code.md');
 
     const copyButton = app.browser.$('main pre button');
+    await app.browser.waitUntil(() => app.browser.execute(() => document.hasFocus()), {
+      timeoutMsg: 'The window never had the focus the clipboard needs.',
+    });
     await copyButton.click();
 
-    await app.browser.waitUntil(async () => (await copyButton.getText()) === 'Copied');
+    let feedback = '';
+    await app.browser.waitUntil(async () => (feedback = await copyButton.getText()) !== 'Copy');
+    expect(feedback).toBe('Copied');
+    expect(WindowsClipboard.readText()?.trimEnd()).toBe('const answer = 42;');
   });
 
   it('highlights code with the language it is written in', async () => {

@@ -66,4 +66,15 @@ describe('wikiLinksPlugin', () => {
 
     expect(plain).toContain('[[Plan]] #tag');
   });
+
+  it('one render can bring its own resolution, relative to the note shown', () => {
+    const shared = createMarkdownRenderer({ window });
+    const notes = { resolveWikiLink: () => '../Plan.md', unresolvedDescription: 'no note yet' };
+
+    const forNote = new DOMParser().parseFromString(shared.render('[[Plan]]', { notes }).html, 'text/html');
+    const plain = shared.render('[[Plan]]').html;
+
+    expect(forNote.querySelector('a.wiki-link')?.getAttribute('href')).toBe('../Plan.md');
+    expect(plain).toContain('[[Plan]]');
+  });
 });

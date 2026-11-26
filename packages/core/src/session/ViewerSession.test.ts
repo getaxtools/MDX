@@ -102,6 +102,33 @@ describe('ViewerSession', () => {
     expect(session.openedDocument(guide.location.canonicalKey)).toBeUndefined();
   });
 
+  it('keeps the fields a newer version saved after a restart and a save', async () => {
+    const boardLayout = { columns: ['Ideas', 'Done'], isCompact: true };
+    const { session, appState } = createSession(new InMemoryAppState({ schemaVersion: 1, boardLayout }));
+    await session.restore();
+    await session.openDocument(GUIDE_PATH);
+    await session.save();
+    const restarted = createSession(appState);
+
+    await restarted.session.restore();
+    await restarted.session.save();
+
+    expect(await appState.load()).toMatchObject({ boardLayout });
+  });
+
+  it('forgets the fields a newer version saved when all data is cleared', async () => {
+    const { session, appState } = createSession(
+      new InMemoryAppState({ schemaVersion: 1, boardLayout: { columns: ['Ideas'] } }),
+    );
+    await session.restore();
+
+    session.clearAllData();
+    await session.clearStoredData();
+    await session.save();
+
+    expect(await appState.load()).not.toHaveProperty('boardLayout');
+  });
+
   it('reports a reset when the saved state is corrupt', async () => {
     const { session } = createSession(new InMemoryAppState('corrupt'));
 
@@ -109,6 +136,52 @@ describe('ViewerSession', () => {
 
     expect(wasReset).toBe(true);
     expect(session.currentState().tabStrip.tabs()).toEqual([]);
+  });
+
+  it('reports saved state from a newer version', async () => {
+    const { session } = createSession(new InMemoryAppState({ schemaVersion: 2, savedByAppVersion: '2.0.0' }));
+
+    const outcome = await session.restore();
+
+    expect(outcome).toEqual({
+      wasReset: true,
+      newerSavedState: { appVersion: '2.0.0' },
+      hasEarlierVersionChanges: false,
+    });
+  });
+
+  it('saves the app version it was given with the state', async () => {
+    const appState = new InMemoryAppState();
+    const session = new ViewerSession({
+      documentFiles: new InMemoryDocumentFiles(),
+      appState,
+      now: () => 0,
+      appVersion: '0.9.0',
+    });
+
+    await session.save();
+
+    expect(await appState.load()).toMatchObject({ schemaVersion: 1, savedByAppVersion: '0.9.0' });
+  });
+
+  it('removes the kept backups of saved state when stored data is cleared', async () => {
+    const { session, appState } = createSession();
+
+    await session.clearStoredData();
+
+    expect(appState.backupRemovalCount).toBe(1);
+  });
+
+  it('tells subscribers about the state a failed clear of stored data left', async () => {
+    const appState = new InMemoryAppState();
+    appState.removeBackups = () => Promise.reject(new Error('backup is locked'));
+    const { session } = createSession(appState);
+    const notifications: ViewerState[] = [];
+    session.subscribe((state) => notifications.push(state));
+
+    await expect(session.clearStoredData()).rejects.toThrow('backup is locked');
+
+    expect(notifications).toHaveLength(1);
   });
 
   it('loads nothing when no tab is open', async () => {
@@ -376,12 +449,37 @@ describe('ViewerSession', () => {
     expect(notifications).toHaveLength(1);
   });
 
+  it('a renamed note keeps its tab, its child note’s tab and its text', async () => {
+    const documentFiles = new InMemoryDocumentFiles({
+      'C:\\Notes\\Projects.md': '# Projects',
+      'C:\\Notes\\Projects\\Plan.md': '# Plan',
+    });
+    const session = new ViewerSession({ documentFiles, appState: new InMemoryAppState(), now: () => 1 });
+    await session.openDocument('C:\\Notes\\Projects\\Plan.md');
+    const projects = await session.openDocument('C:\\Notes\\Projects.md');
+
+    session.followMovedNote({
+      from: projects.location,
+      to: InMemoryDocumentFiles.locationOf('C:\\Notes\\Work.md'),
+    });
+
+    const state = session.currentState();
+    expect(state.tabStrip.tabs().map((tab) => tab.location.displayPath)).toEqual([
+      'C:\\Notes\\Work\\Plan.md',
+      'C:\\Notes\\Work.md',
+    ]);
+    expect(state.tabStrip.activeTab()?.location.fileName).toBe('Work.md');
+    expect(session.openedDocument('c:\\notes\\work.md')?.text).toBe('# Projects');
+    expect(state.recentFiles.has('c:\\notes\\work\\plan.md')).toBe(true);
+    expect(state.recentFiles.has('c:\\notes\\projects.md')).toBe(false);
+  });
+
   it('keeps planned kinds chosen in the UI test build after a restore and Clear All Data', async () => {
     const appState = new InMemoryAppState();
     const documentFiles = new InMemoryDocumentFiles({});
     const kindRegistry = workspaceKindsFor({ allowsPlannedKindPreview: true });
     const first = new ViewerSession({ documentFiles, appState, now: () => 0, kindRegistry });
-    first.updateWorkspaceKinds((kinds) => kinds.enableKind('notes').state.switchKind('notes'));
+    first.updateWorkspaceKinds((kinds) => kinds.enableKind('specViewer').state.switchKind('specViewer'));
     await first.save();
     const second = new ViewerSession({ documentFiles, appState, now: () => 0, kindRegistry });
 
@@ -389,7 +487,7 @@ describe('ViewerSession', () => {
     const restoredActiveKind = second.currentState().workspaceKinds.activeKindId();
     second.clearAllData();
 
-    expect(restoredActiveKind).toBe('notes');
+    expect(restoredActiveKind).toBe('specViewer');
     expect(
       second
         .currentState()

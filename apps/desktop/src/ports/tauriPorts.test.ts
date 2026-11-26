@@ -1,8 +1,10 @@
-import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
-import { InMemoryDocumentFiles } from '@mdx/platform';
+import { clearMocks, mockIPC, mockWindows } from '@tauri-apps/api/mocks';
+import { AppStateRefusedError, InMemoryDocumentFiles, ProtectedNotesError } from '@mdx/platform';
+import { emit } from '@tauri-apps/api/event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TauriAppMenu } from './TauriAppMenu';
 import { TauriAppState } from './TauriAppState';
+import { TauriAttachments } from './TauriAttachments';
 import { TauriDesktopShell } from './TauriDesktopShell';
 import { TauriDocumentFiles } from './TauriDocumentFiles';
 import { TauriDocumentRequests } from './TauriDocumentRequests';
@@ -10,6 +12,7 @@ import { TauriDocumentWatcher } from './TauriDocumentWatcher';
 import { TauriFavouritesFile } from './TauriFavouritesFile';
 import { TauriFolderWatcher } from './TauriFolderWatcher';
 import { TauriFolders } from './TauriFolders';
+import { TauriProtectedNotes } from './TauriProtectedNotes';
 
 type CommandArguments = Record<string, unknown>;
 
@@ -127,6 +130,25 @@ describe('TauriDocumentFiles', () => {
       ['b.md', 'missing'],
     ]);
   });
+
+  it('reads a modified time through the read_modified_time command', async () => {
+    const calls = mockCommands({ read_modified_time: () => 1_700_000_000_000 });
+
+    await expect(new TauriDocumentFiles().readModifiedTime('C:\\a.md')).resolves.toBe(1_700_000_000_000);
+    expect(calls).toEqual([{ command: 'read_modified_time', args: { path: 'C:\\a.md' } }]);
+  });
+
+  it('knows no modified time when the read is refused or the time is missing', async () => {
+    mockCommands({
+      read_modified_time: ({ path }) => {
+        if (path === 'outside.md') throw new Error('accessDenied');
+        return 0;
+      },
+    });
+
+    await expect(new TauriDocumentFiles().readModifiedTime('outside.md')).resolves.toBeUndefined();
+    await expect(new TauriDocumentFiles().readModifiedTime('a.md')).resolves.toBeUndefined();
+  });
 });
 
 describe('TauriAppState', () => {
@@ -155,6 +177,47 @@ describe('TauriAppState', () => {
 
     expect(calls).toEqual([{ command: 'save_app_state', args: { stateJson: '{"schemaVersion":1}' } }]);
   });
+
+  it('reports state the backend refuses to store as refused', async () => {
+    mockCommands({
+      save_app_state: () => {
+        throw Object.assign(new Error('backend error'), { code: 'invalidState' });
+      },
+    });
+
+    await expect(new TauriAppState().save({ schemaVersion: 1 })).rejects.toBeInstanceOf(AppStateRefusedError);
+  });
+
+  it('refuses state too deeply nested to write as JSON text without calling the backend', async () => {
+    const calls = mockCommands({ save_app_state: () => null });
+    let deepField: unknown[] = [];
+    for (let level = 0; level < 200_000; level += 1) deepField = [deepField];
+
+    await expect(new TauriAppState().save({ schemaVersion: 1, deepField })).rejects.toBeInstanceOf(
+      AppStateRefusedError,
+    );
+
+    expect(calls).toEqual([]);
+  });
+
+  it('passes a storage failure through unchanged', async () => {
+    const storageFailure = Object.assign(new Error('backend error'), { code: 'storageUnavailable' });
+    mockCommands({
+      save_app_state: () => {
+        throw storageFailure;
+      },
+    });
+
+    await expect(new TauriAppState().save({ schemaVersion: 1 })).rejects.toBe(storageFailure);
+  });
+
+  it('removes the kept backups through the remove_app_state_backups command', async () => {
+    const calls = mockCommands({ remove_app_state_backups: () => null });
+
+    await new TauriAppState().removeBackups();
+
+    expect(calls.map((call) => call.command)).toEqual(['remove_app_state_backups']);
+  });
 });
 
 describe('TauriDocumentRequests', () => {
@@ -179,6 +242,14 @@ describe('TauriDesktopShell', () => {
       { command: 'reveal_in_file_manager', args: { path: 'C:\\Docs\\guide.md' } },
       { command: 'toggle_full_screen', args: {} },
     ]);
+  });
+
+  it('opens the language settings with a request that names no page', async () => {
+    const calls = mockCommands({ open_language_settings: () => null });
+
+    await new TauriDesktopShell().openLanguageSettings();
+
+    expect(calls).toEqual([{ command: 'open_language_settings', args: {} }]);
   });
 });
 
@@ -237,11 +308,13 @@ describe('TauriAppMenu', () => {
       theme: 'dark',
       readingWidth: 'wide',
       typography: 'book',
+      editingMode: 'richText',
       isSidebarVisible: false,
       isOutlineVisible: true,
       isStatusBarVisible: true,
       isSourceView: false,
       isPreviewBesideEditor: false,
+      isShowingHiddenCharacters: true,
     };
 
     await new TauriAppMenu().showViewState(state);
@@ -257,12 +330,17 @@ describe('TauriAppMenu', () => {
     expect(calls).toEqual([{ command: 'update_menu_language', args: { labels: { 'menu.file': 'फ़ाइल' } } }]);
   });
 
-  it('lists recent documents in the native menu through the update_recent_menu command', async () => {
+  it('lists recent documents and workspaces in the native menu through the update_recent_menu command', async () => {
     const calls = mockCommands({ update_recent_menu: () => null });
 
-    await new TauriAppMenu().showRecentFiles(['C:\\Docs\\a.md']);
+    await new TauriAppMenu().showRecentFiles(['C:\\Docs\\a.md'], [{ id: 'reading', name: 'Reading' }]);
 
-    expect(calls).toEqual([{ command: 'update_recent_menu', args: { displayPaths: ['C:\\Docs\\a.md'] } }]);
+    expect(calls).toEqual([
+      {
+        command: 'update_recent_menu',
+        args: { displayPaths: ['C:\\Docs\\a.md'], workspaces: [{ id: 'reading', name: 'Reading' }] },
+      },
+    ]);
   });
 });
 
@@ -308,5 +386,281 @@ describe('TauriFolders', () => {
     expect(calls).toEqual([
       { command: 'search_folder_documents', args: { folders: ['C:/Docs'], query: 'setup', options } },
     ]);
+  });
+});
+
+describe('TauriAttachments', () => {
+  it('sends the notes folder with the pictures chosen in the dialog, as with a pasted picture', async () => {
+    const calls = mockCommands({
+      add_picture_files: () => [{ kind: 'saved', relativePath: '../Attachments/chart.png' }],
+    });
+    const target = {
+      documentPath: 'E:/Notes/Projects/Plan.md',
+      attachmentFolder: 'Attachments',
+      notesFolder: 'E:/Notes',
+    };
+
+    const chosen = await new TauriAttachments().addPictureFiles(target, 'Pictures');
+
+    expect(chosen).toEqual([{ kind: 'saved', relativePath: '../Attachments/chart.png' }]);
+    expect(calls).toEqual([
+      { command: 'add_picture_files', args: { request: { ...target, filterName: 'Pictures' } } },
+    ]);
+  });
+});
+
+describe('TauriProtectedNotes', () => {
+  const LOCATION = 'C:\\Notes';
+  const PASSWORD = 'correct horse battery';
+  const NEW_PASSWORD = 'staple tuna lighthouse';
+  const NOTE_ID = 'a'.repeat(32);
+  const PLAIN_NOTE = 'C:\\Notes\\Bank details.md';
+
+  function mockProtectedCommands() {
+    return mockCommands({
+      protected_status: () => ({
+        isSetUp: true,
+        isUnlocked: false,
+        canUnlockOnThisPc: true,
+        isReencrypting: false,
+      }),
+      protected_set_up: () => ({ recoveryKey: 'ABCD-EFGH' }),
+      protected_unlock: () => ({ folderWarning: 'olderNotes' }),
+      protected_unlock_with_recovery: () => ({}),
+      protected_unlock_on_this_pc: () => ({}),
+      protected_accept_folder: () => null,
+      protected_forget_this_pc: () => null,
+      protected_lock: () => null,
+      protected_lock_all: () => null,
+      protected_list: () => [],
+      protected_create: () => NOTE_ID,
+      protected_open: () => ({
+        text: 'PIN',
+        encoding: 'UTF-8',
+        hasByteOrderMark: false,
+        hasDecodingErrors: false,
+        lineEnding: 'lf',
+        revision: 2,
+        isOlderCopy: false,
+      }),
+      protected_save: () => 3,
+      protected_change_password: () => ({ recoveryKey: 'IJKL-MNOP' }),
+      protected_continue_reencryption: () => ({
+        remaining: 0,
+        damaged: 0,
+        heldBack: 0,
+        isUnverifiable: false,
+      }),
+      protected_finish_reencryption: () => null,
+      protected_new_recovery_key: () => ({ recoveryKey: 'QRST-UVWX' }),
+      protected_move_in: () => ({ noteId: NOTE_ID, isPlainCopyKept: false }),
+      protected_add_attachment: () => ({ noteId: NOTE_ID, fileName: 'Chart.png' }),
+      protected_open_attachment: () => new Uint8Array([137, 80, 78, 71]).buffer,
+      protected_back_up: () => null,
+      protected_restore: () => true,
+      protected_move_out: () => ({
+        canonicalKey: 'c:\\notes\\bank details.md',
+        displayPath: 'C:\\Notes\\Bank details.md',
+        fileName: 'Bank details.md',
+      }),
+    });
+  }
+
+  async function runEveryOperation(notes: TauriProtectedNotes) {
+    await notes.status(LOCATION);
+    await notes.setUp(LOCATION, PASSWORD);
+    expect(await notes.unlock(LOCATION, PASSWORD, true)).toEqual({ folderWarning: 'olderNotes' });
+    await notes.acceptFolder(LOCATION);
+    await notes.unlockWithRecoveryKey(LOCATION, { recoveryKey: 'ABCD-EFGH', newPassword: PASSWORD });
+    await notes.unlockOnThisPc(LOCATION);
+    await notes.forgetThisPc(LOCATION);
+    await notes.lock(LOCATION);
+    await notes.lockAll();
+    await notes.list(LOCATION);
+    await notes.create(LOCATION, { title: 'Bank details', folder: '' });
+    await notes.open(LOCATION, NOTE_ID);
+    const revision = await notes.save(LOCATION, {
+      noteId: NOTE_ID,
+      text: 'PIN',
+      encoding: 'UTF-8',
+      hasByteOrderMark: false,
+    });
+    await notes.changePassword(LOCATION, {
+      currentPassword: PASSWORD,
+      newPassword: NEW_PASSWORD,
+      shouldReencrypt: true,
+    });
+    await notes.continueReencryption(LOCATION);
+    await notes.finishReencryption(LOCATION, NEW_PASSWORD, {
+      discardCount: 2,
+      acknowledgeUnverifiable: true,
+    });
+    await notes.newRecoveryKey(LOCATION, PASSWORD);
+    await notes.moveIn(LOCATION, { notePath: PLAIN_NOTE, intoFolder: 'Finance', isConfirmed: true });
+    await notes.moveOut(LOCATION, { noteId: NOTE_ID, intoFolder: LOCATION, isConfirmed: true });
+    await notes.addPastedAttachment(LOCATION, { name: 'Chart.png', bytes: new Uint8Array([137, 80]) });
+    await notes.addDroppedAttachment(LOCATION, 'C:\\Pictures\\scan.png');
+    expect(await notes.openAttachment(LOCATION, NOTE_ID)).toEqual(new Uint8Array([137, 80, 78, 71]));
+    expect(await notes.backUp(LOCATION)).toBeUndefined();
+    expect(await notes.restore(LOCATION)).toBe(true);
+    return revision;
+  }
+
+  it('sends each operation to its command and the password only where the user typed it', async () => {
+    const calls = mockProtectedCommands();
+
+    expect(await runEveryOperation(new TauriProtectedNotes())).toBe(3);
+
+    expect(calls.map((call) => call.command)).toEqual([
+      'protected_status',
+      'protected_set_up',
+      'protected_unlock',
+      'protected_accept_folder',
+      'protected_unlock_with_recovery',
+      'protected_unlock_on_this_pc',
+      'protected_forget_this_pc',
+      'protected_lock',
+      'protected_lock_all',
+      'protected_list',
+      'protected_create',
+      'protected_open',
+      'protected_save',
+      'protected_change_password',
+      'protected_continue_reencryption',
+      'protected_finish_reencryption',
+      'protected_new_recovery_key',
+      'protected_move_in',
+      'protected_move_out',
+      'protected_add_attachment',
+      'protected_add_attachment',
+      'protected_open_attachment',
+      'protected_back_up',
+      'protected_restore',
+    ]);
+    const withPassword = calls
+      .filter((call) => JSON.stringify(call.args).includes(PASSWORD))
+      .map((call) => call.command);
+    expect(withPassword).toEqual([
+      'protected_set_up',
+      'protected_unlock',
+      'protected_unlock_with_recovery',
+      'protected_change_password',
+      'protected_new_recovery_key',
+    ]);
+    expect(calls[2]?.args).toEqual({ location: LOCATION, password: PASSWORD, remember: true });
+    expect(calls.find((call) => call.command === 'protected_finish_reencryption')?.args).toEqual({
+      location: LOCATION,
+      password: NEW_PASSWORD,
+      finish: { discardCount: 2, acknowledgeUnverifiable: true },
+    });
+    expect(calls.find((call) => call.command === 'protected_move_in')?.args).toEqual({
+      location: LOCATION,
+      request: { note: PLAIN_NOTE, intoFolder: 'Finance', confirmed: true },
+    });
+    expect(calls.find((call) => call.command === 'protected_move_out')?.args).toEqual({
+      location: LOCATION,
+      request: { noteId: NOTE_ID, intoFolder: LOCATION, confirmed: true },
+    });
+    expect(
+      calls.filter((call) => call.command === 'protected_add_attachment').map((call) => call.args),
+    ).toEqual([
+      {
+        location: LOCATION,
+        request: { suggestedName: 'Chart.png', source: { kind: 'pastedBytes', bytes: [137, 80] } },
+      },
+      {
+        location: LOCATION,
+        request: {
+          suggestedName: 'scan.png',
+          source: { kind: 'droppedFile', path: 'C:\\Pictures\\scan.png' },
+        },
+      },
+    ]);
+    expect(calls.find((call) => call.command === 'protected_change_password')?.args).toEqual({
+      location: LOCATION,
+      change: { currentPassword: PASSWORD, newPassword: NEW_PASSWORD, reencrypt: true },
+    });
+  });
+
+  it('receives no key material: what the commands answer holds only the fields of the port', async () => {
+    mockProtectedCommands();
+    const notes = new TauriProtectedNotes();
+
+    const status = await notes.status(LOCATION);
+    const opened = await notes.open(LOCATION, NOTE_ID);
+
+    expect(Object.keys(status).sort()).toEqual([
+      'canUnlockOnThisPc',
+      'isReencrypting',
+      'isSetUp',
+      'isUnlocked',
+    ]);
+    expect(Object.keys(opened).sort()).toEqual([
+      'encoding',
+      'hasByteOrderMark',
+      'hasDecodingErrors',
+      'isOlderCopy',
+      'lineEnding',
+      'revision',
+      'text',
+    ]);
+  });
+
+  it('passes on the sections that locked in any window', async () => {
+    mockWindows('main');
+    mockIPC(() => null, { shouldMockEvents: true });
+    const listener = vi.fn();
+    const stop = new TauriProtectedNotes().onLocked(listener);
+
+    await vi.waitFor(async () => {
+      await emit('protected-notes-locked', { locationKeys: ['c:\\notes'] });
+      expect(listener).toHaveBeenCalledWith(['c:\\notes']);
+    });
+    stop();
+  });
+
+  it('asks every window to save before a lock, and says whether all of them did', async () => {
+    const calls = mockCommands({ protected_save_before_lock: () => ({ isEverythingSaved: false }) });
+
+    const isEverythingSaved = await new TauriProtectedNotes().saveBeforeLock(LOCATION);
+
+    expect(isEverythingSaved).toBe(false);
+    expect(calls).toEqual([{ command: 'protected_save_before_lock', args: { location: LOCATION } }]);
+  });
+
+  it('answers a lock request with whether this window saved its edits', async () => {
+    mockWindows('window-2');
+    const answers: unknown[] = [];
+    mockIPC(
+      (command, args) => {
+        if (command === 'protected_answer_lock_request') answers.push(args);
+        return null;
+      },
+      { shouldMockEvents: true },
+    );
+    const stop = new TauriProtectedNotes().onLockRequested(() => Promise.resolve(true));
+
+    await vi.waitFor(async () => {
+      await emit('protected-notes-lock-requested', { requestId: 7, locationKeys: ['c:\\notes'] });
+      expect(answers).toContainEqual({ answer: { requestId: 7, isEverythingSaved: true } });
+    });
+    stop();
+  });
+
+  it('turns a refusal into a code and nothing more', async () => {
+    mockCommands({
+      protected_unlock: () => {
+        throw Object.assign(new Error('backend error'), { code: 'wrongPassword' });
+      },
+      protected_open: () => {
+        throw new Error('something unexpected');
+      },
+    });
+    const notes = new TauriProtectedNotes();
+
+    await expect(notes.unlock(LOCATION, PASSWORD, false)).rejects.toEqual(
+      new ProtectedNotesError('wrongPassword'),
+    );
+    await expect(notes.open(LOCATION, NOTE_ID)).rejects.toEqual(new ProtectedNotesError('unavailable'));
   });
 });

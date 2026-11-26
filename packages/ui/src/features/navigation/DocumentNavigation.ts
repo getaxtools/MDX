@@ -1,5 +1,5 @@
 import { NavigationHistory, type NavigationStep, type ViewerSession } from '@mdx/core';
-import { isUntitledLocation, type DocumentLocation } from '@mdx/platform';
+import { hasFile, type DocumentLocation } from '@mdx/platform';
 
 export type NavigationCommand = { readonly kind: 'goBack' } | { readonly kind: 'goForward' };
 
@@ -46,7 +46,7 @@ export class DocumentNavigation {
   }
 
   private canShow(location: DocumentLocation): boolean {
-    return this.isOpen(location) || !isUntitledLocation(location);
+    return this.isOpen(location) || hasFile(location);
   }
 
   private isOpen(location: DocumentLocation): boolean {

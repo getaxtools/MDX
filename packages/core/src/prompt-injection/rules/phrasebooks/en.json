@@ -1,0 +1,94 @@
+{
+  "language": "en",
+  "phrases": {
+    "instr-override": [
+      "\\b(?:ignore|disregard|forget|bypass|override|skip)\\b(?: [\\p{L}']+){0,3}? (?:previous|prior|above|earlier|preceding|all|any|your|the|system|original|initial)\\b(?: [\\p{L}']+){0,2}? (?:instructions?|rules|context|prompts?|directions|guidelines|directives)\\b",
+      "\\bnew instructions? ?:",
+      "\\bfrom now on,? you (?:are|will|must|should|shall)\\b",
+      "\\byour (?:real|actual|true|new|only) (?:task|goal|job|instructions?|purpose|mission) (?:is|are|now)\\b",
+      "\\binstead of (?:what|doing what) the user (?:asked|wants|requested)\\b",
+      "\\b(?:ignore|disregard) (?:the|this|that|any) user\\b"
+    ],
+    "instr-role-markup": [
+      "<\\|(?:im_start|im_end|system|user|assistant|eot_id|begin_of_text|start_header_id|end_header_id|endoftext)\\|>",
+      "\\[/?inst\\]",
+      "<</?sys>>",
+      "<(?:start|end)_of_turn>",
+      "</?(?:system|system_prompt|system-prompt|instructions|admin_override)>",
+      "(?:^|\\n) ?(?:system|assistant|human) ?: ",
+      "<(?:interaction-config|blocked-modes|allowed-modes|blocked-strings|allowed-responses)\\b"
+    ],
+    "instr-tool-call-markup": [
+      "</?function_calls>",
+      "<invoke name=",
+      "</?tool_(?:use|result|call|response)s?\\b",
+      "</?function_results?>",
+      "\"tool_calls\" ?:",
+      "(?:^|\\n) ?\\{ ?\"name\" ?: ?\"[^\"\\n]{1,64}\" ?, ?\"(?:arguments|parameters|input)\" ?:"
+    ],
+    "instr-run-command": [
+      "\\b(?:run|execute|exec|paste|type|enter)\\b(?: [\\p{L}']+){0,3}? (?:this|the following|these|the) (?:commands?|script|snippet|code|line|shell command)\\b",
+      "\\b(?:run|execute|exec|paste) (?:it |this )?`[^`\\n]{1,200}`"
+    ],
+    "instr-sensitive-files": [
+      "\\b(?:read|cat|print|include|upload|post|send|encode|exfiltrate|leak|dump|output|base64|attach|transmit|forward)\\b[^.!?\\n]{0,80}?(?:~/\\.ssh|\\bid_rsa\\b|\\bid_ed25519\\b|(?:^|[\\s/\"'(`])\\.env\\b|\\.aws/credentials|\\.npmrc|\\.pypirc|\\.netrc|\\.git-credentials|\\bmcp\\.json\\b|\\blogin data\\b|\\bbrowser cookies\\b|\\bkeychain\\b|\\$github_token\\b|\\bgithub_token\\b|\\baws_secret_access_key\\b|\\bopenai_api_key\\b|\\banthropic_api_key\\b|\\bprivate keys?\\b|\\bssh keys?\\b)"
+    ],
+    "instr-disable-safety": [
+      "--no-verify\\b",
+      "--dangerously-skip-permissions\\b",
+      "--yolo\\b",
+      "\\bauto[- ]?approve\\b",
+      "\\b(?:disable|turn off|switch off|bypass|skip|deactivate)\\b(?: (?:the|all|any|every|your))? (?:sandbox(?:ing)?|safety|security|guardrails?|confirmations?|approvals?|permission (?:checks|prompts)|security checks|safety checks|sandbox mode)\\b",
+      "\\bset-executionpolicy\\b[^\\n]{0,40}\\b(?:bypass|unrestricted)\\b",
+      "\\bchmod (?:-r )?777\\b",
+      "\\bwithout asking (?:the user|for (?:permission|approval|confirmation)|first)\\b",
+      "\\bwithout (?:the user'?s )?(?:approval|confirmation|permission)\\b"
+    ],
+    "instr-secrecy": [
+      "\\b(?:do not|don'?t|never|must not|should not)\\b (?:tell|mention|reveal|show|disclose|inform|alert|notify)\\b(?: [\\p{L}']+){0,3}? (?:the |this |these |to the |to )?(?:user|users|human|developer|operator|owner|reviewer|person)\\b",
+      "\\bkeep (?:this|it|these instructions|this message) (?:a )?secret from\\b",
+      "\\bsilently (?:run|execute|install|send|upload|delete|add|change|modify|download|exfiltrate|copy|insert)\\b",
+      "\\bwithout (?:telling|informing|notifying|alerting) (?:the )?(?:user|users|human|developer|reviewer)\\b",
+      "\\bdo not mention (?:these|this|the|any) (?:instructions|rules|message|steps)\\b",
+      "\\b(?:hide|conceal) (?:this|it|these) from (?:the )?(?:user|users|human|developer)\\b"
+    ],
+    "instr-addressed-to-ai": [
+      "\\bif you are an? (?:ai|llm|language model|large language model|assistant|bot|agent|chatbot|ai agent|ai assistant)\\b",
+      "\\b(?:ai|llm) (?:agents?|assistants?|models?|bots?) (?:reading|processing|parsing|summari[sz]ing) this\\b",
+      "\\bnote (?:to|for) (?:the |any )?(?:ai|llm|assistant|copilot|claude|cursor|chatgpt|gemini|agent|model)s?\\b",
+      "\\b(?:dear|hey|hello|hi|attention) (?:ai|llm|assistant|copilot|claude|chatgpt|gemini|agent)s?\\b",
+      "\\bto (?:any |all )?(?:ai|llm)s? (?:agents? )?reading this\\b"
+    ],
+    "instr-remote-instructions": [
+      "\\b(?:fetch|read|load|follow|obey|get|retrieve|download|visit|open|curl)\\b(?: [\\p{L}']+){0,4}? (?:instructions|rules|directions|prompts?|commands|tasks|orders)\\b(?: [\\p{L}']+){0,3}? (?:at|from|in|on) (?:https?://|www\\.)",
+      "\\bcurl \\S+ (?:and|then) (?:follow|run|obey|execute|do)\\b"
+    ]
+  },
+  "negationsBefore": [
+    "never",
+    "not",
+    "no",
+    "don't",
+    "dont",
+    "do not",
+    "avoid",
+    "forbid",
+    "forbidden",
+    "prohibited",
+    "must not",
+    "should not",
+    "cannot",
+    "can't"
+  ],
+  "negationsAfter": [
+    "forbidden",
+    "prohibited",
+    "banned",
+    "disallowed",
+    "not allowed",
+    "not permitted",
+    "never"
+  ],
+  "negationWordsBefore": 5,
+  "negationWordsAfter": 3
+}

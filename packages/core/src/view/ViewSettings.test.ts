@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canZoomIn,
+  canZoomOut,
   DEFAULT_VIEW_SETTINGS,
   panelWidthOf,
   parseViewSettings,
@@ -15,6 +17,7 @@ import {
   toggleExplorerSection,
   zoomIn,
   zoomOut,
+  ZOOM_LEVELS_PERCENT,
 } from './ViewSettings';
 
 const atZoom = (zoomPercent: number) => ({ ...DEFAULT_VIEW_SETTINGS, zoomPercent });
@@ -40,8 +43,16 @@ describe('view settings', () => {
       wheelDock: 'bottomInlineEnd',
       isWheelOpenedAtPointer: false,
       isWheelButtonInStatusBar: false,
+      editingMode: 'richText',
       isSlashMenuInRichText: true,
       isSlashMenuInSource: false,
+      isSpellCheckedInRichText: true,
+      isSpellCheckedInSource: false,
+      isNoteDeletionConfirmed: true,
+      isNoteLinkUpdateConfirmed: true,
+      isShowingHiddenCharacters: false,
+      automaticInjectionCheck: 'agentContext',
+      ctrlWheelAction: 'moveBetweenFiles',
     });
   });
 
@@ -59,6 +70,20 @@ describe('view settings', () => {
   it('sets one of the zoom steps and ignores other values', () => {
     expect(setZoom(DEFAULT_VIEW_SETTINGS, 175).zoomPercent).toBe(175);
     expect(setZoom(DEFAULT_VIEW_SETTINGS, 177).zoomPercent).toBe(100);
+  });
+
+  it('the stepper steps through the same levels as the shortcuts', () => {
+    const visited: number[] = [];
+    let settings = atZoom(ZOOM_LEVELS_PERCENT[0] ?? 0);
+    while (canZoomIn(settings.zoomPercent)) {
+      visited.push(settings.zoomPercent);
+      settings = zoomIn(settings);
+    }
+    visited.push(settings.zoomPercent);
+
+    expect(visited).toEqual(ZOOM_LEVELS_PERCENT);
+    expect(canZoomOut(ZOOM_LEVELS_PERCENT[0] ?? 0)).toBe(false);
+    expect(canZoomOut(100)).toBe(true);
   });
 
   it('resets zoom to 100%', () => {
@@ -85,11 +110,54 @@ describe('view settings', () => {
       wheelDock: 'bottomInlineStart',
       isWheelOpenedAtPointer: true,
       isWheelButtonInStatusBar: true,
+      editingMode: 'richText',
       isSlashMenuInRichText: false,
       isSlashMenuInSource: true,
+      isSpellCheckedInRichText: false,
+      isSpellCheckedInSource: true,
+      isNoteDeletionConfirmed: false,
+      isNoteLinkUpdateConfirmed: false,
+      isShowingHiddenCharacters: true,
+      automaticInjectionCheck: 'off',
+      ctrlWheelAction: 'zoom',
     };
 
     expect(parseViewSettings(saved)).toEqual(saved);
+  });
+
+  describe('Check spelling', () => {
+    it('Source is off by default, Rich text on, also for settings saved before the setting', () => {
+      expect(DEFAULT_VIEW_SETTINGS.isSpellCheckedInSource).toBe(false);
+      expect(DEFAULT_VIEW_SETTINGS.isSpellCheckedInRichText).toBe(true);
+      expect(parseViewSettings({}).isSpellCheckedInSource).toBe(false);
+      expect(parseViewSettings({}).isSpellCheckedInRichText).toBe(true);
+    });
+  });
+
+  describe('Ctrl with the mouse wheel', () => {
+    it('the setting survives a restart', () => {
+      const saved: unknown = JSON.parse(
+        JSON.stringify({ ...DEFAULT_VIEW_SETTINGS, ctrlWheelAction: 'zoom' }),
+      );
+
+      expect(parseViewSettings(saved).ctrlWheelAction).toBe('zoom');
+    });
+
+    it('a missing or bad value falls back to moves between files', () => {
+      expect(parseViewSettings({ ctrlWheelAction: 'scroll' }).ctrlWheelAction).toBe('moveBetweenFiles');
+      expect(parseViewSettings({ ctrlWheelAction: 1 }).ctrlWheelAction).toBe('moveBetweenFiles');
+    });
+
+    it('an earlier state without the field still restores', () => {
+      const earlier = { theme: 'dark', zoomPercent: 125, isSidebarVisible: false };
+
+      expect(parseViewSettings(earlier)).toMatchObject({
+        theme: 'dark',
+        zoomPercent: 125,
+        isSidebarVisible: false,
+        ctrlWheelAction: 'moveBetweenFiles',
+      });
+    });
   });
 
   it('restores every named theme', () => {
@@ -119,7 +187,7 @@ describe('view settings', () => {
         language: '<script>',
         isSidebarVisible: 'no',
       }),
-    ).toEqual(DEFAULT_VIEW_SETTINGS);
+    ).toEqual({ ...DEFAULT_VIEW_SETTINGS, editingMode: 'source' });
   });
 
   it('shows a side bar view, and hides the side bar when that view is shown again', () => {
@@ -250,5 +318,36 @@ describe('view settings', () => {
     expect(settings.wheelDock).toBe('bottomInlineEnd');
     expect(settings.isWheelOpenedAtPointer).toBe(false);
     expect(settings.isWheelButtonInStatusBar).toBe(false);
+  });
+
+  it('a saved state without the setting reads as Source', () => {
+    expect(parseViewSettings({ theme: 'dark' }).editingMode).toBe('source');
+    expect(parseViewSettings({ editingMode: 'richText' }).editingMode).toBe('richText');
+    expect(parseViewSettings({ editingMode: 'wysiwyg' }).editingMode).toBe('source');
+  });
+
+  it('a new installation starts in Rich text', () => {
+    expect(DEFAULT_VIEW_SETTINGS.editingMode).toBe('richText');
+    expect(parseViewSettings(undefined).editingMode).toBe('richText');
+  });
+
+  it('reads Show hidden characters, off unless it was turned on', () => {
+    expect(parseViewSettings({ isShowingHiddenCharacters: true }).isShowingHiddenCharacters).toBe(true);
+    expect(parseViewSettings({ isShowingHiddenCharacters: 'yes' }).isShowingHiddenCharacters).toBe(false);
+    expect(parseViewSettings({}).isShowingHiddenCharacters).toBe(false);
+  });
+
+  it('reads the automatic prompt injection check, falling back to agent files for unknown values', () => {
+    expect(parseViewSettings({ automaticInjectionCheck: 'allDocuments' }).automaticInjectionCheck).toBe(
+      'allDocuments',
+    );
+    expect(parseViewSettings({ automaticInjectionCheck: 'off' }).automaticInjectionCheck).toBe('off');
+    expect(parseViewSettings({ automaticInjectionCheck: 'always' }).automaticInjectionCheck).toBe(
+      'agentContext',
+    );
+  });
+
+  it('remembers the prompt injection panel as the side bar view', () => {
+    expect(parseViewSettings({ sidebarView: 'promptInjection' }).sidebarView).toBe('promptInjection');
   });
 });

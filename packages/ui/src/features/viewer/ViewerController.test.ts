@@ -8,6 +8,7 @@ import {
 } from '@mdx/core';
 import { createTranslator } from '@mdx/i18n';
 import {
+  DocumentOpenError,
   InMemoryAppMenu,
   InMemoryAppState,
   InMemoryDesktopShell,
@@ -154,6 +155,24 @@ describe('ViewerController', () => {
     expect(snapshot().notice).toBe('Your saved tabs and favourites could not be read, so MDX started fresh.');
   });
 
+  it('names the newer version that saved state this version cannot read', async () => {
+    const { controller, snapshot } = createViewer({
+      appState: new InMemoryAppState({ schemaVersion: 2, savedByAppVersion: '2.0.0' }),
+    });
+
+    await controller.start();
+
+    expect(snapshot().notice).toContain('came from MDX 2.0.0, which is newer than this version');
+  });
+
+  it('says a newer version saved the state even when it is not named', async () => {
+    const { controller, snapshot } = createViewer({ appState: new InMemoryAppState({ schemaVersion: 2 }) });
+
+    await controller.start();
+
+    expect(snapshot().notice).toContain('came from a newer version of MDX');
+  });
+
   it('saves state shortly after a change, not on every change', async () => {
     const { controller, appState } = createViewer();
     await controller.start();
@@ -235,6 +254,15 @@ describe('ViewerController', () => {
       await viewer.controller.start();
       return viewer;
     }
+
+    it('opens the operating system language settings for spelling', async () => {
+      const { controller, desktopShell } = createViewer();
+      await controller.start();
+
+      await controller.execute({ kind: 'openLanguageSettings' });
+
+      expect(desktopShell.languageSettingsOpenings).toBe(1);
+    });
 
     it('closes the active tab', async () => {
       const { controller, snapshot } = await viewerWithTwoTabs();
@@ -363,7 +391,27 @@ describe('ViewerController', () => {
     expect(html).toContain(`src="image://${encodeURIComponent(GUIDE)}/images/diagram.png"`);
   });
 
-  it('prints only when a document is open', async () => {
+  it('renders a block of an open document with its pictures resolved as in its preview', async () => {
+    const documentFiles = new InMemoryDocumentFiles({ [GUIDE]: '# Guide' });
+    const controller = new ViewerController({
+      session: new ViewerSession({ documentFiles, appState: new InMemoryAppState(), now: () => 0 }),
+      requests: new InMemoryDocumentRequests([GUIDE]),
+      renderer: createMarkdownRenderer({ window }),
+      translator: createTranslator(),
+      resources: {
+        imageUrl: (documentPath, source) => `image://${encodeURIComponent(documentPath)}/${source}`,
+      },
+    });
+    await controller.start();
+
+    const html = controller.renderDocumentBlock(GUIDE.toLowerCase(), '![Diagram](images/diagram.png)');
+    const unknown = controller.renderDocumentBlock('c:\\elsewhere.md', '![Diagram](images/diagram.png)');
+
+    expect(html).toContain(`src="image://${encodeURIComponent(GUIDE)}/images/diagram.png"`);
+    expect(unknown).not.toContain('src=');
+  });
+
+  it('prints only when a document is open, once the shown document has drawn', async () => {
     const printer = { printActiveDocument: vi.fn() };
     const empty = new ViewerController({
       session: new ViewerSession({
@@ -391,9 +439,15 @@ describe('ViewerController', () => {
       translator: createTranslator(),
       printer,
     });
+    let printRequest: number | undefined;
+    withDocument.subscribe((snapshot) => (printRequest = snapshot.printRequest));
     await withDocument.start();
     await withDocument.execute({ kind: 'print' });
+    const wasPrintedBeforeDrawing = printer.printActiveDocument.mock.calls.length > 0;
+    withDocument.printShownDocument();
 
+    expect(printRequest).toBe(1);
+    expect(wasPrintedBeforeDrawing).toBe(false);
     expect(printer.printActiveDocument).toHaveBeenCalledOnce();
   });
 
@@ -785,6 +839,53 @@ describe('ViewerController', () => {
         expect(snapshot().editorRequest).toMatchObject({ kind: 'replaceText', text: '# Updated elsewhere' }),
       );
       expect(snapshot().notice).toBeUndefined();
+    });
+
+    it('the clipboard read runs only from the menu command', async () => {
+      const { controller, desktopShell, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      desktopShell.clipboardText = 'Area \\(x\\)';
+      await controller.start();
+      await controller.execute({ kind: 'pastePlainText' });
+      const readsWhileShown = desktopShell.clipboardReads;
+      await controller.execute({ kind: 'toggleEditing' });
+      await controller.execute({ kind: 'runEditorCommand', command: 'undo' });
+      const readsWhileEditing = desktopShell.clipboardReads;
+
+      await controller.execute({ kind: 'pastePlainText' });
+
+      expect(readsWhileShown).toBe(0);
+      expect(readsWhileEditing).toBe(0);
+      expect(desktopShell.clipboardReads).toBe(1);
+      expect(snapshot().editorRequest).toMatchObject({ kind: 'insertPlainText', text: 'Area \\(x\\)' });
+    });
+
+    it('Paste as Plain Text drops the text when another document became active during the read', async () => {
+      const { controller, desktopShell, snapshot } = createViewer({ startupPaths: [GUIDE, NOTES] });
+      await controller.start();
+      controller.activateTab(guideKey);
+      await controller.execute({ kind: 'toggleEditing' });
+      controller.activateTab(InMemoryDocumentFiles.locationOf(NOTES).canonicalKey);
+      await controller.execute({ kind: 'toggleEditing' });
+      vi.spyOn(desktopShell, 'readClipboardText').mockImplementation(() => {
+        controller.activateTab(guideKey);
+        return Promise.resolve('meant for Notes');
+      });
+
+      await controller.execute({ kind: 'pastePlainText' });
+
+      expect(snapshot().editorRequest?.kind).not.toBe('insertPlainText');
+    });
+
+    it('Paste as Plain Text names a clipboard over the editor limit', async () => {
+      const { controller, desktopShell, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      vi.spyOn(desktopShell, 'readClipboardText').mockRejectedValue(new DocumentOpenError('tooLarge', ''));
+      await controller.start();
+      await controller.execute({ kind: 'toggleEditing' });
+
+      await controller.execute({ kind: 'pastePlainText' });
+
+      expect(snapshot().notice).toBe('The clipboard text is larger than 1 MB, so it was not pasted.');
+      expect(snapshot().editorRequest?.kind).not.toBe('insertPlainText');
     });
 
     it('sends menu commands to the editor only while editing, with Find going to the editor', async () => {
@@ -1272,16 +1373,27 @@ describe('ViewerController', () => {
         theme: 'system',
         readingWidth: 'medium',
         typography: 'github',
+        editingMode: 'richText',
         isSidebarVisible: true,
         isOutlineVisible: false,
         isStatusBarVisible: true,
         isSourceView: false,
         isPreviewBesideEditor: false,
+        isShowingHiddenCharacters: false,
       });
 
       menu.choose('theme.dark');
 
       await vi.waitFor(() => expect(menu.shownViewState?.theme).toBe('dark'));
+    });
+
+    it('View menu checks the current mode', async () => {
+      const { controller, menu } = createViewer();
+      await controller.start();
+
+      menu.choose('editingMode.source');
+
+      await vi.waitFor(() => expect(menu.shownViewState?.editingMode).toBe('source'));
     });
 
     it('checks Source View in the menu while the source is shown', async () => {
@@ -1347,7 +1459,7 @@ describe('ViewerController', () => {
     });
 
     it('asks before clearing all data, then forgets the session and says so', async () => {
-      const { controller, snapshot } = createViewer({ startupPaths: [GUIDE] });
+      const { controller, snapshot, appState } = createViewer({ startupPaths: [GUIDE] });
       await controller.start();
       await controller.execute({ kind: 'toggleFavourite' });
 
@@ -1359,6 +1471,7 @@ describe('ViewerController', () => {
       expect(snapshot().viewer.tabStrip.tabs()).toEqual([]);
       expect(snapshot().viewer.favourites.favourites()).toEqual([]);
       expect(snapshot().viewer.recentFiles.entries()).toEqual([]);
+      expect(appState.backupRemovalCount).toBe(1);
       expect(snapshot().notice).toBe('All MDX data on this PC was cleared.');
     });
 

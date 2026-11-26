@@ -1,6 +1,6 @@
 import { createTranslator } from '@mdx/i18n';
 import { InMemoryDocumentFiles } from '@mdx/platform';
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import StartPage from './StartPage.svelte';
@@ -19,7 +19,82 @@ function renderStartPage(recentFiles = [recentFile]) {
 }
 
 describe('StartPage', () => {
+  it('a kind with no workspace offers to create one, and creates nothing by itself', async () => {
+    const onCommand = vi.fn();
+    render(StartPage, {
+      recentFiles: [],
+      activeKindId: 'notes',
+      canCreateWorkspace: true,
+      translator: createTranslator(),
+      onCommand,
+      onOpenRecentFile: vi.fn(),
+    });
+
+    expect(onCommand).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'New Notes Workspace…' }));
+
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'showNewWorkspace', kindId: 'notes' });
+  });
+
+  it('the start page opens a recent workspace', async () => {
+    const onCommand = vi.fn();
+    render(StartPage, {
+      recentFiles: [],
+      recentWorkspaces: [{ id: 'reading', name: 'Reading', kindName: 'Markdown viewer' }],
+      translator: createTranslator(),
+      onCommand,
+      onOpenRecentFile: vi.fn(),
+    });
+
+    const workspaces = screen.getByRole('region', { name: 'Workspaces' });
+    await userEvent.click(within(workspaces).getByRole('button', { name: 'Reading' }));
+
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'switchWorkspace', workspaceId: 'reading' });
+  });
+
+  it('has no Workspaces section without other workspaces', () => {
+    renderStartPage();
+
+    expect(screen.queryByRole('region', { name: 'Workspaces' })).toBeNull();
+  });
+
+  it('a shown Notes workspace gets its own start page with its recent notes', async () => {
+    const onCommand = vi.fn();
+    render(StartPage, {
+      recentFiles: [recentFile],
+      activeKindId: 'notes',
+      notesWorkspaceName: 'Journal',
+      translator: createTranslator(),
+      onCommand,
+      onOpenRecentFile: vi.fn(),
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show Trash' }));
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Journal' })).toBeTruthy();
+    expect(screen.getByText('Choose a note in the side bar, or create one with New Note.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Guide.md' })).toBeTruthy();
+    expect(screen.queryByText(/is not built yet/)).toBeNull();
+    expect(onCommand).toHaveBeenCalledWith({ kind: 'showNoteTrash' });
+  });
+
   it('shows the not-built-yet text for a previewed kind', () => {
+    render(StartPage, {
+      recentFiles: [],
+      activeKindId: 'specViewer',
+      translator: createTranslator(),
+      onCommand: vi.fn(),
+      onOpenRecentFile: vi.fn(),
+    });
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Spec viewer' })).toBeTruthy();
+    expect(
+      screen.getByText('Spec viewer is not built yet. Switch back to Markdown viewer to read documents.'),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'New Document' })).toBeNull();
+  });
+
+  it('asks for a Notes workspace when Notes is chosen without one', () => {
     render(StartPage, {
       recentFiles: [],
       activeKindId: 'notes',
@@ -30,9 +105,11 @@ describe('StartPage', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'Notes' })).toBeTruthy();
     expect(
-      screen.getByText('Notes is not built yet. Switch back to Markdown viewer to read documents.'),
+      screen.getByText(
+        'Notes keeps your notes as Markdown files in a folder. Create a Notes workspace to start.',
+      ),
     ).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'New Document' })).toBeNull();
+    expect(screen.queryByText(/is not built yet/)).toBeNull();
   });
 
   it('offers ways to start, each with its keys', () => {

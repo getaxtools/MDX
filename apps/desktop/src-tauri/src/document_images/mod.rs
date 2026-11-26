@@ -7,7 +7,8 @@ use tauri::http::{Request, Response, StatusCode, header};
 use crate::documents::{DocumentAccessList, locate_document};
 
 pub const IMAGE_PROTOCOL: &str = "mdx-image";
-const MAX_IMAGE_BYTES: u64 = 20 * 1024 * 1024;
+/// The largest picture the preview shows; pictures added to a document keep to it too.
+pub const MAX_IMAGE_BYTES: usize = 20 * 1024 * 1024;
 const IMAGE_CONTENT_TYPES: [(&str, &str); 9] = [
     ("png", "image/png"),
     ("jpg", "image/jpeg"),
@@ -80,8 +81,9 @@ fn read_image(image_path: &Path) -> Response<Vec<u8>> {
     let Some(content_type) = content_type_of(&resolved) else {
         return empty_response(StatusCode::FORBIDDEN);
     };
-    let is_small_enough =
-        fs::metadata(&resolved).is_ok_and(|metadata| metadata.len() <= MAX_IMAGE_BYTES);
+    let is_small_enough = fs::metadata(&resolved).is_ok_and(|metadata| {
+        u64::try_from(MAX_IMAGE_BYTES).is_ok_and(|largest| metadata.len() <= largest)
+    });
     let bytes = if is_small_enough {
         fs::read(&resolved).ok()
     } else {

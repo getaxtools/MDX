@@ -3,7 +3,7 @@ pub mod recent_files_menu;
 mod view_menu_state;
 
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::menu::{
     CheckMenuItem, CheckMenuItemBuilder, Menu, MenuEvent, MenuItem, MenuItemBuilder,
     PredefinedMenuItem, Submenu, SubmenuBuilder,
@@ -14,13 +14,15 @@ use tauri::{App, AppHandle, Emitter, Manager, State, Wry};
 pub use menu_labels::MenuLabels;
 pub use view_menu_state::ViewMenuState;
 
+use crate::app_windows::{OpenWindows, save_open_windows, target_window_label};
 use crate::documents::DocumentError;
-use crate::open_requests::MAIN_WINDOW_LABEL;
-use recent_files_menu::fill_recent_menu;
+use crate::storage::WorkspaceDatabase;
+use recent_files_menu::{RecentMenuContents, fill_recent_menu};
 use view_menu_state::{
-    READING_WIDTH_ITEM_PREFIX, THEME_ITEM_PREFIX, TOGGLE_OUTLINE_ITEM_ID,
-    TOGGLE_PREVIEW_BESIDE_EDITOR_ITEM_ID, TOGGLE_SIDEBAR_ITEM_ID, TOGGLE_SOURCE_VIEW_ITEM_ID,
-    TOGGLE_STATUS_BAR_ITEM_ID, TYPOGRAPHY_ITEM_PREFIX,
+    EDITING_MODE_ITEM_PREFIX, READING_WIDTH_ITEM_PREFIX, THEME_ITEM_PREFIX,
+    TOGGLE_HIDDEN_CHARACTERS_ITEM_ID, TOGGLE_OUTLINE_ITEM_ID, TOGGLE_PREVIEW_BESIDE_EDITOR_ITEM_ID,
+    TOGGLE_SIDEBAR_ITEM_ID, TOGGLE_SOURCE_VIEW_ITEM_ID, TOGGLE_STATUS_BAR_ITEM_ID,
+    TYPOGRAPHY_ITEM_PREFIX,
 };
 
 pub const MENU_COMMAND_EVENT: &str = "menu-command";
@@ -53,6 +55,12 @@ const READING_WIDTH_CHOICES: CheckChoices = CheckChoices {
     choices: &["narrow", "medium", "wide", "full"],
 };
 
+const EDITING_MODE_CHOICES: CheckChoices = CheckChoices {
+    title_key: "menu.view.editingMode",
+    id_prefix: EDITING_MODE_ITEM_PREFIX,
+    choices: &["richText", "source"],
+};
+
 const TYPOGRAPHY_CHOICES: CheckChoices = CheckChoices {
     title_key: "menu.view.typography",
     id_prefix: TYPOGRAPHY_ITEM_PREFIX,
@@ -62,10 +70,24 @@ const TYPOGRAPHY_CHOICES: CheckChoices = CheckChoices {
 /// Menu item id, label key and the shortcut shown next to it.
 type CommandItem = (&'static str, &'static str, Option<&'static str>);
 
-const FILE_OPEN_ITEMS: [CommandItem; 3] = [
+const FILE_OPEN_ITEMS: [CommandItem; 4] = [
     ("newDocument", "menu.file.newDocument", Some("Ctrl+N")),
+    ("openNewWindow", "menu.file.newWindow", Some("Ctrl+Shift+N")),
     ("openDocuments", "menu.file.open", Some("Ctrl+O")),
     ("openFolder", "menu.file.openFolder", None),
+];
+
+const WORKSPACE_ITEMS: [CommandItem; 6] = [
+    (
+        "showWorkspaceSwitcher",
+        "workspaces.switch",
+        Some("Ctrl+Alt+W"),
+    ),
+    ("showNewWorkspace", "workspaces.new", None),
+    ("showRenameWorkspace", "workspaces.rename", None),
+    ("confirmDeleteWorkspace", "workspaces.delete", None),
+    ("openWorkspaceFile", "workspaces.openFile", None),
+    ("exportWorkspace", "workspaces.export", None),
 ];
 
 const FILE_SAVE_ITEMS: [CommandItem; 5] = [
@@ -94,8 +116,22 @@ const EDIT_SEARCH_ITEMS: [CommandItem; 4] = [
 
 const COPY_AS_HTML_ITEM: CommandItem = ("copyAsHtml", "menu.edit.copyAsHtml", None);
 
+const PASTE_PLAIN_TEXT_ITEM: CommandItem = (
+    "pastePlainText",
+    "menu.edit.pastePlainText",
+    Some("Ctrl+Shift+V"),
+);
+
+const EDIT_INSERT_ITEMS: [CommandItem; 1] = [("insertEquation", "menu.edit.insertMath", None)];
+
 const TOGGLE_EDITING_ITEM: CommandItem =
-    ("toggleEditing", "menu.view.toggleEditing", Some("Ctrl+/"));
+    ("toggleEditing", "menu.view.toggleEditing", Some("Ctrl+E"));
+
+const TOGGLE_EDITING_MODE_ITEM: CommandItem = (
+    "toggleEditingMode",
+    "menu.view.toggleEditingMode",
+    Some("Ctrl+/"),
+);
 
 const SETTINGS_ITEM: CommandItem = ("showSettings", "menu.file.settings", Some("Ctrl+,"));
 
@@ -159,6 +195,18 @@ const SOURCE_VIEW_TOGGLE_ITEM: CommandItem = (
     TOGGLE_SOURCE_VIEW_ITEM_ID,
     "menu.view.toggleSource",
     Some("Ctrl+U"),
+);
+
+const HIDDEN_CHARACTERS_TOGGLE_ITEM: CommandItem = (
+    TOGGLE_HIDDEN_CHARACTERS_ITEM_ID,
+    "promptInjection.hiddenCharacters.toggle",
+    None,
+);
+
+const PROMPT_INJECTION_CHECK_ITEM: CommandItem = (
+    "checkForPromptInjection",
+    "promptInjection.command.check",
+    None,
 );
 
 const PREVIEW_BESIDE_EDITOR_TOGGLE_ITEM: CommandItem = (
@@ -281,7 +329,12 @@ fn build_main_menu(
     };
     let recent_files =
         SubmenuBuilder::new(app, builder.labels.label("menu.file.openRecent")).build()?;
-    fill_recent_menu(app, &recent_files, &[], &builder.labels)?;
+    fill_recent_menu(
+        app,
+        &recent_files,
+        &RecentMenuContents::default(),
+        &builder.labels,
+    )?;
     let menu = Menu::with_items(
         app,
         &[
@@ -378,15 +431,22 @@ fn are_valid_menu_labels(labels: &HashMap<String, String>) -> bool {
         })
 }
 
+/// Menu commands go to the window focused last; Exit closes every window, each asking about its edits.
 pub fn handle_menu_event(app: &AppHandle, event: &MenuEvent) {
-    let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
-        return;
-    };
     if event.id().as_ref() == EXIT_ITEM_ID {
-        let _ = window.close();
+        let windows = app.state::<Arc<OpenWindows>>();
+        save_open_windows(&windows, &app.state::<WorkspaceDatabase>());
+        windows.start_exiting();
+        for window in app.webview_windows().into_values() {
+            let _ = window.close();
+        }
         return;
     }
-    let _ = window.emit(MENU_COMMAND_EVENT, event.id().as_ref());
+    let _ = app.emit_to(
+        target_window_label(app).as_str(),
+        MENU_COMMAND_EVENT,
+        event.id().as_ref(),
+    );
 }
 
 #[tauri::command]
@@ -418,6 +478,7 @@ impl MainMenuBuilder<'_> {
             .item(&reopen_closed?)
             .item(&self.reopen_with_encoding_menu()?)
             .separator();
+        let builder = self.with_items(builder, &WORKSPACE_ITEMS)?.separator();
         let builder = self.with_items(builder, &FILE_SAVE_ITEMS)?.separator();
         let builder = self
             .with_items(builder, &EXPORT_ITEMS)?
@@ -477,12 +538,19 @@ impl MainMenuBuilder<'_> {
             .item(&copy)
             .item(&self.command_item(COPY_AS_HTML_ITEM)?)
             .item(&paste)
+            .item(&self.command_item(PASTE_PLAIN_TEXT_ITEM)?)
             .item(&select_all)
             .separator();
         self.with_items(builder, &EDIT_SEARCH_ITEMS)?
             .separator()
             .item(&self.command_item(PASTE_TABLE_ITEM)?)
+            .item(&self.insert_menu()?)
             .build()
+    }
+
+    fn insert_menu(&self) -> tauri::Result<Submenu<Wry>> {
+        let builder = SubmenuBuilder::new(self.app, self.labels.label("menu.edit.insert"));
+        self.with_items(builder, &EDIT_INSERT_ITEMS)?.build()
     }
 
     fn view_menu(&mut self) -> tauri::Result<Submenu<Wry>> {
@@ -494,16 +562,16 @@ impl MainMenuBuilder<'_> {
             .iter()
             .map(|item| self.toggle_item(*item))
             .collect::<tauri::Result<Vec<_>>>()?;
-        let preview_beside_editor = self.toggle_item(PREVIEW_BESIDE_EDITOR_TOGGLE_ITEM)?;
         let command_palette = self.command_item(COMMAND_PALETTE_ITEM)?;
         let control_wheel = self.rebindable_item(CONTROL_WHEEL_ITEM)?;
-        let toggle_editing = self.command_item(TOGGLE_EDITING_ITEM)?;
         let full_screen = self.command_item(FULL_SCREEN_ITEM)?;
+        let prompt_injection_check = self.command_item(PROMPT_INJECTION_CHECK_ITEM)?;
+        let hidden_characters = self.toggle_item(HIDDEN_CHARACTERS_TOGGLE_ITEM)?;
         let builder = SubmenuBuilder::new(self.app, self.labels.label("menu.view"))
             .item(&command_palette)
-            .item(&control_wheel)
-            .item(&toggle_editing)
-            .item(&preview_beside_editor)
+            .item(&control_wheel);
+        let builder = self
+            .with_editing_items(builder)?
             .separator()
             .item(&themes)
             .item(&reading_widths)
@@ -513,6 +581,8 @@ impl MainMenuBuilder<'_> {
             .with_items(builder, &ZOOM_ITEMS)?
             .separator()
             .item(&source_view)
+            .item(&hidden_characters)
+            .item(&prompt_injection_check)
             .separator();
         panels
             .iter()
@@ -520,6 +590,21 @@ impl MainMenuBuilder<'_> {
             .separator()
             .item(&full_screen)
             .build()
+    }
+
+    fn with_editing_items<'m>(
+        &mut self,
+        builder: SubmenuBuilder<'m, Wry, AppHandle>,
+    ) -> tauri::Result<SubmenuBuilder<'m, Wry, AppHandle>> {
+        let toggle_editing = self.command_item(TOGGLE_EDITING_ITEM)?;
+        let editing_modes = self.check_submenu(&EDITING_MODE_CHOICES)?;
+        let toggle_editing_mode = self.command_item(TOGGLE_EDITING_MODE_ITEM)?;
+        let preview_beside_editor = self.toggle_item(PREVIEW_BESIDE_EDITOR_TOGGLE_ITEM)?;
+        Ok(builder
+            .item(&toggle_editing)
+            .item(&editing_modes)
+            .item(&toggle_editing_mode)
+            .item(&preview_beside_editor))
     }
 
     fn window_menu(&self) -> tauri::Result<Submenu<Wry>> {
@@ -633,16 +718,21 @@ mod tests {
             .chain(&FILE_SAVE_ITEMS)
             .chain(&FILE_OTHER_ITEMS)
             .chain(&FAVOURITES_FILE_ITEMS)
+            .chain(&WORKSPACE_ITEMS)
             .chain(&EDIT_HISTORY_ITEMS)
             .chain(&EDIT_SEARCH_ITEMS)
+            .chain(&EDIT_INSERT_ITEMS)
             .chain(&[
                 PASTE_TABLE_ITEM,
+                PASTE_PLAIN_TEXT_ITEM,
                 COPY_AS_HTML_ITEM,
                 SETTINGS_ITEM,
                 TOGGLE_EDITING_ITEM,
                 COMMAND_PALETTE_ITEM,
                 FULL_SCREEN_ITEM,
                 CONTROL_WHEEL_ITEM,
+                PROMPT_INJECTION_CHECK_ITEM,
+                HIDDEN_CHARACTERS_TOGGLE_ITEM,
             ])
             .chain(&EXPORT_ITEMS)
             .chain(&NAVIGATION_ITEMS)
@@ -724,7 +814,12 @@ mod tests {
     fn every_menu_choice_has_a_label_in_the_catalog() {
         let labels = MenuLabels::english();
 
-        for choices in [THEME_CHOICES, READING_WIDTH_CHOICES, TYPOGRAPHY_CHOICES] {
+        for choices in [
+            THEME_CHOICES,
+            READING_WIDTH_CHOICES,
+            TYPOGRAPHY_CHOICES,
+            EDITING_MODE_CHOICES,
+        ] {
             for choice in choices.choices {
                 let key = format!("{}.{choice}", choices.title_key);
                 assert!(labels.has(&key), "{key}");

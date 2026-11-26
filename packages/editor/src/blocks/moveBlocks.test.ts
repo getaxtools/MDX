@@ -1,19 +1,17 @@
-import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { EditorSelection, EditorState } from '@codemirror/state';
 import { describe, expect, it } from 'vitest';
+import { documentFixtures } from '../byte-exact/documentFixtures';
+import { openDocumentBytes, savedDocumentBytes } from '../byte-exact/documentBytes';
 import { blockMove, moveAnnouncement, moveBlockCommand, type MoveDirection } from './moveBlocks';
 import type { EditorView } from '@codemirror/view';
 import { siblingBlocksAt } from './markdownBlocks';
-
-const FIXTURE_DOCUMENTS = join(import.meta.dirname, '..', '..', '..', '..', 'tests', 'fixtures', 'documents');
+import { markdownSyntax } from '../syntax/markdownSyntax';
 
 function stateOf(doc: string, anchor: number, head = anchor): EditorState {
   return EditorState.create({
     doc,
     selection: EditorSelection.single(anchor, head),
-    extensions: [markdown({ base: markdownLanguage })],
+    extensions: [markdownSyntax()],
   });
 }
 
@@ -80,20 +78,16 @@ describe('blockMove', () => {
     expect(move && moveAnnouncement(state, move)).toBe('Moved heading down.');
   });
 
-  it('moving any block up then down restores the text, in every fixture document', () => {
-    const fixtures = readdirSync(FIXTURE_DOCUMENTS).filter((name) => name.endsWith('.md'));
+  it('moving any block up then down restores the bytes, in every fixture document', () => {
+    const fixtures = documentFixtures();
     expect(fixtures.length).toBeGreaterThan(0);
 
-    for (const name of fixtures) {
-      const doc = EditorState.create({
-        doc: readFileSync(join(FIXTURE_DOCUMENTS, name), 'utf8'),
-      }).doc.toString();
-      const blocks = siblingBlocksAt(stateOf(doc, doc.length), doc.length)?.blocks ?? [];
-      for (const block of blocks.slice(1)) {
-        const up = moved(stateOf(doc, block.from), 'up');
-        const back = moved(up, 'down');
-
-        expect(back.doc.toString(), `${name} at ${String(block.from)}`).toBe(doc);
+    for (const fixture of fixtures) {
+      for (const blockStart of blockStartsAfterTheFirst(fixture.bytes)) {
+        expect(
+          [...bytesAfterMovingUpAndDown(fixture.bytes, blockStart)],
+          `${fixture.name} at ${String(blockStart)}`,
+        ).toEqual([...fixture.bytes]);
       }
     }
   });
@@ -109,3 +103,23 @@ describe('blockMove', () => {
     expect(dispatched).toEqual([]);
   });
 });
+
+function blockStartsAfterTheFirst(bytes: Uint8Array): number[] {
+  const text = editorTextOf(bytes);
+  const blocks = siblingBlocksAt(stateOf(text, text.length), text.length)?.blocks ?? [];
+  return blocks.slice(1).map((block) => block.from);
+}
+
+/** Moves the block at a position up and, when it moved, down again; the first item of a list cannot move up. */
+function bytesAfterMovingUpAndDown(bytes: Uint8Array, blockStart: number): Uint8Array {
+  const opened = openDocumentBytes(bytes);
+  const state = stateOf(editorTextOf(bytes), blockStart);
+  const up = moved(state, 'up');
+  const back = up === state ? state : moved(up, 'down');
+  return savedDocumentBytes(back.doc.toString(), opened);
+}
+
+/** The text as the editor holds it, with every line break as `\n`. */
+function editorTextOf(bytes: Uint8Array): string {
+  return EditorState.create({ doc: openDocumentBytes(bytes).text }).doc.toString();
+}

@@ -7,19 +7,21 @@ mod path_status;
 mod text_decoding;
 mod text_encoding;
 
-pub use document_access::DocumentAccessList;
+pub use document_access::{DocumentAccessList, is_too_broad_to_grant};
 pub use document_error::DocumentError;
 pub use document_location::{
     DocumentLocation, canonical_key_of, locate_document, location_of_resolved_path,
 };
 pub use document_reader::{
-    MAX_DOCUMENT_BYTES, OpenedDocument, is_markdown_path, modified_at_ms_of, open_allowed_document,
-    open_allowed_document_as,
+    MAX_DOCUMENT_BYTES, OpenedDocument, is_markdown_path, modified_at_ms, modified_at_ms_of,
+    open_allowed_document, open_allowed_document_as, read_located_text_file,
 };
 pub use document_writer::{
     copy_document, validated_file_name, with_markdown_extension, write_bytes_atomically,
     write_text_atomically,
 };
 pub use path_status::{PathStatus, status_of_path};
-pub use text_decoding::{decode_document_bytes, encoding_for_label};
+pub use text_decoding::{
+    LineEnding, decode_document_bytes, detect_line_ending, encoding_for_label,
+};
 pub use text_encoding::encode_document_text;

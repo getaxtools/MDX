@@ -206,7 +206,6 @@
   "document.openExternalLink.title": "दुवा तुमच्या ब्राउझरमध्ये उघडायचा?",
   "document.openExternalLink.body": "हे {url} तुमच्या डीफॉल्ट ब्राउझरमध्ये उघडेल.",
   "view.options.label": "दृश्य पर्याय",
-  "view.zoomLevel": "झूम {percent}%",
   "document.openExternalLink.open": "उघडा",
   "document.openExternalLink.cancel": "रद्द करा",
   "shortcuts.column.action": "क्रिया",

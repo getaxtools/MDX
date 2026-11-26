@@ -1,4 +1,5 @@
 import type { DocumentLocation } from '@mdx/platform';
+import { isProtectedLocation } from '../protected-notes/protectedLocations';
 
 export const MAX_RECENT_FILES = 25;
 
@@ -38,7 +39,9 @@ export class RecentFilesList {
     return this.newestFirst.some((file) => file.location.canonicalKey === canonicalKey);
   }
 
+  /** A protected note is never listed. */
   add(location: DocumentLocation, openedAtMs: number): RecentFilesList {
+    if (isProtectedLocation(location)) return this;
     const existing = this.find(location.canonicalKey);
     const reopened: RecentFile = {
       location,

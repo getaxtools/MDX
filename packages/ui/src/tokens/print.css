@@ -17,6 +17,10 @@
     height: auto;
   }
 
+  .mdx-hidden-character::before {
+    content: none !important;
+  }
+
   .sidebar,
   .document-header,
   .tab-strip,

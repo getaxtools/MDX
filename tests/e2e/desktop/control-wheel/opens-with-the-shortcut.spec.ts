@@ -49,17 +49,21 @@ describe('Control wheel shortcut', () => {
     await controlWheel.pressInWheel('Escape');
     await app.browser.waitUntil(async () => !(await controlWheel.isOpen()));
 
+    // Timed to the moment the app puts the wheel in the page. Polling on animation frames added the
+    // compositor's next frame, which other programs loading the machine can hold back for a third of
+    // a second while the app's own work takes a few milliseconds.
     const openingMs = await app.browser.execute(
       () =>
         new Promise<number>((resolve) => {
           const startedAt = performance.now();
+          const observer = new MutationObserver(() => {
+            if (!document.querySelector('[role="menuitemradio"]')) return;
+            observer.disconnect();
+            resolve(performance.now() - startedAt);
+          });
+          observer.observe(document.body, { childList: true, subtree: true });
           const shortcut = { key: ' ', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true };
           document.body.dispatchEvent(new KeyboardEvent('keydown', shortcut));
-          function waitForWheel() {
-            if (document.querySelector('[role="menuitemradio"]')) resolve(performance.now() - startedAt);
-            else requestAnimationFrame(waitForWheel);
-          }
-          waitForWheel();
         }),
     );
 

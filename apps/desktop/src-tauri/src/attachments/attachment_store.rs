@@ -5,7 +5,8 @@ use std::path::{Component, Path, PathBuf};
 use super::ImageKind;
 use crate::documents::{DocumentError, validated_file_name, write_bytes_atomically};
 
-pub const MAX_ATTACHMENT_BYTES: usize = 25 * 1024 * 1024;
+/// A picture larger than the preview shows is not added, so every added picture can be seen.
+pub const MAX_ATTACHMENT_BYTES: usize = crate::document_images::MAX_IMAGE_BYTES;
 /// Gives up rather than trying names forever in a folder full of same-named pictures.
 const MAX_NAME_SUFFIX: u32 = 10_000;
 const DEFAULT_STEM: &str = "image";
@@ -30,7 +31,7 @@ pub fn save_attachment_bytes(
     let kind = ImageKind::of(bytes).ok_or(DocumentError::NotAnImage)?;
     let relative_folder = validated_relative_folder(attachment_folder)?;
     let folder = contained_folder(document_folder, &relative_folder)?;
-    let stem = stem_of(suggested_name)?;
+    let stem = attachment_stem(suggested_name)?;
     let file_name = place_bytes(&folder, &stem, kind.extension(), bytes)?;
     Ok(SavedAttachment {
         relative_path: relative_link_path(&relative_folder, &file_name),
@@ -68,7 +69,8 @@ fn contained_folder(
     }
 }
 
-fn stem_of(suggested_name: &str) -> Result<String, DocumentError> {
+/// The name a picture is saved under, before its extension: the suggested name's stem, or `image`.
+pub fn attachment_stem(suggested_name: &str) -> Result<String, DocumentError> {
     let name = validated_file_name(suggested_name.trim())?;
     let stem = Path::new(name)
         .file_stem()
@@ -245,7 +247,7 @@ mod tests {
     }
 
     #[test]
-    fn more_than_25_mb_is_refused() {
+    fn a_picture_larger_than_the_preview_shows_is_refused() {
         let folder = tempfile::tempdir().unwrap();
         let mut bytes = PNG.to_vec();
         bytes.resize(MAX_ATTACHMENT_BYTES + 1, 0);

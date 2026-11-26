@@ -18,10 +18,10 @@ describe('workspace kinds', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('has only the Markdown viewer built', () => {
+  it('has the Markdown viewer, Notes and Spec viewer built', () => {
     const builtIds = WORKSPACE_KINDS.filter((kind) => kind.availability === 'built').map((kind) => kind.id);
 
-    expect(builtIds).toEqual(['markdownViewer']);
+    expect(builtIds).toEqual(['markdownViewer', 'notes', 'specViewer']);
   });
 
   it('starts with a built kind', () => {
@@ -29,7 +29,12 @@ describe('workspace kinds', () => {
   });
 
   it('does not treat planned or unknown kinds as built', () => {
-    expect(isBuiltKind(WORKSPACE_KINDS, 'notes')).toBe(false);
+    const withPlannedSpecViewer = WORKSPACE_KINDS.map((kind) =>
+      kind.id === 'specViewer' ? { ...kind, availability: 'planned' as const } : kind,
+    );
+
+    expect(isBuiltKind(withPlannedSpecViewer, 'specViewer')).toBe(false);
+    expect(isBuiltKind(WORKSPACE_KINDS, 'specViewer')).toBe(true);
     expect(isBuiltKind(WORKSPACE_KINDS, 'calendar')).toBe(false);
   });
 

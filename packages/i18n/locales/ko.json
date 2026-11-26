@@ -206,7 +206,6 @@
   "document.openExternalLink.title": "브라우저에서 링크를 여시겠습니까?",
   "document.openExternalLink.body": "기본 브라우저에서 {url}을(를) 엽니다.",
   "view.options.label": "보기 옵션",
-  "view.zoomLevel": "확대/축소 {percent}%",
   "document.openExternalLink.open": "열기",
   "document.openExternalLink.cancel": "취소",
   "shortcuts.column.action": "작업",

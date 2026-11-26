@@ -1,5 +1,8 @@
-import { syntaxTree } from '@codemirror/language';
 import { EditorSelection, type EditorState, type TransactionSpec } from '@codemirror/state';
+import type { EditorView } from '@codemirror/view';
+import { documentStyleOf } from '../formatting/documentStyle';
+import { prefixFor } from '../formatting/lineFormatting';
+import { SLASH_ITEM_TEXTS } from '../plain/slashItemTexts';
 
 /** One entry of the insert menu; its name and description are CodeMirror phrases, translated by the app. */
 export interface SlashMenuItem {
@@ -17,11 +20,8 @@ export interface SlashTextRange {
   readonly to: number;
 }
 
+/** How an item inserts its Markdown; its words are in `SLASH_ITEM_TEXTS`, which the app reads at start. */
 interface ItemSpec {
-  readonly id: string;
-  readonly name: string;
-  readonly description: string;
-  readonly aliases: readonly string[];
   /** The Markdown to insert, with `{caret}` where the caret goes, or at its end without one. */
   readonly markdown: (state: EditorState) => string;
   /** A block starts on a line of its own; inline Markdown goes where the slash was. */
@@ -31,160 +31,40 @@ interface ItemSpec {
 const CARET = '{caret}';
 const TABLE_COLUMNS = 3;
 const TABLE_BODY_ROWS = 2;
-const DEFAULT_BULLET = '-';
 
-const ITEM_SPECS: readonly ItemSpec[] = [
-  {
-    id: 'heading1',
-    name: 'Heading 1',
-    description: 'Large section heading',
-    aliases: ['h1', 'title'],
+const ITEM_SPECS: Readonly<Record<string, ItemSpec>> = {
+  heading1: { placement: 'block', markdown: () => '# ' },
+  heading2: { placement: 'block', markdown: () => '## ' },
+  heading3: { placement: 'block', markdown: () => '### ' },
+  bulletList: { placement: 'block', markdown: (state) => prefixFor('bulletList', 1, documentStyleOf(state)) },
+  numberedList: {
     placement: 'block',
-    markdown: () => '# ',
+    markdown: (state) => prefixFor('numberedList', 1, documentStyleOf(state)),
   },
-  {
-    id: 'heading2',
-    name: 'Heading 2',
-    description: 'Medium section heading',
-    aliases: ['h2', 'subtitle'],
-    placement: 'block',
-    markdown: () => '## ',
-  },
-  {
-    id: 'heading3',
-    name: 'Heading 3',
-    description: 'Small section heading',
-    aliases: ['h3'],
-    placement: 'block',
-    markdown: () => '### ',
-  },
-  {
-    id: 'bulletList',
-    name: 'Bulleted list',
-    description: 'A list with bullets',
-    aliases: ['ul', 'bullet', 'list'],
-    placement: 'block',
-    markdown: (state) => `${bulletMarkerOf(state)} `,
-  },
-  {
-    id: 'numberedList',
-    name: 'Numbered list',
-    description: 'A list with numbers',
-    aliases: ['ol', 'number', 'ordered'],
-    placement: 'block',
-    markdown: () => '1. ',
-  },
-  {
-    id: 'taskList',
-    name: 'Task list',
-    description: 'A list with checkboxes',
-    aliases: ['todo', 'task', 'checkbox'],
-    placement: 'block',
-    markdown: (state) => `${bulletMarkerOf(state)} [ ] `,
-  },
-  {
-    id: 'quote',
-    name: 'Quote',
-    description: 'Quoted text',
-    aliases: ['blockquote', 'citation'],
-    placement: 'block',
-    markdown: () => '> ',
-  },
-  {
-    id: 'callout',
-    name: 'Callout',
-    description: 'A highlighted note',
-    aliases: ['note', 'alert', 'admonition'],
-    placement: 'block',
-    markdown: () => '> [!NOTE]\n> ',
-  },
-  {
-    id: 'toggle',
-    name: 'Toggle',
-    description: 'A section that folds away',
-    aliases: ['details', 'collapse', 'fold'],
-    placement: 'block',
-    markdown: () => '> [!NOTE]-\n> ',
-  },
-  {
-    id: 'codeBlock',
-    name: 'Code block',
-    description: 'Code with syntax colours',
-    aliases: ['code', 'pre', 'fence'],
-    placement: 'block',
-    markdown: () => `\`\`\`\n${CARET}\n\`\`\``,
-  },
-  {
-    id: 'table',
-    name: 'Table',
-    description: 'Rows and columns',
-    aliases: ['grid', 'columns', 'rows'],
-    placement: 'block',
-    markdown: () => emptyTable(),
-  },
-  {
-    id: 'horizontalRule',
-    name: 'Divider',
-    description: 'A horizontal line',
-    aliases: ['hr', 'rule', 'separator', 'line'],
-    placement: 'block',
-    markdown: () => '---\n',
-  },
-  {
-    id: 'image',
-    name: 'Image',
-    description: 'A picture from a file or address',
-    aliases: ['img', 'picture', 'photo'],
-    placement: 'inline',
-    markdown: () => `![](${CARET})`,
-  },
-  {
-    id: 'inlineMath',
-    name: 'Inline math',
-    description: 'A formula inside the text',
-    aliases: ['math', 'formula', 'latex', 'equation'],
-    placement: 'inline',
-    markdown: () => `$${CARET}$`,
-  },
-  {
-    id: 'displayMath',
-    name: 'Display math',
-    description: 'A formula on its own line',
-    aliases: ['math', 'formula', 'latex', 'equation', 'katex'],
-    placement: 'block',
-    markdown: () => `$$\n${CARET}\n$$`,
-  },
-  {
-    id: 'diagram',
-    name: 'Diagram',
-    description: 'A Mermaid diagram',
-    aliases: ['mermaid', 'chart', 'flowchart', 'graph'],
-    placement: 'block',
-    markdown: () => `\`\`\`mermaid\n${CARET}\n\`\`\``,
-  },
-];
+  taskList: { placement: 'block', markdown: (state) => prefixFor('taskList', 1, documentStyleOf(state)) },
+  quote: { placement: 'block', markdown: (state) => prefixFor('quote', 1, documentStyleOf(state)) },
+  callout: { placement: 'block', markdown: () => '> [!NOTE]\n> ' },
+  toggle: { placement: 'block', markdown: () => '> [!NOTE]-\n> ' },
+  codeBlock: { placement: 'block', markdown: () => `\`\`\`\n${CARET}\n\`\`\`` },
+  table: { placement: 'block', markdown: () => emptyTable() },
+  horizontalRule: { placement: 'block', markdown: () => '---\n' },
+  image: { placement: 'inline', markdown: () => `![](${CARET})` },
+  inlineMath: { placement: 'inline', markdown: () => `$${CARET}$` },
+  displayMath: { placement: 'block', markdown: () => `$$\n${CARET}\n$$` },
+  diagram: { placement: 'block', markdown: () => `\`\`\`mermaid\n${CARET}\n\`\`\`` },
+};
 
-export const BUILT_IN_SLASH_ITEMS: readonly SlashMenuItem[] = ITEM_SPECS.map((spec) => ({
-  id: spec.id,
-  name: spec.name,
-  description: spec.description,
-  aliases: spec.aliases,
-  insert: (state, range) => insertItem(state, range, spec),
-}));
+export const BUILT_IN_SLASH_ITEMS: readonly SlashMenuItem[] = SLASH_ITEM_TEXTS.flatMap((text) => {
+  const spec = Object.hasOwn(ITEM_SPECS, text.id) ? ITEM_SPECS[text.id] : undefined;
+  return spec ? [{ ...text, insert: (state, range) => insertItem(state, range, spec) }] : [];
+});
 
-/** The marker the document's lists already use, so a new list matches them. */
-export function bulletMarkerOf(state: EditorState): string {
-  let marker: string | undefined;
-  syntaxTree(state).iterate({
-    enter: (node) => {
-      if (marker !== undefined) return false;
-      if (node.name === 'ListMark' && node.node.parent?.parent?.name === 'BulletList') {
-        marker = state.sliceDoc(node.from, node.to);
-      }
-      return undefined;
-    },
-  });
-  return marker ?? DEFAULT_BULLET;
+/** Writes an insert menu item's Markdown over the main selection, as the toolbox does. */
+export function insertMenuItemAtSelection(view: EditorView, itemId: string): void {
+  const item = BUILT_IN_SLASH_ITEMS.find((candidate) => candidate.id === itemId);
+  if (!item) return;
+  const { from, to } = view.state.selection.main;
+  view.dispatch(item.insert(view.state, { from, to }), { userEvent: 'input.format', scrollIntoView: true });
 }
 
 /** A block after text on the same line goes on the next line, and the text stays. */

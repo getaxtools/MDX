@@ -81,11 +81,41 @@ interface Callout {
  */
 export function alertsPlugin(markdown: MarkdownIt, titles: AlertTitles = ENGLISH_ALERT_TITLES): void {
   markdown.core.ruler.after('inline', 'mdx_alerts', (state) => {
+    const titleEdits: TokenEdit[] = [];
     for (let index = state.tokens.length - 1; index >= 0; index -= 1) {
       const callout = calloutAt(state.tokens, index, titles);
-      if (callout) convertToCallout(state, index, callout);
+      const edit = callout ? convertToCallout(state, index, callout) : undefined;
+      if (edit) titleEdits.push(edit);
     }
+    // Applied in one pass: inserting into the token list once per callout takes minutes for a long document.
+    if (titleEdits.length > 0) state.tokens = withEdits(state.tokens, titleEdits.reverse());
   });
+}
+
+/** Tokens to put in place of `removed` tokens at `at`. */
+interface TokenEdit {
+  readonly at: number;
+  readonly removed: number;
+  readonly inserted: readonly Token[];
+}
+
+/** The tokens with edits made, given in the order of their places. */
+function withEdits(tokens: readonly Token[], edits: readonly TokenEdit[]): Token[] {
+  const edited: Token[] = [];
+  let next = 0;
+  const keepUntil = (end: number) => {
+    for (; next < end; next += 1) {
+      const token = tokens[next];
+      if (token) edited.push(token);
+    }
+  };
+  for (const { at, removed, inserted } of edits) {
+    keepUntil(at);
+    edited.push(...inserted);
+    next = at + removed;
+  }
+  keepUntil(tokens.length);
+  return edited;
 }
 
 function calloutAt(tokens: readonly Token[], index: number, titles: AlertTitles): Callout | undefined {
@@ -111,6 +141,13 @@ function calloutOfMarker(
   };
 }
 
+/** The look of a callout type written as `[!type]`, or undefined for a type the preview does not know. */
+export function calloutLookOf(typeName: string): AlertKind | undefined {
+  const type = typeName.toLowerCase();
+  const knownType = CALLOUT_TYPES.find((candidate) => candidate === type);
+  return knownType ? lookOf(knownType) : undefined;
+}
+
 function lookOf(type: CalloutType): AlertKind {
   return Object.hasOwn(LOOKS_OF_EXTRA_TYPES, type)
     ? LOOKS_OF_EXTRA_TYPES[type as ExtraCalloutType]
@@ -128,13 +165,13 @@ function firstLineOf(inline: Token | undefined): string | undefined {
   return nextChild === undefined || nextChild.type === 'softbreak' ? firstChild.content : undefined;
 }
 
-function convertToCallout(state: StateCore, quoteIndex: number, callout: Callout): void {
+function convertToCallout(state: StateCore, quoteIndex: number, callout: Callout): TokenEdit | undefined {
   const tokens = state.tokens;
   const quote = tokens[quoteIndex];
   const inline = tokens[quoteIndex + 2];
   const closeIndex = matchingCloseIndex(tokens, quoteIndex);
   const close = tokens[closeIndex];
-  if (!quote || !inline || !close) return;
+  if (!quote || !inline || !close) return undefined;
   const tag = callout.fold === 'none' ? 'div' : 'details';
   quote.tag = tag;
   close.tag = tag;
@@ -142,11 +179,11 @@ function convertToCallout(state: StateCore, quoteIndex: number, callout: Callout
   if (callout.fold === 'expanded') quote.attrSet('open', '');
   removeMarker(inline);
   const isParagraphEmpty = (inline.children ?? []).length === 0;
-  tokens.splice(
-    quoteIndex + 1,
-    isParagraphEmpty ? PARAGRAPH_TOKEN_COUNT : 0,
-    ...titleTokens(state, callout, quote.level + 1),
-  );
+  return {
+    at: quoteIndex + 1,
+    removed: isParagraphEmpty ? PARAGRAPH_TOKEN_COUNT : 0,
+    inserted: titleTokens(state, callout, quote.level + 1),
+  };
 }
 
 function matchingCloseIndex(tokens: readonly Token[], openIndex: number): number {

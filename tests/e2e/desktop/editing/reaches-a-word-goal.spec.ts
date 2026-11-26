@@ -34,9 +34,7 @@ describe('word goals', () => {
     expect(await findAccessibilityViolations(app.browser)).toEqual([]);
 
     await goal.setValue('6');
-    await app.browser.execute(() =>
-      document.querySelector<HTMLFormElement>('[role="dialog"] form')?.requestSubmit(),
-    );
+    await app.browser.$('[role="dialog"]').$('button=Set Goal').click();
     await mainWindow.waitForStatusBarText('4 of 6 words');
     await mainWindow.typeAtEndOfDocument('Four five.');
 

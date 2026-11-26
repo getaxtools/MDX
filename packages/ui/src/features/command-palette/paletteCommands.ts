@@ -2,6 +2,7 @@ import {
   READING_WIDTHS,
   THEME_PREFERENCES,
   TYPOGRAPHIES,
+  EDITING_MODES,
   WorkspaceKindsState,
   WORKSPACE_KINDS,
   isBuiltInSnippetId,
@@ -9,9 +10,12 @@ import {
 } from '@mdx/core';
 import type { MessageKey, Translator } from '@mdx/i18n';
 import { kindNameOf } from '../control-wheel/kindPresentation';
+import { isFileArcCommand } from '../file-arc/fileArcCommands';
 import { COMMAND_SHORTCUTS, type CommandShortcut } from '../shortcuts/commandShortcuts';
 import { describeCombination } from '../shortcuts/describeCombination';
 import type { ViewerCommand } from '../viewer/viewerCommands';
+import type { WorkspacesView } from '../viewer/ViewerController';
+import { workspaceNameOf } from '../workspaces/workspaceCommands';
 
 export interface PaletteCommand {
   readonly command: ViewerCommand;
@@ -24,6 +28,14 @@ export interface PaletteContext {
   readonly shortcuts: readonly CommandShortcut[];
   readonly workspaceKinds: WorkspaceKindsState;
   readonly snippets?: readonly Snippet[];
+  /** Absent while the earlier state file stands in for the workspace store. */
+  readonly workspaces?: WorkspacesView;
+  /** A Notes workspace is shown, so its daily note, templates and trash are offered. */
+  readonly isNotesWorkspace?: boolean;
+  /** The editor's caret is in a link, so Open Link is offered. */
+  readonly isCaretInLink?: boolean;
+  /** A document is shown, so commands that act on it, such as the prompt injection check, are offered. */
+  readonly hasDocument?: boolean;
 }
 
 const DEFAULT_PALETTE_CONTEXT: PaletteContext = {
@@ -51,6 +63,7 @@ const COMMANDS_WITHOUT_SHORTCUTS: readonly CommandWithoutShortcut[] = [
   { command: { kind: 'exportDocument', format: 'plainText' }, actionKey: 'menu.file.exportAsPlainText' },
   { command: { kind: 'toggleStatusBar' }, actionKey: 'menu.view.toggleStatusBar' },
   { command: { kind: 'toggleBreadcrumbs' }, actionKey: 'settings.breadcrumbs.label' },
+  { command: { kind: 'toggleHiddenCharacters' }, actionKey: 'promptInjection.hiddenCharacters.toggle' },
   { command: { kind: 'showAbout' }, actionKey: 'menu.help.about' },
   { command: { kind: 'confirmClearAllData' }, actionKey: 'privacy.clearAllData' },
   { command: { kind: 'showWorkspaceKindSettings' }, actionKey: 'workspaceKinds.choose' },
@@ -61,6 +74,12 @@ const COMMANDS_WITHOUT_SHORTCUTS: readonly CommandWithoutShortcut[] = [
   { command: { kind: 'runEditorCommand', command: 'redo' }, actionKey: 'menu.edit.redo' },
   { command: { kind: 'runEditorCommand', command: 'replace' }, actionKey: 'menu.edit.replace' },
   { command: { kind: 'runEditorCommand', command: 'goToLine' }, actionKey: 'menu.edit.goToLine' },
+  { command: { kind: 'runEditorCommand', command: 'insertEquation' }, actionKey: 'equation.insertCommand' },
+  {
+    command: { kind: 'runEditorCommand', command: 'editTableAsText' },
+    actionKey: 'editor.blockMenu.editTableAsText',
+  },
+  { command: { kind: 'pastePlainText' }, actionKey: 'menu.edit.pastePlainText' },
   { command: { kind: 'runEditorCommand', command: 'copyLineUp' }, actionKey: 'menu.edit.copyLineUp' },
   { command: { kind: 'runEditorCommand', command: 'copyLineDown' }, actionKey: 'menu.edit.copyLineDown' },
   {
@@ -72,10 +91,36 @@ const COMMANDS_WITHOUT_SHORTCUTS: readonly CommandWithoutShortcut[] = [
 /** Every command the palette offers, labelled as in the menus, with its shortcut where it has one. */
 export function paletteCommands(
   translator: Translator,
-  { shortcuts, workspaceKinds, snippets = [] }: PaletteContext = DEFAULT_PALETTE_CONTEXT,
+  {
+    shortcuts,
+    workspaceKinds,
+    snippets = [],
+    workspaces,
+    isNotesWorkspace = false,
+    isCaretInLink = false,
+    hasDocument = false,
+  }: PaletteContext = DEFAULT_PALETTE_CONTEXT,
 ): PaletteCommand[] {
+  return [
+    ...menuCommands(shortcuts, translator).filter(
+      ({ command }) => isNotesWorkspace || command.kind !== 'lockProtectedNotes',
+    ),
+    ...(isCaretInLink ? [openLinkCommand(translator)] : []),
+    ...workspaceKindCommands(workspaceKinds, translator),
+    ...(workspaces ? workspaceCommands(workspaces, workspaceKinds, translator) : []),
+    ...(isNotesWorkspace ? notesCommands(translator) : []),
+    ...(hasDocument ? documentCommands(translator) : []),
+    ...snippetCommands(snippets, translator),
+    ...themeCommands(translator),
+    ...readingWidthCommands(translator),
+    ...typographyCommands(translator),
+    ...editingModeCommands(translator),
+  ];
+}
+
+function menuCommands(shortcuts: PaletteContext['shortcuts'], translator: Translator): PaletteCommand[] {
   const withShortcuts = shortcuts
-    .filter(({ command }) => command.kind !== 'showCommandPalette')
+    .filter(({ command }) => command.kind !== 'showCommandPalette' && !isFileArcCommand(command))
     .map(({ command, combinations, actionKey }) => {
       const [combination] = combinations;
       return {
@@ -88,14 +133,77 @@ export function paletteCommands(
     command,
     label: translator.translate(actionKey),
   }));
+  return [...withShortcuts, ...withoutShortcuts];
+}
+
+function editingModeCommands(translator: Translator): PaletteCommand[] {
+  const group = translator.translate('menu.view.editingMode');
+  return EDITING_MODES.map((editingMode) => ({
+    command: { kind: 'setEditingMode', editingMode },
+    label: translator.translate('palette.groupedAction', {
+      group,
+      action: translator.translate(`menu.view.editingMode.${editingMode}`),
+    }),
+  }));
+}
+
+function openLinkCommand(translator: Translator): PaletteCommand {
+  return {
+    command: { kind: 'runEditorCommand', command: 'openLink' },
+    label: translator.translate('editor.action.openLink'),
+  };
+}
+
+function documentCommands(translator: Translator): PaletteCommand[] {
   return [
-    ...withShortcuts,
-    ...withoutShortcuts,
-    ...workspaceKindCommands(workspaceKinds, translator),
-    ...snippetCommands(snippets, translator),
-    ...themeCommands(translator),
-    ...readingWidthCommands(translator),
-    ...typographyCommands(translator),
+    {
+      command: { kind: 'checkForPromptInjection' },
+      label: translator.translate('promptInjection.command.check'),
+    },
+  ];
+}
+
+function notesCommands(translator: Translator): PaletteCommand[] {
+  return [
+    { command: { kind: 'openTodaysNote' }, label: translator.translate('notes.today') },
+    { command: { kind: 'showNewNoteFromTemplate' }, label: translator.translate('notes.fromTemplate') },
+    { command: { kind: 'showNoteTrash' }, label: translator.translate('notes.tree.showTrash') },
+    { command: { kind: 'importNotesFolder' }, label: translator.translate('notes.import.command') },
+    {
+      command: {
+        kind: 'showNotesExport',
+        notes: { kind: 'location' },
+        name: translator.translate('notes.export.allNotes'),
+      },
+      label: translator.translate('notes.export.allCommand'),
+    },
+  ];
+}
+
+/** New, Rename and Delete Workspace, and a switch to each other workspace of an enabled kind. */
+function workspaceCommands(
+  workspaces: WorkspacesView,
+  workspaceKinds: WorkspaceKindsState,
+  translator: Translator,
+): PaletteCommand[] {
+  const group = translator.translate('workspaces.palette.group');
+  const switches = workspaces.registry
+    .recentlyShown(workspaceKinds)
+    .filter((workspace) => workspace.id !== workspaces.shownWorkspaceId)
+    .map((workspace) => ({
+      command: { kind: 'switchWorkspace', workspaceId: workspace.id } as const,
+      label: translator.translate('palette.groupedAction', {
+        group,
+        action: workspaceNameOf(workspace, translator),
+      }),
+    }));
+  return [
+    { command: { kind: 'showNewWorkspace' }, label: translator.translate('workspaces.new') },
+    { command: { kind: 'showRenameWorkspace' }, label: translator.translate('workspaces.rename') },
+    { command: { kind: 'confirmDeleteWorkspace' }, label: translator.translate('workspaces.delete') },
+    { command: { kind: 'openWorkspaceFile' }, label: translator.translate('workspaces.openFile') },
+    { command: { kind: 'exportWorkspace' }, label: translator.translate('workspaces.export') },
+    ...switches,
   ];
 }
 

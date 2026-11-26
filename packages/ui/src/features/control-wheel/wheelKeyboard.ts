@@ -46,6 +46,11 @@ export function wheelKeyAction(event: WheelKeyEvent, context: WheelKeyContext): 
   return keyAction ? keyAction(context) : NONE;
 }
 
+/** Moving round the wheel shows that the keyboard is in use, so the segment numbers appear. */
+export function isKeyboardMovement(action: WheelKeyAction): boolean {
+  return action.action === 'focus' || action.action === 'switchFocusArea';
+}
+
 function numberAction(segmentNumber: number, { segmentCount }: WheelKeyContext): WheelKeyAction {
   return segmentNumber <= segmentCount ? { action: 'chooseAndClose', index: segmentNumber - 1 } : NONE;
 }

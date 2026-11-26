@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { CtrlWheelAction } from '@mdx/core';
   import type { Translator } from '@mdx/i18n';
   import Dialog from '../../components/Dialog.svelte';
   import { COMMAND_SHORTCUTS, shortcutLabelFor, type CommandShortcut } from '../shortcuts/commandShortcuts';
@@ -9,27 +10,33 @@
     translator: Translator;
     /** The keys each command has now, including the user's changes. */
     shortcuts?: readonly CommandShortcut[];
+    ctrlWheelAction?: CtrlWheelAction;
     onClose: () => void;
   }
 
-  const { translator, shortcuts = COMMAND_SHORTCUTS, onClose }: Props = $props();
+  const {
+    translator,
+    shortcuts = COMMAND_SHORTCUTS,
+    ctrlWheelAction = 'moveBetweenFiles',
+    onClose,
+  }: Props = $props();
 
   let query = $state('');
-  let searchInput: HTMLInputElement | undefined = $state();
 
-  $effect(() => searchInput?.focus());
-
-  const shownShortcuts = $derived(matchingShortcuts(query, translator, keyboardShortcutsWith(shortcuts)));
+  const shownShortcuts = $derived(
+    matchingShortcuts(query, translator, keyboardShortcutsWith(shortcuts, ctrlWheelAction)),
+  );
   const wheelShortcut = $derived(shortcutLabelFor({ kind: 'toggleControlWheel' }, translator, shortcuts));
 </script>
 
 <Dialog
   title={translator.translate('menu.help.keyboardShortcuts')}
   closeLabel={translator.translate('about.close')}
+  closeTooltip={translator.translate('dialog.close.tooltip')}
+  isInformational
   {onClose}
 >
   <input
-    bind:this={searchInput}
     bind:value={query}
     class="search"
     type="search"
@@ -67,6 +74,7 @@
       ? translator.translate('help.controlWheel.mouseButton', { shortcut: wheelShortcut })
       : translator.translate('help.controlWheel.mouseButtonWithoutShortcut')}
   </p>
+  <p class="mouse-button-help">{translator.translate('help.shortcuts.altGrLayouts')}</p>
 </Dialog>
 
 <style>

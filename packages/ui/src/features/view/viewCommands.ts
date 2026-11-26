@@ -10,6 +10,8 @@ import {
   toggleSidebarView,
   zoomIn,
   zoomOut,
+  type AutomaticInjectionCheck,
+  type CtrlWheelAction,
   type ExplorerSection,
   type KindSwitcher,
   type LanguagePreference,
@@ -32,6 +34,8 @@ export type ViewCommand =
   | { readonly kind: 'setTypography'; readonly typography: Typography }
   | { readonly kind: 'setLanguage'; readonly language: LanguagePreference }
   | { readonly kind: 'toggleSidebar' }
+  | { readonly kind: 'hideSidebar' }
+  | { readonly kind: 'showSidebar' }
   | { readonly kind: 'toggleSidebarView'; readonly sidebarView: SidebarView }
   | { readonly kind: 'toggleOutline' }
   | { readonly kind: 'toggleStatusBar' }
@@ -44,10 +48,17 @@ export type ViewCommand =
   | { readonly kind: 'setEditorShare'; readonly sharePercent: number }
   | { readonly kind: 'setKindSwitcher'; readonly kindSwitcher: KindSwitcher }
   | { readonly kind: 'setWheelDock'; readonly wheelDock: WheelDock }
+  | { readonly kind: 'setCtrlWheelAction'; readonly ctrlWheelAction: CtrlWheelAction }
   | { readonly kind: 'toggleWheelOpenedAtPointer' }
   | { readonly kind: 'toggleWheelButtonInStatusBar' }
   | { readonly kind: 'toggleSlashMenuInRichText' }
-  | { readonly kind: 'toggleSlashMenuInSource' };
+  | { readonly kind: 'toggleSlashMenuInSource' }
+  | { readonly kind: 'toggleSpellCheckInRichText' }
+  | { readonly kind: 'toggleSpellCheckInSource' }
+  | { readonly kind: 'toggleNoteDeletionConfirmation' }
+  | { readonly kind: 'toggleNoteLinkUpdateConfirmation' }
+  | { readonly kind: 'toggleHiddenCharacters' }
+  | { readonly kind: 'setAutomaticInjectionCheck'; readonly check: AutomaticInjectionCheck };
 
 type ViewCommandHandlers = {
   readonly [Kind in ViewCommand['kind']]: (
@@ -66,6 +77,8 @@ const VIEW_COMMAND_HANDLERS: ViewCommandHandlers = {
   setTypography: (settings, { typography }) => ({ ...settings, typography }),
   setLanguage: (settings, { language }) => ({ ...settings, language }),
   toggleSidebar: (settings) => toggleSidebarView(settings, 'explorer'),
+  hideSidebar: (settings) => ({ ...settings, isSidebarVisible: false }),
+  showSidebar: (settings) => ({ ...settings, isSidebarVisible: true }),
   toggleSidebarView: (settings, { sidebarView }) => toggleSidebarView(settings, sidebarView),
   toggleOutline: (settings) => toggleSidebarView(settings, 'outline'),
   toggleStatusBar: (settings) => ({ ...settings, isStatusBarVisible: !settings.isStatusBarVisible }),
@@ -79,6 +92,7 @@ const VIEW_COMMAND_HANDLERS: ViewCommandHandlers = {
   setEditorShare: (settings, { sharePercent }) => setEditorShare(settings, sharePercent),
   setKindSwitcher: (settings, { kindSwitcher }) => ({ ...settings, kindSwitcher }),
   setWheelDock: (settings, { wheelDock }) => ({ ...settings, wheelDock }),
+  setCtrlWheelAction: (settings, { ctrlWheelAction }) => ({ ...settings, ctrlWheelAction }),
   toggleWheelOpenedAtPointer: (settings) => ({
     ...settings,
     isWheelOpenedAtPointer: !settings.isWheelOpenedAtPointer,
@@ -94,6 +108,27 @@ const VIEW_COMMAND_HANDLERS: ViewCommandHandlers = {
   toggleSlashMenuInSource: (settings) => ({
     ...settings,
     isSlashMenuInSource: !settings.isSlashMenuInSource,
+  }),
+  toggleSpellCheckInRichText: (settings) => ({
+    ...settings,
+    isSpellCheckedInRichText: !settings.isSpellCheckedInRichText,
+  }),
+  toggleSpellCheckInSource: (settings) => ({
+    ...settings,
+    isSpellCheckedInSource: !settings.isSpellCheckedInSource,
+  }),
+  toggleNoteDeletionConfirmation: (settings) => ({
+    ...settings,
+    isNoteDeletionConfirmed: !settings.isNoteDeletionConfirmed,
+  }),
+  toggleNoteLinkUpdateConfirmation: (settings) => ({
+    ...settings,
+    isNoteLinkUpdateConfirmed: !settings.isNoteLinkUpdateConfirmed,
+  }),
+  setAutomaticInjectionCheck: (settings, { check }) => ({ ...settings, automaticInjectionCheck: check }),
+  toggleHiddenCharacters: (settings) => ({
+    ...settings,
+    isShowingHiddenCharacters: !settings.isShowingHiddenCharacters,
   }),
 };
 

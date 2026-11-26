@@ -10,12 +10,14 @@ export { HEADING_ID_PREFIX, slugify, type OutlineEntry } from './plugins/heading
 export {
   ALERT_KINDS,
   CALLOUT_TYPES,
+  calloutLookOf,
   type AlertKind,
   type AlertTitles,
   type CalloutType,
 } from './plugins/alertsPlugin';
 export {
   createHtmlSanitizer,
+  linkKindOf,
   UnsafeSanitizerEnvironmentError,
   type BrowserWindow,
   type HtmlSanitizer,
@@ -29,11 +31,19 @@ export {
   type HighlightedLine,
   type HighlightedToken,
 } from './highlight/createCodeHighlighter';
+export { knownCodeLanguages } from './highlight/knownCodeLanguages';
 export { readFrontMatterProperties, type DocumentProperty } from './front-matter/readFrontMatterProperties';
 export {
   createRichBlockRenderer,
+  loadMathFonts,
   type MathTypesetter,
+  type FormulaPreview,
   type RichBlockRenderer,
   type RichBlockRenderOptions,
 } from './rich-blocks/createRichBlockRenderer';
 export type { NotesRendering } from './plugins/wikiLinksPlugin';
+export { previewLinkHref, type WrittenLink, type WrittenLinkForm } from './links/previewLinkHref';
+export { collectDocumentStructure } from './structure/collectDocumentStructure';
+export { MATH_DISPLAY_CLASS, MATH_INLINE_CLASS } from './plugins/mathPlugin';
+export type { DeltaSectionKind, SpecCrossLinks, SpecStructureRendering } from './plugins/specStructurePlugin';
+export type { OutlineRole } from './plugins/headingAnchorsPlugin';

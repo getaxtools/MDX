@@ -47,6 +47,16 @@ impl ImageKind {
             Self::Svg => "svg",
         }
     }
+
+    pub const fn media_type(self) -> &'static str {
+        match self {
+            Self::Png => "image/png",
+            Self::Jpeg => "image/jpeg",
+            Self::Gif => "image/gif",
+            Self::WebP => "image/webp",
+            Self::Svg => "image/svg+xml",
+        }
+    }
 }
 
 fn is_webp(bytes: &[u8]) -> bool {

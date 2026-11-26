@@ -1,10 +1,15 @@
 <script lang="ts">
-  import { wordGoalProgress } from '@mdx/core';
-  import type { Translator } from '@mdx/i18n';
+  import { canZoomIn, canZoomOut, wordGoalProgress } from '@mdx/core';
+  import type { MessageKey, Translator } from '@mdx/i18n';
   import ContextMenu from '../../components/ContextMenu.svelte';
   import KindIcon from '../control-wheel/KindIcon.svelte';
-  import { KIND_ICONS, kindNameOf } from '../control-wheel/kindPresentation';
-  import { tooltipWithShortcut } from '../shortcuts/commandShortcuts';
+  import { KIND_ICONS, kindColourOf, kindNameOf } from '../control-wheel/kindPresentation';
+  import {
+    COMMAND_SHORTCUTS,
+    shortcutLabelFor,
+    tooltipWithShortcut,
+    type CommandShortcut,
+  } from '../shortcuts/commandShortcuts';
   import { contextMenuPosition, type ContextMenuRequest } from '../../components/ContextMenuItem';
   import {
     DETECT_ENCODING_ITEM,
@@ -13,6 +18,8 @@
   } from '../encodings/reopenEncodings';
   import type { RenderedActiveDocument } from '../viewer/ViewerController';
   import type { ControlWheelButton } from './ControlWheelButton';
+  import InjectionCheckBadge from '../prompt-injection/InjectionCheckBadge.svelte';
+  import type { InjectionCheckView } from '../prompt-injection/InjectionCheckActions';
 
   interface Props {
     document: RenderedActiveDocument | undefined;
@@ -30,9 +37,21 @@
     wordsThisSession?: number;
     /** Words in the selection, shown while text is selected. */
     selectedWords?: number;
+    /** A word on something the app is doing, such as moving the notes folder; also announced. */
+    statusMessage?: string | undefined;
     onShowWordGoal?: () => void;
     onResetZoom: () => void;
+    onZoomIn?: () => void;
+    onZoomOut?: () => void;
+    /** The shortcuts in effect, named in the zoom tooltips. */
+    shortcuts?: readonly CommandShortcut[];
     onReopenWithEncoding?: (encoding: string | undefined) => void;
+    /** The prompt injection check of the shown document; the badge shows once it has finished. */
+    injectionCheck?: InjectionCheckView | undefined;
+    onShowInjectionCheck?: () => void;
+    /** The shown Notes workspace's protected section is unlocked, so a Lock button is shown. */
+    isProtectedSectionUnlocked?: boolean;
+    onLockProtectedNotes?: () => void;
   }
 
   const {
@@ -47,12 +66,37 @@
     wordGoal,
     wordsThisSession = 0,
     selectedWords = 0,
+    statusMessage,
     onShowWordGoal = () => undefined,
     onResetZoom,
+    onZoomIn = () => undefined,
+    onZoomOut = () => undefined,
+    shortcuts = COMMAND_SHORTCUTS,
     onReopenWithEncoding = () => undefined,
+    injectionCheck,
+    onShowInjectionCheck = () => undefined,
+    isProtectedSectionUnlocked = false,
+    onLockProtectedNotes = () => undefined,
   }: Props = $props();
 
   let encodingMenuRequest: ContextMenuRequest | undefined = $state();
+  let zoomOutButton: HTMLButtonElement | undefined = $state();
+  let zoomInButton: HTMLButtonElement | undefined = $state();
+  let lastZoomStep: 'zoomIn' | 'zoomOut' | undefined;
+
+  function stepZoom(step: 'zoomIn' | 'zoomOut') {
+    lastZoomStep = step;
+    if (step === 'zoomIn') onZoomIn();
+    else onZoomOut();
+  }
+
+  $effect(() => {
+    const isAtHighest = !canZoomIn(zoomPercent);
+    const isAtLowest = !canZoomOut(zoomPercent);
+    if (lastZoomStep === 'zoomIn' && isAtHighest) zoomOutButton?.focus();
+    if (lastZoomStep === 'zoomOut' && isAtLowest) zoomInButton?.focus();
+    lastZoomStep = undefined;
+  });
 
   function chooseEncoding(itemId: EncodingMenuItemId) {
     onReopenWithEncoding(itemId === DETECT_ENCODING_ITEM ? undefined : itemId);
@@ -88,11 +132,19 @@
     [
       cursorCount > 1 ? translator.translate('statusBar.cursors', { count: cursorCount }) : '',
       progress?.isReached ? translator.translate('statusBar.wordGoal.reached') : '',
+      statusMessage ?? '',
     ]
       .filter(Boolean)
       .join(' '),
   );
   const encodingName = $derived(document?.encoding.toUpperCase() ?? '');
+  function zoomTooltip(labelKey: MessageKey, kind: 'zoomIn' | 'zoomOut' | 'resetZoom'): string {
+    return tooltipWithShortcut(
+      translator.translate(labelKey),
+      shortcutLabelFor({ kind }, translator, shortcuts),
+    );
+  }
+
   const location = $derived(
     document?.isUntitled
       ? translator.translate('statusBar.notSaved', { fileName: document.fileName })
@@ -104,9 +156,26 @@
   <span class="location" title={location}>{location ?? ''}</span>
   <div class="details">
     <span role="status">{announcement}</span>
+    {#if statusMessage}
+      <span class="status-message" aria-hidden="true">{statusMessage}</span>
+    {/if}
     {#each details as detail (detail)}
       <span>{detail}</span>
     {/each}
+    {#if isProtectedSectionUnlocked}
+      <span class="protected-status">
+        {translator.translate('protectedNotes.status.unlocked')}
+        <button
+          aria-label={translator.translate('protectedNotes.lock.command')}
+          onclick={onLockProtectedNotes}
+        >
+          {translator.translate('protectedNotes.lock.button')}
+        </button>
+      </span>
+    {/if}
+    {#if document && injectionCheck}
+      <InjectionCheckBadge check={injectionCheck} {translator} onShow={onShowInjectionCheck} />
+    {/if}
     {#if document}
       <button class="words" title={sessionTooltip} aria-haspopup="dialog" onclick={onShowWordGoal}>
         {#if progress}
@@ -139,13 +208,6 @@
         })}
       </span>
     {/if}
-    <button
-      title={translator.translate('statusBar.resetZoom', { percent: zoomPercent })}
-      aria-label={translator.translate('statusBar.resetZoom', { percent: zoomPercent })}
-      onclick={onResetZoom}
-    >
-      {translator.translate('statusBar.zoom', { percent: zoomPercent })}
-    </button>
     {#if controlWheelButton}
       {@const kind = kindNameOf(controlWheelButton.activeKindId, translator)}
       <button
@@ -153,11 +215,44 @@
         title={tooltipWithShortcut(translator.translate('controlWheel.show'), controlWheelButton.shortcut)}
         aria-label={translator.translate('statusBar.controlWheel', { kind })}
         aria-haspopup="dialog"
+        style:--kind-colour={kindColourOf(controlWheelButton.activeKindId)}
         onclick={controlWheelButton.onShowControlWheel}
       >
         <KindIcon paths={KIND_ICONS[controlWheelButton.activeKindId]} />
         {kind}
       </button>
+    {/if}
+    {#if document}
+      <span class="zoom-stepper">
+        <button
+          bind:this={zoomOutButton}
+          class="zoom-step"
+          title={zoomTooltip('menu.view.zoomOut', 'zoomOut')}
+          aria-label={translator.translate('menu.view.zoomOut')}
+          disabled={!canZoomOut(zoomPercent)}
+          onclick={() => stepZoom('zoomOut')}
+        >
+          −
+        </button>
+        <button
+          class="zoom-value"
+          title={zoomTooltip('menu.view.resetZoom', 'resetZoom')}
+          aria-label={translator.translate('statusBar.resetZoom', { percent: zoomPercent })}
+          onclick={onResetZoom}
+        >
+          {translator.translate('statusBar.zoom', { percent: zoomPercent })}
+        </button>
+        <button
+          bind:this={zoomInButton}
+          class="zoom-step"
+          title={zoomTooltip('menu.view.zoomIn', 'zoomIn')}
+          aria-label={translator.translate('menu.view.zoomIn')}
+          disabled={!canZoomIn(zoomPercent)}
+          onclick={() => stepZoom('zoomIn')}
+        >
+          +
+        </button>
+      </span>
     {/if}
   </div>
 </footer>
@@ -172,6 +267,12 @@
 {/if}
 
 <style>
+  .protected-status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
   .status-bar {
     display: flex;
     gap: var(--space-4);
@@ -203,7 +304,7 @@
   button {
     padding: 0 var(--space-1);
     border: 0;
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-xsmall);
     background: none;
     color: inherit;
     font: inherit;
@@ -218,6 +319,32 @@
   .control-wheel :global(svg) {
     width: 1rem;
     height: 1rem;
+    color: var(--kind-colour);
+  }
+
+  .zoom-stepper {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .zoom-stepper button {
+    min-width: 1.5rem;
+    min-height: 1.5rem;
+  }
+
+  .zoom-value {
+    min-width: 4ch;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .zoom-step:disabled {
+    color: var(--color-text-tertiary);
+  }
+
+  @media (forced-colors: active) {
+    .zoom-step:disabled {
+      color: GrayText;
+    }
   }
 
   .words {
