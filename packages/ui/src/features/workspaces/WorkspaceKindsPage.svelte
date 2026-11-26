@@ -8,8 +8,8 @@
     type WorkspaceKindId,
     type WorkspaceKindsState,
   } from '@mdx/core';
-  import { tick } from 'svelte';
   import type { MessageKey, Translator } from '@mdx/i18n';
+  import { tick } from 'svelte';
   import KindIcon from '../control-wheel/KindIcon.svelte';
   import { KIND_ICONS, kindColourOf, kindDescriptionOf, kindNameOf } from '../control-wheel/kindPresentation';
   import {
@@ -97,7 +97,7 @@
 
 <!-- Esc leaves the page from any control on it, so the landmark listens for the key. -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<main class="kinds-page" aria-labelledby="kinds-page-heading" onkeydown={handleKeydown}>
+<main class="kinds-page" tabindex="-1" aria-labelledby="kinds-page-heading" onkeydown={handleKeydown}>
   <h1 id="kinds-page-heading">{translator.translate('workspaceKinds.page.title')}</h1>
   <p class="introduction">{translator.translate('workspaceKinds.page.introduction')}</p>
   <ul class="cards" aria-label={translator.translate('workspaceKinds.page.kinds')}>
@@ -159,7 +159,7 @@
   </ul>
   <div class="actions">
     <button class="action" onclick={() => onCommand({ kind: 'toggleControlWheel' })}>
-      {translator.translate('controlWheel.show')}
+      {translator.translate('workspaceKinds.page.showControlWheel')}
       {#if controlWheelShortcut}<kbd>{controlWheelShortcut}</kbd>{/if}
     </button>
     <button class="action" onclick={() => onCommand({ kind: 'showSettings' })}>
@@ -169,7 +169,7 @@
   <p class="tip">
     {controlWheelShortcut
       ? translator.translate('workspaceKinds.page.mouseButtonTip', { shortcut: controlWheelShortcut })
-      : translator.translate('help.controlWheel.mouseButtonWithoutShortcut')}
+      : translator.translate('workspaceKinds.page.mouseButtonTipWithoutShortcut')}
   </p>
   <p class="visually-hidden" role="status">{announcement}</p>
 </main>
@@ -262,7 +262,7 @@
 
   .open,
   .action {
-    min-height: 2rem;
+    min-block-size: 2rem;
     padding: 0 var(--space-3);
     border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-full);
@@ -294,10 +294,14 @@
   }
 
   .track {
+    --track-height: 1.25rem;
+    --knob-size: 0.75rem;
+    --knob-gap: calc((var(--track-height) - var(--knob-size)) / 2);
+
     position: relative;
     display: block;
     width: 2.25rem;
-    height: 1.25rem;
+    height: var(--track-height);
     border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-full);
   }
@@ -305,10 +309,10 @@
   .track::after {
     content: '';
     position: absolute;
-    inset-block-start: 3px;
-    inset-inline-start: 3px;
-    width: 0.75rem;
-    height: 0.75rem;
+    inset-block-start: var(--knob-gap);
+    inset-inline-start: var(--knob-gap);
+    width: var(--knob-size);
+    height: var(--knob-size);
     border-radius: 50%;
     background: var(--color-text-secondary);
   }
@@ -319,7 +323,7 @@
   }
 
   .switch[aria-checked='true'] .track::after {
-    inset-inline-start: calc(100% - 0.75rem - 3px);
+    inset-inline-start: calc(100% - var(--knob-size) - var(--knob-gap));
     background: var(--color-accent-text);
   }
 

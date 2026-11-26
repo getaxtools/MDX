@@ -92,7 +92,7 @@ describe('WorkspaceKindsPage', () => {
 
   it('open the control wheel from the page', async () => {
     const { onCommand } = renderPage(ALL_KINDS_ON);
-    const showWheel = screen.getByRole('button', { name: /Show Control Wheel/ });
+    const showWheel = screen.getByRole('button', { name: /^Show control wheel/ });
 
     expect(showWheel.textContent).toContain('Ctrl+Space');
     await userEvent.click(showWheel);
@@ -117,6 +117,15 @@ describe('WorkspaceKindsPage', () => {
     notes.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', isComposing: true, bubbles: true }));
 
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('leave the page with Esc after a click on its background', async () => {
+    const { onClose } = renderPage(ALL_KINDS_ON);
+
+    await userEvent.click(screen.getByText(/^Each kind is a different way/));
+    await userEvent.keyboard('{Escape}');
+
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it('leave the page with Esc without changing the kind', async () => {
@@ -249,7 +258,7 @@ describe('WorkspaceKindsPage', () => {
   it('asks for a wheel shortcut before a mouse button can open it', () => {
     renderPage(ALL_KINDS_ON, null);
 
-    expect(screen.getByText(/Give the control wheel a shortcut in Settings/)).toBeTruthy();
+    expect(screen.getByText(/^Tip: give the control wheel a shortcut in Settings > Keyboard/)).toBeTruthy();
   });
 
   it('tab order follows the cards in reading order', async () => {
@@ -270,7 +279,7 @@ describe('WorkspaceKindsPage', () => {
       expect(document.activeElement, name).toBe(within(cardOf(card)).getByRole(role, { name }));
     }
     await userEvent.tab();
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: /Show Control Wheel/ }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Show control wheel/ }));
     await userEvent.tab();
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Settings' }));
   });

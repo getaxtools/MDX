@@ -621,6 +621,8 @@
   "workspaceKinds.page.turnedOn": "{kind} is on.",
   "workspaceKinds.page.turnedOff": "{kind} is off.",
   "workspaceKinds.page.mouseButtonTip": "Tip: give a mouse button the shortcut {shortcut} in your mouse software to open the control wheel with one press.",
+  "workspaceKinds.page.mouseButtonTipWithoutShortcut": "Tip: give the control wheel a shortcut in Settings > Keyboard to open it with a mouse button.",
+  "workspaceKinds.page.showControlWheel": "Show control wheel",
   "controlWheel.label": "Control wheel",
   "controlWheel.kinds.label": "Workspace kinds",
   "controlWheel.gear.label": "Choose workspace kinds",
